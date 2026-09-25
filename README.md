@@ -5,8 +5,8 @@ A Home Assistant energy controller for a solar + battery + EV home, running as a
 hold, discharge or export the battery using tariff prices, solar forecasts, EV
 smart-charge slots and VPP events, and explains every decision in plain English.
 
-> **Status: early development (0.0.x).** Current builds are scaffolding only and
-> do not control any device.
+> **Status: beta (0.1.x), Passive only.** PowerEngine monitors and explains your
+> system and has its own dashboard. It does not control any device yet.
 
 ## Install
 

@@ -6,7 +6,7 @@ with a **Check** so you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.0.4 (beta, Passive-only)
+**Version this guide matches:** 0.1.0 (beta, Passive-only)
 
 ---
 
@@ -151,10 +151,10 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.0.4 starting (Passive-only build: nothing is controlled)
+PowerEngine 0.1.0 starting (Passive-only build: nothing is controlled)
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
-Published 7 entities under the PowerEngine device
+Published 20 entities under the PowerEngine device
 ```
 
 **Check the device:** *Settings → Devices & services → MQTT → PowerEngine*:
@@ -221,7 +221,44 @@ restart AppDaemon.
 
 ---
 
+## Step 7: the PowerEngine dashboard
+
+PowerEngine ships its own dashboard and keeps it up to date: on every start it
+writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once.
+
+1. **Install Power Flow Card Plus** (used for the energy flow picture):
+   HACS → search **Power Flow Card Plus** → Download. Reload the browser.
+2. **Register the dashboard.** Add this to `configuration.yaml` (at the top
+   level; if you already have a `lovelace:` section, add just the
+   `powerengine-dash:` block under its `dashboards:`):
+
+   ```yaml
+   lovelace:
+     dashboards:
+       powerengine-dash:
+         mode: yaml
+         title: PowerEngine
+         icon: mdi:lightning-bolt
+         show_in_sidebar: true
+         filename: powerengine/dashboard.yaml
+   ```
+
+3. **Restart Home Assistant** (*Settings → System → Restart*). This is only
+   needed the first time.
+
+**Check:** *PowerEngine* appears in the sidebar and shows the status sentence,
+the energy flow, the *Now* tiles and the last-24-hours graphs.
+
+- Signs look wrong (battery shows charging while discharging)? Fix it with
+  **Invert** on the config page (Step 6), not in the dashboard.
+- The dashboard is managed: edits to `dashboard.yaml` are overwritten on the
+  next update. To customise, copy the cards into a dashboard of your own.
+
+---
+
 ## Updating
+
+The dashboard updates itself with the app; refresh the browser after updating.
 
 1. HACS shows updates under *Settings → Updates* (betas only if pre-releases are on).
 2. Update **both** repos to the **same** version. The card warns if they differ.
@@ -261,6 +298,9 @@ for the card, then restart AppDaemon.
 | Card warns about a version mismatch | App and card on different versions | Update both to the same version |
 | `Unknown command: ha` | Commands run on your own computer | Use HA's terminal add-on |
 | `Config problem: ...` in the log | `config.yaml` has an error | The message names the problem; fix or restore the backup |
+| Dashboard missing from the sidebar | `lovelace:` entry not added, or HA not restarted | Step 7 |
+| Energy flow card says *Custom element doesn't exist* | Power Flow Card Plus not installed | Step 7.1, then reload the browser |
+| Dashboard values are *unknown* | Inputs not configured, or mode *unconfigured* | Step 6 |
 | Save says *could not send* | You're not an admin | Log in as an admin user |
 | Save says *no reply from PowerEngine* | App not running, or can't write its folder | Check the AppDaemon log for the reason |
 | Mode stays *unconfigured* after saving | Required inputs missing or failing checks | See the reason on *Operation mode*; fix the inputs flagged on the card |
