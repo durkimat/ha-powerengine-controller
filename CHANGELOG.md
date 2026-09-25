@@ -2,6 +2,23 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.3 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- **Car charging at peak holds the battery again.** The 0.5.2 "cover the house, not the car" rule is dropped:
+  a 7.4 kW boost dwarfs the house load, so it isn't worth the extra control.
+- **Inverter write tracking (EEPROM wear).** New `sensor.pe_diag_inverter_writes` and a Health tab section:
+  writes per day by your current setup (observed changes to the mapped control entities, e.g. Predbat pressing
+  the update button) and what PowerEngine's Active design would make, each with how many years 100,000 writes
+  would last at that rate.
+- **Control inputs for the Solis timed slots** (Config tab, *Control outputs*): charge and discharge window
+  start/end hour and minute, charge and discharge current, the update button and the storage mode. They replace
+  the override inputs (pre-FB00 firmware has no override); old override mappings are dropped from config.yaml
+  automatically. Map the new ones so writes can be counted.
+- The settings list moved to its own sensor (`sensor.pe_map_settings`) to keep each under HA's attribute size
+  limit. Needs card 0.5.3.
+
 ## 0.5.2 (beta)
 
 ### Behaviour changes

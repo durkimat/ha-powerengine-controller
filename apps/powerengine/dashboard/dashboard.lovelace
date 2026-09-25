@@ -603,6 +603,24 @@ views:
               No smart-charge slots seen yet. PowerEngine records each one EDF plans (and what the car actually drew) from now on.
               {%- endif %}
           - type: heading
+            heading: Inverter writes (EEPROM wear)
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set w = states.sensor.pe_diag_inverter_writes %}
+              {%- if w and w.attributes.budget is defined %}{% set o, p = w.attributes.observed, w.attributes.would %}
+              Inverter settings are stored in EEPROM, typically rated for about 100,000 writes.
+
+              | | Writes today | Per day (average) | 100,000 writes would last |
+              |---|---:|---:|---:|
+              | Your current setup (observed) | {{ o.today }} | {{ o.per_day if o.per_day is not none else '–' }} | {{ (o.years ~ ' years') if o.years else ('no writes' if o.per_day == 0 else '–') }} |
+              | PowerEngine in Active mode (would) | {{ p.today }} | {{ p.per_day if p.per_day is not none else '–' }} | {{ (p.years ~ ' years') if p.years else ('no writes' if p.per_day == 0 else '–') }} |
+
+              *Observed* counts changes to the inverter's control entities mapped on the Config tab (a press of the timed-window update button is one write; setting a value to what it already is isn't seen, so this can undercount). *Would* follows the Active design: one write to open, roll forward or close a timed window, and one per change of charge current. Averages use full days since {{ w.attributes.since or 'tracking started' }}.
+              {%- else %}
+              Counting starts once PowerEngine 0.5.3 is running; map the timed-window controls on the Config tab to see what your current setup writes.
+              {%- endif %}
+          - type: heading
             heading: Inputs
           - type: markdown
             grid_options: {columns: full}

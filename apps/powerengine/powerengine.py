@@ -30,6 +30,7 @@ from pe_core.costbook import MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import sync_dashboard
 from pe_core.decide import decide
+from pe_core.eeprom import WriteLog, WriteModel
 from pe_core.energy import Recorder
 from pe_core.entities import (
     AVAILABILITY_TOPIC,
@@ -99,7 +100,8 @@ class PowerEngine(hass.Hass):
         self._publish(AVAILABILITY_TOPIC, ONLINE)
         self._publish_state("diag_version", __version__)
         self._publish_state("diag_started", datetime.now(timezone.utc).isoformat(timespec="seconds"))
-        self._publish_state("map_catalogue", str(len(ROLES)), {**catalogue(), "settings": settings_catalogue()})
+        self._publish_state("map_catalogue", str(len(ROLES)), catalogue())
+        self._publish_state("map_settings", str(len(settings_catalogue()["safety"])), settings_catalogue())
         self._last_checks = None
         self._published = {}
         self._decision, self._since = None, None
@@ -126,6 +128,11 @@ class PowerEngine(hass.Hass):
         self.recorder = Recorder()
         self.notifier = Notifier(os.path.join(os.path.dirname(self._save_path()), "notifications.json"))
         self._bad_since = {}
+        self.writes = WriteLog(os.path.join(os.path.dirname(self._save_path()), "inverter_writes.json"))
+        self.write_model = WriteModel()
+        self._write_listeners = []
+        self._watch_controls()
+        self._publish_writes()
         self.slots = SlotTracker(os.path.join(os.path.dirname(self._save_path()), "costs", "slots.json"))
         self._slots_last = None
         self.costbook, self._months, self.measured = None, [], None
@@ -237,6 +244,7 @@ class PowerEngine(hass.Hass):
                 self._logbook(entry["text"])
                 self._publish_state("state_activity", entry["time"], {"entries": self.activity.entries})
             self._decision = decision
+            self._count_would_writes(readings, decision)
         for key, (state, attrs) in entity_states(readings, self.mode, self.tz, decision, self._since).items():
             self._publish_if_changed(key, state, attrs)
 
@@ -555,6 +563,52 @@ class PowerEngine(hass.Hass):
         if r.free_start and r.free_start > r.now:
             self._notify("free_power", free_message(r.free_start, r.free_end, r.now, self.tz))
 
+    # --- inverter writes (EEPROM wear) ---------------------------------------------------
+
+    CONTROL_ROLES = ("timed_charge_start_hour", "timed_charge_start_minute", "timed_charge_end_hour",
+                     "timed_charge_end_minute", "timed_charge_current", "timed_discharge_start_hour",
+                     "timed_discharge_start_minute", "timed_discharge_end_hour", "timed_discharge_end_minute",
+                     "timed_discharge_current", "timed_update_button", "storage_mode", "inverter_export_limit")
+
+    def _watch_controls(self):
+        """Count writes to the inverter's control entities by whatever controls it now (e.g. Predbat)."""
+        for handle in self._write_listeners:
+            try:
+                self.cancel_listen_state(handle)
+            except Exception:
+                pass
+        self._write_listeners = []
+        if self.cfg is None:
+            return
+        for role in self.CONTROL_ROLES:
+            eid = self._role_entity(role)
+            if eid:
+                self._write_listeners.append(self.listen_state(self._on_control_change, eid))
+
+    def _on_control_change(self, entity, attribute, old, new, kwargs):
+        if old == new or old in (None, "unknown", "unavailable") or new in (None, "unknown", "unavailable"):
+            return
+        self.writes.observed(self._today(), entity)
+
+    def _count_would_writes(self, r, decision):
+        try:
+            p = self._params(r)
+            events = self.write_model.step(r.now, decision, p.max_charge_kw * 1000, p.max_discharge_kw * 1000)
+            self.writes.would(self._today(), len(events))
+            if r.now.minute % 10 == 0 and r.now.second < CYCLE_SECONDS:     # save every 10 minutes
+                self._publish_writes()
+        except Exception as err:
+            self.log(f"Could not count inverter writes: {err!r}", level="WARNING")
+
+    def _publish_writes(self):
+        try:
+            self.writes.save()
+            s = self.writes.summary(self._today())
+            self._publish_state("diag_inverter_writes", s["would"]["per_day"] if s["would"]["per_day"] is not None
+                                else "unknown", s)
+        except Exception as err:
+            self.log(f"Could not publish inverter writes: {err!r}", level="WARNING")
+
     def _track_slots(self, r):
         dt = (r.now - self._slots_last).total_seconds() if self._slots_last else 0.0
         self._slots_last = r.now
@@ -628,6 +682,7 @@ class PowerEngine(hass.Hass):
             self.cfg, self.cfg_path = load_config(self.paths)
         except ConfigError as err:
             self.cfg, self.cfg_error = None, str(err)
+        self._watch_controls()
         if self.cfg is not None and self.costbook is not None:
             fid = flow_id(self.cfg)
             if fid != self.costbook.flow_id:              # inputs that shape the flows changed: rebuild from history

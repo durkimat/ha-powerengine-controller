@@ -4,7 +4,7 @@ import pytest
 from fixtures import BST, NOW
 
 from pe_core.config import parse_config
-from pe_core.decide import GRID_CHARGE, SELF_USE, Decision, decide
+from pe_core.decide import GRID_CHARGE, HOLD, SELF_USE, Decision, decide
 from pe_core.forecast import SLOT, Slot, slot_start
 from pe_core.planner import Params, make_plan, params_from
 from pe_core.readings import Readings
@@ -63,7 +63,7 @@ def test_decision_follows_plan():
 def test_live_car_charging_overrides_plan():
     plan = _plan_with_first(0.30)
     d = decide(R(ev_power=7000, ev_plug="Charging"), CFG, plan=plan)
-    assert d.action == SELF_USE and d.rule == "car_charging" and d.power_w == 1000   # house only
+    assert d.action == HOLD and d.rule == "car_charging"
 
 
 def test_live_axle_overrides_plan():
