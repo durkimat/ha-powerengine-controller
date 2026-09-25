@@ -175,3 +175,22 @@ def test_charge_left_at_the_end_counts_in_the_saving():
     plan = make_plan(day(n=30), soc=60.0, p=FILL, now=T0)       # ends in the cheap window, freshly topped up
     assert plan.extra_kwh > 0 and plan.extra_value == pytest.approx(plan.extra_kwh * CHEAP)
     assert plan.saving == pytest.approx(plan.baseline_cost - plan.cost + plan.extra_value)
+
+
+def test_cheap_threshold_follows_the_prices():
+    from pe_core.tariff import cheap_threshold
+    edf = [0.0699] * 14 + [0.3028] * 34
+    assert cheap_threshold(edf, cap_p=10) == 10                       # the cap: 6.99p counts, 30p doesn't
+    assert cheap_threshold(edf, cap_p=50) == pytest.approx(6.99 + 0.2 * (30.28 - 6.99), abs=0.01)
+    agile = [0.05 + 0.005 * i for i in range(48)]                     # 5p .. 28.5p
+    t = cheap_threshold(agile, cap_p=50)
+    assert 9 < t < 10                                                 # the bottom fifth of the range
+    assert cheap_threshold([0.25] * 48, cap_p=50) < 25                # flat: nothing is cheap
+    assert cheap_threshold([-0.02] + [0.25] * 47, cap_p=10) >= 0      # negative prices always count
+    close = [0.20] * 24 + [0.22] * 24                                 # storing at 20p to save 22p doesn't pay
+    assert cheap_threshold(close, cap_p=50, rte=0.9, wear_p=2) < 20
+
+
+def test_auto_threshold_is_used_by_the_plan():
+    plan = make_plan(day(), soc=60.0, p=Params(cheap_cap_p=50, fill_when_cheap=False), now=T0, auto_cheap=True)
+    assert plan.cheap_p == pytest.approx(7 + 0.2 * 23, abs=0.01)

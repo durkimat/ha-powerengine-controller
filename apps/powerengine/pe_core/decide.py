@@ -13,6 +13,7 @@ from datetime import timedelta, tzinfo
 
 from .config import Config
 from .readings import Readings
+from .tariff import cheap_threshold
 
 SELF_USE, GRID_CHARGE, HOLD, FORCE_DISCHARGE, NONE = "self_use", "grid_charge", "hold", "force_discharge", "none"
 
@@ -59,6 +60,15 @@ def _static(cfg: Config, role: str, default: float) -> float:
         return default
 
 
+def cheap_limit(r: Readings, cfg: Config) -> float:
+    """Cheap-import threshold now (p/kWh): automatic from the next 24 hours' prices, or the fixed setting."""
+    s = cfg.safety
+    if not cfg.features.get("auto_cheap_threshold", True):
+        return s["cheap_threshold_p"]
+    ahead = [w.value for w in r.rates if w.end > r.now and w.start < r.now + timedelta(hours=24)]
+    return cheap_threshold(ahead, s["cheap_threshold_p"], wear_p=s.get("battery_wear_p", 2.0))
+
+
 def pre_axle_reserve(r: Readings, cfg: Config) -> float | None:
     """SoC (%) needed to cover a scheduled Axle event, or None if there isn't one."""
     if not (r.axle_start and r.axle_end):
@@ -92,7 +102,8 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
     soc, price_p = r.battery_soc, r.import_rate * 100
     target = s["grid_charge_target_soc"]
     max_dis = _static(cfg, "battery_max_discharge_power", AXLE_POWER_W_DEFAULT)
-    cheap = price_p <= s["cheap_threshold_p"]
+    threshold = cheap_limit(r, cfg)
+    cheap = price_p <= threshold
     price = f"{price_p:.2f}".rstrip("0").rstrip(".") + "p"
 
     # 1. Axle event in progress
@@ -132,7 +143,7 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
         was_charging = previous is not None and previous.action == GRID_CHARGE and previous.rule == "cheap_rate"
         resume_below = target - (0 if was_charging else s["charge_hysteresis_soc"])
         if soc < resume_below or (was_charging and soc < target):
-            return Decision(GRID_CHARGE, "cheap_rate", f"import is cheap ({price} ≤ {s['cheap_threshold_p']:g}p)",
+            return Decision(GRID_CHARGE, "cheap_rate", f"import is cheap ({price} ≤ {threshold:g}p)",
                             target_soc=target)
         why = f"import is cheap ({price}) and the battery is full enough; use the grid, save the battery"
         return Decision(HOLD, "cheap_rate", why)

@@ -41,8 +41,10 @@ KNOWN_KEYS = frozenset(
 
 MODES = ("passive", "active")
 FORECAST_SOURCES = ("none", "solcast_site", "scaled")
-FEATURES = ("fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle", "free_power_days")
-FEATURE_DEFAULTS = {"fill_when_cheap": True, "smart_charge_optimisation": True, "arbitrage": False, "axle": True,
+FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
+            "free_power_days")
+FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
+                    "arbitrage": False, "axle": True,
                     "free_power_days": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 SAFETY = {
@@ -73,7 +75,9 @@ _NOTIFY_SERVICE = re.compile(r"^notify\.[a-z0-9_]+$")
 # Labels and one-line help for the config page (kept next to the defaults they describe).
 SETTING_TEXT = {
     "min_reserve_soc": ("Minimum reserve", "%", "PowerEngine never plans to take the battery below this."),
-    "cheap_threshold_p": ("Cheap import threshold", "p/kWh", "Import at or below this price counts as cheap."),
+    "cheap_threshold_p": ("Cheap import threshold", "p/kWh",
+                          "Import at or below this counts as cheap. With the automatic threshold on, this is the "
+                          "most it can be; the day's prices can set it lower."),
     "grid_charge_target_soc": ("Grid-charge target", "%", "How full to charge from the grid when import is cheap."),
     "charge_hysteresis_soc": ("Charge restart margin", "%", "Once full, restart only below target minus this."),
     "pre_axle_lookahead_h": ("Axle look-ahead", "h", "How long before an Axle event to start protecting charge."),
