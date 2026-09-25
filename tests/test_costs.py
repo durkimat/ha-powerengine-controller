@@ -272,3 +272,42 @@ def test_days_recorded_with_an_older_flow_method_are_rebuilt(tmp_path):
     (tmp_path / f"{T0.date().isoformat()}.json").write_text(json.dumps(old))
     book = CostBook(str(tmp_path), UTC)
     assert T0.date() in book.days_to_backfill(T0.date() + timedelta(days=1), 2)
+
+
+def test_flow_id_changes_when_cost_inputs_are_remapped():
+    import dataclasses
+
+    from fixtures import CONFIG
+
+    from pe_core.replay import flow_id
+    a = flow_id(CONFIG)
+    b = flow_id(dataclasses.replace(CONFIG, inputs={**CONFIG.inputs, "battery_charge_power": {"entity": "sensor.x"}}))
+    c = flow_id(dataclasses.replace(CONFIG, inputs={**CONFIG.inputs, "solar_forecast_today": {"entity": "sensor.y"}}))
+    assert a != b and a == c                                    # only inputs that shape the flows count
+
+
+def test_measure_battery_efficiency_and_losses(tmp_path):
+    import json
+
+    from pe_core.costbook import CostBook
+    book = CostBook(str(tmp_path), UTC)
+    book.flow_id = "t"
+    today = (T0 + timedelta(days=20)).date()
+    e = 0.97                                                    # true one-way efficiency
+    for n in range(20):
+        day = T0 + timedelta(days=n)
+        recs = []
+        for i in range(48):
+            charging, discharging = i < 8, 36 <= i < 44
+            b_in = 2.0 if charging else 0.0                     # 16 kWh in overnight
+            b_out = 16 * e * e / 8 if discharging else 0.0      # everything back out in the evening
+            recs.append({"start": (day + timedelta(minutes=30 * i)).isoformat(), "seconds": 1800, "fv": "t",
+                         "battery_in": b_in, "battery_out": b_out, "solar": 0.0, "grid_import": 1.0 + b_in,
+                         "house": 0.95 + b_out, "car": 0.0, "grid_export": 0.0, "soc_start": 20, "soc_end": 20})
+        (tmp_path / f"{day.date().isoformat()}.json").write_text(json.dumps(recs))
+    m = book.measure(today, capacity=18)
+    assert m["measured"] and m["days"] == 20
+    assert m["efficiency"] == pytest.approx(e, abs=0.002) and m["rte"] == pytest.approx(e * e, abs=0.004)
+    assert m["losses_yesterday"] == pytest.approx(48 * 0.05, abs=0.01)   # 50 Wh per half-hour unaccounted
+    few = book.measure(T0.date() + timedelta(days=5), capacity=18)
+    assert not few["measured"] and few["efficiency"] is None             # under 14 days: not measured yet

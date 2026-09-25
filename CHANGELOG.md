@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.13 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- **Measured losses.** New diagnostic sensors `sensor.pe_diag_battery_efficiency` (round trip, measured over the
+  last 30 days from the battery's energy in and out and its change in charge) and
+  `sensor.pe_diag_system_losses` (yesterday's inverter/standby losses, with a per-day history). Once 14 full days
+  are recorded, the measured efficiency replaces the configured 95% in the battery ledger, the default-battery
+  simulation, the Passive simulation and the planner; costs are re-valued when it moves.
+- **Fix: days weren't rebuilt after re-mapping the battery sensors.** Cost records now carry a flow id made from
+  the method version and the inputs they were read from; when those inputs change (on save, or at start-up), the
+  last 14 days are rebuilt from HA history automatically.
+
 ## 0.4.12 (beta)
 
 ### Behaviour changes
