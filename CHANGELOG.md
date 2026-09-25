@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.3.3 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- House-load history is now read from HA **one day at a time** in the background (values only). A busy power sensor
+  logs ~15,000 readings a day, and asking for 14 days at once returned nothing ("0 house readings").
+- Logbook entries are written without an entity reference (AppDaemon turned it into a target, which the logbook
+  service rejected with `invalid_format`).
+
+### Fixed
+- Plan tab: costs read "this plan earns £0.52 … plain self-use costs £0.00" instead of "£-0.52 vs £0.0".
+- No more "Excessive time spent in callback" warning while loading history.
+
 ## 0.3.2 (beta)
 
 ### Behaviour changes

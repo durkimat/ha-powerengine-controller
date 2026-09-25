@@ -80,3 +80,9 @@ def test_no_profile_uses_steady_default_not_live_power():
     r.house_power = 3200                               # a kettle-and-oven moment
     slots = build_slots(r, [], LoadProfile(), BST)
     assert slots[0].load_kwh == pytest.approx(DEFAULT_LOAD_W / 1000 * 0.5)
+
+
+def test_unit_passed_in_when_rows_have_no_attributes():
+    rows = [[{"state": "1.2", "last_changed": "2026-09-25T10:00:00+00:00"}]]
+    assert [v for _, v in parse_history(rows, unit="kW")] == [1200.0]
+    assert [v for _, v in parse_history(rows)] == [1.2]

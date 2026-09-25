@@ -9,7 +9,7 @@ MQTT and never write to the inverter or any other device.
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
@@ -186,12 +186,18 @@ class PowerEngine(hass.Hass):
             if entry:
                 self._since = entry["hhmm"]
                 self.log(f"Decision: {entry['text']}")
-                self.call_service("logbook/log", name="PowerEngine", message=entry["text"],
-                                  entity_id="sensor.pe_state_decision")
+                self._logbook(entry["text"])
                 self._publish_state("state_activity", entry["time"], {"entries": self.activity.entries})
             self._decision = decision
         for key, (state, attrs) in entity_states(readings, self.mode, self.tz, decision, self._since).items():
             self._publish_if_changed(key, state, attrs)
+
+    def _logbook(self, message):
+        """Write to the HA logbook. No entity_id: AppDaemon would move it into 'target', which logbook.log rejects."""
+        try:
+            self.call_service("logbook/log", name="PowerEngine", message=message, domain="powerengine")
+        except Exception as err:
+            self.log(f"Could not write to the logbook: {err!r}", level="WARNING")
 
     def _publish_if_changed(self, key, state, attrs):
         if self._published.get(key) != (state, attrs):
@@ -205,21 +211,59 @@ class PowerEngine(hass.Hass):
         return spec.get("entity")
 
     def _learn_load(self, kwargs):
-        """Read 14 days of house-load (and car) history from HA, then rebuild the load profile."""
+        """Start reading 14 days of house-load (and car) history from HA, one day per callback.
+
+        A busy power sensor can log ~15,000 readings a day; asking for 14 days at once returns nothing,
+        so history is fetched a day at a time in the background.
+        """
         house, car = self._role_entity("house_load_power"), self._role_entity("ev_charge_power")
         if not house:
             self.log("Load history: no house-load input mapped yet", level="WARNING")
             return
+        def unit(eid):
+            try:
+                return self.get_state(eid, attribute="unit_of_measurement") if eid else None
+            except Exception:
+                return None
+        now = datetime.now(timezone.utc)
+        self._hist_job = {"now": now, "days": list(range(HISTORY_DAYS, 0, -1)), "errors": 0,
+                          "ids": {"house": house, "car": car}, "units": {"house": unit(house), "car": unit(car)},
+                          "rows": {"house": [], "car": []}}
+        self.run_in(self._learn_load_day, 1)
+
+    def _history(self, eid, start, end):
         try:
-            now = datetime.now(timezone.utc)
-            house_rows = parse_history(self.get_history(entity_id=house, days=HISTORY_DAYS))
-            car_rows = parse_history(self.get_history(entity_id=car, days=HISTORY_DAYS)) if car else []
-            self._hist_means = house_only_means(house_rows, car_rows, now,
-                                                bool(self.cfg.system.get("house_load_includes_ev", True)))
-            self.log(f"Load history from HA: {len(house_rows)} house readings, {len(car_rows)} car readings "
-                     f"-> {len(self._hist_means)} half-hours")
-        except Exception as err:
-            self.log(f"Could not read load history from HA ({err!r}); retrying in an hour. "
+            return self.get_history(entity_id=eid, start_time=start, end_time=end,
+                                    minimal_response=True, no_attributes=True)
+        except TypeError:                              # older AppDaemon without those options
+            return self.get_history(entity_id=eid, start_time=start, end_time=end)
+
+    def _learn_load_day(self, kwargs):
+        job = self._hist_job
+        if job["days"]:
+            d = job["days"].pop(0)
+            start = job["now"] - timedelta(days=d)
+            end = start + timedelta(days=1)
+            for key in ("house", "car"):
+                eid = job["ids"][key]
+                if not eid:
+                    continue
+                try:
+                    job["rows"][key] += parse_history(self._history(eid, start, end), unit=job["units"][key])
+                except Exception as err:
+                    job["errors"] += 1
+                    if job["errors"] == 1:
+                        self.log(f"Load history: couldn't read {eid} for {start:%d %b} ({err!r})", level="WARNING")
+            self.run_in(self._learn_load_day, 1)
+            return
+        house_rows, car_rows = job["rows"]["house"], job["rows"]["car"]
+        self._hist_means = house_only_means(house_rows, car_rows, job["now"],
+                                            bool(self.cfg.system.get("house_load_includes_ev", True)))
+        failed = f" ({job['errors']} day(s) failed)" if job["errors"] else ""
+        self.log(f"Load history from HA: {len(house_rows)} house readings, {len(car_rows)} car readings "
+                 f"-> {len(self._hist_means)} half-hours{failed}")
+        if not self._hist_means:
+            self.log("Load history from HA was empty; retrying in an hour. "
                      "PowerEngine's own load record is still used.", level="WARNING")
             self.run_in(self._learn_load, 3600)
         self._rebuild_profile()
@@ -298,9 +342,7 @@ class PowerEngine(hass.Hass):
             return
         changed = self._changes(self.cfg.raw if self.cfg else {}, new)
         self.log(f"Config saved by {user} ({changed}); backup: {backup or 'none (first save)'}")
-        self.call_service("logbook/log", name="PowerEngine",
-                          message=f"configuration saved by {user}: {changed}",
-                          entity_id="sensor.pe_map_config")
+        self._logbook(f"configuration saved by {user}: {changed}")
         self._reload()
         self.fire_event(RESULT_EVENT, ok=True, message=f"Saved. {changed}.")
 

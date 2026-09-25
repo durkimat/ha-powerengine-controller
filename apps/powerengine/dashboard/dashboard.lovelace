@@ -175,7 +175,8 @@ views:
               · house load learned from {{ state_attr('sensor.pe_plan', 'load_profile_days') or 0 }} days of history
               {%- if (state_attr('sensor.pe_plan', 'load_profile_days') or 0) < 2 %}
               · **the load forecast is still learning**, so treat this plan as rough for the first day or two{% endif %}
-              · expected cost £{{ state_attr('sensor.pe_plan', 'cost') }} vs £{{ state_attr('sensor.pe_plan', 'baseline_cost') }} with plain self-use
+              {%- macro money(v) -%}{% set v = v | float(0) %}{{ ('earns £%.2f' | format(-v)) if v < -0.005 else ('costs £%.2f' | format(v)) }}{%- endmacro %}
+              · this plan {{ money(state_attr('sensor.pe_plan', 'cost')) }} over the period; plain self-use {{ money(state_attr('sensor.pe_plan', 'baseline_cost')) }}
               {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}
               · prices after {{ as_timestamp(state_attr('sensor.pe_plan', 'estimated_prices_from')) | timestamp_custom('%a %H:%M') }} are estimated (not yet published){% endif %}</small>
           - type: custom:apexcharts-card
