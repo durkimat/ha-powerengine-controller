@@ -16,7 +16,7 @@ from .costs import METHOD_VERSION, SimDefault, day_summary, process, steps
 from .energy import HalfHour
 from .ledger import Ledger
 from .readings import Readings
-from .tariff import cheap_tods, overnight_window, rates_at
+from .tariff import cheap_tods, overnight_window, rates_at, reclassify
 
 KEEP_DAYS = 400
 WINDOW_DAYS = 14
@@ -77,8 +77,11 @@ class CostBook:
             del self.cheap_history[day]
 
     def add(self, hh: HalfHour, r: Readings, *, capacity: float, eff: float, floor_soc: float, max_kw: float,
-            includes_ev: bool, axle_value: float = 1.0) -> dict | None:
-        """Value a completed half-hour and store it. Returns the stored record, or None if it can't be valued."""
+            includes_ev: bool, axle_value: float = 1.0, keep_existing: bool = False) -> dict | None:
+        """Value a completed half-hour and store it. Returns the stored record, or None if it can't be valued.
+
+        keep_existing: don't replace a half-hour already recorded (a backfill never overwrites live records).
+        """
         self.learn_rates(r)
         window = overnight_window(self.cheap_history)
         export = hh.export_rate if hh.export_rate is not None else (r.export_rate or 0.0)
@@ -90,16 +93,61 @@ class CostBook:
                            max_kw=max_kw, includes_ev=includes_ev, axle_value=axle_value)
         day = self._local_day(hh.start)
         records = self.day_records(day)
-        records = [x for x in records if x.get("start") != rec["start"]] + [rec]
+        if keep_existing and any(x.get("start") == rec["start"] for x in records):
+            return None
+        rec["source"] = "history" if keep_existing else "live"
+        records = sorted([x for x in records if x.get("start") != rec["start"]] + [rec], key=lambda x: x["start"])
         _write_json(self._day_path(day), records)
+        self._note_event(rec)
+        self._save_state()
+        return rec
+
+    def days_to_backfill(self, today: date, days: int) -> list[date]:
+        """Recent complete days with less than 90% of the day recorded, oldest first."""
+        out = []
+        for i in range(days, 0, -1):
+            d = today - timedelta(days=i)
+            recs = self.day_records(d)
+            if sum(x.get("seconds") or 0.0 for x in recs) < 0.9 * 86400:
+                out.append(d)
+        return out
+
+    def revalue(self, *, capacity: float, eff: float, floor_soc: float, max_kw: float, includes_ev: bool,
+                axle_value: float = 1.0) -> int:
+        """Re-value every stored half-hour in time order with a fresh ledger and simulation.
+
+        Needed after a backfill (older half-hours arrived after newer ones) or a change of method. Smart slots are
+        re-decided with the current overnight window. Returns the number of half-hours valued.
+        """
+        window = overnight_window(self.cheap_history)
+        self.ledger, self.sim, self.last_event = Ledger(), SimDefault(), None
+        n = 0
+        names = sorted(x for x in os.listdir(self.folder) if x[:4].isdigit() and x.endswith(".json"))
+        for name in names:
+            path = os.path.join(self.folder, name)
+            records = sorted(_read_json(path, []), key=lambda x: x["start"])
+            for rec in records:
+                v = rec.get("v") or {}
+                if "act" not in v:
+                    continue
+                start = datetime.fromisoformat(rec["start"])
+                rt = reclassify(start, v, window, self.tz)
+                rec["v"] = process(rec, rt, self.ledger, self.sim, capacity=capacity, eff=eff, floor_soc=floor_soc,
+                                   max_kw=max_kw, includes_ev=includes_ev, axle_value=axle_value)
+                self._note_event(rec)
+                n += 1
+            _write_json(path, records)
+        self._save_state()
+        return n
+
+    def _note_event(self, rec: dict) -> None:
         v = rec["v"]
         if v.get("event") and v.get("event_kwh", 0) > 0.01:
-            local = hh.start.astimezone(self.tz) if self.tz else hh.start
+            start = datetime.fromisoformat(rec["start"])
+            local = start.astimezone(self.tz) if self.tz else start
             self.last_event = {"type": v["event"], "date": local.date().isoformat(), "time": local.strftime("%H:%M"),
                                "kwh": round(v["event_kwh"], 2), "gross": round(v["event_gross"], 2),
                                "net": round(v["event_net"], 2)}
-        self._save_state()
-        return rec
 
     # --- reporting ----------------------------------------------------------------------
     def summary(self, day: date, today: date) -> dict | None:

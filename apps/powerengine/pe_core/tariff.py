@@ -68,6 +68,7 @@ class Rates:
     overnight: float        # normal overnight rate
     export: float
     smart_slot: bool
+    peak: float | None = None     # the day's highest rate
 
 
 def rates_at(t: datetime, rates: list[Window], window: set[int], export: float, fallback: float | None,
@@ -82,4 +83,11 @@ def rates_at(t: datetime, rates: list[Window], window: set[int], export: float, 
     lo, hi = min(vals), max(vals)
     in_window = tod(t, tz) in window
     slot = actual < hi - EPS and actual <= lo + EPS and not in_window and bool(window)
-    return Rates(actual=actual, standard=hi if slot else actual, overnight=lo, export=export, smart_slot=slot)
+    return Rates(actual=actual, standard=hi if slot else actual, overnight=lo, export=export, smart_slot=slot, peak=hi)
+
+
+def reclassify(start: datetime, v: dict, window: set[int], tz=None) -> Rates:
+    """Rates for a stored half-hour, re-deciding 'smart slot' with today's (better) overnight window."""
+    act, ovn, peak, exp = v["act"], v["ovn"], v.get("peak") or v["std"], v["exp"]
+    slot = bool(window) and act < peak - EPS and act <= ovn + EPS and tod(start, tz) not in window
+    return Rates(actual=act, standard=peak if slot else act, overnight=ovn, export=exp, smart_slot=slot, peak=peak)

@@ -181,3 +181,55 @@ def test_cost_book_records_values_and_summarises(tmp_path):
     states = cost_entity_states(again, T0.date(), again.months(T0.date()))
     assert states["cost_today"][0] == s["actual"]
     assert states["cost_days"][1]["days"][-1]["date"] == T0.date().isoformat()
+
+
+# --- backfill from history -----------------------------------------------------------------
+
+def _rows(points, unit=None):
+    rows = [{"state": str(v), "last_changed": t.isoformat()} for t, v in points]
+    if unit and rows:
+        rows[0]["attributes"] = {"unit_of_measurement": unit}
+    return [rows]
+
+
+def test_replay_backfills_a_day_and_revalue_reconciles(tmp_path):
+    from fixtures import CONFIG
+
+    from pe_core.costbook import CostBook
+    from pe_core.replay import Timeline, history_entities, replay
+    day0 = T0
+    rates = [{"start": w.start.isoformat(), "end": w.end.isoformat(), "value_inc_vat": w.value}
+             for w in day_rates(day0)]
+    night, evening = day0 + timedelta(hours=1), day0 + timedelta(hours=18)
+    tl = {
+        "sensor.bat_soc": Timeline(_rows([(day0, 30), (night + timedelta(hours=3), 90), (evening, 90)])),
+        # grid-charge 01:00-04:00, battery covers the house 18:00-21:00
+        "sensor.bat_power": Timeline(_rows([(day0, 0), (night, -4800), (night + timedelta(hours=3), 0),
+                                            (evening, 1000), (evening + timedelta(hours=3), 0)], "W")),
+        "sensor.meter_power": Timeline(_rows([(day0, 1000), (night, 5800), (night + timedelta(hours=3), 1000),
+                                              (evening, 0), (evening + timedelta(hours=3), 1000)], "W")),
+        "sensor.house_load": Timeline(_rows([(day0, 1000)], "W")),
+        "sensor.rate_now": Timeline(_rows([(day0, CHEAP), (day0 + timedelta(hours=5, minutes=30), PEAK)], "GBP/kWh")),
+        "sensor.export_rate": Timeline(_rows([(day0, EXP)], "GBP/kWh")),
+        "event.rates_today": Timeline([[{"state": day0.isoformat(), "last_changed": day0.isoformat(),
+                                         "attributes": {"rates": rates}}]]),
+    }
+    plain, full = history_entities(CONFIG)
+    assert "sensor.house_load" in plain and full == ["event.rates_today"]
+    book = CostBook(str(tmp_path), UTC)
+    assert day0.date() in book.days_to_backfill(day0.date() + timedelta(days=1), 3)
+    rec, n = Recorder(), 0
+    for r in replay(CONFIG, tl, day0, day0 + timedelta(days=1, seconds=30)):
+        hh = rec.add(r)
+        if hh and book.add(hh, r, capacity=18, eff=0.95, floor_soc=12, max_kw=4.8, includes_ev=True,
+                           keep_existing=True):
+            n += 1
+    assert n == 48
+    assert day0.date() not in book.days_to_backfill(day0.date() + timedelta(days=1), 3)
+    assert book.revalue(capacity=18, eff=0.95, floor_soc=12, max_kw=4.8, includes_ev=True) == 48
+    s = book.summary(day0.date(), today=day0.date() + timedelta(days=1))
+    assert s["complete"] and s["half_hours"] == 48 and s["coverage"] == 1.0
+    assert s["actual"] == pytest.approx(20.4 * CHEAP + 15 * PEAK, abs=0.02)      # metered import at the listed rates
+    assert s["unexplained"] == pytest.approx(0, abs=0.02)
+    assert s["s3b"] > 0                                    # charging at night for the evening beats plain self-use
+    assert s["stored"] > 0                                 # the battery ends fuller than it started

@@ -36,6 +36,7 @@ from pe_core.loadstore import LoadStore
 from pe_core.modes import effective_mode
 from pe_core.planner import make_plan, params_from, plan_entity_states
 from pe_core.readings import read
+from pe_core.replay import Timeline, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue
 from pe_core.simulate import SimBattery
 from pe_core.status import entity_states
@@ -45,6 +46,7 @@ HEARTBEAT_SECONDS = 60
 CYCLE_SECONDS = 30
 REPLAN_SECONDS = 300
 HISTORY_DAYS = 14
+BACKFILL_DAYS = 14
 RECHECK_SECONDS = 300
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
@@ -125,6 +127,8 @@ class PowerEngine(hass.Hass):
         self.run_in(self._learn_load, 5)                     # load profile from history, then daily
         self.run_daily(self._learn_load, "00:10:00")
         self.run_daily(lambda kwargs: self._refresh_months(prune=True), "00:05:00")
+        self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
+        self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
 
     def terminate(self):
@@ -215,9 +219,7 @@ class PowerEngine(hass.Hass):
         if hh is None:
             return
         try:
-            p = params_from(self.cfg)
-            rec = self.costbook.add(hh, r, capacity=p.capacity_kwh, eff=p.efficiency, floor_soc=p.min_reserve_soc,
-                                    max_kw=p.max_discharge_kw, includes_ev=p.hold_for_car, axle_value=p.axle_value)
+            rec = self.costbook.add(hh, r, **self._cost_params())
             if rec is None:
                 return
             if rec["v"].get("event"):
@@ -225,6 +227,70 @@ class PowerEngine(hass.Hass):
             self._publish_costs()
         except Exception as err:
             self.log(f"Cost accounting failed for {hh.start.isoformat()}: {err!r}", level="WARNING")
+
+    def _cost_params(self):
+        p = params_from(self.cfg)
+        return {"capacity": p.capacity_kwh, "eff": p.efficiency, "floor_soc": p.min_reserve_soc,
+                "max_kw": p.max_discharge_kw, "includes_ev": p.hold_for_car, "axle_value": p.axle_value}
+
+    def _backfill(self, kwargs):
+        """Fill recent days that PowerEngine didn't record (or only partly) from HA history, one day per callback."""
+        if self.costbook is None or self.cfg is None:
+            return
+        days = self.costbook.days_to_backfill(self._today(), BACKFILL_DAYS)
+        if not days:
+            return
+        plain, full = history_entities(self.cfg)
+        units = {}
+        for eid in plain:
+            try:
+                units[eid] = {"unit_of_measurement": self.get_state(eid, attribute="unit_of_measurement")}
+            except Exception:
+                units[eid] = {}
+        self.log(f"Cost backfill: {len(days)} day(s) from HA history ({days[0]:%d %b} to {days[-1]:%d %b})")
+        self._bf = {"days": days, "plain": plain, "full": full, "units": units, "added": 0, "errors": 0}
+        self.run_in(self._backfill_day, 1)
+
+    def _backfill_day(self, kwargs):
+        job = self._bf
+        if not job["days"]:
+            n = self.costbook.revalue(**self._cost_params())
+            failed = f"; {job['errors']} fetch(es) failed" if job["errors"] else ""
+            self.log(f"Cost backfill done: {job['added']} half-hours added from history; "
+                     f"{n} half-hours re-valued{failed}")
+            self._refresh_months()
+            return
+        day = job["days"].pop(0)
+        tz = self.tz or timezone.utc
+        start = datetime(day.year, day.month, day.day, tzinfo=tz).astimezone(timezone.utc)
+        end = (datetime(day.year, day.month, day.day, tzinfo=tz) + timedelta(days=1)).astimezone(timezone.utc)
+        timelines = {}
+        for eid in job["plain"] + job["full"]:
+            try:
+                if eid in job["full"]:
+                    rows = self.get_history(entity_id=eid, start_time=start - timedelta(days=1), end_time=end)
+                else:
+                    rows = self._history(eid, start, end)
+                timelines[eid] = Timeline(rows, job["units"].get(eid))
+            except Exception as err:
+                job["errors"] += 1
+                if job["errors"] <= 3:
+                    self.log(f"Cost backfill: couldn't read {eid} for {day:%d %b} ({err!r})", level="WARNING")
+        rec, kw, added = Recorder(), self._cost_params(), 0
+        last = None
+        try:
+            for r in replay(self.cfg, timelines, start, end + timedelta(seconds=30)):
+                hh = rec.add(r)
+                last = r
+                if hh is not None and self.costbook.add(hh, r, keep_existing=True, **kw):
+                    added += 1
+        except Exception as err:
+            job["errors"] += 1
+            self.log(f"Cost backfill failed for {day:%d %b}: {err!r}", level="WARNING")
+        job["added"] += added
+        if last is not None:
+            self.log(f"Cost backfill: {day:%a %d %b}: {added} half-hours from history")
+        self.run_in(self._backfill_day, 1)
 
     def _refresh_months(self, prune=False):
         if self.costbook is None:
