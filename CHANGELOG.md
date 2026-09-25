@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.1 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- **Cost backfill:** on start-up (and nightly at 00:20) PowerEngine fills any of the last 14 days that it didn't
+  record, or only partly recorded, by replaying HA history through the same code it uses live. Live half-hours are
+  never overwritten. Afterwards every stored half-hour is re-valued in time order so the battery ledger is continuous.
+- Re-valuing also re-decides which half-hours were smart slots using the latest overnight window, so early days
+  improve as more days are seen.
+- History half-hours are marked `source: history` in the cost records.
+
 ## 0.4.0 (beta)
 
 ### Behaviour changes

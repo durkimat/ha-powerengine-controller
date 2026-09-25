@@ -90,7 +90,7 @@ def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: 
     s3a = (delivered - car_part) * (std - exp / rte) + car_part * (ovn - exp / rte)
 
     out = {
-        "act": act, "std": std, "ovn": ovn, "exp": exp, "slot": rt.smart_slot,
+        "act": act, "std": std, "ovn": ovn, "exp": exp, "slot": rt.smart_slot, "peak": rt.peak,
         "s0": house * std + car * ovn,
         "solar": k["s_h"] * std + k["s_c"] * ovn + (k["s_e"] + k["s_b"]) * exp,
         "smart": k["g_h"] * (std - act) + k["g_c"] * (ovn - act) + k["g_b"] * (std - act),
