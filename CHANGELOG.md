@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.2 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only. These change what PowerEngine *would* do (decisions, Passive simulation):
+- **Car charging at peak: the battery covers the house, not the car.** Previously PowerEngine would hold the
+  battery; now it would self-use with the battery's discharge limited to the house's own load, so the house isn't
+  pushed onto the peak rate. At the minimum reserve it still holds. (How to apply the limit to the Solis is part
+  of the Active design; hold remains the fallback.)
+- **Fuse limit in live decisions.** When grid charging would take house + car + battery over 90% of the main fuse,
+  the decision says so and shows the reduced charge rate (the plan already allowed for it).
+- **Smart-charge slot record.** Every EDF slot is tracked: ran (confirmed when EDF lists it as completed),
+  cancelled before starting, or cut short, with the energy the car actually drew. Shown on the Health tab; it is
+  the history for the slot-certainty score (#14).
+
 ## 0.5.1 (beta)
 
 ### Behaviour changes

@@ -40,9 +40,12 @@ def test_hysteresis_stops_flapping():
     assert decide(R(import_rate=CHEAP, battery_soc=98), CFG, prev).action == GRID_CHARGE
 
 
-def test_car_charging_never_drains_battery():
-    d = decide(R(ev_power=7000, ev_plug="Charging"), CFG)
-    assert d.action == HOLD and d.rule == "car_charging"
+def test_car_charging_at_peak_battery_covers_house_not_car():
+    d = decide(R(ev_power=7000, ev_plug="Charging", house_power=1200), CFG)
+    assert d.action == SELF_USE and d.rule == "car_charging" and d.power_w == 1200
+    assert "not the car" in d.reason and "limited to 1.2 kW" in d.sentence(passive=True)
+    low = decide(R(ev_power=7000, ev_plug="Charging", house_power=1200, battery_soc=12), CFG)
+    assert low.action == HOLD                                    # at the reserve: hold
 
 
 def test_car_charging_on_cheap_rate_charges_battery_too():
@@ -118,3 +121,13 @@ def test_safety_settings_validated():
     with pytest.raises(ConfigError):
         parse_config({"system": {"house_load_includes_ev": "yes"}})
     assert parse_config({"safety": {"cheap_threshold_p": 8}}).safety["cheap_threshold_p"] == 8
+
+
+def test_grid_charging_is_limited_by_the_fuse():
+    cfg60 = parse_config({"inputs": {"battery_capacity": {"value": 18}}, "safety": {"main_fuse_a": 60}})
+    cfg80 = parse_config({"inputs": {"battery_capacity": {"value": 18}}, "safety": {"main_fuse_a": 80}})
+    r = R(ev_power=7400, ev_plug="Charging", import_rate=CHEAP, house_power=1000, battery_soc=40)
+    d60 = decide(r, cfg60)                                        # 12.42 kW - 1 - 7.4 = 4.02 kW
+    assert d60.action == GRID_CHARGE and d60.power_w == 4020 and "60 A fuse" in d60.reason
+    d80 = decide(r, cfg80)                                        # 16.56 kW: room for the full 4.8 kW
+    assert d80.action == GRID_CHARGE and d80.power_w is None

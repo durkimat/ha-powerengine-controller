@@ -42,6 +42,8 @@ class Decision:
             verb += f" to {self.target_soc:.0f}%"
         if self.action == FORCE_DISCHARGE and self.power_w:
             verb += f" at {self.power_w / 1000:.1f} kW"
+        if self.action == SELF_USE and self.power_w is not None:
+            verb += f" (battery limited to {self.power_w / 1000:.1f} kW)"
         if self.action == NONE:
             return f"No decision: {self.reason}"
         lead = "Would " if passive else ""
@@ -73,6 +75,12 @@ def pre_axle_reserve(r: Readings, cfg: Config) -> float | None:
 
 def decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz: tzinfo | None = None,
            plan=None) -> Decision:
+    """What PowerEngine would do now (the rule stack, or the plan with live overrides), within the fuse limit."""
+    return fuse_limited(_decide(r, cfg, previous, tz, plan), r, cfg)
+
+
+def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz: tzinfo | None = None,
+            plan=None) -> Decision:
     if r is None:
         return Decision(NONE, "unconfigured", "PowerEngine isn't configured yet")
     if r.battery_soc is None or r.import_rate is None:
@@ -117,7 +125,7 @@ def decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz
         if cheap and soc < target:
             why = f"car is charging at a cheap rate ({price}); charge the battery too"
             return Decision(GRID_CHARGE, "car_charging", why, target_soc=target)
-        return Decision(HOLD, "car_charging", "car is charging; stop the battery discharging into it")
+        return _car_at_peak(r, soc, s, price)
 
     # 5. Cheap import
     if cheap:
@@ -136,6 +144,37 @@ def decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz
     return Decision(SELF_USE, "default", f"nothing better to do at {price}; the battery covers the house")
 
 
+def _car_at_peak(r: Readings, soc: float, s: dict, price: str) -> Decision:
+    """Car charging at a non-cheap rate: the battery covers the house but not the car.
+
+    The battery's discharge is capped at the house's own load, so the car's charge comes from the grid. How the
+    cap is applied to a real inverter is part of the Active design (fallback: hold).
+    """
+    if soc <= s["min_reserve_soc"]:
+        return Decision(HOLD, "car_charging", f"car is charging and the battery is at its {s['min_reserve_soc']:.0f}% "
+                                              "minimum reserve")
+    house = max(0.0, r.house_power or 0.0)
+    why = (f"car is charging at {price}: the battery covers the house (about {house / 1000:.1f} kW) "
+           "but not the car, which charges from the grid")
+    return Decision(SELF_USE, "car_charging", why, power_w=round(house))
+
+
+def fuse_limited(d: Decision, r: Readings, cfg: Config) -> Decision:
+    """Cap grid charging so house + car + battery stay under 90% of the main fuse (battery reduced first)."""
+    if d.action != GRID_CHARGE or r is None:
+        return d
+    s = cfg.safety
+    max_w = _static(cfg, "battery_max_charge_power", 4800)
+    limit_w = s.get("main_fuse_a", 60) * 230 * 0.9
+    car_w = (r.ev_power or 0.0) if r.ev_state() == "charging" else 0.0
+    house_w = max(0.0, (r.house_power or 0.0) - (r.solar_power or 0.0))
+    room = max(0.0, limit_w - house_w - car_w)
+    if room >= max_w:
+        return d
+    why = f"{d.reason} (charging limited to {room / 1000:.1f} kW by the {s.get('main_fuse_a', 60):g} A fuse)"
+    return Decision(d.action, d.rule, why, target_soc=d.target_soc, power_w=round(room), details=d.details)
+
+
 def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bool, target: float) -> Decision:
     s, f = cfg.safety, cfg.features
     if f.get("free_power_days") and r.free_state() == "active":
@@ -144,7 +183,7 @@ def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bo
         if cheap and soc < target:
             why = f"car is charging at a cheap rate ({price}); charge the battery too"
             return Decision(GRID_CHARGE, "car_charging", why, target_soc=target)
-        return Decision(HOLD, "car_charging", "car is charging; stop the battery discharging into it")
+        return _car_at_peak(r, soc, s, price)
     ps = plan.slots[0]
     if ps.action == FORCE_DISCHARGE and r.axle_state() != "active":
         return Decision(HOLD, "plan", "Axle event due now per the plan, but not started yet: holding charge")
