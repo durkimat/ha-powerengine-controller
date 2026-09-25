@@ -19,6 +19,7 @@ from pe_core.activity import ActivityLog
 from pe_core.checks import OK, check, summarise
 from pe_core.config import DEFAULT_PATHS, ConfigError, load_config, required_roles, settings_catalogue
 from pe_core.costbook import CostBook, cost_entity_states
+from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import sync_dashboard
 from pe_core.decide import decide
 from pe_core.energy import Recorder
@@ -112,6 +113,9 @@ class PowerEngine(hass.Hass):
         self.costbook, self._months = None, []
         try:
             self.costbook = CostBook(os.path.join(os.path.dirname(self._save_path()), "costs"), self.tz)
+            if self.costbook.needs_revalue and self.cfg is not None:
+                n = self.costbook.revalue(**self._cost_params())
+                self.log(f"Costs: re-valued {n} half-hours with method {METHOD_VERSION}")
             self._refresh_months()
         except Exception as err:
             self.log(f"Could not open the cost book: {err!r}", level="WARNING")

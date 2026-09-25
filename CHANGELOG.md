@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.4 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- **Fix: "Carried in battery" drifted negative every day.** Whenever the battery ledger ran empty it was re-seeded
+  without counting the seed, so its later use showed as a loss. The ledger is now matched to the battery's real
+  state of charge every half-hour; any correction lands in Unexplained. Cost method is now version 2 and all stored
+  half-hours are re-valued automatically on start-up.
+- **Energy by day** table on the Costs tab (import, export, solar, house, car, battery in/out, battery → export,
+  unaccounted, ledger correction) to check the figures against the inverter's counters.
+- Labels: "Battery (app)" is now "Battery control", and in Passive mode the page says these layers describe what
+  your current setup (e.g. Predbat) did.
+
 ## 0.4.3 (beta)
 
 ### Behaviour changes

@@ -47,6 +47,8 @@ class CostBook:
         self.sim = SimDefault(st.get("sim_kwh"))
         self.cheap_history: dict[str, list[int]] = st.get("cheap_tods", {})
         self.last_event: dict | None = st.get("last_event")
+        # records valued by an older method are re-valued on start-up
+        self.needs_revalue = bool(st) and st.get("method") != METHOD_VERSION
 
     # --- files ------------------------------------------------------------------------
     def _day_path(self, day: date | str) -> str:

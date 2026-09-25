@@ -98,7 +98,7 @@ def test_ledger_first_in_first_out_with_losses():
 
 def rec(**kw):
     base = dict.fromkeys(FLOWS, 0.0)
-    base.update(seconds=1800, soc_start=50, standing=0.0)
+    base.update(seconds=1800, soc_start=None, standing=0.0)      # None: no state-of-charge check
     base.update(kw)
     base["grid_import"] = base["g_h"] + base["g_c"] + base["g_b"]
     base["grid_export"] = base["s_e"] + base["b_e"]
@@ -106,7 +106,7 @@ def rec(**kw):
 
 
 CASES = [
-    (rec(g_h=0.3, g_b=2.4), Rates(CHEAP, CHEAP, CHEAP, EXP, False)),             # overnight charge
+    (rec(g_h=0.3, g_b=2.4, soc_start=50), Rates(CHEAP, CHEAP, CHEAP, EXP, False)),  # overnight charge (opening SoC)
     (rec(g_h=0.2, g_c=3.7, g_b=2.0), Rates(CHEAP, PEAK, CHEAP, EXP, True)),        # daytime smart slot, car + battery
     (rec(s_h=0.4, s_b=1.0, s_e=0.5), Rates(PEAK, PEAK, CHEAP, EXP, False)),       # sunny
     (rec(b_h=0.6, s_h=0.1), Rates(PEAK, PEAK, CHEAP, EXP, False)),                # evening, battery covers house
@@ -162,9 +162,10 @@ def test_cost_book_records_values_and_summarises(tmp_path):
     rec = Recorder()
     t = T0 + timedelta(hours=1)
     stored = []
-    for i in range(4 * 60 * 2):                     # 4 hours of 30-second readings, grid-charging overnight
-        r = R(t + timedelta(seconds=30 * i), grid_power=5800, battery_power=-4800, house_power=1000,
-              import_rate=CHEAP, rates=rates)
+    for i in range(4 * 60 * 2):                     # 4 hours of 30-second readings, grid-charging overnight at 2 kW
+        soc = 50 + 2.0 * 0.95 * (i * 30 / 3600) / 18 * 100
+        r = R(t + timedelta(seconds=30 * i), grid_power=3000, battery_power=-2000, house_power=1000,
+              import_rate=CHEAP, rates=rates, battery_soc=soc)
         hh = rec.add(r)
         if hh:
             out = book.add(hh, r, capacity=18, eff=0.95, floor_soc=12, max_kw=4.8, includes_ev=True)
@@ -172,7 +173,9 @@ def test_cost_book_records_values_and_summarises(tmp_path):
     assert len([x for x in stored if x]) == 7
     s = book.summary(T0.date(), today=T0.date())
     assert s["half_hours"] == 7 and not s["complete"]
-    assert s["actual"] == pytest.approx(7 * 0.5 * 5.8 * CHEAP + 0.57 * 3.5 / 24, abs=0.02)   # + standing so far
+    assert s["actual"] == pytest.approx(7 * 0.5 * 3.0 * CHEAP + 0.57 * 3.5 / 24, abs=0.02)   # + standing so far
+    assert s["energy"]["grid_import"] == pytest.approx(10.5, abs=0.1)
+    assert abs(s["energy"]["correction_kwh"]) < 0.2              # the ledger tracked the battery
     assert s["stored"] > 0                                      # bought now, for later
     assert s["unexplained"] == pytest.approx(0, abs=0.02)
     # state survives a restart
@@ -233,3 +236,29 @@ def test_replay_backfills_a_day_and_revalue_reconciles(tmp_path):
     assert s["unexplained"] == pytest.approx(0, abs=0.02)
     assert s["s3b"] > 0                                    # charging at night for the evening beats plain self-use
     assert s["stored"] > 0                                 # the battery ends fuller than it started
+
+
+def test_ledger_follows_the_real_battery_and_corrections_land_in_unexplained():
+    """A battery that holds more than the flows say (e.g. better efficiency than configured) is corrected every
+    half-hour, so 'carried in battery' stays real and the difference shows as unexplained, never as a drift."""
+    lg, sim, out = Ledger(), SimDefault(), []
+    soc = 50.0
+    for _i in range(20):                                       # battery covers the house; SoC falls more slowly
+        r = rec(b_h=0.5, soc_start=soc)
+        out.append({"v": process(r, Rates(PEAK, PEAK, CHEAP, EXP, False), lg, sim, capacity=18, eff=0.95,
+                                 floor_soc=12, max_kw=4.8, includes_ev=True)})
+        soc -= 0.5 / 0.98 / 18 * 100                           # real losses smaller than configured
+    s = day_summary(out, complete=False)
+    assert s["energy"]["correction_kwh"] > 0
+    assert abs(s["stored"]) < 3.0                              # bounded by what the battery can hold
+    assert s["unexplained"] < 0                                # the extra energy made the day cheaper than modelled
+
+
+def test_older_method_records_are_flagged_for_revalue(tmp_path):
+    import json
+
+    from pe_core.costbook import CostBook
+    (tmp_path / "state.json").write_text(json.dumps({"method": 1, "ledger": []}))
+    assert CostBook(str(tmp_path), UTC).needs_revalue
+    book = CostBook(str(tmp_path / "fresh"), UTC)
+    assert not book.needs_revalue

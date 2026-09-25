@@ -8,7 +8,9 @@ smart   grid to house x (standard - actual) + grid to car x (overnight - actual)
 battery value delivered by the battery (house x standard, car x overnight, export x export rate)
         minus the ledger basis of the energy used; split into S3a (a simulated plain self-use battery) and S3b (the
         rest: the app's timing). Grid-sourced energy exported goes to arbitrage instead.
-stored  change in the ledger's value: energy bought or stored today for use later (adds to today's cost)
+stored  change in the ledger's value: energy bought or stored today for use later (adds to today's cost). The
+        ledger is matched to the battery's real state of charge every half-hour; corrections (efficiency or sensor
+        error) are part of the change and so show up in 'unexplained'.
 actual  metered import x actual rate - metered export x export rate (+ standing charge)
 
 S0 - solar - smart - battery - arbitrage + stored = actual, apart from what the meters don't account for
@@ -24,7 +26,10 @@ from dataclasses import dataclass
 from .ledger import Ledger
 from .tariff import Rates
 
-METHOD_VERSION = 1
+METHOD_VERSION = 2
+# daily energy totals (kWh) shown for checking against the inverter's own counters
+ENERGY_KEYS = ("grid_import", "grid_export", "solar", "house", "car", "battery_in", "battery_out", "b_e",
+               "unallocated_src", "unallocated_sink", "correction_kwh")
 LAYERS = ("s0", "solar", "smart", "s3a", "s3b", "arbitrage", "stored", "actual", "standing", "unexplained")
 
 
@@ -59,12 +64,21 @@ def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: 
     car = k["s_c"] + k["b_c"] + k["g_c"]
     hours = max(rec.get("seconds") or 0.0, 1.0) / 3600
 
+    soc0 = rec.get("soc_start")
+    first = sim.kwh is None
+    if first and soc0 is not None:
+        sim.kwh = soc0 / 100 * capacity
     value_before = ledger.value
-    if sim.kwh is None and rec.get("soc_start") is not None:
-        sim.kwh = rec["soc_start"] / 100 * capacity
-    if not ledger.lots and rec.get("soc_start") is not None:            # first run: seed with what's there now
-        ledger.reconcile(rec["soc_start"] / 100 * capacity / eff, ovn)
-        value_before = ledger.value
+    correction_kwh = correction_value = 0.0
+    if soc0 is not None:
+        # keep the ledger matched to what the battery really holds. The first time this is the opening balance;
+        # after that any difference is a correction (efficiency or sensor error), which ends up in 'unexplained'.
+        kwh0, val0 = ledger.kwh, ledger.value
+        ledger.reconcile(soc0 / 100 * capacity / eff, ovn)
+        if first:
+            value_before = ledger.value
+        else:
+            correction_kwh, correction_value = ledger.kwh - kwh0, ledger.value - val0
 
     # battery ledger: in first, then out (oldest first)
     ledger.add(k["s_b"], "solar", exp)
@@ -101,6 +115,7 @@ def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: 
         "actual": (rec.get("grid_import") or 0.0) * act - (rec.get("grid_export") or 0.0) * exp,
         "standing_part": (rec.get("standing") or 0.0) * hours / 24,
         "ledger_kwh": ledger.kwh, "ledger_value": ledger.value, "sim_kwh": sim.kwh,
+        "correction_kwh": correction_kwh, "correction": correction_value,
     }
     event = "axle" if rec.get("axle") else ("free_power" if rec.get("free") else None)
     out["event"] = event
@@ -118,11 +133,14 @@ def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: 
 def day_summary(records: list[dict], standing_per_day: float | None = None, complete: bool = True) -> dict:
     """Sum a day's valued half-hours into layers (GBP). Event half-hours are left out of the layers."""
     tot = dict.fromkeys(("s0", "solar", "smart", "battery", "s3a", "arbitrage", "stored", "actual"), 0.0)
+    energy = dict.fromkeys(ENERGY_KEYS, 0.0)
     standing = 0.0
     events: dict[str, dict] = {}
     for r in records:
         v = r.get("v") or {}
         standing += v.get("standing_part", 0.0)
+        for key in ENERGY_KEYS:
+            energy[key] += (v.get("correction_kwh", 0.0) if key == "correction_kwh" else (r.get(key) or 0.0))
         if v.get("event"):
             e = events.setdefault(v["event"], {"kwh": 0.0, "gross": 0.0, "net": 0.0, "metered": 0.0})
             e["kwh"] += v.get("event_kwh", 0.0)
@@ -145,6 +163,7 @@ def day_summary(records: list[dict], standing_per_day: float | None = None, comp
         "standing": r2(standing), "unexplained": r2(unexplained),
         "events": {k: {kk: round(vv, 2) for kk, vv in e.items()} for k, e in events.items()},
         "half_hours": len(records), "complete": complete, "method": METHOD_VERSION,
+        "energy": {k: round(v, 1) for k, v in energy.items()},
         "coverage": round(sum(r.get("seconds") or 0.0 for r in records) / 86400, 3),
     }
 
