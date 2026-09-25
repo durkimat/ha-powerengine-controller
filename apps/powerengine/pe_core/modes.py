@@ -15,8 +15,8 @@ UNCONFIGURED, PASSIVE, ACTIVE, PAUSED = "unconfigured", "passive", "active", "pa
 # Handover guards: role -> the state it must be in before PowerEngine may control the inverter.
 GUARDS = (("guard_read_only", "on"), ("guard_off_1", "off"), ("guard_off_2", "off"))
 
-# Control is not implemented yet: every build until control ships is Passive-only.
-BUILD_SUPPORTS_ACTIVE = False
+# Active is available from 0.5.14. Kept as a switch so a build can be made Passive-only again if needed.
+BUILD_SUPPORTS_ACTIVE = True
 
 
 @dataclass(frozen=True)

@@ -16,7 +16,7 @@ def test_passive_by_default():
 
 
 def test_active_refused_by_passive_only_build():
-    m = effective_mode(parse_config({"operation": {"mode": "active"}}))
+    m = effective_mode(parse_config({"operation": {"mode": "active"}}), build_supports_active=False)
     assert m.configured == "active" and m.effective == "passive"
     assert "only supports Passive" in m.reason
 
@@ -26,9 +26,9 @@ def test_active_allowed_when_build_supports_it():
     assert m.effective == "active"
 
 
-def test_this_build_never_goes_active():
-    from pe_core import modes
-    assert modes.BUILD_SUPPORTS_ACTIVE is False
+def test_active_needs_safe_guards_even_in_this_build():
+    m = effective_mode(parse_config({"operation": {"mode": "active"}}), guards=["no handover guards are mapped"])
+    assert m.effective == "passive" and "Active refused" in m.reason
 
 
 def test_missing_required_inputs_keep_it_unconfigured():

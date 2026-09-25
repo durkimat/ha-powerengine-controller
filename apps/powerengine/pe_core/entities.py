@@ -72,6 +72,8 @@ ENTITIES: tuple[EntityDef, ...] = (
               {"device_class": "timestamp", "entity_category": "diagnostic", "icon": "mdi:restart"}),
     EntityDef("sensor", "diag_control", "Inverter control preview",
               {"icon": "mdi:tune-vertical", "entity_category": "diagnostic"}),
+    EntityDef("sensor", "diag_inverter_clock", "Inverter clock drift",
+              {"icon": "mdi:clock-alert-outline", "entity_category": "diagnostic", "unit_of_measurement": "s"}),
     EntityDef("sensor", "diag_test_write", "Supervised test",
               {"icon": "mdi:test-tube", "entity_category": "diagnostic"}),
     EntityDef("sensor", "diag_inverter_writes", "Inverter writes per day",

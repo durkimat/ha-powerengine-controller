@@ -1,0 +1,96 @@
+# PowerEngine handover: one selector for which controller drives the battery.
+#
+# Install: copy into /config/packages/ (packages: !include_dir_named packages), check config, restart HA.
+# Needs the Predbat handover scripts (script.predbat_handover_to_predbat / _to_legacy) only if you still use
+# Predbat or the legacy automations; remove those options once they are retired.
+#
+# Handing over to PowerEngine turns the legacy automations off, puts Predbat in read-only mode and resumes
+# PowerEngine (pause off). PowerEngine only takes control if its Operation mode is Active (Config tab) and its
+# handover guards are safe. Handing away pauses PowerEngine first (it returns the inverter to Self-Use), then
+# runs the other controller's handover script.
+
+input_select:
+  battery_controller:
+    name: Battery controller
+    icon: mdi:battery-sync
+    options:
+      - PowerEngine
+      - Predbat
+      - Legacy automations
+
+script:
+  battery_handover_to_powerengine:
+    alias: Battery - Hand control to PowerEngine
+    mode: single
+    sequence:
+      - action: automation.turn_off
+        target:
+          entity_id:
+            - automation.charge_house_battery_on
+            - automation.charge_house_battery_off
+            - automation.discharge_house_battery_on
+            - automation.discharge_house_battery_off
+            - automation.house_battery_start_charging
+            - automation.house_battery_stop_charging
+            - automation.house_battery_start_charging_2
+            - automation.house_battery_stop_charging_2
+      - action: switch.turn_on
+        target:
+          entity_id: switch.predbat_set_read_only
+      - delay: "00:00:05"
+      - action: switch.turn_off
+        target:
+          entity_id: switch.pe_ctl_pause
+      - action: persistent_notification.create
+        data:
+          title: Battery control
+          message: >-
+            Handed to PowerEngine: legacy automations off, Predbat read-only, PowerEngine resumed.
+            PowerEngine mode is now {{ states('sensor.pe_state_operation_mode') }}
+            ({{ state_attr('sensor.pe_state_operation_mode', 'reason') }}).
+
+  battery_pause_powerengine:
+    alias: Battery - Pause PowerEngine
+    mode: single
+    sequence:
+      - action: switch.turn_on
+        target:
+          entity_id: switch.pe_ctl_pause
+      - delay: "00:00:15"          # PowerEngine returns the inverter to Self-Use and reads it back
+
+automation:
+  - alias: Battery controller selector
+    id: battery_controller_selector
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: input_select.battery_controller
+    conditions:
+      # ignore start-up and the selector being created (only real changes between options)
+      - condition: template
+        value_template: >-
+          {{ trigger.from_state is not none and trigger.to_state is not none
+             and trigger.from_state.state in ['PowerEngine', 'Predbat', 'Legacy automations']
+             and trigger.to_state.state != trigger.from_state.state }}
+    actions:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: input_select.battery_controller
+                state: PowerEngine
+            sequence:
+              - action: script.battery_handover_to_powerengine
+          - conditions:
+              - condition: state
+                entity_id: input_select.battery_controller
+                state: Predbat
+            sequence:
+              - action: script.battery_pause_powerengine
+              - action: script.predbat_handover_to_predbat
+          - conditions:
+              - condition: state
+                entity_id: input_select.battery_controller
+                state: Legacy automations
+            sequence:
+              - action: script.battery_pause_powerengine
+              - action: script.predbat_handover_to_legacy

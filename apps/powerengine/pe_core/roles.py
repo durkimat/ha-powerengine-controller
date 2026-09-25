@@ -44,6 +44,8 @@ class Role:
 
     def as_dict(self) -> dict:
         d = asdict(self)
+        if self.domains == ("sensor",):          # the card's default; left out to keep the catalogue small
+            d.pop("domains")
         return {k: v for k, v in d.items() if v not in ("", (), None, False) or k in ("key", "required")}
 
 
@@ -85,6 +87,8 @@ ROLES: tuple[Role, ...] = (
          "energy", suggest=(r"^sensor\.solis_battery_discharge_today$",)),
     Role("battery_soh", "battery", "Battery health", "State of health, shown on the Health view.",
          "percent", required="no", suggest=(r"^sensor\.solis_battery_soh$",)),
+    Role("inverter_clock", "battery", "Inverter clock", "The inverter's own time, to check for drift.",
+         "text", required="no", suggest=(r"^sensor\.solis_rtc$",)),
     Role("inverter_min_soc", "battery", "Inverter minimum SoC", "The inverter's own floor, as a safety cross-check.",
          "percent", required="no", domains=("number", "sensor"), suggest=(r"^number\.solis_battery_minimum_soc$",)),
     # --- grid and house ---
@@ -185,6 +189,8 @@ ROLES: tuple[Role, ...] = (
          "control", required="no", domains=("button",), suggest=(r"^button\.solis_update_charge_discharge_times$",)),
     Role("storage_mode", "controls", "Storage mode", "Energy storage control switch (Self-Use etc.).",
          "control", required="no", domains=("select",), suggest=(r"^select\.solis_energy_storage_control_switch$",)),
+    Role("inverter_clock_sync", "controls", "Sync inverter clock", "Button that sets the inverter's clock to HA's.",
+         "control", required="no", domains=("button",), suggest=(r"^button\.solis_sync_rtc$",)),
     Role("inverter_export_limit", "controls", "Export limit", "Export (backflow) power limit.",
          "control", required="no", domains=("number",), suggest=(r"^number\.solis_backflow_power$",)),
     Role("smart_target_soc", "controls", "Smart-charge target", "Car charge target sent to EDF.",

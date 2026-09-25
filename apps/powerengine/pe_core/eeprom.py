@@ -108,11 +108,12 @@ class BlockWriteModel(WriteModel):
 class WriteLog:
     def __init__(self, path: str | None = None):
         self.path = path
-        self.data: dict = {"observed": {}, "would": {}, "would_block": {}, "by_entity": {}, "since": None}
+        self.data: dict = {"observed": {}, "would": {}, "would_block": {}, "own": {}, "by_entity": {}, "since": None}
         if path and os.path.exists(path):
             try:
                 with open(path, encoding="utf-8") as fh:
                     self.data.update(json.load(fh))
+                self.data.setdefault("own", {})
             except (OSError, ValueError):
                 pass
         self._dirty = False
@@ -128,6 +129,13 @@ class WriteLog:
     def would(self, day: date, n: int, model: str = "would") -> None:
         self._add(model, day, n)
 
+    def own(self, day: date, n: int = 1) -> None:
+        """Writes PowerEngine itself made (also counted in 'observed' when the entity changes)."""
+        self._add("own", day, n)
+
+    def own_today(self, day: date) -> int:
+        return self.data["own"].get(day.isoformat(), 0)
+
     def observed(self, day: date, entity_id: str) -> None:
         self._add("observed", day)
         self.data["by_entity"][entity_id] = self.data["by_entity"].get(entity_id, 0) + 1
@@ -136,7 +144,7 @@ class WriteLog:
         if not self.path or not (self._dirty or force):
             return
         cutoff = (date.today() - timedelta(days=400)).isoformat()
-        for kind in ("observed", "would", "would_block"):
+        for kind in ("observed", "would", "would_block", "own"):
             self.data[kind] = {d: n for d, n in self.data.get(kind, {}).items() if d >= cutoff}
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
@@ -147,7 +155,7 @@ class WriteLog:
     def summary(self, today: date, days: int = 14) -> dict:
         since = self.data.get("since")
         out: dict = {"budget": BUDGET, "since": since, "by_entity": self.data["by_entity"]}
-        for kind in ("observed", "would", "would_block"):
+        for kind in ("observed", "would", "would_block", "own"):
             counts = self.data.get(kind, {})
             window = [(today - timedelta(days=i)).isoformat() for i in range(days, 0, -1)]
             full = [d for d in window if since and d > since]          # skip the first (partial) day

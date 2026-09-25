@@ -2,6 +2,31 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.14 (beta)
+
+### Behaviour changes
+- **Active mode is available.** Choose *Active* under Operation on the Config tab. PowerEngine then writes the
+  Solis timed-slot settings (and, with smart-charge optimisation on, EDF's ready-by time), but only while every
+  handover guard is safe and control isn't paused. Passive stays the default; nothing changes until you choose
+  Active.
+- **Inputs failing while in control:** the inverter is now returned to Self-Use (windows closed) and you're
+  notified; control resumes when the inputs recover. (Before, writing just stopped.) A tripped handover guard
+  still writes nothing.
+- **Daily write limit** (new setting, *Inverter control*, default 150): if PowerEngine's own writes reach it in a
+  day, control pauses (the pause switch turns on, returning the inverter to Self-Use) and you're notified.
+  Resuming allows the limit again.
+- **Inverter clock:** new inputs *Inverter clock* (`sensor.solis_rtc`) and *Sync inverter clock*
+  (`button.solis_sync_rtc`). Drift is checked every 10 minutes (Health tab; a finding above 2 minutes). In
+  Active mode the clock is synced weekly, and within 10 minutes if it's a minute or more out (e.g. when the clocks
+  change on 25 October).
+
+### Other
+- Inverter writes: PowerEngine's own writes are counted separately (Health tab), and no longer double-counted in
+  *observed*.
+- `docs/ha/powerengine_handover.yaml`: an optional HA package with a PowerEngine / Predbat / Legacy selector
+  that runs the right handover.
+- Shorter role catalogue (sensor-only inputs no longer repeat their domain).
+
 ## 0.5.13 (beta)
 
 ### Behaviour changes
