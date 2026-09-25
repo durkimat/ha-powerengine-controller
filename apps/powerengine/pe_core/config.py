@@ -306,11 +306,22 @@ def load_config(paths: tuple[str, ...] | list[str] = DEFAULT_PATHS) -> tuple[Con
     return None, None
 
 
+BATTERY_PAIR = ("battery_charge_power", "battery_discharge_power")
+
+
+def uses_battery_pair(cfg: Config) -> bool:
+    """True when separate charging/discharging sensors replace the single (unsigned) battery power sensor."""
+    return all("entity" in (cfg.inputs.get(k) or {}) for k in BATTERY_PAIR)
+
+
 def required_roles(cfg: Config) -> list[str]:
     """Role keys that must be mapped, given which features are switched on."""
     feature_for = {"axle": "axle", "free_power": "free_power_days"}
+    pair = uses_battery_pair(cfg)
     keys = []
     for role in ROLE_BY_KEY.values():
         if role.required == "yes" or (role.required in feature_for and cfg.features.get(feature_for[role.required])):
             keys.append(role.key)
+    if pair:                               # the pair replaces the single sensor, and both become required
+        keys = [k for k in keys if k != "battery_power"] + [k for k in BATTERY_PAIR if k not in keys]
     return keys
