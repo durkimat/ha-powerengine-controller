@@ -18,7 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
-from .decide import FORCE_DISCHARGE, GRID_CHARGE, HOLD, SELF_USE
+from .decide import EXPORT, FORCE_DISCHARGE, GRID_CHARGE, HOLD, SELF_USE
 from .forecast import Slot
 from .tariff import cheap_threshold
 
@@ -44,6 +44,11 @@ class Params:
     fuse_kw: float = 60 * 0.230 * 0.9  # import limit: 90% of the main fuse at 230 V
     ev_charger_kw: float = 7.4        # car draw assumed during planned smart slots
     fill_when_cheap: bool = True      # top up to the target in every cheap slot (a buffer against forecast error)
+    arbitrage: bool = False           # sell stored energy before a cheap refill when it pays
+    export_limit_kw: float = 6.0      # DNO export limit
+    wear_p: float = 2.0               # battery wear per kWh cycled (p)
+    min_margin_p: float = 1.0         # arbitrage must clear this per kWh after losses and wear (p)
+    arbitrage_keep_soc: float = 10.0  # keep this much above the reserve when the refill starts (%)
 
 
 @dataclass
@@ -148,6 +153,12 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
         ps.grid_to_battery = into
         flow = net + into
         imp, exp = max(0.0, flow), max(0.0, -flow)
+    elif ps.action == EXPORT:
+        room_kw = min(p.max_discharge_kw, p.export_limit_kw + max(0.0, net) / dt_h)
+        out = min(room_kw * dt_h, max(0.0, stored - floor) * p.efficiency)
+        stored -= out / p.efficiency
+        flow = net - out                                # the battery covers the house first, the rest is sold
+        imp, exp = max(0.0, flow), max(0.0, -flow)
     elif ps.action == FORCE_DISCHARGE:
         out = min(p.axle_kw * dt_h, max(0.0, stored - floor) * p.efficiency)
         stored -= out / p.efficiency
@@ -216,6 +227,44 @@ def _first_problem(plan: list[PlanSlot], p: Params, start: int, eff2: float):
     return None
 
 
+def _add_arbitrage(plan: list[PlanSlot], soc: float, p: Params, now: datetime, tz=None) -> None:
+    """Sell stored energy just before a cheap refill, when it pays and the house doesn't go short.
+
+    For each cheap period in the plan, walk back from its start through the self-use half-hours before it and
+    turn them into exports (latest first), as long as:
+      - selling beats buying it back: export price - refill price / round trip - wear >= the minimum margin;
+      - the battery still reaches the refill with the reserve plus a margin (so the house isn't pushed onto the
+        peak rate by a forecast that's a little out);
+      - no half-hour before the refill ends up importing more than it did.
+    """
+    rte = p.efficiency ** 2
+    def cheap(k: int) -> bool:
+        return plan[k].slot.price is not None and plan[k].slot.price * 100 <= p.cheap_cap_p
+    starts = [i for i in range(1, len(plan)) if cheap(i) and not cheap(i - 1)]
+    for i in starts:
+        buy = plan[i].slot.price
+        refill = _hhmm(plan[i].slot.start, tz)
+        keep = p.min_reserve_soc + p.arbitrage_keep_soc
+        for j in range(i - 1, -1, -1):
+            c = plan[j]
+            if c.action != SELF_USE or c.slot.axle or c.slot.free or c.slot.smart_slot or c.slot.export is None:
+                break
+            margin_p = (c.slot.export - buy / rte) * 100 - p.wear_p
+            if margin_p < p.min_margin_p:
+                break
+            before_imports = [ps.grid_import for ps in plan[j:i]]
+            why = (f"sell at {_p(c.slot.export)}: refilled at {_p(buy)} from {refill} "
+                   f"(about {margin_p:.1f}p/kWh after losses and wear)")
+            plan[j] = replace(c, action=EXPORT, reason=why)
+            simulate(plan, soc, p)
+            worse = any(ps.grid_import > b + 0.01 for ps, b in zip(plan[j:i], before_imports, strict=True)
+                        if ps.action != EXPORT)
+            if plan[i - 1].soc_end < keep or worse:
+                plan[j] = c                                  # undo, and stop for this refill
+                simulate(plan, soc, p)
+                break
+
+
 def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None, auto_cheap: bool = False,
               wear_p: float = 2.0) -> Plan:
     if auto_cheap:
@@ -258,6 +307,9 @@ def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None, 
             target = p.target_soc
         plan[best] = replace(c, action=GRID_CHARGE, reason=reason, target_soc=target)
         simulate(plan, soc, p)
+
+    if p.arbitrage:
+        _add_arbitrage(plan, soc, p, now, tz)
 
     result = Plan(slots=plan, made_at=now, cheap_p=p.cheap_cap_p, cost=sum(ps.cost for ps in plan),
                   baseline_cost=baseline_cost)
@@ -312,7 +364,8 @@ def windows(plan: list[PlanSlot], tz=None, now: datetime | None = None) -> list[
     return out
 
 
-ACTION_WORDS = {SELF_USE: "Self-use", GRID_CHARGE: "Grid-charge", HOLD: "Hold", FORCE_DISCHARGE: "Force-discharge"}
+ACTION_WORDS = {SELF_USE: "Self-use", GRID_CHARGE: "Grid-charge", HOLD: "Hold", FORCE_DISCHARGE: "Force-discharge",
+                EXPORT: "Export"}
 
 
 def headline(plan: Plan) -> str:
@@ -321,8 +374,8 @@ def headline(plan: Plan) -> str:
     if not ws:
         return "No plan yet."
     now_w = ws[0]
-    nxt = next((w for w in ws[1:] if w["action"] in (GRID_CHARGE, FORCE_DISCHARGE)), None)
-    if now_w["action"] in (GRID_CHARGE, FORCE_DISCHARGE) or nxt is None:
+    nxt = next((w for w in ws[1:] if w["action"] in (GRID_CHARGE, FORCE_DISCHARGE, EXPORT)), None)
+    if now_w["action"] in (GRID_CHARGE, FORCE_DISCHARGE, EXPORT) or nxt is None:
         nxt = now_w
     verb = ACTION_WORDS[nxt["action"]]
     if nxt["action"] == GRID_CHARGE and nxt["target_soc"]:
@@ -357,6 +410,10 @@ def params_from(cfg, readings=None) -> Params:
         hold_for_car=bool(cfg.system.get("house_load_includes_ev", True)),
         fuse_kw=s.get("main_fuse_a", 60) * 0.230 * 0.9,
         fill_when_cheap=bool(f.get("fill_when_cheap", True)),
+        arbitrage=bool(f.get("arbitrage", False)),
+        export_limit_kw=s.get("export_limit_kw", 6.0),
+        wear_p=s.get("battery_wear_p", 2.0),
+        min_margin_p=s.get("arbitrage_min_margin_p", 1.0),
         ev_charger_kw=s.get("ev_charger_kw", 7.4),
     )
 
@@ -374,7 +431,7 @@ def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
         ser["solar_kwh"].append(round(ps.slot.solar_kwh, 2))
         ser["load_kwh"].append(round(ps.slot.load_kwh, 2))
         ser["charge_kwh"].append(round(ps.grid_to_battery, 2))
-        ser["discharge_kwh"].append(round(ps.grid_export, 2) if ps.action == FORCE_DISCHARGE else 0)
+        ser["discharge_kwh"].append(round(ps.grid_export, 2) if ps.action in (FORCE_DISCHARGE, EXPORT) else 0)
         ser["action"].append(ps.action)
     text = headline(plan)
     est = next((ps.slot.start.isoformat() for ps in plan.slots if ps.slot.price_estimated), None)

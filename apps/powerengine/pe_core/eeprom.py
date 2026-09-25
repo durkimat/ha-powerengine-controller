@@ -14,12 +14,12 @@ import json
 import os
 from datetime import date, datetime, timedelta
 
-from .decide import FORCE_DISCHARGE, GRID_CHARGE, HOLD, Decision
+from .decide import EXPORT, FORCE_DISCHARGE, GRID_CHARGE, HOLD, Decision
 
 BUDGET = 100_000
 WINDOW_MINUTES = 35        # a window never reaches further ahead than this (dead man's switch)
 ROLL_BEFORE_MINUTES = 5    # extend the window this long before it ends
-ACTIONS_WITH_WINDOW = {GRID_CHARGE: "charge", HOLD: "charge", FORCE_DISCHARGE: "discharge"}
+ACTIONS_WITH_WINDOW = {GRID_CHARGE: "charge", HOLD: "charge", FORCE_DISCHARGE: "discharge", EXPORT: "discharge"}
 
 
 class WriteModel:

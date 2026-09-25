@@ -194,3 +194,27 @@ def test_cheap_threshold_follows_the_prices():
 def test_auto_threshold_is_used_by_the_plan():
     plan = make_plan(day(), soc=60.0, p=Params(cheap_cap_p=50, fill_when_cheap=False), now=T0, auto_cheap=True)
     assert plan.cheap_p == pytest.approx(7 + 0.2 * 23, abs=0.01)
+
+
+def test_arbitrage_sells_surplus_just_before_the_cheap_refill():
+    from pe_core.decide import EXPORT
+    arb = Params(arbitrage=True)
+    plan = make_plan(day(), soc=90.0, p=arb, now=T0)
+    exports = [i for i, ps in enumerate(plan.slots) if ps.action == EXPORT]
+    assert exports and max(exports) == 13 and all(i < 14 for i in exports)   # just before 00:00
+    assert plan.slots[13].soc_end >= arb.min_reserve_soc + arb.arbitrage_keep_soc - 0.01
+    assert all(plan.slots[i].grid_import < 0.01 for i in range(0, 14) if plan.slots[i].action != EXPORT)
+    without = make_plan(day(), soc=90.0, p=Params(), now=T0)
+    assert plan.cost < without.cost and "refilled at 7p" in plan.slots[13].reason
+
+
+def test_no_arbitrage_when_it_does_not_pay_or_is_off():
+    from pe_core.decide import EXPORT
+    low_export = [replace_export(s, 0.08) for s in day()]
+    assert not any(ps.action == EXPORT for ps in make_plan(low_export, 90.0, Params(arbitrage=True), T0).slots)
+    assert not any(ps.action == EXPORT for ps in make_plan(day(), 90.0, Params(arbitrage=False), T0).slots)
+
+
+def replace_export(s, value):
+    import dataclasses
+    return dataclasses.replace(s, export=value)

@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.7 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- **Arbitrage planning.** With *Energy arbitrage* on (Config tab, off by default), the plan sells stored energy in
+  the half-hours just before a cheap refill, latest first, while:
+  selling beats buying it back (export price − refill price ÷ round trip − wear ≥ the minimum profit setting);
+  the battery still reaches the refill with the reserve plus 10%; and nothing before the refill imports more.
+  Uses the export limit. New plan action **Export**, shown on the Plan tab (reason gives the profit per kWh), in
+  the Passive simulation, and in the Costs tab's arbitrage layer. On your tariff (15p export, 6.99p refill, 2p
+  wear) that is about 5p/kWh. Check your export tariff allows exporting grid-bought energy before relying on it.
+
 ## 0.5.6 (beta)
 
 ### Behaviour changes

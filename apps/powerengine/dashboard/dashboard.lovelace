@@ -283,7 +283,7 @@ views:
                   if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
                   return pts;
               - entity: sensor.pe_plan
-                name: Axle export (kWh)
+                name: Battery export (kWh)
                 yaxis_id: kwh
                 type: area
                 curve: stepline
