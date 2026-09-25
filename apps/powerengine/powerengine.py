@@ -26,6 +26,7 @@ from pe_core.config import (
     settings_catalogue,
     uses_battery_pair,
 )
+from pe_core.control import KINDS, desired, window_end, writes_needed
 from pe_core.costbook import MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import sync_dashboard
@@ -51,7 +52,7 @@ from pe_core.optimiser import compare, optimise
 from pe_core.planner import make_plan, params_from, plan_entity_states
 from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
-from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue
+from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue, is_forbidden_control
 from pe_core.simulate import SimBattery
 from pe_core.slots import SlotTracker
 from pe_core.smartcharge import SmartCharger, worth_asking
@@ -59,6 +60,8 @@ from pe_core.status import entity_states
 from pe_core.store import save_config
 
 HEARTBEAT_SECONDS = 60
+CONTROL_STRATEGY = "rolling"      # "rolling" | "block": decided by #44 (EEPROM writes) before Active ships
+BATTERY_VOLTS = 52.0              # nominal, for converting power to the inverter's current settings
 CYCLE_SECONDS = 30
 REPLAN_SECONDS = 300
 HISTORY_DAYS = 14
@@ -252,6 +255,7 @@ class PowerEngine(hass.Hass):
                 self._publish_state("state_activity", entry["time"], {"entries": self.activity.entries})
             self._decision = decision
             self._count_would_writes(readings, decision)
+            self._control(readings, decision)
         for key, (state, attrs) in entity_states(readings, self.mode, self.tz, decision, self._since).items():
             self._publish_if_changed(key, state, attrs)
 
@@ -630,6 +634,74 @@ class PowerEngine(hass.Hass):
                 self._publish_writes()
         except Exception as err:
             self.log(f"Could not count inverter writes: {err!r}", level="WARNING")
+
+    # --- inverter control (Active mode; previewed in Passive) --------------------------------
+
+    def _control(self, r, decision):
+        try:
+            p = self._params(r)
+            now_local = r.now.astimezone(self.tz) if self.tz else r.now
+            kind = KINDS.get(decision.action)
+            ctl = getattr(self, "_ctl", {"kind": None, "end": None, "last_write": None})
+            block_end = None
+            if self.plan is not None and self.plan.windows and self.plan.windows[0]["action"] == decision.action:
+                be = datetime.fromisoformat(self.plan.windows[0]["end"])
+                block_end = be.astimezone(self.tz) if self.tz else be
+            end = window_end(now_local, ctl["end"] if ctl["kind"] == kind else None, CONTROL_STRATEGY, block_end) \
+                if kind else None
+            want = desired(decision, now_local, end, BATTERY_VOLTS, p.max_charge_kw * 1000, p.max_discharge_kw * 1000)
+            entities = {role: self._role_entity(role) for role in list(want) + ["timed_update_button"]}
+            missing = sorted(role for role, eid in entities.items() if not eid)
+            have = {role: self.get_state(eid) for role, eid in entities.items() if eid and role in want}
+            writes = writes_needed(want, have)
+            state = "not mapped" if missing else (f"{len(writes)} write{'s' if len(writes) != 1 else ''}"
+                                                   if writes else "no change")
+            attrs = {"decision": decision.action, "strategy": CONTROL_STRATEGY, "missing": missing,
+                     "window_end": end.strftime("%H:%M") if end else None,
+                     "writes": [w.as_dict() for w in writes],
+                     "settings": {role: {"want": v, "now": have.get(role)} for role, v in want.items()}}
+            self._publish_if_changed("diag_control", state, attrs)
+            recent = ctl["last_write"] is not None and (r.now - ctl["last_write"]).total_seconds() < 60
+            if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
+                    and (not recent or kind != ctl["kind"])):
+                self._execute(writes, entities)
+                ctl["last_write"] = r.now
+            ctl["kind"], ctl["end"] = kind, end
+            self._ctl = ctl
+        except Exception as err:
+            self.log(f"Control step failed: {err!r}", level="WARNING")
+
+    def _execute(self, writes, entities, attempt=1):
+        """Active mode only (unreachable while BUILD_SUPPORTS_ACTIVE is False). Write, then verify."""
+        for w in writes:
+            eid = entities.get(w.role)
+            if not eid or is_forbidden_control(eid):
+                continue
+            if w.kind == "number":
+                self.call_service("number/set_value", entity_id=eid, value=w.value)
+            elif w.kind == "select":
+                self.call_service("select/select_option", entity_id=eid, option=w.value)
+            elif w.kind == "button":
+                self.call_service("button/press", entity_id=eid)
+            self.writes.observed(self._today(), eid)
+        self.run_in(self._verify_writes, 6, writes=[w.as_dict() for w in writes if w.kind != "button"],
+                    entities=entities, attempt=attempt)
+
+    def _verify_writes(self, kwargs):
+        bad = [w for w in kwargs["writes"]
+               if str(self.get_state(kwargs["entities"][w["role"]])) not in (str(w["value"]), f"{w['value']}.0")]
+        if not bad:
+            return
+        if kwargs["attempt"] == 1:
+            self.log(f"Inverter read-back mismatch ({[w['role'] for w in bad]}); retrying once", level="WARNING")
+            from pe_core.control import Write
+            self._execute([Write(w["role"], w["value"], w["kind"]) for w in bad], kwargs["entities"], attempt=2)
+            return
+        self._halted = True                              # no more writes until AppDaemon restarts
+        self.log("Inverter writes could not be confirmed; control stopped until restart", level="WARNING")
+        self._notify("health", ("control:verify", "PowerEngine: inverter writes not confirmed",
+                                "Settings written to the inverter didn't read back correctly twice. Check the "
+                                "inverter and the SolaX Modbus integration."))
 
     def _publish_writes(self):
         try:
