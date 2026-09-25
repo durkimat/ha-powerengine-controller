@@ -311,3 +311,19 @@ def test_measure_battery_efficiency_and_losses(tmp_path):
     assert m["losses_yesterday"] == pytest.approx(48 * 0.05, abs=0.01)   # 50 Wh per half-hour unaccounted
     few = book.measure(T0.date() + timedelta(days=5), capacity=18)
     assert not few["measured"] and few["efficiency"] is None             # under 14 days: not measured yet
+
+
+def test_plan_snapshots_are_kept_and_pruned(tmp_path):
+    from pe_core.costbook import KEEP_DAYS, CostBook
+    from pe_core.forecast import SLOT, Slot
+    from pe_core.health import plan_snapshot
+    from pe_core.planner import Params, make_plan
+    slots = [Slot(T0 + i * SLOT, CHEAP if i < 10 else PEAK, EXP, load_kwh=0.5) for i in range(60)]
+    plan = make_plan(slots, 50.0, Params(), T0)
+    snap = plan_snapshot(plan, T0, T0 + timedelta(days=1))
+    assert len(snap["slots"]) == 48
+    book = CostBook(str(tmp_path), UTC)
+    book.save_plan_snapshot(T0.date(), snap)
+    assert book.plan_snapshot(T0.date())["slots"][0]["start"] == T0.isoformat()
+    book.prune(T0.date() + timedelta(days=KEEP_DAYS + 1))
+    assert book.plan_snapshot(T0.date()) is None

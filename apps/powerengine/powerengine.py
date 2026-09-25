@@ -42,6 +42,7 @@ from pe_core.entities import (
     validate_definitions,
 )
 from pe_core.forecast import LoadProfile, build_slots, house_only_means, parse_history, profile_from_means
+from pe_core.health import plan_snapshot
 from pe_core.loadstore import LoadStore
 from pe_core.modes import effective_mode
 from pe_core.planner import make_plan, params_from, plan_entity_states
@@ -95,6 +96,7 @@ class PowerEngine(hass.Hass):
         self._ui_defaults()
         self._publish(AVAILABILITY_TOPIC, ONLINE)
         self._publish_state("diag_version", __version__)
+        self._publish_state("diag_started", datetime.now(timezone.utc).isoformat(timespec="seconds"))
         self._publish_state("map_catalogue", str(len(ROLES)), {**catalogue(), "settings": settings_catalogue()})
         self._last_checks = None
         self._published = {}
@@ -181,6 +183,8 @@ class PowerEngine(hass.Hass):
         if signature == self._last_checks:
             return
         self._last_checks = signature
+        self._checks = {k: {"status": s, "message": m} for k, (s, m) in checks.items()}
+        self._health()
         self._publish_state("diag_config_ok", "ON" if overall in ("ok", "warnings") else "OFF",
                             {"reason": self.cfg_error or overall, "file": self.cfg_path})
         self._publish_state("cfg_operation_mode", mode.configured)
@@ -355,6 +359,7 @@ class PowerEngine(hass.Hass):
                 self.costbook.prune(self._today())
             self._months = self.costbook.months(self._today())
             self._publish_costs()
+            self._health()
         except Exception as err:
             self.log(f"Could not summarise costs: {err!r}", level="WARNING")
 
@@ -482,9 +487,35 @@ class PowerEngine(hass.Hass):
         slots = build_slots(r, self._solar_forecast(), self.profile, self.tz)
         self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz)
         self._plan_sig, self._plan_time = sig, r.now
+        self._snapshot_plan(r.now)
         extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0}
         for key, (state, attrs) in plan_entity_states(self.plan, extra).items():
             self._publish_if_changed(key, state, attrs)
+
+    def _snapshot_plan(self, now):
+        """Keep the first plan of each local day, to compare with what actually happened (Health tab)."""
+        if self.costbook is None or self.plan is None:
+            return
+        tz = self.tz or timezone.utc
+        day = now.astimezone(tz).date()
+        if getattr(self, "_snap_day", None) == day:
+            return
+        self._snap_day = day
+        try:
+            if self.costbook.plan_snapshot(day) is None:
+                start = datetime(day.year, day.month, day.day, tzinfo=tz)
+                self.costbook.save_plan_snapshot(day, plan_snapshot(self.plan, start, start + timedelta(days=1)))
+        except Exception as err:
+            self.log(f"Could not save the plan snapshot: {err!r}", level="WARNING")
+
+    def _health(self):
+        if self.costbook is None or getattr(self, "mqtt", None) is None:
+            return
+        try:
+            h = self.costbook.health(self._today(), getattr(self, "_checks", None))
+            self._publish_state("diag_health", h["state"], h)
+        except Exception as err:
+            self.log(f"Could not evaluate health: {err!r}", level="WARNING")
 
     def _sync_dashboard(self):
         target = os.path.join(os.path.dirname(self._save_path()), "dashboard.yaml")

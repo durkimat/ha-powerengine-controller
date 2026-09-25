@@ -498,6 +498,108 @@ views:
               - **Unexplained:** Actual minus the layers. Inverter losses, standby use and meter mismatch land here; if it grows, the model needs fixing.
 
               Caveats: half-hour resolution from HA's sensors, which may differ slightly from EDF's bill; rates are the ones seen at the time; first-in-first-out is a convention, not physics; battery round-trip efficiency is {{ states('sensor.pe_diag_battery_efficiency') }}% ({{ 'measured over the last 30 days' if state_attr('sensor.pe_diag_battery_efficiency', 'measured') else 'the configured figure until 14 full days are recorded' }}). Method version {{ state_attr('sensor.pe_cost_days', 'method') or 1 }}.
+  - title: Health
+    path: health
+    icon: mdi:stethoscope
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set h = states('sensor.pe_diag_health') %}
+              {%- set f = state_attr('sensor.pe_diag_health', 'findings') or [] %}
+              {%- if h == 'ok' %}
+              **All clear.** Inputs look healthy and yesterday's data adds up.
+              {%- elif h in ['warnings', 'problems'] %}
+              **{{ f | count }} thing{{ '' if f | count == 1 else 's' }} to look at{{ ' (including problems)' if h == 'problems' else '' }}:**
+              {%- for x in f %}
+              - {{ 'Problem' if x.level == 'problem' else 'Check' }}: **{{ x.title }}.** {{ x.detail }}
+              {%- endfor %}
+              {%- else %}
+              Health checks run after start-up and each night.
+              {%- endif %}
+
+              Running PowerEngine {{ states('sensor.pe_diag_version') }} since {{ as_timestamp(states('sensor.pe_diag_started'), 0) | timestamp_custom('%a %d %b %H:%M') }} · heartbeat {{ relative_time(as_datetime(states('sensor.pe_diag_heartbeat'))) if states('sensor.pe_diag_heartbeat') not in ['unknown', 'unavailable'] else 'missing' }} ago
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Battery and losses
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set m = state_attr('sensor.pe_diag_battery_efficiency', 'measured') %}
+              **Battery round trip: {{ states('sensor.pe_diag_battery_efficiency') }}%** ({{ 'measured over the last 30 days: ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'battery_in_kwh') ~ ' kWh in, ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'battery_out_kwh') ~ ' kWh out' if m else state_attr('sensor.pe_diag_battery_efficiency', 'note') }}).
+
+              **System losses yesterday: {{ states('sensor.pe_diag_system_losses') }} kWh** (average {{ state_attr('sensor.pe_diag_system_losses', 'average_kwh') or '–' }} kWh a day): everything supplied minus everything used, i.e. inverter conversion, standby and heat.
+          - type: custom:apexcharts-card
+            grid_options: {columns: full, rows: auto}
+            graph_span: 30d
+            span:
+              end: day
+            header:
+              show: true
+              title: System losses by day
+              show_states: false
+            apex_config:
+              chart: {height: 220}
+              legend: {show: false}
+            yaxis:
+              - decimals: 1
+                min: 0
+                apex_config: {title: {text: "kWh"}}
+            series:
+              - entity: sensor.pe_diag_system_losses
+                name: Losses
+                type: column
+                color: "#ef6c00"
+                extend_to: false
+                show: {legend_value: false}
+                data_generator: |
+                  return (entity.attributes.by_day || []).map(d => [new Date(d[0] + "T12:00:00").getTime(), d[1]]);
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Plan vs what happened
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set a = state_attr('sensor.pe_diag_health', 'accuracy') or [] %}
+              {%- if a %}
+              Each day is compared with the first plan made that day.
+
+              | Day | House load: forecast | actual | Error per half-hour | Solar: forecast | actual | Battery: average gap |
+              |---|---:|---:|---:|---:|---:|---:|
+              {%- for d in a | reverse %}
+              | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }} | {{ d.load_forecast }} kWh | {{ d.load_actual }} kWh | {{ (d.load_mae * 1000) | round(0) | int }} Wh | {{ d.solar_forecast }} kWh | {{ d.solar_actual }} kWh | {{ d.soc_mean_error if d.soc_mean_error is not none else '–' }}% |
+              {%- endfor %}
+
+              *Battery: average gap* is how far the real state of charge was from the plan's, averaged over the day. In Passive mode the battery follows your current setup, not the plan, so a gap there is expected; the load and solar columns show how good the forecasts are.
+              {%- else %}
+              Nothing to compare yet: PowerEngine keeps the first plan of each day and compares it the next day.
+              {%- endif %}
+          - type: heading
+            heading: Inputs
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set c = state_attr('sensor.pe_map_config', 'checks') or {} %}
+              {%- set ns = namespace(bad=[], ok=0) %}
+              {%- for k, v in c.items() %}{% if v.status == 'ok' %}{% set ns.ok = ns.ok + 1 %}{% elif v.status != 'unmapped' %}{% set ns.bad = ns.bad + [[k, v]] %}{% endif %}{% endfor %}
+              {{ ns.ok }} input{{ '' if ns.ok == 1 else 's' }} OK{{ ', ' ~ (ns.bad | count) ~ ' need attention:' if ns.bad else '.' }}
+              {%- if ns.bad %}
+
+              | Input | Status | Detail |
+              |---|---|---|
+              {%- for k, v in ns.bad %}
+              | {{ k }} | {{ v.status | replace('_', ' ') }} | {{ v.message }} |
+              {%- endfor %}
+              {%- endif %}
   - title: Config
     path: config
     icon: mdi:cog
