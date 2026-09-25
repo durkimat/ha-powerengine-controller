@@ -42,6 +42,8 @@ def test_valid_inputs(tmp_path):
         {"inputs": {"x": {}}},
         {"inputs": {"x": {"entity": "sensor.a", "value": 1}}},
         {"schema_version": 99},
+        # the app's own AppDaemon definition must never be mistaken for settings
+        {"powerengine": {"module": "powerengine", "class": "PowerEngine"}},
     ],
 )
 def test_invalid_config_rejected(data):
