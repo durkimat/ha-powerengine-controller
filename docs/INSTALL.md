@@ -6,7 +6,7 @@ with a **Check** so you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.4.13 (beta, Passive-only)
+**Version this guide matches:** 0.5.0 (beta, Passive-only)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.4.13 starting (Passive-only build: nothing is controlled)
+PowerEngine 0.5.0 starting (Passive-only build: nothing is controlled)
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published 28 entities under the PowerEngine device
@@ -214,9 +214,9 @@ writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once
 
    When HA is back, restart AppDaemon: `ha apps restart a0d7b954_appdaemon`
 
-**Check:** *PowerEngine* appears in the sidebar with four tabs: **Monitoring**
+**Check:** *PowerEngine* appears in the sidebar with five tabs: **Monitoring**
 (it will say *UNCONFIGURED* until Step 6), **Plan**, **Costs** (after Step 6, PowerEngine
-fills the last 14 days from HA history within a few minutes, then counts live), and **Config**, which opens the
+fills the last 14 days from HA history within a few minutes, then counts live), **Health**, and **Config**, which opens the
 configuration card with suggested entities pre-filled. PowerEngine keeps its cost records in
 `/homeassistant/powerengine/costs/` (about 20 KB a day, kept for 400 days).
 

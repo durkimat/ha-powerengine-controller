@@ -71,7 +71,8 @@ class CostBook:
     def prune(self, today: date) -> None:
         cutoff = (today - timedelta(days=KEEP_DAYS)).isoformat()
         for name in os.listdir(self.folder):
-            if name[:10] < cutoff and name.endswith(".json") and name[:4].isdigit():
+            day = name[5:15] if name.startswith("plan-") else name[:10]
+            if day < cutoff and name.endswith(".json") and day[:4].isdigit():
                 os.remove(os.path.join(self.folder, name))
 
     # --- recording ----------------------------------------------------------------------
@@ -157,6 +158,28 @@ class CostBook:
             self.last_event = {"type": v["event"], "date": local.date().isoformat(), "time": local.strftime("%H:%M"),
                                "kwh": round(v["event_kwh"], 2), "gross": round(v["event_gross"], 2),
                                "net": round(v["event_net"], 2)}
+
+    # --- plan snapshots (for plan-vs-actual) ------------------------------------------------
+    def save_plan_snapshot(self, day: date, snapshot: dict) -> None:
+        _write_json(os.path.join(self.folder, f"plan-{day.isoformat()}.json"), snapshot)
+
+    def plan_snapshot(self, day: date) -> dict | None:
+        return _read_json(os.path.join(self.folder, f"plan-{day.isoformat()}.json"), None)
+
+    def health(self, today: date, checks: dict | None, days: int = SHOW_DAYS) -> dict:
+        """Findings (inputs + yesterday's data) and plan-vs-actual accuracy for recent days."""
+        from .health import accuracy, data_findings, input_findings, overall
+        yesterday = today - timedelta(days=1)
+        findings = input_findings(checks or {})
+        findings += data_findings([x for x in self.day_records(yesterday) if x.get("fv") == self.flow_id],
+                                  yesterday.strftime("%a %d %b"))
+        acc = []
+        for i in range(days, 0, -1):
+            d = today - timedelta(days=i)
+            a = accuracy(self.day_records(d), self.plan_snapshot(d))
+            if a:
+                acc.append({"date": d.isoformat(), **a})
+        return {"state": overall(findings), "findings": findings, "accuracy": acc}
 
     # --- measured losses ------------------------------------------------------------------
     def measure(self, today: date, capacity: float, days: int = MEASURE_DAYS) -> dict:

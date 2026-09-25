@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.0 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- **Health tab** (new, between Costs and Config):
+  - Findings: inputs PowerEngine's checks flag, plus sanity checks on yesterday's data: gaps in recording,
+    battery power that never shows charging (an unsigned sensor), energy unaccounted for (or more used than
+    supplied), and large battery-ledger corrections.
+  - Battery round-trip efficiency and system losses, with losses by day for 30 days.
+  - Plan vs what happened: each day's first plan is kept and compared the next day (house-load and solar
+    forecasts vs actual, and how far the battery was from the plan).
+  - Uptime: version, start time and heartbeat.
+- New entities: `sensor.pe_diag_health` (ok / warnings / problems, with findings and accuracy as attributes) and
+  `sensor.pe_diag_started`.
+
 ## 0.4.13 (beta)
 
 ### Behaviour changes
