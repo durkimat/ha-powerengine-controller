@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.8 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only. Nothing is sent to EDF in Passive mode.
+- **Smart-charge optimisation (FR-8), Passive.** When it's worth it (car plugged in and not charging, no slot in
+  the next 3 hours, import not already cheap, and the battery has room or arbitrage is on so cheap power could
+  be sold for more), PowerEngine picks the next nearest ready-by time (different from the current one) with the
+  charge target kept at 100%, checks 15 minutes later whether EDF added slots, and backs off 30 min, 1 h, 2 h,
+  then 4 h if not, with at most 6 requests a day and at least 20 minutes between any two. In Passive mode these
+  are recorded as "would" requests. Every other ready-by change (e.g. your four IO Schedule automations) is logged
+  with whether EDF added slots, as the baseline. Health tab: *Asking EDF for slots*.
+
 ## 0.5.7 (beta)
 
 ### Behaviour changes
