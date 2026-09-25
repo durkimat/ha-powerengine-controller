@@ -47,6 +47,7 @@ class Readings:
     standing_charge: float | None = None  # GBP/day
     rates: list[Window] = field(default_factory=list)          # today + tomorrow
     dispatches: list[Window] = field(default_factory=list)     # planned smart-charge slots
+    completed_dispatches: list[Window] = field(default_factory=list)
     ev_plug: str | None = None
     ev_status: str | None = None
     ev_mode: str | None = None
@@ -252,6 +253,7 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None) -> Readi
         r.standing_charge /= 100
     r.rates = parse_windows(attr("import_rates_today", "rates")) + parse_windows(attr("import_rates_tomorrow", "rates"))
     r.dispatches = parse_windows(attr("smart_dispatches", "planned_dispatches"), ("charge_in_kwh",))
+    r.completed_dispatches = parse_windows(attr("smart_dispatches", "completed_dispatches"), ("charge_in_kwh",))
 
     r.ev_plug = (state("ev_plug_status") or {}).get("state")
     r.ev_status = (state("ev_charger_status") or {}).get("state")

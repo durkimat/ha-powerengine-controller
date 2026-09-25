@@ -584,6 +584,25 @@ views:
               Nothing to compare yet: PowerEngine keeps the first plan of each day and compares it the next day.
               {%- endif %}
           - type: heading
+            heading: Smart-charge slots
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set s = state_attr('sensor.pe_diag_health', 'slots') %}
+              {%- if s and (s.slots or s.upcoming) %}
+              Last {{ s.days }} days: **{{ s.slots }} slot{{ '' if s.slots == 1 else 's' }}** finished, **{{ s.used }} used by the car**, {{ s.done_no_car }} ran with no car charging, {{ s.cancelled }} cancelled before starting, {{ s.cut_short }} cut short{{ (', ' ~ s.upcoming ~ ' upcoming') if s.upcoming else '' }}. The car drew {{ s.car_kwh }} kWh against {{ s.planned_kwh }} kWh planned by EDF.
+
+              | Day | Time | What happened | EDF planned | Car drew | Charging |
+              |---|---|---|---:|---:|---:|
+              {%- for r in s.recent | reverse %}
+              | {{ r.day }} | {{ r.time }} | {{ {'planned': 'upcoming', 'done': 'ran' ~ (' (confirmed)' if r.confirmed else ''), 'cancelled': 'cancelled', 'cut_short': 'cut short'}[r.status] }} | {{ r.planned_kwh if r.planned_kwh is not none else '–' }} kWh | {{ r.car_kwh }} kWh | {{ r.charging_min | round(0) | int }} min |
+              {%- endfor %}
+
+              This record builds the history for scoring how reliable EDF's slots are.
+              {%- else %}
+              No smart-charge slots seen yet. PowerEngine records each one EDF plans (and what the car actually drew) from now on.
+              {%- endif %}
+          - type: heading
             heading: Inputs
           - type: markdown
             grid_options: {columns: full}

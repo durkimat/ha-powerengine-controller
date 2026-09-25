@@ -51,6 +51,7 @@ from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue
 from pe_core.simulate import SimBattery
+from pe_core.slots import SlotTracker
 from pe_core.status import entity_states
 from pe_core.store import save_config
 
@@ -125,6 +126,8 @@ class PowerEngine(hass.Hass):
         self.recorder = Recorder()
         self.notifier = Notifier(os.path.join(os.path.dirname(self._save_path()), "notifications.json"))
         self._bad_since = {}
+        self.slots = SlotTracker(os.path.join(os.path.dirname(self._save_path()), "costs", "slots.json"))
+        self._slots_last = None
         self.costbook, self._months, self.measured = None, [], None
         try:
             self.costbook = CostBook(os.path.join(os.path.dirname(self._save_path()), "costs"), self.tz)
@@ -215,6 +218,7 @@ class PowerEngine(hass.Hass):
                 self._record_load(readings)
                 self._record_costs(readings)
                 self._watch_events(readings)
+                self._track_slots(readings)
                 self._maybe_replan(readings)
                 decision = decide(readings, self.cfg, self._decision, self.tz, plan=self.plan)
                 sim = self.sim.update(decision, readings, self._params(), self.tz)
@@ -551,6 +555,17 @@ class PowerEngine(hass.Hass):
         if r.free_start and r.free_start > r.now:
             self._notify("free_power", free_message(r.free_start, r.free_end, r.now, self.tz))
 
+    def _track_slots(self, r):
+        dt = (r.now - self._slots_last).total_seconds() if self._slots_last else 0.0
+        self._slots_last = r.now
+        charging = r.ev_state() == "charging"
+        if self.slots.update(r.now, r.dispatches, r.completed_dispatches, charging, r.ev_power, min(dt, 300.0)):
+            try:
+                self.slots.save()
+            except OSError as err:
+                self.log(f"Could not save the slot record: {err}", level="WARNING")
+            self._health()
+
     def _daily_summary(self, kwargs):
         if self.costbook is None:
             return
@@ -564,6 +579,7 @@ class PowerEngine(hass.Hass):
             return
         try:
             h = self.costbook.health(self._today(), getattr(self, "_checks", None))
+            h["slots"] = self.slots.summary(datetime.now(timezone.utc), tz=self.tz)
             self._publish_state("diag_health", h["state"], h)
             self._notify("health", health_message(h))
         except Exception as err:
