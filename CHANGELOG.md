@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## Unreleased
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Dashboard title is now "Power Engine". The sidebar name comes from `configuration.yaml`: change `title:` under
+  `powerengine-dash:` to `Power Engine` (the install guide now shows this).
+
 ## 0.4.8 (beta)
 
 ### Behaviour changes

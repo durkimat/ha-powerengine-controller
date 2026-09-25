@@ -1,7 +1,7 @@
 # PowerEngine dashboard: managed by the PowerEngine app.
 # This file is rewritten whenever PowerEngine is updated; local edits will be lost.
 # Needs: Power Flow Card Plus and ApexCharts Card (HACS). See docs/INSTALL.md, Step 5.
-title: PowerEngine
+title: Power Engine
 views:
   - title: Monitoring
     path: monitoring

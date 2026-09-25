@@ -192,7 +192,7 @@ writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once
      dashboards:
        powerengine-dash:
          mode: yaml
-         title: PowerEngine
+         title: Power Engine
          icon: mdi:lightning-bolt
          show_in_sidebar: true
          filename: powerengine/dashboard.yaml
