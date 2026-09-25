@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.5.12 (beta, Passive-only)
+**Version this guide matches:** 0.5.13 (beta, Passive-only)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.5.12 starting (Passive-only build: nothing is controlled)
+PowerEngine 0.5.13 starting (Passive-only build: nothing is controlled)
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -264,6 +264,11 @@ shows how many items to check. Work through it top to bottom:
    - *Control outputs* (Solis timed-slot hours/minutes, currents, update button, storage mode, export limit):
      only written in Active mode, but map them now so PowerEngine can count the writes your current setup makes
      (Health tab, EEPROM wear).
+   - *Handover guards* (read only): entities that show nothing else is controlling the inverter. With Predbat
+     and the legacy automations: **Other controller read-only** = `switch.predbat_set_read_only` (must be on),
+     **Other control off (1)/(2)** = `automation.charge_house_battery_on` and
+     `automation.house_battery_start_charging` (must be off). Active mode and supervised tests are refused
+     until every mapped guard is safe.
    - Fix anything shown in red.
 5. **Solar plants:** the main plant (on the hybrid inverter) is pre-filled. Use **+ Add solar plant** for
    extra arrays.
@@ -305,7 +310,20 @@ All in `/homeassistant/powerengine/` (outside the app folder, so updates never t
 ## Active mode
 
 Not available yet: every current build is Passive-only. The design (Solis timed slots, safety rules, handover
-from Predbat) is in the spec; this section will describe switching over when it's released.
+from Predbat) is in the spec; this section will describe switching over when it's released. Ready now:
+
+- **Handover guards** (config card, *Handover guards*): Active is refused while any mapped guard is unsafe (e.g.
+  Predbat not read-only, or a legacy automation on), and if one trips while PowerEngine is in control it stops
+  writing at once and notifies you (it writes nothing more, since something else has taken over).
+- **Pause control** (Monitoring tab, top right): in Active mode, pausing returns the inverter to Self-Use once
+  (both windows closed) and then makes no changes until you resume. Choosing Passive does the same.
+- **Supervised inverter test** (Config tab, below the config card, admins only). **This writes to the
+  inverter**, in any mode, when you start it. Hand control over first (Predbat read-only, legacy automations
+  off), pick Hold, Grid charge, Force discharge or Self-Use for 1 to 10 minutes, tick the box and start. It
+  writes the settings, reads them back after 10 seconds, records battery power and SoC each minute, then returns
+  the inverter to Self-Use and reads that back. *Stop and revert* ends it early. The window it sets ends two
+  minutes after the test, so a restart mid-test can't leave it running. Result: `sensor.pe_diag_test_write`
+  (passed / failed / stopped / refused, with every step). Hand back to Predbat or legacy afterwards.
 
 ---
 

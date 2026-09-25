@@ -12,12 +12,22 @@ views:
       - type: grid
         column_span: 3
         cards:
+          # pause switch on the right: stops all inverter writes in Active mode (hands back to Self-Use once)
+          - type: custom:powerengine-toggle-card
+            title: Power Engine
+            entity: switch.pe_ctl_pause
+            name: Pause control
+            icon_on: mdi:pause-circle
+            icon_off: mdi:play-circle-outline
+            grid_options: {columns: full, rows: 1}
           - type: markdown
             grid_options: {columns: full}
             content: |-
               {% set t = state_attr('sensor.pe_state_summary', 'text') or states('sensor.pe_state_summary') %}
               {% set parts = t.split('. ', 1) %}
               **{{ parts[0] }}**{% if parts | count > 1 %} {{ parts[1] }}{% endif %}
+              {% if states('sensor.pe_state_operation_mode') == 'paused' or states('sensor.pe_cfg_operation_mode') == 'active' %}
+              <br>*{{ state_attr('sensor.pe_state_operation_mode', 'reason') }}*{% endif %}
           - type: tile
             entity: sensor.pe_state_operation_mode
             name: Mode
@@ -556,7 +566,8 @@ views:
               **Usable capacity: {{ c.state }} kWh** ({{ 'measured, and used for planning' if c.attributes.measured else 'estimate from ' ~ c.attributes.samples ~ ' half-hours; the configured ' ~ c.attributes.configured_kwh ~ ' kWh is used until 14 full days and 100 samples agree within 30%' }}). Highest rates seen: charging {{ c.attributes.max_charge_kw or '–' }} kW, discharging {{ c.attributes.max_discharge_kw or '–' }} kW; lowest charge {{ c.attributes.min_soc_seen if c.attributes.min_soc_seen is not none else '–' }}%.
               {%- endif %}
 
-              **System losses yesterday: {{ states('sensor.pe_diag_system_losses') }} kWh** (average {{ state_attr('sensor.pe_diag_system_losses', 'average_kwh') or '–' }} kWh a day): everything supplied minus everything used, i.e. inverter conversion, standby and heat.
+              {%- set lp = state_attr('sensor.pe_diag_system_losses', 'percent_yesterday') %}{% set la = state_attr('sensor.pe_diag_system_losses', 'average_percent') %}
+              **System losses yesterday: {{ states('sensor.pe_diag_system_losses') }} kWh{{ (' (' ~ lp ~ '% of the energy handled)') if lp is not none else '' }}** (average {{ state_attr('sensor.pe_diag_system_losses', 'average_kwh') or '–' }} kWh{{ (', ' ~ la ~ '%') if la is not none else '' }} a day): everything supplied (solar, grid, battery) minus everything used, i.e. inverter conversion, standby and heat. The % above each bar is that day's losses as a share of all the energy handled.
           - type: custom:apexcharts-card
             grid_options: {columns: full, rows: auto}
             graph_span: 30d
@@ -569,6 +580,17 @@ views:
             apex_config:
               chart: {height: 220}
               legend: {show: false}
+              dataLabels:
+                enabled: true
+                offsetY: -18
+                style: {fontSize: "10px", colors: ["#616161"]}
+                formatter: |
+                  EVAL:function(val, opts) {
+                    const x = opts.w.globals.seriesX[opts.seriesIndex][opts.dataPointIndex];
+                    const pct = (window.powerEngineLossPct || {})[x];
+                    return pct === undefined || pct === null ? "" : pct + "%";
+                  }
+              plotOptions: {bar: {dataLabels: {position: "top"}}}
             yaxis:
               - decimals: 1
                 min: 0
@@ -581,7 +603,10 @@ views:
                 extend_to: false
                 show: {legend_value: false}
                 data_generator: |
-                  return (entity.attributes.by_day || []).map(d => [new Date(d[0] + "T12:00:00").getTime(), d[1]]);
+                  const days = entity.attributes.by_day || [];
+                  window.powerEngineLossPct = {};             // read by the data-label formatter above
+                  days.forEach(d => { window.powerEngineLossPct[new Date(d[0] + "T12:00:00").getTime()] = d[2]; });
+                  return days.map(d => [new Date(d[0] + "T12:00:00").getTime(), d[1]]);
       - type: grid
         column_span: 3
         cards:
@@ -708,4 +733,8 @@ views:
     icon: mdi:cog
     panel: true
     cards:
-      - type: custom:powerengine-config-card
+      - type: vertical-stack
+        cards:
+          - type: custom:powerengine-config-card
+          # supervised inverter test (admin only; refused unless the handover guards are safe)
+          - type: custom:powerengine-test-card

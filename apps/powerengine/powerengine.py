@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
 
-from pe_core import __version__
+from pe_core import __version__, testwrite
 from pe_core.activity import ActivityLog
 from pe_core.checks import OK, check, summarise
 from pe_core.config import (
@@ -26,7 +26,7 @@ from pe_core.config import (
     settings_catalogue,
     uses_battery_pair,
 )
-from pe_core.control import KINDS, desired, window_end, writes_needed
+from pe_core.control import KINDS, desired, readback_mismatches, release, window_end, writes_needed
 from pe_core.costbook import MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import sync_dashboard
@@ -46,7 +46,7 @@ from pe_core.entities import (
 from pe_core.forecast import LoadProfile, build_slots, house_only_means, parse_history, profile_from_means
 from pe_core.health import plan_snapshot
 from pe_core.loadstore import LoadStore
-from pe_core.modes import effective_mode
+from pe_core.modes import GUARDS, effective_mode, guard_problems
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
 from pe_core.optimiser import compare, optimise
 from pe_core.planner import make_plan, params_from, plan_entity_states
@@ -69,6 +69,8 @@ BACKFILL_DAYS = 14
 RECHECK_SECONDS = 300
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
+TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
+PAUSE_ENTITY = "switch.pe_ctl_pause"
 
 
 class PowerEngine(hass.Hass):
@@ -161,6 +163,7 @@ class PowerEngine(hass.Hass):
         self._sync_dashboard()
 
         self.listen_event(self._on_save, SAVE_EVENT)
+        self.listen_event(self._on_test, TEST_EVENT)
         self._beat({})
         self.run_every(self._beat, "now+60", HEARTBEAT_SECONDS)
         self.run_every(lambda kwargs: self._evaluate(), f"now+{RECHECK_SECONDS}", RECHECK_SECONDS)
@@ -193,8 +196,12 @@ class PowerEngine(hass.Hass):
                 checks["battery_power"] = (OK, "Not used: the charging and discharging sensors are mapped")
         missing = [k for k in required if checks.get(k, ("unmapped", ""))[0] != OK]
         self._watch_inputs(checks, required)
-        mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing)
+        guards = guard_problems(self.cfg, self.get_state) if self.cfg is not None else []
+        paused = self.get_state(PAUSE_ENTITY) == "on"
+        mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused)
+        self._leave_active(getattr(self, "mode", None), mode)
         self.mode = mode
+        self._guards, self._paused = guards, paused
 
         if self.cfg_error:
             overall = "error"
@@ -203,7 +210,7 @@ class PowerEngine(hass.Hass):
         else:
             overall = summarise(checks, required)
 
-        signature = (overall, mode, tuple(sorted(checks.items())))
+        signature = (overall, mode, tuple(guards), paused, tuple(sorted(checks.items())))
         if signature == self._last_checks:
             return
         self._last_checks = signature
@@ -212,7 +219,8 @@ class PowerEngine(hass.Hass):
         self._publish_state("diag_config_ok", "ON" if overall in ("ok", "warnings") else "OFF",
                             {"reason": self.cfg_error or overall, "file": self.cfg_path})
         self._publish_state("cfg_operation_mode", mode.configured)
-        self._publish_state("state_operation_mode", mode.effective, {"reason": mode.reason})
+        self._publish_state("state_operation_mode", mode.effective,
+                            {"reason": mode.reason, "guards": guards or "all safe", "paused": paused})
         self._publish_state("map_config", overall, {
             "config": self.cfg.raw if self.cfg else {},
             "checks": {k: {"status": s, "message": m} for k, (s, m) in checks.items()},
@@ -308,7 +316,9 @@ class PowerEngine(hass.Hass):
                 "note": "measured over the last 30 days" if m["measured"]
                 else f"estimated (configured figure) until {MIN_MEASURE_DAYS} full days are recorded"})
             self._publish_state("diag_system_losses", m.get("losses_yesterday") if m.get("losses_yesterday") is not None
-                                else "unknown", {"average_kwh": m.get("losses_avg"), "by_day": m["losses"]})
+                                else "unknown", {"average_kwh": m.get("losses_avg"),
+                                                 "percent_yesterday": m.get("losses_pct_yesterday"),
+                                                 "average_percent": m.get("losses_pct_avg"), "by_day": m["losses"]})
             if m["measured"]:
                 self.log(f"Battery round trip measured at {m['rte'] * 100:.1f}% over {m['days']} days")
             self._publish_state("diag_battery_capacity", m["capacity_kwh"] if m.get("capacity_kwh") else "unknown", {
@@ -613,6 +623,13 @@ class PowerEngine(hass.Hass):
             eid = self._role_entity(role)
             if eid:
                 self._write_listeners.append(self.listen_state(self._on_control_change, eid))
+        for eid in [self._role_entity(key) for key, _ in GUARDS] + [PAUSE_ENTITY]:
+            if eid:                                   # re-check the mode as soon as a guard or pause changes
+                self._write_listeners.append(self.listen_state(self._on_guard_change, eid))
+
+    def _on_guard_change(self, entity, attribute, old, new, kwargs):
+        if old != new:
+            self._evaluate()
 
     def _on_control_change(self, entity, attribute, old, new, kwargs):
         if old == new or old in (None, "unknown", "unavailable") or new in (None, "unknown", "unavailable"):
@@ -663,6 +680,7 @@ class PowerEngine(hass.Hass):
             self._publish_if_changed("diag_control", state, attrs)
             recent = ctl["last_write"] is not None and (r.now - ctl["last_write"]).total_seconds() < 60
             if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
+                    and not self._test_running()
                     and (not recent or kind != ctl["kind"])):
                 self._execute(writes, entities)
                 ctl["last_write"] = r.now
@@ -671,8 +689,8 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Control step failed: {err!r}", level="WARNING")
 
-    def _execute(self, writes, entities, attempt=1):
-        """Active mode only (unreachable while BUILD_SUPPORTS_ACTIVE is False). Write, then verify."""
+    def _write(self, writes, entities):
+        """Send writes to the inverter's control entities (never bump/boost ones)."""
         for w in writes:
             eid = entities.get(w.role)
             if not eid or is_forbidden_control(eid):
@@ -684,6 +702,11 @@ class PowerEngine(hass.Hass):
             elif w.kind == "button":
                 self.call_service("button/press", entity_id=eid)
             self.writes.observed(self._today(), eid)
+
+    def _execute(self, writes, entities, attempt=1):
+        """Active mode (unreachable while BUILD_SUPPORTS_ACTIVE is False), pause and leaving Active. Write,
+        then verify."""
+        self._write(writes, entities)
         self.run_in(self._verify_writes, 6, writes=[w.as_dict() for w in writes if w.kind != "button"],
                     entities=entities, attempt=attempt)
 
@@ -702,6 +725,138 @@ class PowerEngine(hass.Hass):
         self._notify("health", ("control:verify", "PowerEngine: inverter writes not confirmed",
                                 "Settings written to the inverter didn't read back correctly twice. Check the "
                                 "inverter and the SolaX Modbus integration."))
+
+    def _control_entities(self, roles):
+        entities = {role: self._role_entity(role) for role in list(roles) + ["timed_update_button"]}
+        missing = sorted(role for role, eid in entities.items() if not eid)
+        return entities, missing
+
+    def _leave_active(self, old, new):
+        """Leaving Active by pause or by choosing Passive hands the inverter back to Self-Use once. Leaving
+        because a handover guard tripped writes nothing: another controller has taken over."""
+        if old is None or old.effective != "active" or new.effective == "active":
+            return
+        if new.effective == "paused" or new.configured == "passive":
+            self.log(f"Leaving Active ({new.effective}); returning the inverter to Self-Use")
+            self._logbook("control paused; inverter returned to Self-Use" if new.effective == "paused"
+                          else "control stopped; inverter returned to Self-Use")
+            self._release()
+        else:
+            self.log(f"Leaving Active: {new.reason}", level="WARNING")
+            self._notify("health", ("control:guard", "PowerEngine: control stopped", new.reason))
+
+    def _release(self):
+        try:
+            want = release()
+            entities, missing = self._control_entities(want)
+            if missing:
+                return
+            have = {role: self.get_state(entities[role]) for role in want}
+            writes = writes_needed(want, have)
+            if writes:
+                self._execute(writes, entities)
+        except Exception as err:
+            self.log(f"Could not return the inverter to Self-Use: {err!r}", level="WARNING")
+
+    # --- supervised test writes ------------------------------------------------------------
+
+    def _test_running(self):
+        run = getattr(self, "_test", None)
+        return run is not None and not run.done
+
+    def _publish_test(self):
+        run = self._test
+        self._publish_state("diag_test_write", run.status, run.as_dict())
+
+    def _battery_now(self):
+        try:
+            r = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
+            return {"soc": r.battery_soc, "battery_w": r.battery_power}
+        except Exception:
+            return {}
+
+    def _on_test(self, event_name, data, kwargs):
+        user = self._user_name(data)
+        now = datetime.now(timezone.utc)
+        if data.get("action") == "stop":
+            if self._test_running():
+                self.log(f"Supervised test stopped by {user}")
+                self._test_end({"stopped": True})
+            return
+        req_roles = list(release()) + ["timed_charge_current", "timed_discharge_current"]
+        entities, missing = self._control_entities(req_roles) if self.cfg else ({}, ["config"])
+        guards = guard_problems(self.cfg, self.get_state) if self.cfg else ["no config"]
+        req, err = testwrite.validate(data, guards, missing, self._test_running())
+        if not err and self.mode.effective == "active":
+            err = "PowerEngine is in control; pause it first"
+        if err:
+            self.log(f"Supervised test by {user} refused: {err}", level="WARNING")
+            self._test = testwrite.TestRun({"action": data.get("action")}, now)
+            self._test.problems.append(err)
+            self._test.finish("refused")
+            self._publish_test()
+            self.fire_event("pe_test_result", ok=False, message=f"Refused: {err}")
+            return
+        run = self._test = testwrite.TestRun(req, now)
+        p = self._params(self._last_readings) if getattr(self, "_last_readings", None) else None
+        max_c, max_d = (p.max_charge_kw * 1000, p.max_discharge_kw * 1000) if p else (4800, 4800)
+        now_local = now.astimezone(self.tz) if self.tz else now
+        want = desired(testwrite.decision(req), now_local, testwrite.end_time(now_local, req["minutes"]),
+                       BATTERY_VOLTS, max_c, max_d)
+        have = {role: self.get_state(entities[role]) for role in want}
+        writes = writes_needed(want, have)
+        run.step(now, "before", **self._battery_now(), settings=have)
+        self._write(writes, entities)
+        run.step(now, "wrote", writes=[w.as_dict() for w in writes])
+        self.log(f"Supervised test started by {user}: {req['action']} for {req['minutes']} min "
+                 f"({len(writes)} writes)")
+        self._logbook(f"supervised test started by {user}: {req['action']} for {req['minutes']} min")
+        self._publish_test()
+        self.fire_event("pe_test_result", ok=True, message=f"Test started: {req['action']} for {req['minutes']} min")
+        self._test_handles = [self.run_in(self._test_check, 10, phase="start", want=want, entities=entities),
+                              self.run_every(self._test_observe, "now+60", 60),
+                              self.run_in(self._test_end, req["minutes"] * 60)]
+
+    def _test_observe(self, kwargs):
+        if self._test_running():
+            self._test.step(datetime.now(timezone.utc), "battery", **self._battery_now())
+            self._publish_test()
+
+    def _test_check(self, kwargs):
+        run = self._test
+        have = {role: self.get_state(kwargs["entities"][role]) for role in kwargs["want"]}
+        bad = readback_mismatches(kwargs["want"], have)
+        run.step(datetime.now(timezone.utc), f"read back ({kwargs['phase']})", ok=not bad, mismatched=bad,
+                 **self._battery_now())
+        if bad:
+            run.problems.append(f"{kwargs['phase']}: {', '.join(bad)} did not read back")
+        if kwargs["phase"] == "end":
+            run.finish("stopped" if kwargs.get("stopped") and not run.problems else None)
+            self.log(f"Supervised test {run.status}" + (f": {run.problems}" if run.problems else ""),
+                     level="WARNING" if run.problems else "INFO")
+            self._logbook(f"supervised test {run.status}")
+            self._notify("health", (f"test:{run.started.isoformat()}", f"PowerEngine test {run.status}",
+                                    "; ".join(run.problems) or "Settings read back correctly; inverter is back on "
+                                    "Self-Use."))
+        self._publish_test()
+
+    def _test_end(self, kwargs):
+        run = self._test
+        for handle in getattr(self, "_test_handles", []):
+            try:
+                self.cancel_timer(handle)
+            except Exception:
+                pass
+        self._test_handles = []
+        run.status = "reverting"
+        want = release()
+        entities, _ = self._control_entities(want)
+        have = {role: self.get_state(entities[role]) for role in want}
+        writes = writes_needed(want, have)
+        self._write(writes, entities)
+        run.step(datetime.now(timezone.utc), "reverted to Self-Use", writes=[w.as_dict() for w in writes])
+        self._publish_test()
+        self.run_in(self._test_check, 10, phase="end", want=want, entities=entities, stopped=kwargs.get("stopped"))
 
     def _publish_writes(self):
         try:

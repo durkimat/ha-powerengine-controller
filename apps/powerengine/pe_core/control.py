@@ -75,6 +75,20 @@ def desired(decision: Decision, now_local: datetime, end_local: datetime | None,
     return out
 
 
+def release() -> dict:
+    """Settings that hand the inverter back to plain Self-Use: both windows closed (pause, leaving Active,
+    and the end of a supervised test)."""
+    out: dict = {"storage_mode": SELF_USE_MODE}
+    for k in ("charge", "discharge"):
+        out.update(dict.fromkeys(TIME_ROLES[k], 0))
+    return out
+
+
+def readback_mismatches(want: dict, have: dict) -> list[str]:
+    """Roles whose current state doesn't match what was written."""
+    return sorted(role for role, value in want.items() if not _same(value, have.get(role)))
+
+
 def _same(want, have) -> bool:
     try:
         return abs(float(want) - float(have)) < 0.5

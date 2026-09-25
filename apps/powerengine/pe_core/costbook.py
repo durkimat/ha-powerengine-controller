@@ -212,13 +212,17 @@ class CostBook:
             supplied = sum((x.get("solar") or 0.0) + (x.get("grid_import") or 0.0) for x in recs) + day_out
             used = sum((x.get("house") or 0.0) + (x.get("car") or 0.0) + (x.get("grid_export") or 0.0)
                        for x in recs) + day_in
-            losses.append((d.isoformat(), round(supplied - used, 2)))
+            pct = (supplied - used) / supplied * 100 if supplied > 0 else None
+            losses.append((d.isoformat(), round(supplied - used, 2), round(pct, 1) if pct is not None else None))
         out: dict = {"days": n_days, "battery_in": round(b_in, 1), "battery_out": round(b_out, 1),
                      "losses": losses, "measured": False, "rte": None, "efficiency": None}
         if losses:
             yesterday = (today - timedelta(days=1)).isoformat()
             out["losses_yesterday"] = losses[-1][1] if losses[-1][0] == yesterday else None
-            out["losses_avg"] = round(sum(v for _, v in losses) / len(losses), 2)
+            out["losses_pct_yesterday"] = losses[-1][2] if losses[-1][0] == yesterday else None
+            out["losses_avg"] = round(sum(v[1] for v in losses) / len(losses), 2)
+            pcts = [v[2] for v in losses if v[2] is not None]
+            out["losses_pct_avg"] = round(sum(pcts) / len(pcts), 1) if pcts else None
         if n_days >= MIN_MEASURE_DAYS and b_in >= 20 and b_out >= 20 and soc_first is not None and soc_last is not None:
             d_e = (soc_last - soc_first) / 100 * capacity
             e = (d_e + (d_e * d_e + 4 * b_in * b_out) ** 0.5) / (2 * b_in)
