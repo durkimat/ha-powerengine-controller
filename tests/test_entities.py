@@ -54,3 +54,10 @@ def test_removal_clears_everything():
 def test_validation_catches_mistakes(bad):
     with pytest.raises(ValueError):
         validate_definitions(bad)
+
+
+def test_ui_switch_is_a_real_toggle():
+    from pe_core.entities import ENTITIES, discovery_payload
+    ent = next(e for e in ENTITIES if e.key == "ui_right_align")
+    p = discovery_payload(ent, "x")
+    assert p["optimistic"] is False and p["state_topic"] == p["command_topic"] and p["retain"] is True

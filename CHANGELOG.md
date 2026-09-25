@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.10 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Costs tab: the Right-align numbers control is now a normal on/off toggle with its full name (0.4.9 showed two
+  lightning-bolt buttons, HA's style for a switch whose state it can't confirm, and truncated the name).
+
 ## 0.4.9 (beta)
 
 ### Behaviour changes
