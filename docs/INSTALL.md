@@ -6,7 +6,7 @@ with a **Check** so you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.3.8 (beta, Passive-only)
+**Version this guide matches:** 0.4.0 (beta, Passive-only)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.3.8 starting (Passive-only build: nothing is controlled)
+PowerEngine 0.4.0 starting (Passive-only build: nothing is controlled)
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published 28 entities under the PowerEngine device
@@ -177,7 +177,7 @@ writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once
 
 1. **Install two dashboard cards from HACS** (search each, then Download):
    - **Power Flow Card Plus**: the energy flow picture (Monitoring tab)
-   - **ApexCharts Card**: the plan chart (Plan tab)
+   - **ApexCharts Card**: the plan chart (Plan tab) and the daily cost chart (Costs tab)
 
    Reload the browser afterwards.
 2. **Register the dashboard** in `configuration.yaml`. If your
@@ -214,9 +214,11 @@ writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once
 
    When HA is back, restart AppDaemon: `ha apps restart a0d7b954_appdaemon`
 
-**Check:** *PowerEngine* appears in the sidebar with three tabs: **Monitoring**
-(it will say *UNCONFIGURED* until Step 6), **Plan**, and **Config**, which opens the
-configuration card with suggested entities pre-filled.
+**Check:** *PowerEngine* appears in the sidebar with four tabs: **Monitoring**
+(it will say *UNCONFIGURED* until Step 6), **Plan**, **Costs** (empty until the first
+half-hour has been recorded after Step 6), and **Config**, which opens the
+configuration card with suggested entities pre-filled. PowerEngine keeps its cost records in
+`/homeassistant/powerengine/costs/` (about 20 KB a day, kept for 400 days).
 
 Anyone can open the Config tab, but only admins can save; other users see it
 read-only.

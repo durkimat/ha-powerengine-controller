@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.0 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- **Cost accounting.** Every 30 s PowerEngine splits the energy flows (solar, battery, grid → house, car, battery,
+  export) and values each half-hour at the rates seen. A first-in-first-out battery ledger tracks where stored
+  energy came from and what it cost. Records are kept in `/homeassistant/powerengine/costs/`.
+- **Costs tab:** daily layers S0 (no solar or battery) → solar → smart charge → battery (default) → battery (app)
+  → arbitrage → actual, with "carried in battery" and "unexplained" so every day reconciles; today so far; a
+  7-day chart; special events (Axle, free power) by month; and the full method.
+- New entities: `sensor.pe_cost_today`, `sensor.pe_cost_days`, `sensor.pe_event_last`, `sensor.pe_event_months`.
+- The standing charge input is now read (for costs).
+- Counting starts from install; history backfill follows in 0.4.1, measured losses in 0.4.2.
+
 ## 0.3.8 (beta)
 
 ### Behaviour changes

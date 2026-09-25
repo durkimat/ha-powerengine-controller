@@ -114,7 +114,16 @@ PLAN_ENTITIES: tuple[EntityDef, ...] = (
                "icon": "mdi:battery-sync"}),
 )
 
-ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES
+MONEY = {"unit_of_measurement": "GBP", "icon": "mdi:cash", "suggested_display_precision": 2}
+
+COST_ENTITIES: tuple[EntityDef, ...] = (
+    EntityDef("sensor", "cost_today", "Cost today", MONEY),
+    EntityDef("sensor", "cost_days", "Daily costs", MONEY),
+    EntityDef("sensor", "event_last", "Last special event", {**MONEY, "icon": "mdi:star-outline"}),
+    EntityDef("sensor", "event_months", "Special events this month", {**MONEY, "icon": "mdi:calendar-star"}),
+)
+
+ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES
 
 
 def device(version: str) -> dict[str, Any]:

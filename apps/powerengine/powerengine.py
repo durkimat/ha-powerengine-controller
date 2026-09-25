@@ -18,8 +18,10 @@ from pe_core import __version__
 from pe_core.activity import ActivityLog
 from pe_core.checks import OK, check, summarise
 from pe_core.config import DEFAULT_PATHS, ConfigError, load_config, required_roles, settings_catalogue
+from pe_core.costbook import CostBook, cost_entity_states
 from pe_core.dashboard import sync_dashboard
 from pe_core.decide import decide
+from pe_core.energy import Recorder
 from pe_core.entities import (
     AVAILABILITY_TOPIC,
     ENTITIES,
@@ -104,6 +106,13 @@ class PowerEngine(hass.Hass):
             self.tz = ZoneInfo(str(self.get_timezone()))
         except Exception:
             self.tz = None
+        self.recorder = Recorder()
+        self.costbook, self._months = None, []
+        try:
+            self.costbook = CostBook(os.path.join(os.path.dirname(self._save_path()), "costs"), self.tz)
+            self._refresh_months()
+        except Exception as err:
+            self.log(f"Could not open the cost book: {err!r}", level="WARNING")
         self._evaluate()                                   # also publishes mode + config status
         self._cycle({})
         self._sync_dashboard()
@@ -115,6 +124,7 @@ class PowerEngine(hass.Hass):
         self.run_every(self._cycle, f"now+{CYCLE_SECONDS}", CYCLE_SECONDS)
         self.run_in(self._learn_load, 5)                     # load profile from history, then daily
         self.run_daily(self._learn_load, "00:10:00")
+        self.run_daily(lambda kwargs: self._refresh_months(prune=True), "00:05:00")
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
 
     def terminate(self):
@@ -171,6 +181,7 @@ class PowerEngine(hass.Hass):
             try:
                 readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
                 self._record_load(readings)
+                self._record_costs(readings)
                 self._maybe_replan(readings)
                 decision = decide(readings, self.cfg, self._decision, self.tz, plan=self.plan)
                 sim = self.sim.update(decision, readings, params_from(self.cfg), self.tz)
@@ -190,6 +201,46 @@ class PowerEngine(hass.Hass):
                 self._publish_state("state_activity", entry["time"], {"entries": self.activity.entries})
             self._decision = decision
         for key, (state, attrs) in entity_states(readings, self.mode, self.tz, decision, self._since).items():
+            self._publish_if_changed(key, state, attrs)
+
+    # --- cost accounting -------------------------------------------------------------
+
+    def _today(self):
+        return datetime.now(self.tz or timezone.utc).date()
+
+    def _record_costs(self, r):
+        if self.costbook is None:
+            return
+        hh = self.recorder.add(r)
+        if hh is None:
+            return
+        try:
+            p = params_from(self.cfg)
+            rec = self.costbook.add(hh, r, capacity=p.capacity_kwh, eff=p.efficiency, floor_soc=p.min_reserve_soc,
+                                    max_kw=p.max_discharge_kw, includes_ev=p.hold_for_car, axle_value=p.axle_value)
+            if rec is None:
+                return
+            if rec["v"].get("event"):
+                self._refresh_months()
+            self._publish_costs()
+        except Exception as err:
+            self.log(f"Cost accounting failed for {hh.start.isoformat()}: {err!r}", level="WARNING")
+
+    def _refresh_months(self, prune=False):
+        if self.costbook is None:
+            return
+        try:
+            if prune:
+                self.costbook.prune(self._today())
+            self._months = self.costbook.months(self._today())
+            self._publish_costs()
+        except Exception as err:
+            self.log(f"Could not summarise costs: {err!r}", level="WARNING")
+
+    def _publish_costs(self):
+        if self.costbook is None or getattr(self, "mqtt", None) is None or not hasattr(self, "_published"):
+            return
+        for key, (state, attrs) in cost_entity_states(self.costbook, self._today(), self._months).items():
             self._publish_if_changed(key, state, attrs)
 
     def _logbook(self, message):
