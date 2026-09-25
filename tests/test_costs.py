@@ -309,6 +309,7 @@ def test_measure_battery_efficiency_and_losses(tmp_path):
     assert m["measured"] and m["days"] == 20
     assert m["efficiency"] == pytest.approx(e, abs=0.002) and m["rte"] == pytest.approx(e * e, abs=0.004)
     assert m["losses_yesterday"] == pytest.approx(48 * 0.05, abs=0.01)   # 50 Wh per half-hour unaccounted
+    assert 0 < m["losses_pct_yesterday"] < 10 and m["losses_pct_avg"] == pytest.approx(m["losses_pct_yesterday"])
     few = book.measure(T0.date() + timedelta(days=5), capacity=18)
     assert not few["measured"] and few["efficiency"] is None             # under 14 days: not measured yet
 

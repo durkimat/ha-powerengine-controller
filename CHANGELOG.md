@@ -2,6 +2,30 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.13 (beta)
+
+### Behaviour changes
+- **Supervised inverter test: the first thing that can write to the inverter.** Only when an admin starts it
+  from the Config tab, ticks *I'm watching*, and the handover guards are safe. It writes one action's timed-slot
+  settings (hold at 0 A, grid charge, force discharge or self-use) for 1 to 10 minutes, reads them back, logs
+  battery power and SoC each minute, then returns the inverter to Self-Use (windows closed) and reads that back.
+  Refused while PowerEngine is in control, while another test runs, or if any control output is unmapped. The
+  window it writes ends 2 minutes after the test so a restart can't leave it open. Results on
+  `sensor.pe_diag_test_write`, the log, the logbook and (if on) the health notification.
+- **Handover guards.** New read-only inputs (*Handover guards*: another controller's read-only switch must be on;
+  up to two other automations must be off). Active mode is refused unless at least one guard is mapped and all
+  are safe, re-checked whenever one changes. If a guard trips while in control, PowerEngine stops writing and
+  notifies you; it does not write anything more.
+- **Pause control** (`switch.pe_ctl_pause`, top right of the Monitoring tab). In Active mode, pausing (or choosing
+  Passive) returns the inverter to Self-Use once and then writes nothing until resumed; the mode shows *paused*.
+  No effect in this Passive-only build other than the mode reason.
+- Every build is still Passive-only for normal control.
+
+### Other
+- **Losses as a % of energy handled** (#53): system losses are also shown as a percentage of the energy supplied
+  each day, labelled above each bar on the Health tab losses chart, with yesterday's and the average % in the text.
+- Shorter input descriptions on the config card (the catalogue must stay under HA's 16 KB attribute limit).
+
 ## 0.5.12 (beta)
 
 ### Behaviour changes

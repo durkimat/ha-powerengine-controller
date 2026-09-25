@@ -72,6 +72,8 @@ ENTITIES: tuple[EntityDef, ...] = (
               {"device_class": "timestamp", "entity_category": "diagnostic", "icon": "mdi:restart"}),
     EntityDef("sensor", "diag_control", "Inverter control preview",
               {"icon": "mdi:tune-vertical", "entity_category": "diagnostic"}),
+    EntityDef("sensor", "diag_test_write", "Supervised test",
+              {"icon": "mdi:test-tube", "entity_category": "diagnostic"}),
     EntityDef("sensor", "diag_inverter_writes", "Inverter writes per day",
               {"icon": "mdi:memory", "entity_category": "diagnostic", "unit_of_measurement": "writes/day"}),
     EntityDef("sensor", "diag_battery_capacity", "Battery usable capacity (measured)",
@@ -152,7 +154,16 @@ UI_ENTITIES: tuple[EntityDef, ...] = (
                "state_topic": _UI_TOPIC, "optimistic": False, "retain": True}),
 )
 
-ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES + UI_ENTITIES
+# Pause: stops all inverter writes in Active mode (after handing the inverter back to Self-Use once). Same
+# retained command/state topic pattern as the UI switch, so the choice survives restarts of HA and the app.
+PAUSE_TOPIC = f"{BASE_TOPIC}/ctl_pause/set"
+CONTROL_SWITCHES: tuple[EntityDef, ...] = (
+    EntityDef("switch", "ctl_pause", "Pause control",
+              {"icon": "mdi:pause-octagon", "command_topic": PAUSE_TOPIC, "state_topic": PAUSE_TOPIC,
+               "optimistic": False, "retain": True}),
+)
+
+ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES + UI_ENTITIES + CONTROL_SWITCHES
 
 
 def device(version: str) -> dict[str, Any]:
