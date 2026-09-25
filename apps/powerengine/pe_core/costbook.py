@@ -82,7 +82,8 @@ class CostBook:
             includes_ev: bool, axle_value: float = 1.0, keep_existing: bool = False) -> dict | None:
         """Value a completed half-hour and store it. Returns the stored record, or None if it can't be valued.
 
-        keep_existing: don't replace a half-hour already recorded (a backfill never overwrites live records).
+        keep_existing: don't replace a half-hour already fully recorded (a backfill never overwrites a full live
+        record, but does fill in one cut short by a restart).
         """
         self.learn_rates(r)
         window = overnight_window(self.cheap_history)
@@ -95,8 +96,9 @@ class CostBook:
                            max_kw=max_kw, includes_ev=includes_ev, axle_value=axle_value)
         day = self._local_day(hh.start)
         records = self.day_records(day)
-        if keep_existing and any(x.get("start") == rec["start"] and x.get("fv") == FLOW_VERSION for x in records):
-            return None
+        if keep_existing and any(x.get("start") == rec["start"] and x.get("fv") == FLOW_VERSION
+                                 and (x.get("seconds") or 0) >= 0.8 * 1800 for x in records):
+            return None                     # a full live half-hour wins; a partial one (restart) is replaced
         rec["source"] = "history" if keep_existing else "live"
         records = sorted([x for x in records if x.get("start") != rec["start"]] + [rec], key=lambda x: x["start"])
         _write_json(self._day_path(day), records)
@@ -105,12 +107,13 @@ class CostBook:
         return rec
 
     def days_to_backfill(self, today: date, days: int) -> list[date]:
-        """Recent complete days with less than 90% of the day recorded (by the current flow method), oldest first."""
+        """Recent days with less than 90% recorded (by the current flow method), oldest first; today is always
+        included so half-hours before PowerEngine started (or during a restart) are filled in."""
         out = []
-        for i in range(days, 0, -1):
+        for i in range(days, -1, -1):
             d = today - timedelta(days=i)
             recs = [x for x in self.day_records(d) if x.get("fv") == FLOW_VERSION]
-            if sum(x.get("seconds") or 0.0 for x in recs) < 0.9 * 86400:
+            if i == 0 or sum(x.get("seconds") or 0.0 for x in recs) < 0.9 * 86400:
                 out.append(d)
         return out
 
@@ -144,7 +147,7 @@ class CostBook:
 
     def _note_event(self, rec: dict) -> None:
         v = rec["v"]
-        if v.get("event") and v.get("event_kwh", 0) > 0.01:
+        if v.get("event") and v.get("event_kwh", 0) >= 0.1:           # ignore a flag with next to no energy
             start = datetime.fromisoformat(rec["start"])
             local = start.astimezone(self.tz) if self.tz else start
             self.last_event = {"type": v["event"], "date": local.date().isoformat(), "time": local.strftime("%H:%M"),
