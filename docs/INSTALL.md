@@ -6,7 +6,7 @@ with a **Check** so you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.1.0 (beta, Passive-only)
+**Version this guide matches:** 0.2.0 (beta, Passive-only)
 
 ---
 
@@ -151,10 +151,10 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.1.0 starting (Passive-only build: nothing is controlled)
+PowerEngine 0.2.0 starting (Passive-only build: nothing is controlled)
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
-Published 20 entities under the PowerEngine device
+Published 22 entities under the PowerEngine device
 ```
 
 **Check the device:** *Settings → Devices & services → MQTT → PowerEngine*:
@@ -170,69 +170,21 @@ Published 20 entities under the PowerEngine device
 
 ---
 
-## Step 5: the config page
-
-A separate dashboard for admins only, hidden from the sidebar.
-
-1. **Settings → Dashboards → Add dashboard → New dashboard from scratch**
-   - Title: `PowerEngine config`, icon `mdi:cog`
-   - **Admin only**: on; **Show in sidebar**: off
-2. Open it (*Settings → Dashboards → PowerEngine config*) → ✏️ → **Raw configuration editor**, and paste:
-
-   ```yaml
-   views:
-     - title: Config
-       cards:
-         - type: custom:powerengine-config-card
-   ```
-
-**Check:** the card opens with a banner saying suggested entities have been
-pre-filled. Bookmark the page.
-
----
-
-## Step 6: configure PowerEngine
-
-On the config page (you must be an admin to save):
-
-1. **Operation:** leave on **Passive** (monitor and simulate only).
-2. **Features:** tick the ones you use (Axle, free-power sessions, and so on).
-   Inputs only needed by a feature you've switched off become optional.
-3. **Inputs:** work down each section. For every input:
-   - Pick the entity (suggestions are pre-filled on first use) or enter a fixed value where offered.
-   - Check the **Now:** value looks right for that input.
-   - For signed inputs (battery power, grid power), read the **reads as** text.
-     If it says *charging* when the battery is discharging (or *importing* when
-     you're exporting), tick **Invert**.
-   - Fix anything shown in red.
-4. **Solar plants:** the main plant (on the hybrid inverter) is pre-filled. Use
-   **+ Add solar plant** for any extra arrays.
-5. **Save.** PowerEngine checks everything, writes
-   `/homeassistant/powerengine/config.yaml` and keeps the previous version as a
-   backup (`config.yaml.bak-<date>`).
-
-**Check:** the banner says *Saved*, each input shows *PowerEngine check: OK*,
-and *Operation mode* becomes **passive**. If it stays *unconfigured*, its
-reason (on the entity, and at the top of the card after a refresh) lists the
-inputs still needing attention.
-
-To restore a previous configuration, copy a backup over `config.yaml` and
-restart AppDaemon.
-
----
-
-## Step 7: the PowerEngine dashboard
+## Step 5: the PowerEngine dashboard
 
 PowerEngine ships its own dashboard and keeps it up to date: on every start it
 writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once.
 
 1. **Install Power Flow Card Plus** (used for the energy flow picture):
    HACS → search **Power Flow Card Plus** → Download. Reload the browser.
-2. **Register the dashboard.** Add this to `configuration.yaml` (at the top
-   level; if you already have a `lovelace:` section, add just the
-   `powerengine-dash:` block under its `dashboards:`):
+2. **Register the dashboard** in `configuration.yaml`. If your
+   `configuration.yaml` has **no** `lovelace:` section yet, paste this into the
+   HA terminal (it appends to the end of the file):
 
-   ```yaml
+   ```bash
+   cat >> /homeassistant/configuration.yaml <<'EOF'
+
+   # PowerEngine dashboard (managed by the PowerEngine app)
    lovelace:
      dashboards:
        powerengine-dash:
@@ -241,18 +193,76 @@ writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once
          icon: mdi:lightning-bolt
          show_in_sidebar: true
          filename: powerengine/dashboard.yaml
+   EOF
    ```
 
-3. **Restart Home Assistant** (*Settings → System → Restart*). This is only
-   needed the first time.
+   If you **already** have a `lovelace:` section, edit the file instead
+   (`nano /homeassistant/configuration.yaml`) and add just the
+   `powerengine-dash:` block under its `dashboards:`.
 
-**Check:** *PowerEngine* appears in the sidebar and shows the status sentence,
-the energy flow, the *Now* tiles and the last-24-hours graphs.
+   If you keep a local git copy of your config, pull it afterwards so your next
+   push doesn't overwrite this change.
 
-- Signs look wrong (battery shows charging while discharging)? Fix it with
-  **Invert** on the config page (Step 6), not in the dashboard.
+3. **Check and restart Home Assistant** (only needed the first time):
+
+   ```bash
+   ha core check && ha core restart
+   ```
+
+   When HA is back, restart AppDaemon: `ha apps restart a0d7b954_appdaemon`
+
+**Check:** *PowerEngine* appears in the sidebar with two tabs: **Monitoring**
+(it will say *UNCONFIGURED* until Step 6) and **Config**, which opens the
+configuration card with suggested entities pre-filled.
+
+Anyone can open the Config tab, but only admins can save; other users see it
+read-only.
+
 - The dashboard is managed: edits to `dashboard.yaml` are overwritten on the
   next update. To customise, copy the cards into a dashboard of your own.
+
+> Upgrading from 0.1 or earlier? You can delete the separate *PowerEngine config*
+> dashboard you created before: the card now lives on the Config tab.
+
+---
+
+## Step 6: configure PowerEngine
+
+On the PowerEngine dashboard's **Config** tab (you must be an admin to save):
+
+1. **Operation:** leave on **Passive** (monitor and simulate only).
+2. **Features:** tick the ones you use (Axle, free-power sessions, and so on).
+   Inputs only needed by a feature you've switched off become optional.
+3. **Safety and thresholds:** the defaults are sensible; change the cheap-import
+   threshold and grid-charge target to suit your tariff.
+4. **Grid and house:** tick **House load includes the car charger** if your
+   inverter's house load includes the car (car on the same meter/CT). If unsure,
+   compare *House power* on the Monitoring tab with and without the car charging.
+5. **Inputs:** work down each section. For every input:
+   - Pick the entity (suggestions are pre-filled on first use) or enter a fixed value where offered.
+   - Check the **Now:** value looks right for that input.
+   - For signed inputs (battery power, grid power), read the **reads as** text.
+     If it says *charging* when the battery is discharging (or *importing* when
+     you're exporting), tick **Invert**.
+   - Fix anything shown in red.
+6. **Solar plants:** the main plant (on the hybrid inverter) is pre-filled. Use
+   **+ Add solar plant** for any extra arrays.
+7. **Save.** PowerEngine checks everything, writes
+   `/homeassistant/powerengine/config.yaml` and keeps the previous version as a
+   backup (`config.yaml.bak-<date>`).
+
+**Check:** the banner says *Saved*, each input shows *PowerEngine check: OK*,
+and *Operation mode* becomes **passive**. On the Monitoring tab the status now
+starts with what PowerEngine *would* do, e.g. *"PASSIVE. Would self-use:
+nothing better to do at 30.28p…"*, and the Activity list fills as decisions change.
+
+Signs look wrong (battery shows charging while discharging)? Fix it with
+**Invert** on the Config tab, not in the dashboard. If it stays *unconfigured*, its
+reason (on the entity, and at the top of the card after a refresh) lists the
+inputs still needing attention.
+
+To restore a previous configuration, copy a backup over `config.yaml` and
+restart AppDaemon.
 
 ---
 
@@ -298,8 +308,8 @@ for the card, then restart AppDaemon.
 | Card warns about a version mismatch | App and card on different versions | Update both to the same version |
 | `Unknown command: ha` | Commands run on your own computer | Use HA's terminal add-on |
 | `Config problem: ...` in the log | `config.yaml` has an error | The message names the problem; fix or restore the backup |
-| Dashboard missing from the sidebar | `lovelace:` entry not added, or HA not restarted | Step 7 |
-| Energy flow card says *Custom element doesn't exist* | Power Flow Card Plus not installed | Step 7.1, then reload the browser |
+| Dashboard missing from the sidebar | `lovelace:` entry not added, or HA not restarted | Step 5 |
+| Energy flow card says *Custom element doesn't exist* | Power Flow Card Plus not installed | Step 5.1, then reload the browser |
 | Dashboard values are *unknown* | Inputs not configured, or mode *unconfigured* | Step 6 |
 | Save says *could not send* | You're not an admin | Log in as an admin user |
 | Save says *no reply from PowerEngine* | App not running, or can't write its folder | Check the AppDaemon log for the reason |

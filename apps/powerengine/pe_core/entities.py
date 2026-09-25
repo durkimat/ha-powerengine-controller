@@ -81,6 +81,10 @@ RATE = {"unit_of_measurement": "GBP/kWh", "state_class": "measurement", "icon": 
 
 STATE_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "state_summary", "Status", {"icon": "mdi:text-box-outline"}),
+    EntityDef("sensor", "state_decision", "Decision",
+              {"icon": "mdi:head-cog-outline", "device_class": "enum",
+               "options": ["self_use", "grid_charge", "hold", "force_discharge", "none"]}),
+    EntityDef("sensor", "state_activity", "Activity", {"icon": "mdi:history"}),
     EntityDef("sensor", "state_battery_soc", "Battery",
               {"device_class": "battery", "unit_of_measurement": "%", "state_class": "measurement"}),
     EntityDef("sensor", "state_battery_power", "Battery power", {**POWER, "icon": "mdi:home-battery"}),
