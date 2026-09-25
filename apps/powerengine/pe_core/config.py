@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from .roles import ROLE_BY_KEY, is_forbidden_control
+from .roles import RETIRED_ROLES, ROLE_BY_KEY, is_forbidden_control
 
 SCHEMA_VERSION = 1
 
@@ -270,6 +270,7 @@ def parse_config(data: Any) -> Config:
     inputs = data.get("inputs") or {}
     if not isinstance(inputs, dict):
         raise ConfigError("'inputs' must be a mapping")
+    inputs = {k: v for k, v in inputs.items() if k not in RETIRED_ROLES}
     for role_key, spec in inputs.items():
         _check_role(role_key, spec)
 

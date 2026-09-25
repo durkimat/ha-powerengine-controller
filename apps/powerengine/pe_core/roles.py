@@ -158,17 +158,31 @@ ROLES: tuple[Role, ...] = (
     Role("free_power_next_end", "free", "Next free session end", "End of the next free session.",
          "timestamp", required="free_power", suggest=(r"^sensor\.edf_energy_.*_next_free_electricity_session_end$",)),
     # --- control outputs (never written in Passive mode) ---
-    Role("inverter_override", "controls", "Battery override", "Off / force charge / force discharge.",
-         "control", required="no", domains=("select",),
-         suggest=(r"^select\.solis_inverter_battery_control_override$",)),
-    Role("inverter_override_charge_power", "controls", "Override charge power", "Charge power used with the override.",
-         "control", required="no", domains=("number",),
-         suggest=(r"^number\.solis_inverter_battery_control_override_charge_power$",)),
-    Role("inverter_override_discharge_power", "controls", "Override discharge power", "Discharge power used with the override.",
-         "control", required="no", domains=("number",),
-         suggest=(r"^number\.solis_inverter_battery_control_override_discharge_power$",)),
-    Role("inverter_force_charge_soc", "controls", "Force-charge target SoC", "SoC to charge to from the grid.",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_force_charge_soc$",)),
+    # Solis timed charge/discharge slots (pre-FB00 firmware: values apply when the update button is pressed)
+    Role("timed_charge_start_hour", "controls", "Charge window start (hour)", "Timed charge window start hour.",
+         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_charge_start_hours$",)),
+    Role("timed_charge_start_minute", "controls", "Charge window start (minute)", "Timed charge window start minute.",
+         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_charge_start_minutes$",)),
+    Role("timed_charge_end_hour", "controls", "Charge window end (hour)", "Timed charge window end hour.",
+         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_charge_end_hours$",)),
+    Role("timed_charge_end_minute", "controls", "Charge window end (minute)", "Timed charge window end minute.",
+         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_charge_end_minutes$",)),
+    Role("timed_charge_current", "controls", "Charge current", "Timed charge current (A).",
+         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_charge_current$",)),
+    Role("timed_discharge_start_hour", "controls", "Discharge window start (hour)", "Timed discharge window start hour.",
+         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_discharge_start_hours$",)),
+    Role("timed_discharge_start_minute", "controls", "Discharge window start (minute)", "Timed discharge start minute.",
+         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_discharge_start_minutes$",)),
+    Role("timed_discharge_end_hour", "controls", "Discharge window end (hour)", "Timed discharge window end hour.",
+         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_discharge_end_hours$",)),
+    Role("timed_discharge_end_minute", "controls", "Discharge window end (minute)", "Timed discharge end minute.",
+         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_discharge_end_minutes$",)),
+    Role("timed_discharge_current", "controls", "Discharge current", "Timed discharge current (A).",
+         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_discharge_current$",)),
+    Role("timed_update_button", "controls", "Apply timed windows", "Button that sends the window times to the inverter.",
+         "control", required="no", domains=("button",), suggest=(r"^button\.solis_update_charge_discharge_times$",)),
+    Role("storage_mode", "controls", "Storage mode", "Energy storage control switch (Self-Use etc.).",
+         "control", required="no", domains=("select",), suggest=(r"^select\.solis_energy_storage_control_switch$",)),
     Role("inverter_export_limit", "controls", "Export limit", "Export (backflow) power limit.",
          "control", required="no", domains=("number",), suggest=(r"^number\.solis_backflow_power$",)),
     Role("smart_target_soc", "controls", "Smart-charge target", "Car charge target sent to EDF.",
@@ -180,6 +194,10 @@ ROLES: tuple[Role, ...] = (
 )
 
 ROLE_BY_KEY = {r.key: r for r in ROLES}
+
+# Inputs from earlier versions that no longer exist; dropped from a config.yaml on load (not an error).
+RETIRED_ROLES = frozenset({"inverter_override", "inverter_override_charge_power", "inverter_override_discharge_power",
+                           "inverter_force_charge_soc"})
 
 
 def is_forbidden_control(entity_id: str) -> bool:

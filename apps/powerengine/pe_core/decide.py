@@ -145,18 +145,10 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
 
 
 def _car_at_peak(r: Readings, soc: float, s: dict, price: str) -> Decision:
-    """Car charging at a non-cheap rate: the battery covers the house but not the car.
-
-    The battery's discharge is capped at the house's own load, so the car's charge comes from the grid. How the
-    cap is applied to a real inverter is part of the Active design (fallback: hold).
-    """
-    if soc <= s["min_reserve_soc"]:
-        return Decision(HOLD, "car_charging", f"car is charging and the battery is at its {s['min_reserve_soc']:.0f}% "
-                                              "minimum reserve")
-    house = max(0.0, r.house_power or 0.0)
-    why = (f"car is charging at {price}: the battery covers the house (about {house / 1000:.1f} kW) "
-           "but not the car, which charges from the grid")
-    return Decision(SELF_USE, "car_charging", why, power_w=round(house))
+    """Car charging at a non-cheap rate: hold the battery. (Covering the house but not the car was tried in
+    0.5.2 and dropped: a 7.4 kW car charge dwarfs the house load, so it isn't worth the extra control.)"""
+    return Decision(HOLD, "car_charging", f"car is charging at {price}; the battery holds and the grid covers "
+                                          "house and car")
 
 
 def fuse_limited(d: Decision, r: Readings, cfg: Config) -> Decision:

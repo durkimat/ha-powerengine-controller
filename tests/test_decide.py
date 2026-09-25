@@ -40,12 +40,9 @@ def test_hysteresis_stops_flapping():
     assert decide(R(import_rate=CHEAP, battery_soc=98), CFG, prev).action == GRID_CHARGE
 
 
-def test_car_charging_at_peak_battery_covers_house_not_car():
+def test_car_charging_at_peak_holds_the_battery():
     d = decide(R(ev_power=7000, ev_plug="Charging", house_power=1200), CFG)
-    assert d.action == SELF_USE and d.rule == "car_charging" and d.power_w == 1200
-    assert "not the car" in d.reason and "limited to 1.2 kW" in d.sentence(passive=True)
-    low = decide(R(ev_power=7000, ev_plug="Charging", house_power=1200, battery_soc=12), CFG)
-    assert low.action == HOLD                                    # at the reserve: hold
+    assert d.action == HOLD and d.rule == "car_charging" and "holds" in d.reason
 
 
 def test_car_charging_on_cheap_rate_charges_battery_too():
