@@ -262,3 +262,13 @@ def test_older_method_records_are_flagged_for_revalue(tmp_path):
     assert CostBook(str(tmp_path), UTC).needs_revalue
     book = CostBook(str(tmp_path / "fresh"), UTC)
     assert not book.needs_revalue
+
+
+def test_days_recorded_with_an_older_flow_method_are_rebuilt(tmp_path):
+    import json
+
+    from pe_core.costbook import CostBook
+    old = [{"start": (T0 + timedelta(minutes=30 * i)).isoformat(), "seconds": 1800, "v": {}} for i in range(48)]
+    (tmp_path / f"{T0.date().isoformat()}.json").write_text(json.dumps(old))
+    book = CostBook(str(tmp_path), UTC)
+    assert T0.date() in book.days_to_backfill(T0.date() + timedelta(days=1), 2)

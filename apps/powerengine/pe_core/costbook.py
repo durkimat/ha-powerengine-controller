@@ -13,7 +13,7 @@ import os
 from datetime import date, datetime, timedelta
 
 from .costs import METHOD_VERSION, SimDefault, day_summary, process, steps
-from .energy import HalfHour
+from .energy import FLOW_VERSION, HalfHour
 from .ledger import Ledger
 from .readings import Readings
 from .tariff import cheap_tods, overnight_window, rates_at, reclassify
@@ -95,7 +95,7 @@ class CostBook:
                            max_kw=max_kw, includes_ev=includes_ev, axle_value=axle_value)
         day = self._local_day(hh.start)
         records = self.day_records(day)
-        if keep_existing and any(x.get("start") == rec["start"] for x in records):
+        if keep_existing and any(x.get("start") == rec["start"] and x.get("fv") == FLOW_VERSION for x in records):
             return None
         rec["source"] = "history" if keep_existing else "live"
         records = sorted([x for x in records if x.get("start") != rec["start"]] + [rec], key=lambda x: x["start"])
@@ -105,11 +105,11 @@ class CostBook:
         return rec
 
     def days_to_backfill(self, today: date, days: int) -> list[date]:
-        """Recent complete days with less than 90% of the day recorded, oldest first."""
+        """Recent complete days with less than 90% of the day recorded (by the current flow method), oldest first."""
         out = []
         for i in range(days, 0, -1):
             d = today - timedelta(days=i)
-            recs = self.day_records(d)
+            recs = [x for x in self.day_records(d) if x.get("fv") == FLOW_VERSION]
             if sum(x.get("seconds") or 0.0 for x in recs) < 0.9 * 86400:
                 out.append(d)
         return out

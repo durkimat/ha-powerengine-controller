@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.5 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- **Fix: battery charging was counted as discharging.** Solis (via SolaX Modbus) reports battery power without a
+  sign, so PowerEngine never saw the battery charge: the cost records showed 0 kWh in and all of it out, which is
+  most of the "unexplained" cost. Two new optional inputs, **Battery charging power** and **Battery discharging
+  power**, are used instead when both are mapped (Solis: `sensor.solis_battery_input_energy` /
+  `..._output_energy`, which are power in W). **Map them on the Config tab.** This also fixes the battery direction
+  on the Monitoring tab.
+- Cost records now carry a flow-method version; days recorded the old way are rebuilt from HA history
+  automatically (the nightly backfill, or ~90 s after a restart).
+- The plan always covers at least 36 hours, using yesterday's prices (marked *est.*) beyond what EDF has
+  published, so the chart has no empty tail.
+
 ## 0.4.4 (beta)
 
 ### Behaviour changes

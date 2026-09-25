@@ -141,7 +141,7 @@ def _in(windows: list[Window], s: datetime) -> bool:
 
 
 def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | None, tz,
-                horizon_h: float = 48, min_h: float = 24) -> list[Slot]:
+                horizon_h: float = 48, min_h: float = 36) -> list[Slot]:
     """Half-hour slots from the current half-hour to the end of known prices (24-48 h)."""
     start = slot_start(r.now)
     rates = sorted(r.rates, key=lambda w: w.start)

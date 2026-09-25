@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 from .readings import Readings
 
 HALF = timedelta(minutes=30)
+FLOW_VERSION = 2          # bump when the way flows are measured changes; older days are rebuilt from history
 MAX_GAP_S = 300                     # longer gaps between readings aren't integrated
 
 FLOWS = ("s_h", "s_c", "s_b", "s_e", "b_h", "b_c", "b_e", "g_h", "g_c", "g_b")
@@ -119,6 +120,7 @@ class HalfHour:
             "unallocated_sink": self.unallocated_sink, "seconds": self.seconds, "soc_start": self.soc_start,
             "soc_end": self.soc_end, "axle": self.axle, "free": self.free, "import_rate": self.import_rate,
             "export_rate": self.export_rate, "standing": self.standing}.items()})
+        d["fv"] = FLOW_VERSION
         return d
 
 
