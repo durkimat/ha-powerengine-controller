@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.11 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only. The optimiser is for comparison only; it never drives decisions.
+- **Optimiser alongside the planner.** Each re-plan, a dynamic-programming optimiser works out the lowest-cost
+  plan over the same horizon (battery charge in 1% steps, the same physics, prices, limits and forecasts, charge
+  left at the end valued at the cheapest price). The Plan tab says how much cheaper, if at all, its plan is than
+  the planner's, and draws its battery line (thin green) on the chart. In tests it matches the planner on your
+  normal tariff and finds more with arbitrage on (mainly more export cycles), which is what this comparison is
+  for: seeing whether a smarter planner is worth switching to.
+
 ## 0.5.10 (beta)
 
 ### Behaviour changes
