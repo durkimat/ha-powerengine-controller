@@ -87,3 +87,14 @@ def test_prices_beyond_published_are_estimated_from_yesterday():
 
 def test_unused_imports():
     assert STATES
+
+
+def test_half_hour_means_with_no_samples():
+    assert half_hour_means([], datetime(2026, 9, 22, 10, 0, tzinfo=UTC)) == {}
+
+
+def test_load_profile_with_no_car_history():
+    now = datetime(2026, 9, 22, 0, 0, tzinfo=UTC)
+    house = [(now - timedelta(days=1, hours=-18), 900.0), (now - timedelta(days=1, hours=-19), 900.0)]
+    prof = build_load_profile(house, [], now, UTC)          # car never charged: must not crash
+    assert prof.watts
