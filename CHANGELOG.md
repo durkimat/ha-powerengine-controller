@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.6 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Plan chart: grid charging (blue) and Axle export (red) are drawn as blocks filling each half-hour they happen
+  in, instead of thin bars at the start of the half-hour that looked like short spikes.
+
 ## 0.4.5 (beta)
 
 ### Behaviour changes
