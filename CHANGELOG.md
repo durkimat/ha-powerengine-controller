@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.3.2 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+
+### Fixed
+- Load history failed to load when an input had no readings in the period (typically the car, if it hasn't
+  charged recently): the error `zip() argument 2 is longer than argument 1` discarded the house-load history too.
+  The load forecast now learns from HA history as intended.
+
 ## 0.3.1 (beta)
 
 ### Behaviour changes

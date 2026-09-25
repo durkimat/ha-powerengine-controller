@@ -59,6 +59,8 @@ class LoadProfile:
 def half_hour_means(samples: list[tuple[datetime, float]], end: datetime) -> dict[datetime, float]:
     """Time-weighted mean power per half-hour from state-change samples (value holds until next change)."""
     samples = sorted((t.astimezone(timezone.utc), v) for t, v in samples if v is not None)
+    if not samples:                                      # e.g. no car charging in the period
+        return {}
     energy: dict[datetime, float] = defaultdict(float)   # W*s
     covered: dict[datetime, float] = defaultdict(float)  # s
     for (t0, v), nxt in zip(samples, samples[1:] + [(end, None)], strict=True):
