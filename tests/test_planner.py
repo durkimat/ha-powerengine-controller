@@ -218,3 +218,29 @@ def test_no_arbitrage_when_it_does_not_pay_or_is_off():
 def replace_export(s, value):
     import dataclasses
     return dataclasses.replace(s, export=value)
+
+
+def test_export_split_solar_when_battery_full():
+    ps = PlanSlot(Slot(T0, PEAK, 0.15, load_kwh=0.3, solar_kwh=2.0), SELF_USE, "")
+    step(ps, 100, P)
+    assert ps.battery_export == 0 and ps.grid_export == pytest.approx(1.7)
+
+
+def test_export_split_battery_and_solar_when_selling():
+    from pe_core.decide import EXPORT
+    ps = PlanSlot(Slot(T0, PEAK, 0.15, load_kwh=0.3, solar_kwh=1.0), EXPORT, "")
+    step(ps, 90, P)
+    assert ps.battery_export > 0
+    assert ps.grid_export - ps.battery_export == pytest.approx(0.7, abs=0.01)
+
+
+def test_plan_series_has_solar_export_and_fits_ha_limit():
+    import json
+
+    from pe_core.planner import plan_entity_states
+    plan = make_plan(day(n=72, solar=1.5, load=0.3), soc=95.0, p=P, now=T0)
+    attrs = plan_entity_states(plan)["plan"][1]
+    ser = attrs["series"]
+    assert len(ser["solar_export_kwh"]) == len(ser["t"]) and max(ser["solar_export_kwh"]) > 0
+    assert all(d == 0 for d in ser["discharge_kwh"])
+    assert len(json.dumps(attrs, separators=(",", ":"))) < 15500

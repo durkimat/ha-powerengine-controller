@@ -62,6 +62,7 @@ class PlanSlot:
     grid_import: float = 0.0          # kWh
     grid_export: float = 0.0
     grid_to_battery: float = 0.0      # kWh drawn from the grid into the battery (grid-charge only)
+    battery_export: float = 0.0       # kWh of grid_export that came from the battery (the rest is solar)
     cost: float = 0.0                 # GBP (negative = income)
 
 
@@ -137,6 +138,7 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
     imp = exp = 0.0
     axle_export = 0.0
     ps.grid_to_battery = 0.0
+    battery_export = 0.0
 
     def charge_from_surplus(surplus: float, limit_soc: float = 100.0) -> float:
         nonlocal stored
@@ -159,6 +161,7 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
         stored -= out / p.efficiency
         flow = net - out                                # the battery covers the house first, the rest is sold
         imp, exp = max(0.0, flow), max(0.0, -flow)
+        battery_export = min(exp, out)
     elif ps.action == FORCE_DISCHARGE:
         out = min(p.axle_kw * dt_h, max(0.0, stored - floor) * p.efficiency)
         stored -= out / p.efficiency
@@ -167,6 +170,7 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
         exp_total = max(0.0, -flow)
         axle_export = min(exp_total, out)
         exp = exp_total - axle_export
+        battery_export = axle_export
     else:                                               # SELF_USE or HOLD
         if net > 0:
             if ps.action == SELF_USE:
@@ -181,6 +185,7 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
     price = s.price if s.price is not None else 0.0
     export_price = s.export if s.export is not None else 0.0
     ps.grid_import, ps.grid_export = imp, exp + axle_export
+    ps.battery_export = battery_export
     ps.cost = imp * price - exp * export_price - axle_export * p.axle_value
     ps.soc_start = soc
     ps.soc_end = stored / cap * 100
@@ -423,7 +428,7 @@ def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
     if plan is None:
         return {"plan": ("unknown", {}), "plan_headline": ("No plan yet.", {"text": "No plan yet."})}
     ser = {"t": [], "soc": [], "price_p": [], "solar_kwh": [], "load_kwh": [], "charge_kwh": [], "discharge_kwh": [],
-           "action": []}
+           "solar_export_kwh": [], "action": []}
     for ps in plan.slots:
         ser["t"].append(ps.slot.start.isoformat())
         ser["soc"].append(round(ps.soc_end, 1))
@@ -431,7 +436,8 @@ def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
         ser["solar_kwh"].append(round(ps.slot.solar_kwh, 2))
         ser["load_kwh"].append(round(ps.slot.load_kwh, 2))
         ser["charge_kwh"].append(round(ps.grid_to_battery, 2))
-        ser["discharge_kwh"].append(round(ps.grid_export, 2) if ps.action in (FORCE_DISCHARGE, EXPORT) else 0)
+        ser["discharge_kwh"].append(round(ps.battery_export, 2))          # battery export (Axle, arbitrage)
+        ser["solar_export_kwh"].append(round(max(0.0, ps.grid_export - ps.battery_export), 2))
         ser["action"].append(ps.action)
     text = headline(plan)
     est = next((ps.slot.start.isoformat() for ps in plan.slots if ps.slot.price_estimated), None)
