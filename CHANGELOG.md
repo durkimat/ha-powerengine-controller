@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.10 (beta)
+
+### Behaviour changes
+- None: documentation only.
+- **Install guide consolidated (#10):** seven steps in order, with the config page walked through section by
+  section as it is now, a new *First-day checks* step (what each tab should show, and when measured values take
+  over), where PowerEngine keeps its files, an *Active mode* placeholder, and troubleshooting for costs, the
+  unsigned battery sensor and inverter writes.
+
 ## 0.5.9 (beta)
 
 ### Behaviour changes
