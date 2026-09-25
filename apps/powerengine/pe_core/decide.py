@@ -16,12 +16,14 @@ from .readings import Readings
 from .tariff import cheap_threshold
 
 SELF_USE, GRID_CHARGE, HOLD, FORCE_DISCHARGE, NONE = "self_use", "grid_charge", "hold", "force_discharge", "none"
+EXPORT = "export"          # arbitrage: sell stored energy that will be refilled cheaply
 
 ACTION_TEXT = {
     SELF_USE: "self-use",
     GRID_CHARGE: "grid-charge",
     HOLD: "hold the battery",
     FORCE_DISCHARGE: "force-discharge",
+    EXPORT: "export from the battery",
     NONE: "do nothing",
 }
 
