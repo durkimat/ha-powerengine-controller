@@ -27,3 +27,18 @@ def test_no_stray_yaml_in_app_folder():
     app = pathlib.Path(__file__).resolve().parents[1] / "apps" / "powerengine"
     yamls = sorted(p.relative_to(app).as_posix() for p in app.rglob("*.y*ml"))
     assert yamls == ["powerengine.yaml"], yamls
+
+
+def test_dashboard_templates_parse():
+    """Every markdown card's Jinja template must at least parse (HA would show an error otherwise)."""
+    import jinja2
+    d = yaml.safe_load(open(SOURCE))
+    env = jinja2.Environment()
+    count = 0
+    for view in d["views"]:
+        for section in view.get("sections", []):
+            for card in section.get("cards", []):
+                if card.get("type") == "markdown":
+                    env.parse(card["content"])
+                    count += 1
+    assert count >= 5

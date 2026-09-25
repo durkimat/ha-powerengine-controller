@@ -29,14 +29,19 @@ from pe_core.entities import (
     removal_messages,
     validate_definitions,
 )
+from pe_core.forecast import LoadProfile, build_load_profile, build_slots, parse_history
 from pe_core.modes import effective_mode
+from pe_core.planner import make_plan, params_from, plan_entity_states
 from pe_core.readings import read
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue
+from pe_core.simulate import SimBattery
 from pe_core.status import entity_states
 from pe_core.store import save_config
 
 HEARTBEAT_SECONDS = 60
 CYCLE_SECONDS = 30
+REPLAN_SECONDS = 300
+HISTORY_DAYS = 14
 RECHECK_SECONDS = 300
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
@@ -83,6 +88,9 @@ class PowerEngine(hass.Hass):
         except Exception:
             saved = None
         self.activity = ActivityLog(saved if isinstance(saved, list) else None)
+        self.profile: LoadProfile | None = None
+        self.plan, self._plan_sig, self._plan_time = None, None, None
+        self.sim = SimBattery()
         try:
             self.tz = ZoneInfo(str(self.get_timezone()))
         except Exception:
@@ -96,6 +104,8 @@ class PowerEngine(hass.Hass):
         self.run_every(self._beat, "now+60", HEARTBEAT_SECONDS)
         self.run_every(lambda kwargs: self._evaluate(), f"now+{RECHECK_SECONDS}", RECHECK_SECONDS)
         self.run_every(self._cycle, f"now+{CYCLE_SECONDS}", CYCLE_SECONDS)
+        self.run_in(self._learn_load, 5)                     # load profile from history, then daily
+        self.run_daily(self._learn_load, "00:10:00")
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
 
     def terminate(self):
@@ -151,9 +161,15 @@ class PowerEngine(hass.Hass):
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
                 readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
-                decision = decide(readings, self.cfg, self._decision, self.tz)
+                self._maybe_replan(readings)
+                decision = decide(readings, self.cfg, self._decision, self.tz, plan=self.plan)
+                sim = self.sim.update(decision, readings, params_from(self.cfg), self.tz)
+                if sim is not None:
+                    self._publish_if_changed("state_sim_soc", round(sim, 1),
+                                             {"cost_today": round(self.sim.cost_today, 2),
+                                              "real_soc": readings.battery_soc})
             except Exception as err:          # never let one bad reading stop the app
-                self.log(f"Reading or deciding failed: {err!r}", level="WARNING")
+                self.log(f"Reading, planning or deciding failed: {err!r}", level="WARNING")
         if decision is not None:
             passive = self.mode.effective != "active"
             entry = self.activity.record(decision, readings.now, passive, self.tz)
@@ -165,9 +181,58 @@ class PowerEngine(hass.Hass):
                 self._publish_state("state_activity", entry["time"], {"entries": self.activity.entries})
             self._decision = decision
         for key, (state, attrs) in entity_states(readings, self.mode, self.tz, decision, self._since).items():
-            if self._published.get(key) != (state, attrs):
-                self._published[key] = (state, attrs)
-                self._publish_state(key, state, attrs)
+            self._publish_if_changed(key, state, attrs)
+
+    def _publish_if_changed(self, key, state, attrs):
+        if self._published.get(key) != (state, attrs):
+            self._published[key] = (state, attrs)
+            self._publish_state(key, state, attrs)
+
+    # --- forecasting and planning --------------------------------------------------
+
+    def _role_entity(self, role):
+        spec = (self.cfg.inputs if self.cfg else {}).get(role) or {}
+        return spec.get("entity")
+
+    def _learn_load(self, kwargs):
+        """Build the house-load profile from the last 14 days of HA history."""
+        house, car = self._role_entity("house_load_power"), self._role_entity("ev_charge_power")
+        if not house:
+            return
+        try:
+            def hist(eid):
+                rows = self.get_history(entity_id=eid, days=HISTORY_DAYS) if eid else []
+                return parse_history(rows[0] if rows and isinstance(rows[0], list) else rows)
+            now = datetime.now(timezone.utc)
+            self.profile = build_load_profile(hist(house), hist(car), now, self.tz,
+                                              subtract_car=bool(self.cfg.system.get("house_load_includes_ev", True)))
+            self.log(f"Load profile built from {self.profile.days:.1f} days of history")
+            self._plan_sig = None                                   # force a re-plan with the new profile
+        except Exception as err:
+            self.log(f"Could not build the load profile: {err!r}", level="WARNING")
+
+    def _solar_forecast(self):
+        items = []
+        for role in ("solar_forecast_today", "solar_forecast_tomorrow", "solar_forecast_day3"):
+            eid = self._role_entity(role)
+            if eid:
+                items += self.get_state(eid, attribute="detailedForecast") or []
+        return items
+
+    def _maybe_replan(self, r):
+        sig = (len(r.rates), r.rates[0].start if r.rates else None,
+               tuple((w.start, w.end) for w in r.dispatches), r.axle_start, r.axle_end, r.free_start, r.free_end,
+               self.profile.days if self.profile else None, json.dumps(self.cfg.safety, sort_keys=True),
+               json.dumps(self.cfg.features, sort_keys=True))
+        due = self._plan_time is None or (r.now - self._plan_time).total_seconds() >= REPLAN_SECONDS
+        if sig == self._plan_sig and not due or r.battery_soc is None:
+            return
+        slots = build_slots(r, self._solar_forecast(), self.profile, self.tz)
+        self.plan = make_plan(slots, r.battery_soc, params_from(self.cfg, r), r.now, self.tz)
+        self._plan_sig, self._plan_time = sig, r.now
+        extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0}
+        for key, (state, attrs) in plan_entity_states(self.plan, extra).items():
+            self._publish_if_changed(key, state, attrs)
 
     def _sync_dashboard(self):
         target = os.path.join(os.path.dirname(self._save_path()), "dashboard.yaml")
