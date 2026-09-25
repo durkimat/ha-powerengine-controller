@@ -2,6 +2,25 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.0.3 (beta)
+
+### Behaviour changes
+- None to your devices: this build is Passive-only and never controls anything.
+- New: PowerEngine now creates a **PowerEngine** device in HA (via MQTT) with five entities:
+  `sensor.pe_diag_version`, `sensor.pe_diag_heartbeat`, `binary_sensor.pe_diag_config_ok`,
+  `sensor.pe_cfg_operation_mode` and `sensor.pe_state_operation_mode`.
+
+### Added
+- Operation mode (`operation.mode: passive | active`, default passive). Active is refused by this build.
+- Optional additional solar plants (`solar_plants:` list) in `config.yaml`.
+- `remove_entities: true` removes every PowerEngine entity.
+
+### Changed
+- `operation.dry_run` replaced by `operation.mode`.
+
+### Setup
+- Requires AppDaemon's MQTT plugin (see README, "MQTT (one-off)").
+
 ## 0.0.2 (beta)
 
 ### Behaviour changes

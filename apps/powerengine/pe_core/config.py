@@ -7,6 +7,7 @@ reads and validates it; a missing file means "unconfigured", never an error.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -21,10 +22,23 @@ DEFAULT_PATHS = (
     "/config/powerengine/config.yaml",
 )
 
-
 KNOWN_KEYS = frozenset(
-    {"schema_version", "inputs", "features", "safety", "tariff", "operation", "notifications", "remove_entities"}
+    {
+        "schema_version",
+        "inputs",
+        "solar_plants",
+        "features",
+        "safety",
+        "tariff",
+        "operation",
+        "notifications",
+        "remove_entities",
+    }
 )
+
+MODES = ("passive", "active")
+FORECAST_SOURCES = ("none", "solcast_site", "scaled")
+_PLANT_ID = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 
 
 class ConfigError(ValueError):
@@ -32,11 +46,65 @@ class ConfigError(ValueError):
 
 
 @dataclass(frozen=True)
+class SolarPlant:
+    id: str
+    name: str
+    power: dict[str, Any]
+    energy_today: dict[str, Any]
+    forecast: str = "none"
+    enabled: bool = True
+
+
+@dataclass(frozen=True)
 class Config:
-    dry_run: bool = True
+    mode: str = "passive"
     remove_entities: bool = False
     inputs: dict[str, Any] = field(default_factory=dict)
+    solar_plants: tuple[SolarPlant, ...] = ()
     raw: dict[str, Any] = field(default_factory=dict)
+
+
+def _check_input_spec(label: str, spec: Any) -> None:
+    if not isinstance(spec, dict) or not ({"entity", "value"} & spec.keys()):
+        raise ConfigError(f"{label} must have either 'entity' or 'value'")
+    if "entity" in spec and "value" in spec:
+        raise ConfigError(f"{label} has both 'entity' and 'value'; use one")
+
+
+def _parse_plants(data: Any) -> tuple[SolarPlant, ...]:
+    if data is None:
+        return ()
+    if not isinstance(data, list):
+        raise ConfigError("'solar_plants' must be a list")
+    plants, seen = [], set()
+    for i, item in enumerate(data, start=1):
+        if not isinstance(item, dict):
+            raise ConfigError(f"solar plant #{i} must be a mapping")
+        pid = item.get("id")
+        if not isinstance(pid, str) or not _PLANT_ID.match(pid):
+            raise ConfigError(f"solar plant #{i}: 'id' must be lowercase letters, digits or _ (max 24)")
+        if pid in seen:
+            raise ConfigError(f"solar plant id '{pid}' is used twice")
+        seen.add(pid)
+        for key in ("power", "energy_today"):
+            _check_input_spec(f"solar plant '{pid}' {key}", item.get(key))
+        forecast = item.get("forecast", "none")
+        if forecast not in FORECAST_SOURCES:
+            raise ConfigError(f"solar plant '{pid}': forecast must be one of {', '.join(FORECAST_SOURCES)}")
+        enabled = item.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ConfigError(f"solar plant '{pid}': 'enabled' must be true or false")
+        plants.append(
+            SolarPlant(
+                id=pid,
+                name=str(item.get("name") or pid),
+                power=dict(item["power"]),
+                energy_today=dict(item["energy_today"]),
+                forecast=forecast,
+                enabled=enabled,
+            )
+        )
+    return tuple(plants)
 
 
 def parse_config(data: Any) -> Config:
@@ -57,9 +125,9 @@ def parse_config(data: Any) -> Config:
     operation = data.get("operation") or {}
     if not isinstance(operation, dict):
         raise ConfigError("'operation' must be a mapping")
-    dry_run = operation.get("dry_run", True)
-    if not isinstance(dry_run, bool):
-        raise ConfigError("'operation.dry_run' must be true or false")
+    mode = operation.get("mode", "passive")
+    if mode not in MODES:
+        raise ConfigError("'operation.mode' must be 'passive' or 'active'")
 
     remove_entities = data.get("remove_entities", False)
     if not isinstance(remove_entities, bool):
@@ -69,12 +137,15 @@ def parse_config(data: Any) -> Config:
     if not isinstance(inputs, dict):
         raise ConfigError("'inputs' must be a mapping")
     for role, spec in inputs.items():
-        if not isinstance(spec, dict) or not ({"entity", "value"} & spec.keys()):
-            raise ConfigError(f"input '{role}' must have either 'entity' or 'value'")
-        if "entity" in spec and "value" in spec:
-            raise ConfigError(f"input '{role}' has both 'entity' and 'value'; use one")
+        _check_input_spec(f"input '{role}'", spec)
 
-    return Config(dry_run=dry_run, remove_entities=remove_entities, inputs=dict(inputs), raw=data)
+    return Config(
+        mode=mode,
+        remove_entities=remove_entities,
+        inputs=dict(inputs),
+        solar_plants=_parse_plants(data.get("solar_plants")),
+        raw=data,
+    )
 
 
 def load_config(paths: tuple[str, ...] | list[str] = DEFAULT_PATHS) -> tuple[Config | None, str | None]:

@@ -15,35 +15,57 @@ def test_missing_file_means_unconfigured(tmp_path):
 
 def test_defaults_are_safe():
     cfg = parse_config({})
-    assert cfg.dry_run is True
+    assert cfg.mode == "passive"
     assert cfg.remove_entities is False
+    assert cfg.solar_plants == ()
 
 
-def test_valid_inputs(tmp_path):
+def test_valid_file(tmp_path):
     p = tmp_path / "config.yaml"
     p.write_text(
         "inputs:\n"
         "  battery_soc: {entity: sensor.solis_battery_soc}\n"
         "  export_rate: {value: 0.15, unit: GBP/kWh}\n"
+        "solar_plants:\n"
+        "  - id: main\n"
+        "    name: Solis (roof)\n"
+        "    power: {entity: sensor.solis_pv_total_power}\n"
+        "    energy_today: {entity: sensor.solis_power_generation_today}\n"
+        "    forecast: solcast_site\n"
+        "  - id: garage\n"
+        "    power: {entity: sensor.solax_power}\n"
+        "    energy_today: {entity: sensor.solax_yield_today}\n"
         "operation:\n"
-        "  dry_run: false\n"
+        "  mode: active\n"
     )
     cfg, used = load_config([str(p)])
     assert used == str(p)
-    assert cfg.dry_run is False
+    assert cfg.mode == "active"
     assert set(cfg.inputs) == {"battery_soc", "export_rate"}
+    assert [pl.id for pl in cfg.solar_plants] == ["main", "garage"]
+    assert cfg.solar_plants[1].forecast == "none" and cfg.solar_plants[1].enabled is True
+    assert cfg.solar_plants[1].name == "garage"
+
+
+PLANT = {"id": "p1", "power": {"entity": "sensor.a"}, "energy_today": {"entity": "sensor.b"}}
 
 
 @pytest.mark.parametrize(
     "data",
     [
         [1, 2],
-        {"operation": {"dry_run": "yes"}},
+        {"operation": {"mode": "on"}},
         {"inputs": {"x": {}}},
         {"inputs": {"x": {"entity": "sensor.a", "value": 1}}},
         {"schema_version": 99},
         # the app's own AppDaemon definition must never be mistaken for settings
         {"powerengine": {"module": "powerengine", "class": "PowerEngine"}},
+        {"solar_plants": {"id": "x"}},
+        {"solar_plants": [{**PLANT, "id": "Bad Id"}]},
+        {"solar_plants": [PLANT, PLANT]},
+        {"solar_plants": [{**PLANT, "forecast": "magic"}]},
+        {"solar_plants": [{**PLANT, "power": {}}]},
+        {"solar_plants": [{**PLANT, "enabled": "yes"}]},
     ],
 )
 def test_invalid_config_rejected(data):

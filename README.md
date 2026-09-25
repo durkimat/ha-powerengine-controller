@@ -21,6 +21,24 @@ smart-charge slots and VPP events, and explains every decision in plain English.
    appdaemon:
      app_dir: /homeassistant/appdaemon/apps
    ```
+   **MQTT (one-off):** PowerEngine creates its entities through MQTT discovery,
+   so AppDaemon needs its MQTT plugin. Create a non-admin HA user for it (the
+   Mosquitto add-on accepts HA logins), put the login in
+   `/addon_configs/a0d7b954_appdaemon/secrets.yaml` as `powerengine_mqtt_user` /
+   `powerengine_mqtt_password`, and add this under `appdaemon:` → `plugins:`
+   (next to `HASS:`), then restart the add-on:
+
+   ```yaml
+       MQTT:
+         type: mqtt
+         namespace: mqtt
+         client_host: core-mosquitto
+         client_port: 1883
+         client_user: !secret powerengine_mqtt_user
+         client_password: !secret powerengine_mqtt_password
+         client_id: appdaemon-powerengine
+         client_topics: NONE   # publish only; don't subscribe to every topic
+   ```
 1. HACS → ⋮ → *Custom repositories* → add this repo with category **AppDaemon**
    (enable AppDaemon apps in the HACS integration options first).
 2. Install **PowerEngine**. The app ships its own app definition, so no
@@ -28,7 +46,9 @@ smart-charge slots and VPP events, and explains every decision in plain English.
 3. Install the companion [config card](https://github.com/durkimat/ha-powerengine-card).
 
 Settings live in `/homeassistant/powerengine/config.yaml`, outside the app
-folder, so updates never overwrite them. A fresh install runs in **dry run**.
+folder, so updates never overwrite them. A fresh install runs in **Passive** mode: it monitors, plans and simulates,
+but never controls anything. Active mode is switched on from the config page,
+and only once the build supports it.
 
 ## Development
 
