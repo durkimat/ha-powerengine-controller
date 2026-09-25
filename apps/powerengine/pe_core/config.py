@@ -89,13 +89,25 @@ SETTING_TEXT = {
 }
 
 
+# Config-page sections for the numeric settings (in display order).
+SETTING_SECTIONS = (
+    ("battery", "Battery and charging", ("min_reserve_soc", "cheap_threshold_p", "grid_charge_target_soc",
+                                         "charge_hysteresis_soc")),
+    ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
+    ("axle", "Axle events", ("pre_axle_lookahead_h", "axle_margin_soc")),
+    ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p")),
+)
+
+
 def settings_catalogue() -> dict:
     """Settings schema for the config page: defaults, ranges, labels, help."""
-    safety = [{"key": k, "default": d, "min": lo, "max": hi, "label": SETTING_TEXT[k][0],
-               "unit": SETTING_TEXT[k][1], "help": SETTING_TEXT[k][2]} for k, (d, lo, hi) in SAFETY.items()]
+    order = [k for _, _, keys in SETTING_SECTIONS for k in keys]
+    safety = [{"key": k, "default": SAFETY[k][0], "min": SAFETY[k][1], "max": SAFETY[k][2],
+               "label": SETTING_TEXT[k][0], "unit": SETTING_TEXT[k][1], "help": SETTING_TEXT[k][2]} for k in order]
     system = [{"key": k, "default": d, "label": SETTING_TEXT[k][0], "help": SETTING_TEXT[k][2]}
               for k, d in SYSTEM_DEFAULTS.items()]
-    return {"safety": safety, "system": system}
+    return {"safety": safety, "system": system,
+            "sections": [{"key": sec, "label": label, "keys": list(keys)} for sec, label, keys in SETTING_SECTIONS]}
 _ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
 _PLANT_ID = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 

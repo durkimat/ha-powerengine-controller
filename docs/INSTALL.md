@@ -6,7 +6,7 @@ with a **Check** so you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.4.1 (beta, Passive-only)
+**Version this guide matches:** 0.4.2 (beta, Passive-only)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.4.1 starting (Passive-only build: nothing is controlled)
+PowerEngine 0.4.2 starting (Passive-only build: nothing is controlled)
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published 28 entities under the PowerEngine device
@@ -234,6 +234,9 @@ read-only.
 ## Step 6: configure PowerEngine
 
 On the PowerEngine dashboard's **Config** tab (you must be an admin to save):
+
+The page is split into collapsible sections; *Expand all* opens everything, and any section
+that needs attention opens by itself and shows how many items to check.
 
 1. **Operation:** leave on **Passive** (monitor and simulate only).
 2. **Features:** tick the ones you use (Axle, free-power sessions, and so on). *Top up when

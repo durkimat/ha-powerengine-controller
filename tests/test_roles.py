@@ -34,7 +34,8 @@ def test_suggestion_patterns_compile():
 def test_catalogue_fits_in_ha_attribute_limit():
     # HA won't record attributes over 16 KB; keep well under it (roles + settings, as published)
     from pe_core.config import settings_catalogue
-    size = len(json.dumps({**catalogue(), "settings": settings_catalogue()}))
+    # HA's recorder stores attributes as compact JSON and skips any over 16 KiB
+    size = len(json.dumps({**catalogue(), "settings": settings_catalogue()}, separators=(",", ":"), ensure_ascii=False))
     assert size < 16000, size
 
 
