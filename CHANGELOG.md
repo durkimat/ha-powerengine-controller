@@ -2,6 +2,22 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.9 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Dashboard title is now "Power Engine". The sidebar name comes from `configuration.yaml`: change `title:` under
+  `powerengine-dash:` to `Power Engine` (the install guide now shows this).
+- Costs tab:
+  - The **Right-align numbers** control is now a toggle switch at the top right, and starts **on** (it came up
+    off in 0.4.8 because HA starts such switches off). Set once by PowerEngine; your choice is kept after that.
+  - Chart: each day's bars are centred on its label; only the last 7 days and today are drawn (no clipped group
+    at the left); the legend no longer shows misleading "0 GBP" values.
+  - "£-0.00" now shows as £0.00; "1 half-hour recorded" grammar; tiny Axle flags (< 0.1 kWh) are not reported as
+    the last event; the method text no longer points at an old version number.
+- Cost backfill now also fills **today's** missing half-hours (before PowerEngine started, or cut short by a
+  restart), so today's figures cover the whole day rather than just since the last restart.
+
 ## 0.4.8 (beta)
 
 ### Behaviour changes

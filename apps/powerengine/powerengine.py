@@ -32,6 +32,7 @@ from pe_core.decide import decide
 from pe_core.energy import Recorder
 from pe_core.entities import (
     AVAILABILITY_TOPIC,
+    BASE_TOPIC,
     ENTITIES,
     OFFLINE,
     ONLINE,
@@ -90,6 +91,7 @@ class PowerEngine(hass.Hass):
 
         for ent in ENTITIES:
             self._publish(ent.discovery_topic, discovery_payload(ent, __version__))
+        self._ui_defaults()
         self._publish(AVAILABILITY_TOPIC, ONLINE)
         self._publish_state("diag_version", __version__)
         self._publish_state("map_catalogue", str(len(ROLES)), {**catalogue(), "settings": settings_catalogue()})
@@ -292,7 +294,8 @@ class PowerEngine(hass.Hass):
         rec, kw, added = Recorder(), self._cost_params(), 0
         last = None
         try:
-            for r in replay(self.cfg, timelines, start, end + timedelta(seconds=30)):
+            stop = min(end + timedelta(seconds=30), datetime.now(timezone.utc) - timedelta(minutes=1))
+            for r in replay(self.cfg, timelines, start, stop):
                 hh = rec.add(r)
                 last = r
                 if hh is not None and self.costbook.add(hh, r, keep_existing=True, **kw):
@@ -515,6 +518,23 @@ class PowerEngine(hass.Hass):
         return "; ".join(parts) or "no changes"
 
     # --- helpers -------------------------------------------------------------------
+
+    def _ui_defaults(self):
+        """Set dashboard preferences to their defaults once (HA and the broker keep them after that)."""
+        path = os.path.join(os.path.dirname(self._save_path()), "ui.json")
+        try:
+            with open(path, encoding="utf-8") as fh:
+                done = json.load(fh)
+        except (OSError, ValueError):
+            done = {}
+        if not done.get("right_align"):
+            self._publish(f"{BASE_TOPIC}/ui_right_align/set", "ON")      # right-aligned numbers by default
+            done["right_align"] = True
+            try:
+                with open(path, "w", encoding="utf-8") as fh:
+                    json.dump(done, fh)
+            except OSError as err:
+                self.log(f"Could not save dashboard defaults: {err}", level="WARNING")
 
     def _mqtt_api(self):
         try:

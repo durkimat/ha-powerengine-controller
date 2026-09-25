@@ -6,7 +6,7 @@ with a **Check** so you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.4.8 (beta, Passive-only)
+**Version this guide matches:** 0.4.9 (beta, Passive-only)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.4.8 starting (Passive-only build: nothing is controlled)
+PowerEngine 0.4.9 starting (Passive-only build: nothing is controlled)
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published 28 entities under the PowerEngine device
@@ -192,7 +192,7 @@ writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once
      dashboards:
        powerengine-dash:
          mode: yaml
-         title: PowerEngine
+         title: Power Engine
          icon: mdi:lightning-bolt
          show_in_sidebar: true
          filename: powerengine/dashboard.yaml
