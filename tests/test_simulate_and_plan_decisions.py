@@ -48,10 +48,16 @@ def _plan_with_first(action_price):
     return make_plan(slots, 20.0, params_from(CFG), NOW)
 
 
+def test_fill_when_cheap_is_on_by_default_and_can_be_turned_off():
+    assert params_from(CFG).fill_when_cheap is True
+    off = parse_config({"features": {"fill_when_cheap": False}})
+    assert params_from(off).fill_when_cheap is False
+
+
 def test_decision_follows_plan():
     plan = _plan_with_first(0.05)          # cheap now, expensive later -> charge now
     d = decide(R(battery_soc=20, import_rate=0.05), CFG, plan=plan)
-    assert d.rule == "plan" and d.action == GRID_CHARGE and "cheapest" in d.reason
+    assert d.rule == "plan" and d.action == GRID_CHARGE and ("cheapest" in d.reason or "top up" in d.reason)
 
 
 def test_live_car_charging_overrides_plan():

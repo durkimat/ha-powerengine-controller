@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.3.8 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- New feature **Top up when cheap** (on by default): the plan charges to the grid-charge target in every cheap slot,
+  as a buffer in case the forecast is wrong, instead of buying only what the forecast needs.
+- The plan's saving now counts the value of extra charge left in the battery at the end (at the cheapest price in
+  the period), so topping up isn't shown as a loss. Part of #15.
+- Plan chart's grid-charge bars show only energy going into the battery, not the house's import.
+- New settings for arbitrage (not built yet): **Export limit** (6 kW default), **Battery wear cost**,
+  **Arbitrage minimum profit**. The arbitrage option on the config page warns to check export tariff terms.
+
 ## 0.3.7 (beta)
 
 ### Behaviour changes

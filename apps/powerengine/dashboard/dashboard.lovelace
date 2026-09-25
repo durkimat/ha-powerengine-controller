@@ -177,6 +177,8 @@ views:
               · **the load forecast is still learning**, so treat this plan as rough for the first day or two{% endif %}
               {%- macro money(v) -%}{% set v = v | float(0) %}{{ ('earns £%.2f' | format(-v)) if v < -0.005 else ('costs £%.2f' | format(v)) }}{%- endmacro %}
               · this plan {{ money(state_attr('sensor.pe_plan', 'cost')) }} over the period; plain self-use {{ money(state_attr('sensor.pe_plan', 'baseline_cost')) }}
+              {%- set extra = state_attr('sensor.pe_plan', 'extra_kwh') | float(0) %}{% if extra | abs >= 0.5 %}
+              · the plan ends with {{ '%.1f' | format(extra | abs) }} kWh {{ 'more' if extra > 0 else 'less' }} in the battery than plain self-use (worth £{{ '%.2f' | format(state_attr('sensor.pe_plan', 'extra_value') | float(0) | abs) }} at the cheapest price), counted in the saving{% endif %}
               {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}
               · prices after {{ as_timestamp(state_attr('sensor.pe_plan', 'estimated_prices_from')) | timestamp_custom('%a %H:%M') }} are estimated (not yet published){% endif %}
           - type: custom:apexcharts-card
