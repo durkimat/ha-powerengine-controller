@@ -312,7 +312,7 @@ views:
               {%- set days = state_attr('sensor.pe_cost_days', 'days') or [] %}
               {%- set done = days | selectattr('complete') | list %}
               {%- if done %}{% set y = done | last %}
-              **{{ as_timestamp(y.date) | timestamp_custom('%a %d %b') }}: {{ gbp(y.actual) }} actual vs {{ gbp(y.s0) }} with no solar or battery.** Solar saved {{ gbp(y.solar) }}, smart charge {{ gbp(y.smart) }}, battery {{ gbp(y.s3a) }} (default) + {{ gbp(y.s3b) }} (app), arbitrage {{ gbp(y.arbitrage) }}.
+              **{{ as_timestamp(y.date) | timestamp_custom('%a %d %b') }}: {{ gbp(y.actual) }} actual vs {{ gbp(y.s0) }} with no solar or battery.** Solar saved {{ gbp(y.solar) }}, smart charge {{ gbp(y.smart) }}, battery {{ gbp(y.s3a) }} (default) + {{ gbp(y.s3b) }} (control), arbitrage {{ gbp(y.arbitrage) }}.
               {%- else %}
               **No complete days yet.** PowerEngine counts forward from when 0.4 was installed; the first full day appears after midnight.
               {%- endif %}
@@ -372,14 +372,14 @@ views:
                 data_generator: |
                   return (entity.attributes.days || []).map(d => [new Date(d.date + "T12:00:00").getTime(), d.steps[3][1]]);
               - entity: sensor.pe_cost_days
-                name: "S3b: + battery (app)"
+                name: "S3b: + battery control"
                 type: column
                 color: "#1e88e5"
                 extend_to: false
                 data_generator: |
                   return (entity.attributes.days || []).map(d => [new Date(d.date + "T12:00:00").getTime(), d.steps[4][1]]);
               - entity: sensor.pe_cost_days
-                name: "S4: + arbitrage"
+                name: "S4: + battery export (arbitrage)"
                 type: column
                 color: "#ab47bc"
                 extend_to: false
@@ -401,13 +401,26 @@ views:
             grid_options: {columns: full}
             content: |-
               {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v)) }}{%- endmacro %}
-              | Day | No solar/battery | Solar | Smart | Battery (default) | Battery (app) | Arbitrage | Carried in battery | Actual | Unexplained |
+              | Day | No solar/battery | Solar | Smart | Battery (default) | Battery control | Arbitrage | Carried in battery | Actual | Unexplained |
               |---|---|---|---|---|---|---|---|---|---|
               {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse %}
               | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }}{{ ' (so far)' if not d.complete else '' }} | {{ gbp(d.s0) }} | {{ gbp(d.solar) }} | {{ gbp(d.smart) }} | {{ gbp(d.s3a) }} | {{ gbp(d.s3b) }} | {{ gbp(d.arbitrage) }} | {{ gbp(d.stored) }} | **{{ gbp(d.actual) }}** | {{ gbp(d.unexplained) }} |
               {%- endfor %}
 
-              Savings columns reduce the cost; "Carried in battery" is energy bought or stored for later use (it adds to today's cost and is credited when used).
+              Savings columns reduce the cost; "Carried in battery" is energy bought or stored for later use (it adds to today's cost and is credited when used). {% if states('sensor.pe_state_operation_mode') != 'active' %}PowerEngine is in Passive mode, so "Battery control" and "Arbitrage" show what your current setup (for example Predbat or your automations) actually did, not PowerEngine.{% endif %}
+          - type: heading
+            heading: Energy by day
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- macro k(v) -%}{{ '%.1f' | format(v | float(0)) }}{%- endmacro %}
+              | Day | Import | Export | Solar | House | Car | Battery in | Battery out | Battery → export | Unaccounted | Ledger correction |
+              |---|---|---|---|---|---|---|---|---|---|---|
+              {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse %}{% set e = d.energy or {} %}
+              | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }} | {{ k(e.grid_import) }} | {{ k(e.grid_export) }} | {{ k(e.solar) }} | {{ k(e.house) }} | {{ k(e.car) }} | {{ k(e.battery_in) }} | {{ k(e.battery_out) }} | {{ k(e.b_e) }} | {{ k(e.unallocated_src) }} | {{ k(e.correction_kwh) }} |
+              {%- endfor %}
+
+              kWh, integrated from the 30-second readings. Compare with the inverter's daily counters to check the sensors. *Unaccounted* is energy supplied (solar, grid, battery) that didn't reach a measured destination: inverter losses, standby and sensor mismatch. It is the main source of *Unexplained* cost. *Ledger correction* is how far the battery's real state of charge differed from what the flows predicted.
           - type: heading
             heading: Special events
           - type: markdown
@@ -442,9 +455,9 @@ views:
               - **Solar:** solar used by the house × standard rate, plus solar exported or stored × export rate.
               - **Smart charge:** every kWh bought in an EDF smart slot × (standard rate − slot rate), split between house, car (against the overnight rate) and battery by where it went. The standard rate in a slot is the day's peak rate.
               - **Battery (default):** a half-hour simulation of the inverter's plain self-use with the same battery: charges only from surplus solar, covers the house.
-              - **Battery (app):** the battery's real value minus the default. Energy delivered is valued at the rate it avoided; energy used is costed from a first-in-first-out ledger (solar at the export rate, grid at the standard rate when bought), losses included. Can be negative.
+              - **Battery control:** the battery's real value minus the default: what the charge/discharge timing added. Energy delivered is valued at the rate it avoided; energy used is costed from a first-in-first-out ledger (solar at the export rate, grid at the standard rate when bought), losses included. Can be negative. In Passive mode this is whatever is controlling the battery today.
               - **Arbitrage:** grid-bought energy later exported: export revenue − its cost.
-              - **Carried in battery:** the change in the ledger's value: energy bought or stored today for later.
+              - **Carried in battery:** the change in the ledger's value: energy bought or stored today for later. The ledger is matched to the battery's real state of charge every half-hour; any correction shows in Unexplained.
               - **Actual:** metered import × rate − metered export × export rate + standing charge.
               - **Unexplained:** Actual minus the layers. Inverter losses, standby use and meter mismatch land here; if it grows, the model needs fixing.
 
