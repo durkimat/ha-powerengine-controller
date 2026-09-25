@@ -42,6 +42,7 @@ def test_valid_file(tmp_path):
     assert used == str(p)
     assert cfg.mode == "active"
     assert set(cfg.inputs) == {"battery_soc", "export_rate"}
+    assert cfg.features["axle"] is True and cfg.features["arbitrage"] is False
     assert [pl.id for pl in cfg.solar_plants] == ["main", "garage"]
     assert cfg.solar_plants[1].forecast == "none" and cfg.solar_plants[1].enabled is True
     assert cfg.solar_plants[1].name == "garage"
@@ -55,8 +56,17 @@ PLANT = {"id": "p1", "power": {"entity": "sensor.a"}, "energy_today": {"entity":
     [
         [1, 2],
         {"operation": {"mode": "on"}},
-        {"inputs": {"x": {}}},
-        {"inputs": {"x": {"entity": "sensor.a", "value": 1}}},
+        {"inputs": {"battery_soc": {}}},
+        {"inputs": {"battery_soc": {"entity": "sensor.a", "value": 1}}},
+        {"inputs": {"not_a_role": {"entity": "sensor.a"}}},
+        {"inputs": {"battery_soc": {"entity": "sensor.a", "invert": True}}},     # not a signed input
+        {"inputs": {"battery_soc": {"value": 50}}},                              # must be an entity
+        {"inputs": {"battery_capacity": {"value": "lots"}}},
+        {"inputs": {"battery_soc": {"entity": "switch.a"}}},                     # wrong domain
+        {"inputs": {"battery_soc": {"entity": "Not An Entity"}}},
+        {"inputs": {"smart_target_soc": {"entity": "number.edf_x_intelligent_bump_charge"}}},
+        {"features": {"teleport": True}},
+        {"features": {"axle": "yes"}},
         {"schema_version": 99},
         # the app's own AppDaemon definition must never be mistaken for settings
         {"powerengine": {"module": "powerengine", "class": "PowerEngine"}},
@@ -78,3 +88,16 @@ def test_bad_yaml_rejected(tmp_path):
     p.write_text("inputs: [unclosed\n")
     with pytest.raises(ConfigError):
         load_config([str(p)])
+
+
+def test_signed_input_can_be_inverted():
+    cfg = parse_config({"inputs": {"grid_power": {"entity": "sensor.solis_meter_active_power", "invert": True}}})
+    assert cfg.inputs["grid_power"]["invert"] is True
+
+
+def test_required_roles_follow_features():
+    from pe_core.config import required_roles
+    with_axle = required_roles(parse_config({}))
+    without = required_roles(parse_config({"features": {"axle": False, "free_power_days": False}}))
+    assert "axle_event_active" in with_axle and "axle_event_active" not in without
+    assert "battery_soc" in without and "battery_soh" not in with_axle
