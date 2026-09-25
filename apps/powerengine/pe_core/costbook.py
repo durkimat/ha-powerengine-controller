@@ -195,12 +195,14 @@ class CostBook:
         soc_first = soc_last = None
         losses: list[tuple[str, float]] = []
         n_days = 0
+        halves: list[dict] = []
         for i in range(days, 0, -1):
             d = today - timedelta(days=i)
             recs = sorted((x for x in self.day_records(d) if x.get("fv") == self.flow_id), key=lambda x: x["start"])
             if not recs or sum(x.get("seconds") or 0.0 for x in recs) < 0.9 * 86400:
                 continue
             n_days += 1
+            halves += recs
             day_in = sum(x.get("battery_in") or 0.0 for x in recs)
             day_out = sum(x.get("battery_out") or 0.0 for x in recs)
             b_in, b_out = b_in + day_in, b_out + day_out
@@ -222,6 +224,7 @@ class CostBook:
             e = (d_e + (d_e * d_e + 4 * b_in * b_out) ** 0.5) / (2 * b_in)
             if 0.8 <= e <= 1.0:
                 out.update(measured=True, efficiency=round(e, 4), rte=round(e * e, 4))
+        out.update(battery_parameters(halves, out["efficiency"] or 0.95, capacity, n_days >= MIN_MEASURE_DAYS))
         return out
 
     # --- reporting ----------------------------------------------------------------------
@@ -286,3 +289,40 @@ def cost_entity_states(book: CostBook, today: date, months: list[dict] | None = 
         "event_last": (ev["net"] if ev else "unknown", ev or {}),
         "event_months": (month_events, {"months": months or []}),
     }
+
+
+def battery_parameters(halves: list[dict], eff: float, configured_kwh: float, enough_days: bool) -> dict:
+    """Usable capacity, highest charge/discharge rates seen and lowest state of charge, from recorded half-hours.
+
+    Capacity: each half-hour's energy into storage (in x e - out / e) against its change in state of charge,
+    fitted through zero (least squares). Only half-hours that moved the charge by 2% or more count, so the 1%
+    steps of the SoC reading average out. Rates: the 98th percentile of half-hourly power, so a single spike
+    doesn't count; they show what the battery has done, not necessarily its limit.
+    """
+    full = [h for h in halves if (h.get("seconds") or 0) >= 1500 and h.get("soc_start") is not None
+            and h.get("soc_end") is not None]
+    out: dict = {"capacity_kwh": None, "capacity_measured": False, "capacity_samples": 0,
+                 "max_charge_kw": None, "max_discharge_kw": None, "min_soc": None}
+    num = den = 0.0
+    n = 0
+    for h in full:
+        ds = (h["soc_end"] - h["soc_start"]) / 100
+        if abs(ds) < 0.02:
+            continue
+        de = (h.get("battery_in") or 0.0) * eff - (h.get("battery_out") or 0.0) / eff
+        num, den, n = num + de * ds, den + ds * ds, n + 1
+    out["capacity_samples"] = n
+    if n and den:
+        cap = num / den
+        out["capacity_kwh"] = round(cap, 2)
+        plausible = 0.7 * configured_kwh <= cap <= 1.3 * configured_kwh
+        out["capacity_measured"] = bool(enough_days and n >= 100 and plausible)
+
+    def p98(values: list[float]) -> float | None:
+        v = sorted(x for x in values if x > 0.05)
+        return round(v[min(len(v) - 1, int(0.98 * len(v)))], 2) if v else None
+    out["max_charge_kw"] = p98([(h.get("battery_in") or 0.0) * 3600 / h["seconds"] for h in full])
+    out["max_discharge_kw"] = p98([(h.get("battery_out") or 0.0) * 3600 / h["seconds"] for h in full])
+    socs = [h["soc_end"] for h in full]
+    out["min_soc"] = min(socs) if socs else None
+    return out

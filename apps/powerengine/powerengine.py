@@ -275,6 +275,8 @@ class PowerEngine(hass.Hass):
         m = getattr(self, "measured", None)
         if m and m.get("measured") and m.get("efficiency"):
             p = dataclasses.replace(p, efficiency=m["efficiency"])
+        if m and m.get("capacity_measured") and m.get("capacity_kwh"):
+            p = dataclasses.replace(p, capacity_kwh=m["capacity_kwh"])
         return p
 
     def _measure(self, revalue=True):
@@ -282,7 +284,9 @@ class PowerEngine(hass.Hass):
         if self.costbook is None or self.cfg is None:
             return
         try:
-            before = (self.measured or {}).get("efficiency")
+            old = self.measured or {}
+            before = old.get("efficiency")
+            cap_before = old.get("capacity_kwh") if old.get("capacity_measured") else None
             self.measured = self.costbook.measure(self._today(), params_from(self.cfg).capacity_kwh)
             m = self.measured
             configured = params_from(self.cfg).efficiency
@@ -296,9 +300,16 @@ class PowerEngine(hass.Hass):
                                 else "unknown", {"average_kwh": m.get("losses_avg"), "by_day": m["losses"]})
             if m["measured"]:
                 self.log(f"Battery round trip measured at {m['rte'] * 100:.1f}% over {m['days']} days")
-            if revalue and m["measured"] and (before is None or abs(m["efficiency"] - before) > 0.002):
+            self._publish_state("diag_battery_capacity", m["capacity_kwh"] if m.get("capacity_kwh") else "unknown", {
+                "measured": m.get("capacity_measured"), "configured_kwh": params_from(self.cfg).capacity_kwh,
+                "samples": m.get("capacity_samples"), "max_charge_kw": m.get("max_charge_kw"),
+                "max_discharge_kw": m.get("max_discharge_kw"), "min_soc_seen": m.get("min_soc")})
+            cap_now = m.get("capacity_kwh") if m.get("capacity_measured") else None
+            eff_moved = m["measured"] and (before is None or abs(m["efficiency"] - before) > 0.002)
+            cap_moved = cap_now is not None and (cap_before is None or abs(cap_now - cap_before) > 0.2)
+            if revalue and (eff_moved or cap_moved):
                 n = self.costbook.revalue(**self._cost_params())
-                self.log(f"Costs re-valued ({n} half-hours) with the measured battery efficiency")
+                self.log(f"Costs re-valued ({n} half-hours) with the measured battery efficiency/capacity")
                 self._refresh_months()
         except Exception as err:
             self.log(f"Could not measure losses: {err!r}", level="WARNING")

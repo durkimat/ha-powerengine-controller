@@ -327,3 +327,21 @@ def test_plan_snapshots_are_kept_and_pruned(tmp_path):
     assert book.plan_snapshot(T0.date())["slots"][0]["start"] == T0.isoformat()
     book.prune(T0.date() + timedelta(days=KEEP_DAYS + 1))
     assert book.plan_snapshot(T0.date()) is None
+
+
+def test_battery_parameters_from_half_hours():
+    from pe_core.costbook import battery_parameters
+    halves, soc = [], 50.0
+    for i in range(200):
+        charging = i % 4 < 2
+        b_in, b_out = (2.0, 0.0) if charging else (0.0, 1.5)
+        e = 0.95
+        d_kwh = b_in * e - b_out / e
+        new = soc + d_kwh / 17.0 * 100                     # true capacity 17 kWh
+        halves.append({"seconds": 1800, "soc_start": soc, "soc_end": new, "battery_in": b_in, "battery_out": b_out})
+        soc = new if 20 < new < 90 else 50.0
+    p = battery_parameters(halves, 0.95, configured_kwh=18.0, enough_days=True)
+    assert p["capacity_kwh"] == pytest.approx(17.0, abs=0.05) and p["capacity_measured"]
+    assert p["max_charge_kw"] == pytest.approx(4.0) and p["max_discharge_kw"] == pytest.approx(3.0)
+    implausible = battery_parameters(halves, 0.95, configured_kwh=10.0, enough_days=True)
+    assert not implausible["capacity_measured"]

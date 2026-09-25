@@ -537,6 +537,11 @@ views:
               {%- set m = state_attr('sensor.pe_diag_battery_efficiency', 'measured') %}
               **Battery round trip: {{ states('sensor.pe_diag_battery_efficiency') }}%** ({{ 'measured over the last 30 days: ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'battery_in_kwh') ~ ' kWh in, ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'battery_out_kwh') ~ ' kWh out' if m else state_attr('sensor.pe_diag_battery_efficiency', 'note') }}).
 
+              {%- set c = states.sensor.pe_diag_battery_capacity %}
+              {%- if c and c.state not in ['unknown', 'unavailable'] %}
+              **Usable capacity: {{ c.state }} kWh** ({{ 'measured, and used for planning' if c.attributes.measured else 'estimate from ' ~ c.attributes.samples ~ ' half-hours; the configured ' ~ c.attributes.configured_kwh ~ ' kWh is used until 14 full days and 100 samples agree within 30%' }}). Highest rates seen: charging {{ c.attributes.max_charge_kw or '–' }} kW, discharging {{ c.attributes.max_discharge_kw or '–' }} kW; lowest charge {{ c.attributes.min_soc_seen if c.attributes.min_soc_seen is not none else '–' }}%.
+              {%- endif %}
+
               **System losses yesterday: {{ states('sensor.pe_diag_system_losses') }} kWh** (average {{ state_attr('sensor.pe_diag_system_losses', 'average_kwh') or '–' }} kWh a day): everything supplied minus everything used, i.e. inverter conversion, standby and heat.
           - type: custom:apexcharts-card
             grid_options: {columns: full, rows: auto}
