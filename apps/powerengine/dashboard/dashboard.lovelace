@@ -644,6 +644,29 @@ views:
               No ready-by changes seen yet. PowerEngine records every change (yours or its own) and whether EDF added slots within 15 minutes.
               {%- endif %}
           - type: heading
+            heading: Inverter control preview
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set c = states.sensor.pe_diag_control %}
+              {%- if c and c.attributes.settings is defined %}
+              {%- if c.state == 'not mapped' %}
+              Map these control outputs on the Config tab to preview control: {{ c.attributes.missing | join(', ') }}.
+              {%- else %}
+              For the current decision (**{{ c.attributes.decision | replace('_', '-') }}**{{ (', window to ' ~ c.attributes.window_end) if c.attributes.window_end else '' }}), Active mode would need **{{ c.state }}** now. Nothing is written in Passive mode.
+
+              | Setting | PowerEngine wants | Inverter now |
+              |---|---:|---:|
+              {%- for k, v in c.attributes.settings.items() %}
+              | {{ k | replace('timed_', '') | replace('_', ' ') }} | {{ v.want }} | {{ v.now }}{{ ' ✱' if (v.want | string) != (v.now | string) and ((v.want | float(-1)) != (v.now | float(-2))) else '' }} |
+              {%- endfor %}
+
+              ✱ would be written (then the update button pressed once if any window time changes). Strategy: {{ c.attributes.strategy }} windows. While your current setup (Predbat) is in control the two columns will often differ; this table is for checking the mapping and the logic.
+              {%- endif %}
+              {%- else %}
+              The preview appears once PowerEngine has made a decision.
+              {%- endif %}
+          - type: heading
             heading: Inverter writes (EEPROM wear)
           - type: markdown
             grid_options: {columns: full}

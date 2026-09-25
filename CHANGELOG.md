@@ -2,6 +2,22 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.12 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only. The control layer is built but cannot write: every build still forces
+  Passive, and writing happens only in Active mode.
+- **Inverter control layer (Active design).** Each decision is turned into the Solis timed-slot settings it needs
+  (storage mode Self-Use; a charge window for grid charge/hold with the current from power ÷ 52 V, 0 A to hold; a
+  discharge window for Axle/export; both closed for self-use; rolling windows at most 35 minutes ahead, never past
+  midnight), compared with what the inverter holds now, and reduced to only the writes needed, with one press of
+  the update button after any window-time change. In Active mode (not yet available) writes are rate-limited,
+  read back after 6 seconds, retried once, and on a second failure control stops and you're notified; bump/boost
+  entities are never written.
+- **Health tab: Inverter control preview** (`sensor.pe_diag_control`): for the current decision, each setting
+  PowerEngine would want next to what the inverter holds now, and how many writes that would take. Use it to check
+  the control mapping before Active mode.
+
 ## 0.5.11 (beta)
 
 ### Behaviour changes

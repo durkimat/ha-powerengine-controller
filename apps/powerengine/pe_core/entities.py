@@ -70,6 +70,8 @@ ENTITIES: tuple[EntityDef, ...] = (
               {"icon": "mdi:stethoscope", "device_class": "enum", "options": ["ok", "warnings", "problems"]}),
     EntityDef("sensor", "diag_started", "Started",
               {"device_class": "timestamp", "entity_category": "diagnostic", "icon": "mdi:restart"}),
+    EntityDef("sensor", "diag_control", "Inverter control preview",
+              {"icon": "mdi:tune-vertical", "entity_category": "diagnostic"}),
     EntityDef("sensor", "diag_inverter_writes", "Inverter writes per day",
               {"icon": "mdi:memory", "entity_category": "diagnostic", "unit_of_measurement": "writes/day"}),
     EntityDef("sensor", "diag_battery_capacity", "Battery usable capacity (measured)",
