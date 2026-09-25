@@ -1,6 +1,6 @@
 # PowerEngine dashboard: managed by the PowerEngine app.
 # This file is rewritten whenever PowerEngine is updated; local edits will be lost.
-# Needs: Power Flow Card Plus (HACS). See docs/INSTALL.md, Step 7.
+# Needs: Power Flow Card Plus and ApexCharts Card (HACS). See docs/INSTALL.md, Step 5.
 title: PowerEngine
 views:
   - title: Monitoring
@@ -14,7 +14,7 @@ views:
         cards:
           - type: markdown
             grid_options: {columns: full}
-            content: >-
+            content: |-
               {% set t = state_attr('sensor.pe_state_summary', 'text') or states('sensor.pe_state_summary') %}
               {% set parts = t.split('. ', 1) %}
               **{{ parts[0] }}**{% if parts | count > 1 %} {{ parts[1] }}{% endif %}
@@ -70,7 +70,7 @@ views:
           - type: heading
             heading: Now
           - type: markdown
-            content: >-
+            content: |-
               {% set imp = state_attr('sensor.pe_state_import_rate', 'pence') %}
               {% set until = state_attr('sensor.pe_state_import_rate', 'until') %}
               {% set nxt = state_attr('sensor.pe_state_import_rate', 'next_rate_pence') %}
@@ -93,7 +93,7 @@ views:
             entity: sensor.pe_state_free_power
             name: Free power
           - type: markdown
-            content: >-
+            content: |-
               {% set t = state_attr('sensor.pe_state_solar_power', 'forecast_today_kwh') %}
               {% set m = state_attr('sensor.pe_state_solar_power', 'forecast_tomorrow_kwh') %}
               **Solar forecast** today {{ t if t is not none else '–' }} kWh · tomorrow {{ m if m is not none else '–' }} kWh
@@ -104,12 +104,12 @@ views:
             heading: Activity
           - type: markdown
             grid_options: {columns: full}
-            content: >-
+            content: |-
               {% set entries = state_attr('sensor.pe_state_activity', 'entries') or [] %}
-              {% if entries | count == 0 %}No decisions yet.{% endif %}
-              {% for e in entries[:8] %}
-              **{{ e.hhmm }}** {{ e.text }}
-              {% endfor %}
+              {%- if entries | count == 0 %}No decisions yet.{% endif %}
+              {%- for e in entries[:8] %}
+              - **{{ e.hhmm }}** {{ e.text }}
+              {%- endfor %}
       - type: grid
         column_span: 3
         cards:
@@ -134,7 +134,9 @@ views:
             hours_to_show: 24
             entities:
               - entity: sensor.pe_state_battery_soc
-                name: Battery %
+                name: Battery % (real)
+              - entity: sensor.pe_state_sim_soc
+                name: Battery % (PowerEngine simulated)
       - type: grid
         column_span: 3
         cards:
@@ -153,6 +155,123 @@ views:
             entity: sensor.pe_diag_version
             name: Version
             grid_options: {columns: 4}
+  - title: Plan
+    path: plan
+    icon: mdi:calendar-clock
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {% set made = states('sensor.pe_plan') -%}
+              **{{ state_attr('sensor.pe_plan_headline', 'text') or 'No plan yet.' }}**
+
+              <small>Plan made {{ as_timestamp(made) | timestamp_custom('%H:%M') if made not in ['unknown', 'unavailable', ''] else '–' }}
+              · re-plans every 5 minutes and when prices, slots or events change
+              · house load learned from {{ state_attr('sensor.pe_plan', 'load_profile_days') or 0 }} days of history
+              · expected cost £{{ state_attr('sensor.pe_plan', 'cost') }} vs £{{ state_attr('sensor.pe_plan', 'baseline_cost') }} with plain self-use
+              {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}
+              · prices after {{ as_timestamp(state_attr('sensor.pe_plan', 'estimated_prices_from')) | timestamp_custom('%a %H:%M') }} are estimated (not yet published){% endif %}</small>
+          - type: custom:apexcharts-card
+            grid_options: {columns: full, rows: 8}
+            graph_span: 36h
+            span:
+              start: minute
+            now:
+              show: true
+              label: Now
+            header:
+              show: true
+              title: Next 36 hours
+              show_states: false
+            apex_config:
+              legend: {show: true}
+              tooltip: {shared: true}
+            yaxis:
+              - id: soc
+                min: 0
+                max: 100
+                decimals: 0
+                apex_config: {title: {text: "Battery %"}}
+              - id: price
+                opposite: true
+                min: 0
+                decimals: 0
+                apex_config: {title: {text: "p/kWh"}}
+              - id: kwh
+                show: false
+                min: 0
+            series:
+              - entity: sensor.pe_plan
+                name: Battery (planned)
+                yaxis_id: soc
+                type: line
+                color: "#43a047"
+                stroke_width: 3
+                data_generator: |
+                  const s = entity.attributes.series || {t: []};
+                  return s.t.map((t, i) => [new Date(t).getTime() + 1800000, s.soc[i]]);
+              - entity: sensor.pe_plan
+                name: Import price
+                yaxis_id: price
+                type: line
+                curve: stepline
+                color: "#fb8c00"
+                stroke_width: 2
+                data_generator: |
+                  const s = entity.attributes.series || {t: []};
+                  return s.t.map((t, i) => [new Date(t).getTime(), s.price_p[i]]);
+              - entity: sensor.pe_plan
+                name: Solar forecast (kWh)
+                yaxis_id: kwh
+                type: area
+                color: "#fdd835"
+                opacity: 0.3
+                data_generator: |
+                  const s = entity.attributes.series || {t: []};
+                  return s.t.map((t, i) => [new Date(t).getTime(), s.solar_kwh[i]]);
+              - entity: sensor.pe_plan
+                name: House load forecast (kWh)
+                yaxis_id: kwh
+                type: line
+                color: "#9e9e9e"
+                stroke_width: 1
+                data_generator: |
+                  const s = entity.attributes.series || {t: []};
+                  return s.t.map((t, i) => [new Date(t).getTime(), s.load_kwh[i]]);
+              - entity: sensor.pe_plan
+                name: Grid charge (kWh)
+                yaxis_id: kwh
+                type: column
+                color: "#1e88e5"
+                data_generator: |
+                  const s = entity.attributes.series || {t: []};
+                  return s.t.map((t, i) => [new Date(t).getTime(), s.charge_kwh[i]]);
+              - entity: sensor.pe_plan
+                name: Axle export (kWh)
+                yaxis_id: kwh
+                type: column
+                color: "#e53935"
+                data_generator: |
+                  const s = entity.attributes.series || {t: []};
+                  return s.t.map((t, i) => [new Date(t).getTime(), s.discharge_kwh[i]]);
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Actions
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              | Time | Action | Target | Price | Battery | Why |
+              |---|---|---|---|---|---|
+              {%- for w in state_attr('sensor.pe_plan', 'windows') or [] %}
+              | {{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}** | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
+              {%- endfor %}
   - title: Config
     path: config
     icon: mdi:cog

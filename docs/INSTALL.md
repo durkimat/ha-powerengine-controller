@@ -6,7 +6,7 @@ with a **Check** so you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.2.0 (beta, Passive-only)
+**Version this guide matches:** 0.3.0 (beta, Passive-only)
 
 ---
 
@@ -151,10 +151,10 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.2.0 starting (Passive-only build: nothing is controlled)
+PowerEngine 0.3.0 starting (Passive-only build: nothing is controlled)
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
-Published 22 entities under the PowerEngine device
+Published 28 entities under the PowerEngine device
 ```
 
 **Check the device:** *Settings → Devices & services → MQTT → PowerEngine*:
@@ -175,8 +175,11 @@ Published 22 entities under the PowerEngine device
 PowerEngine ships its own dashboard and keeps it up to date: on every start it
 writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once.
 
-1. **Install Power Flow Card Plus** (used for the energy flow picture):
-   HACS → search **Power Flow Card Plus** → Download. Reload the browser.
+1. **Install two dashboard cards from HACS** (search each, then Download):
+   - **Power Flow Card Plus**: the energy flow picture (Monitoring tab)
+   - **ApexCharts Card**: the plan chart (Plan tab)
+
+   Reload the browser afterwards.
 2. **Register the dashboard** in `configuration.yaml`. If your
    `configuration.yaml` has **no** `lovelace:` section yet, paste this into the
    HA terminal (it appends to the end of the file):
@@ -211,8 +214,8 @@ writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once
 
    When HA is back, restart AppDaemon: `ha apps restart a0d7b954_appdaemon`
 
-**Check:** *PowerEngine* appears in the sidebar with two tabs: **Monitoring**
-(it will say *UNCONFIGURED* until Step 6) and **Config**, which opens the
+**Check:** *PowerEngine* appears in the sidebar with three tabs: **Monitoring**
+(it will say *UNCONFIGURED* until Step 6), **Plan**, and **Config**, which opens the
 configuration card with suggested entities pre-filled.
 
 Anyone can open the Config tab, but only admins can save; other users see it
@@ -255,6 +258,11 @@ On the PowerEngine dashboard's **Config** tab (you must be an admin to save):
 and *Operation mode* becomes **passive**. On the Monitoring tab the status now
 starts with what PowerEngine *would* do, e.g. *"PASSIVE. Would self-use:
 nothing better to do at 30.28p…"*, and the Activity list fills as decisions change.
+
+The **Plan** tab shows the next 24–48 hours: a one-line headline, a chart
+(planned battery %, prices, solar and house-load forecasts, grid charging) and
+a table of actions with the reason for each. Within a few seconds of starting,
+PowerEngine learns your typical house load from the last 14 days of history.
 
 Signs look wrong (battery shows charging while discharging)? Fix it with
 **Invert** on the Config tab, not in the dashboard. If it stays *unconfigured*, its
@@ -309,7 +317,9 @@ for the card, then restart AppDaemon.
 | `Unknown command: ha` | Commands run on your own computer | Use HA's terminal add-on |
 | `Config problem: ...` in the log | `config.yaml` has an error | The message names the problem; fix or restore the backup |
 | Dashboard missing from the sidebar | `lovelace:` entry not added, or HA not restarted | Step 5 |
-| Energy flow card says *Custom element doesn't exist* | Power Flow Card Plus not installed | Step 5.1, then reload the browser |
+| Energy flow or plan chart says *Custom element doesn't exist* | Power Flow Card Plus or ApexCharts Card not installed | Step 5.1, then reload the browser |
+| Plan says *house load learned from 0 days* | No history for the house-load input yet (new install, or recorder excludes it) | Wait a day; check the recorder keeps the house-load entity |
+| PowerEngine missing from HACS (repos disappeared) but still running | HACS lost its record of the custom repositories | Re-add both under *HACS → ⋮ → Custom repositories* and download the latest version; settings and dashboard are unaffected |
 | Dashboard values are *unknown* | Inputs not configured, or mode *unconfigured* | Step 6 |
 | Save says *could not send* | You're not an admin | Log in as an admin user |
 | Save says *no reply from PowerEngine* | App not running, or can't write its folder | Check the AppDaemon log for the reason |

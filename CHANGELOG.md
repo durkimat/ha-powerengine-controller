@@ -2,6 +2,30 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.3.0 (beta): "Plan"
+
+### Behaviour changes
+- None to your devices: still Passive-only.
+- PowerEngine now **plans the next 24–48 hours** and the live decision follows the plan (live overrides first:
+  Axle event now, free power now, car charging now). The fixed pre-Axle rule is replaced by the plan.
+- New entities: `sensor.pe_plan` (full plan in attributes), `sensor.pe_plan_headline`, `sensor.pe_plan_next_mode`,
+  `sensor.pe_plan_next_start`, `sensor.pe_plan_next_target_soc`, and `sensor.pe_state_sim_soc` (simulated battery).
+- On start and daily at 00:10, PowerEngine reads 14 days of house-load history (and car power) from HA.
+
+### Added
+- Forecasts: half-hourly import prices (estimated from the previous day beyond published prices), Solcast solar,
+  and a learned house-load profile (weekday/weekend, recency-weighted, car removed).
+- Explainable planner: defaults per half-hour, forward battery simulation, then the cheapest earlier slot is chosen
+  to fix each avoidable shortfall. Multi-hour Axle events are handled as a need to be met (top-ups worth doing at
+  any price below £1/kWh). Every window has a reason.
+- Simulated battery (Passive): the SoC PowerEngine would have produced, re-synced at midnight; shown next to the
+  real battery on the Monitoring tab.
+- Dashboard **Plan** tab: headline, 36-hour chart, actions table with reasons, expected cost vs plain self-use.
+
+### Docs
+- Install guide: ApexCharts Card is now needed (Step 5.1); Plan tab described; new troubleshooting rows
+  (including HACS forgetting the repositories).
+
 ## 0.2.0 (beta): "Decide"
 
 ### Behaviour changes

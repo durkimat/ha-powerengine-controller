@@ -71,7 +71,8 @@ def pre_axle_reserve(r: Readings, cfg: Config) -> float | None:
     return min(100.0, s["min_reserve_soc"] + need + s["axle_margin_soc"])
 
 
-def decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz: tzinfo | None = None) -> Decision:
+def decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz: tzinfo | None = None,
+           plan=None) -> Decision:
     if r is None:
         return Decision(NONE, "unconfigured", "PowerEngine isn't configured yet")
     if r.battery_soc is None or r.import_rate is None:
@@ -90,6 +91,10 @@ def decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz
     if f.get("axle") and r.axle_state() == "active":
         return Decision(FORCE_DISCHARGE, "axle_active", "Axle event in progress (paid £1/kWh exported)",
                         power_w=min(AXLE_POWER_W_DEFAULT, max_dis))
+
+    # With a plan, live overrides first (Axle now, free power now, car charging now), then the plan.
+    if plan is not None and plan.slots:
+        return _with_plan(r, cfg, plan, soc, price, cheap, target)
 
     # 2. Keep enough charge for an upcoming Axle event
     soon = r.axle_state() == "scheduled" and r.axle_start - r.now <= timedelta(hours=s["pre_axle_lookahead_h"])
@@ -129,3 +134,20 @@ def decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz
     if soc <= floor:
         return Decision(HOLD, "reserve", f"battery at its {floor:.0f}% minimum reserve")
     return Decision(SELF_USE, "default", f"nothing better to do at {price}; the battery covers the house")
+
+
+def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bool, target: float) -> Decision:
+    s, f = cfg.safety, cfg.features
+    if f.get("free_power_days") and r.free_state() == "active":
+        return Decision(GRID_CHARGE, "free_power", "free-electricity session: fill the battery", target_soc=100)
+    if r.house_includes_ev and r.ev_state() == "charging":
+        if cheap and soc < target:
+            why = f"car is charging at a cheap rate ({price}); charge the battery too"
+            return Decision(GRID_CHARGE, "car_charging", why, target_soc=target)
+        return Decision(HOLD, "car_charging", "car is charging; stop the battery discharging into it")
+    ps = plan.slots[0]
+    if ps.action == FORCE_DISCHARGE and r.axle_state() != "active":
+        return Decision(HOLD, "plan", "Axle event due now per the plan, but not started yet: holding charge")
+    if ps.action == SELF_USE and soc <= s["min_reserve_soc"]:
+        return Decision(HOLD, "reserve", f"battery at its {s['min_reserve_soc']:.0f}% minimum reserve")
+    return Decision(ps.action, "plan", ps.reason, target_soc=ps.target_soc)

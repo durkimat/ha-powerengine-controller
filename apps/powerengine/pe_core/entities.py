@@ -19,7 +19,7 @@ ONLINE, OFFLINE = "online", "offline"
 REPO_URL = "https://github.com/durkimat/ha-powerengine-controller"
 
 GROUPS = ("cfg", "ctl", "state", "plan", "map", "diag", "cost", "event")
-_KEY = re.compile(r"^(" + "|".join(GROUPS) + r")_[a-z0-9_]+$")
+_KEY = re.compile(r"^(" + "|".join(GROUPS) + r")(_[a-z0-9_]+)?$")   # e.g. plan, plan_next_mode
 
 # HA only allows entity_category "config" on controllable entities (switch,
 # number, select, button...). Read-only entities use "diagnostic" or none.
@@ -100,7 +100,21 @@ STATE_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "state_free_power", "Free power", {"icon": "mdi:gift-outline"}),
 )
 
-ENTITIES = ENTITIES + STATE_ENTITIES
+PLAN_ENTITIES: tuple[EntityDef, ...] = (
+    EntityDef("sensor", "plan", "Plan", {"device_class": "timestamp", "icon": "mdi:calendar-clock"}),
+    EntityDef("sensor", "plan_headline", "Plan headline", {"icon": "mdi:text-box-outline"}),
+    EntityDef("sensor", "plan_next_mode", "Next planned mode",
+              {"icon": "mdi:skip-next-outline", "device_class": "enum",
+               "options": ["self_use", "grid_charge", "hold", "force_discharge", "none"]}),
+    EntityDef("sensor", "plan_next_start", "Next planned change", {"device_class": "timestamp"}),
+    EntityDef("sensor", "plan_next_target_soc", "Next planned target",
+              {"unit_of_measurement": "%", "icon": "mdi:battery-arrow-up"}),
+    EntityDef("sensor", "state_sim_soc", "Simulated battery",
+              {"device_class": "battery", "unit_of_measurement": "%", "state_class": "measurement",
+               "icon": "mdi:battery-sync"}),
+)
+
+ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES
 
 
 def device(version: str) -> dict[str, Any]:
