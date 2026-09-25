@@ -24,6 +24,20 @@ COST_ROLES = ("battery_soc", "battery_power", "battery_charge_power", "battery_d
 ATTRIBUTE_ROLES = ("import_rates_today",)
 
 
+def flow_id(cfg: Config) -> str:
+    """Identifies how flows are measured: the method version plus the inputs they are read from. A day recorded
+    under a different id (e.g. before the battery sensors were re-mapped) is rebuilt from history."""
+    import hashlib
+    import json
+
+    from .energy import FLOW_VERSION
+    used = {k: cfg.inputs.get(k) for k in COST_ROLES}
+    used["plants"] = [p.power for p in cfg.solar_plants if p.enabled]
+    used["includes_ev"] = bool(cfg.system.get("house_load_includes_ev", True))
+    digest = hashlib.sha1(json.dumps(used, sort_keys=True, default=str).encode()).hexdigest()[:8]
+    return f"{FLOW_VERSION}-{digest}"
+
+
 def history_entities(cfg: Config) -> tuple[list[str], list[str]]:
     """(entities fetched without attributes, entities fetched with attributes) for a replay."""
     plain, full = [], []

@@ -21,6 +21,8 @@ from .tariff import cheap_tods, overnight_window, rates_at, reclassify
 KEEP_DAYS = 400
 WINDOW_DAYS = 14
 SHOW_DAYS = 14
+MEASURE_DAYS = 30
+MIN_MEASURE_DAYS = 14
 
 
 def _write_json(path: str, data) -> None:
@@ -47,6 +49,7 @@ class CostBook:
         self.sim = SimDefault(st.get("sim_kwh"))
         self.cheap_history: dict[str, list[int]] = st.get("cheap_tods", {})
         self.last_event: dict | None = st.get("last_event")
+        self.flow_id: str = str(FLOW_VERSION)          # set by the app from the current input mapping
         # records valued by an older method are re-valued on start-up
         self.needs_revalue = bool(st) and st.get("method") != METHOD_VERSION
 
@@ -96,7 +99,8 @@ class CostBook:
                            max_kw=max_kw, includes_ev=includes_ev, axle_value=axle_value)
         day = self._local_day(hh.start)
         records = self.day_records(day)
-        if keep_existing and any(x.get("start") == rec["start"] and x.get("fv") == FLOW_VERSION
+        rec["fv"] = self.flow_id
+        if keep_existing and any(x.get("start") == rec["start"] and x.get("fv") == self.flow_id
                                  and (x.get("seconds") or 0) >= 0.8 * 1800 for x in records):
             return None                     # a full live half-hour wins; a partial one (restart) is replaced
         rec["source"] = "history" if keep_existing else "live"
@@ -112,7 +116,7 @@ class CostBook:
         out = []
         for i in range(days, -1, -1):
             d = today - timedelta(days=i)
-            recs = [x for x in self.day_records(d) if x.get("fv") == FLOW_VERSION]
+            recs = [x for x in self.day_records(d) if x.get("fv") == self.flow_id]
             if i == 0 or sum(x.get("seconds") or 0.0 for x in recs) < 0.9 * 86400:
                 out.append(d)
         return out
@@ -153,6 +157,49 @@ class CostBook:
             self.last_event = {"type": v["event"], "date": local.date().isoformat(), "time": local.strftime("%H:%M"),
                                "kwh": round(v["event_kwh"], 2), "gross": round(v["event_gross"], 2),
                                "net": round(v["event_net"], 2)}
+
+    # --- measured losses ------------------------------------------------------------------
+    def measure(self, today: date, capacity: float, days: int = MEASURE_DAYS) -> dict:
+        """Battery round-trip efficiency and system losses from the recorded flows (complete days only).
+
+        Battery: energy in (charging) and out (discharging) plus the change in stored energy over the window give
+        the one-way efficiency e from  in*e - out/e = dE  (charge and discharge losses assumed equal); the round
+        trip is e squared. Needs MIN_MEASURE_DAYS of data and a reasonable amount of cycling.
+        System losses per day: everything supplied (solar, grid, battery) minus everything used (house, car,
+        battery charging, export): inverter conversion, standby and heat.
+        """
+        b_in = b_out = 0.0
+        soc_first = soc_last = None
+        losses: list[tuple[str, float]] = []
+        n_days = 0
+        for i in range(days, 0, -1):
+            d = today - timedelta(days=i)
+            recs = sorted((x for x in self.day_records(d) if x.get("fv") == self.flow_id), key=lambda x: x["start"])
+            if not recs or sum(x.get("seconds") or 0.0 for x in recs) < 0.9 * 86400:
+                continue
+            n_days += 1
+            day_in = sum(x.get("battery_in") or 0.0 for x in recs)
+            day_out = sum(x.get("battery_out") or 0.0 for x in recs)
+            b_in, b_out = b_in + day_in, b_out + day_out
+            if soc_first is None:
+                soc_first = next((x["soc_start"] for x in recs if x.get("soc_start") is not None), None)
+            soc_last = next((x["soc_end"] for x in reversed(recs) if x.get("soc_end") is not None), soc_last)
+            supplied = sum((x.get("solar") or 0.0) + (x.get("grid_import") or 0.0) for x in recs) + day_out
+            used = sum((x.get("house") or 0.0) + (x.get("car") or 0.0) + (x.get("grid_export") or 0.0)
+                       for x in recs) + day_in
+            losses.append((d.isoformat(), round(supplied - used, 2)))
+        out: dict = {"days": n_days, "battery_in": round(b_in, 1), "battery_out": round(b_out, 1),
+                     "losses": losses, "measured": False, "rte": None, "efficiency": None}
+        if losses:
+            yesterday = (today - timedelta(days=1)).isoformat()
+            out["losses_yesterday"] = losses[-1][1] if losses[-1][0] == yesterday else None
+            out["losses_avg"] = round(sum(v for _, v in losses) / len(losses), 2)
+        if n_days >= MIN_MEASURE_DAYS and b_in >= 20 and b_out >= 20 and soc_first is not None and soc_last is not None:
+            d_e = (soc_last - soc_first) / 100 * capacity
+            e = (d_e + (d_e * d_e + 4 * b_in * b_out) ** 0.5) / (2 * b_in)
+            if 0.8 <= e <= 1.0:
+                out.update(measured=True, efficiency=round(e, 4), rte=round(e * e, 4))
+        return out
 
     # --- reporting ----------------------------------------------------------------------
     def summary(self, day: date, today: date) -> dict | None:

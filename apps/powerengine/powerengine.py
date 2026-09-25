@@ -7,6 +7,7 @@ belongs in pe_core so it can be tested offline.
 MQTT and never write to the inverter or any other device.
 """
 
+import dataclasses
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -25,7 +26,7 @@ from pe_core.config import (
     settings_catalogue,
     uses_battery_pair,
 )
-from pe_core.costbook import CostBook, cost_entity_states
+from pe_core.costbook import MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import sync_dashboard
 from pe_core.decide import decide
@@ -45,7 +46,7 @@ from pe_core.loadstore import LoadStore
 from pe_core.modes import effective_mode
 from pe_core.planner import make_plan, params_from, plan_entity_states
 from pe_core.readings import read
-from pe_core.replay import Timeline, history_entities, replay
+from pe_core.replay import Timeline, flow_id, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue
 from pe_core.simulate import SimBattery
 from pe_core.status import entity_states
@@ -119,9 +120,12 @@ class PowerEngine(hass.Hass):
         except Exception:
             self.tz = None
         self.recorder = Recorder()
-        self.costbook, self._months = None, []
+        self.costbook, self._months, self.measured = None, [], None
         try:
             self.costbook = CostBook(os.path.join(os.path.dirname(self._save_path()), "costs"), self.tz)
+            if self.cfg is not None:
+                self.costbook.flow_id = flow_id(self.cfg)
+            self._measure(revalue=False)
             if self.costbook.needs_revalue and self.cfg is not None:
                 n = self.costbook.revalue(**self._cost_params())
                 self.log(f"Costs: re-valued {n} half-hours with method {METHOD_VERSION}")
@@ -139,7 +143,7 @@ class PowerEngine(hass.Hass):
         self.run_every(self._cycle, f"now+{CYCLE_SECONDS}", CYCLE_SECONDS)
         self.run_in(self._learn_load, 5)                     # load profile from history, then daily
         self.run_daily(self._learn_load, "00:10:00")
-        self.run_daily(lambda kwargs: self._refresh_months(prune=True), "00:05:00")
+        self.run_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
@@ -203,7 +207,7 @@ class PowerEngine(hass.Hass):
                 self._record_costs(readings)
                 self._maybe_replan(readings)
                 decision = decide(readings, self.cfg, self._decision, self.tz, plan=self.plan)
-                sim = self.sim.update(decision, readings, params_from(self.cfg), self.tz)
+                sim = self.sim.update(decision, readings, self._params(), self.tz)
                 if sim is not None:
                     self._publish_if_changed("state_sim_soc", round(sim, 1),
                                              {"cost_today": round(self.sim.cost_today, 2),
@@ -243,8 +247,42 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Cost accounting failed for {hh.start.isoformat()}: {err!r}", level="WARNING")
 
+    def _params(self, readings=None):
+        """Planner/simulation parameters, with the measured battery efficiency once there is enough data."""
+        p = params_from(self.cfg, readings)
+        m = getattr(self, "measured", None)
+        if m and m.get("measured") and m.get("efficiency"):
+            p = dataclasses.replace(p, efficiency=m["efficiency"])
+        return p
+
+    def _measure(self, revalue=True):
+        """Measure battery efficiency and system losses; publish them; re-value costs if the efficiency moved."""
+        if self.costbook is None or self.cfg is None:
+            return
+        try:
+            before = (self.measured or {}).get("efficiency")
+            self.measured = self.costbook.measure(self._today(), params_from(self.cfg).capacity_kwh)
+            m = self.measured
+            configured = params_from(self.cfg).efficiency
+            eff = m["efficiency"] if m["measured"] else configured
+            self._publish_state("diag_battery_efficiency", round(eff * eff * 100, 1), {
+                "measured": m["measured"], "one_way": round(eff, 4), "configured_one_way": configured,
+                "days": m["days"], "battery_in_kwh": m["battery_in"], "battery_out_kwh": m["battery_out"],
+                "note": "measured over the last 30 days" if m["measured"]
+                else f"estimated (configured figure) until {MIN_MEASURE_DAYS} full days are recorded"})
+            self._publish_state("diag_system_losses", m.get("losses_yesterday") if m.get("losses_yesterday") is not None
+                                else "unknown", {"average_kwh": m.get("losses_avg"), "by_day": m["losses"]})
+            if m["measured"]:
+                self.log(f"Battery round trip measured at {m['rte'] * 100:.1f}% over {m['days']} days")
+            if revalue and m["measured"] and (before is None or abs(m["efficiency"] - before) > 0.002):
+                n = self.costbook.revalue(**self._cost_params())
+                self.log(f"Costs re-valued ({n} half-hours) with the measured battery efficiency")
+                self._refresh_months()
+        except Exception as err:
+            self.log(f"Could not measure losses: {err!r}", level="WARNING")
+
     def _cost_params(self):
-        p = params_from(self.cfg)
+        p = self._params()
         return {"capacity": p.capacity_kwh, "eff": p.efficiency, "floor_soc": p.min_reserve_soc,
                 "max_kw": p.max_discharge_kw, "includes_ev": p.hold_for_car, "axle_value": p.axle_value}
 
@@ -274,6 +312,7 @@ class PowerEngine(hass.Hass):
             self.log(f"Cost backfill done: {job['added']} half-hours added from history; "
                      f"{n} half-hours re-valued{failed}")
             self._refresh_months()
+            self._measure()
             return
         day = job["days"].pop(0)
         tz = self.tz or timezone.utc
@@ -441,7 +480,7 @@ class PowerEngine(hass.Hass):
         if sig == self._plan_sig and not due or r.battery_soc is None:
             return
         slots = build_slots(r, self._solar_forecast(), self.profile, self.tz)
-        self.plan = make_plan(slots, r.battery_soc, params_from(self.cfg, r), r.now, self.tz)
+        self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz)
         self._plan_sig, self._plan_time = sig, r.now
         extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0}
         for key, (state, attrs) in plan_entity_states(self.plan, extra).items():
@@ -490,6 +529,12 @@ class PowerEngine(hass.Hass):
             self.cfg, self.cfg_path = load_config(self.paths)
         except ConfigError as err:
             self.cfg, self.cfg_error = None, str(err)
+        if self.cfg is not None and self.costbook is not None:
+            fid = flow_id(self.cfg)
+            if fid != self.costbook.flow_id:              # inputs that shape the flows changed: rebuild from history
+                self.costbook.flow_id = fid
+                self.log("Cost inputs changed; recent days will be rebuilt from HA history")
+                self.run_in(self._backfill, 30)
         self._last_checks = None
         self._evaluate()
         self._cycle({})

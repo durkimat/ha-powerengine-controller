@@ -120,7 +120,7 @@ class HalfHour:
             "unallocated_sink": self.unallocated_sink, "seconds": self.seconds, "soc_start": self.soc_start,
             "soc_end": self.soc_end, "axle": self.axle, "free": self.free, "import_rate": self.import_rate,
             "export_rate": self.export_rate, "standing": self.standing}.items()})
-        d["fv"] = FLOW_VERSION
+        d["fv"] = str(FLOW_VERSION)            # replaced by the cost book's full flow id
         return d
 
 

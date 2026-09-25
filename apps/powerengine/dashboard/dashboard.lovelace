@@ -497,7 +497,7 @@ views:
               - **Actual:** metered import × rate − metered export × export rate + standing charge.
               - **Unexplained:** Actual minus the layers. Inverter losses, standby use and meter mismatch land here; if it grows, the model needs fixing.
 
-              Caveats: half-hour resolution from HA's sensors, which may differ slightly from EDF's bill; rates are the ones seen at the time; first-in-first-out is a convention, not physics; round-trip efficiency is the configured figure until measured losses arrive in a later release. Method version {{ state_attr('sensor.pe_cost_days', 'method') or 1 }}.
+              Caveats: half-hour resolution from HA's sensors, which may differ slightly from EDF's bill; rates are the ones seen at the time; first-in-first-out is a convention, not physics; battery round-trip efficiency is {{ states('sensor.pe_diag_battery_efficiency') }}% ({{ 'measured over the last 30 days' if state_attr('sensor.pe_diag_battery_efficiency', 'measured') else 'the configured figure until 14 full days are recorded' }}). Method version {{ state_attr('sensor.pe_cost_days', 'method') or 1 }}.
   - title: Config
     path: config
     icon: mdi:cog
