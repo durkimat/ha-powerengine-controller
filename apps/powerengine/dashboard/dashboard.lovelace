@@ -317,6 +317,12 @@ views:
       - type: grid
         column_span: 3
         cards:
+          - type: tile
+            entity: switch.pe_ui_right_align
+            name: Right-align numbers
+            grid_options: {columns: 6}
+            tap_action: {action: toggle}
+            icon_tap_action: {action: toggle}
           - type: markdown
             grid_options: {columns: full}
             content: |-
@@ -413,8 +419,9 @@ views:
             grid_options: {columns: full}
             content: |-
               {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v)) }}{%- endmacro %}
+              {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
               | Day | No solar/battery | Solar | Smart | Battery (default) | Battery control | Arbitrage | Carried in battery | Actual | Unexplained |
-              |---|---|---|---|---|---|---|---|---|---|
+              |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
               {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse %}
               | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }}{{ ' (so far)' if not d.complete else '' }} | {{ gbp(d.s0) }} | {{ gbp(d.solar) }} | {{ gbp(d.smart) }} | {{ gbp(d.s3a) }} | {{ gbp(d.s3b) }} | {{ gbp(d.arbitrage) }} | {{ gbp(d.stored) }} | **{{ gbp(d.actual) }}** | {{ gbp(d.unexplained) }} |
               {%- endfor %}
@@ -426,8 +433,9 @@ views:
             grid_options: {columns: full}
             content: |-
               {%- macro k(v) -%}{{ '%.1f' | format(v | float(0)) }}{%- endmacro %}
+              {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
               | Day | Import | Export | Solar | House | Car | Battery in | Battery out | Battery → export | Unaccounted | Ledger correction |
-              |---|---|---|---|---|---|---|---|---|---|---|
+              |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
               {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse %}{% set e = d.energy or {} %}
               | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }} | {{ k(e.grid_import) }} | {{ k(e.grid_export) }} | {{ k(e.solar) }} | {{ k(e.house) }} | {{ k(e.car) }} | {{ k(e.battery_in) }} | {{ k(e.battery_out) }} | {{ k(e.b_e) }} | {{ k(e.unallocated_src) }} | {{ k(e.correction_kwh) }} |
               {%- endfor %}
@@ -439,6 +447,7 @@ views:
             grid_options: {columns: full}
             content: |-
               {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v)) }}{%- endmacro %}
+              {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
               {%- set e = states.sensor.pe_event_last %}
               {%- if e and e.attributes.type is defined %}
               **Last event:** {{ 'Axle export' if e.attributes.type == 'axle' else 'Free power' }} on {{ as_timestamp(e.attributes.date) | timestamp_custom('%a %d %b') }} from {{ e.attributes.time }}: {{ e.attributes.kwh }} kWh, worth {{ gbp(e.attributes.gross) }} ({{ gbp(e.attributes.net) }} net).
@@ -447,7 +456,7 @@ views:
               {%- endif %}
 
               | Month | Axle (net) | Free power (net) | Everyday actual |
-              |---|---|---|---|
+              |---|{{ a }}|{{ a }}|{{ a }}|
               {%- for m in (state_attr('sensor.pe_event_months', 'months') or []) | reverse %}
               | {{ as_timestamp(m.month ~ '-01') | timestamp_custom('%b %Y') }} | {{ gbp(m.axle_net) }} | {{ gbp(m.free_power_net) }} | {{ gbp(m.actual) }} |
               {%- endfor %}
