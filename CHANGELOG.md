@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.2 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Config page settings are grouped into sections (Battery and charging, Supply limits, Axle events, Arbitrage);
+  the app now tells the card which section each setting belongs in. Needs card 0.4.2.
+
 ## 0.4.1 (beta)
 
 ### Behaviour changes

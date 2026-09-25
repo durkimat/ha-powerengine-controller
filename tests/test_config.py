@@ -101,3 +101,11 @@ def test_required_roles_follow_features():
     without = required_roles(parse_config({"features": {"axle": False, "free_power_days": False}}))
     assert "axle_event_active" in with_axle and "axle_event_active" not in without
     assert "battery_soc" in without and "battery_soh" not in with_axle
+
+
+def test_every_setting_is_in_exactly_one_config_page_section():
+    from pe_core.config import SAFETY, SETTING_SECTIONS, settings_catalogue
+    keys = [k for _, _, ks in SETTING_SECTIONS for k in ks]
+    assert sorted(keys) == sorted(SAFETY) and len(keys) == len(set(keys))
+    cat = settings_catalogue()
+    assert sorted(k for s in cat["sections"] for k in s["keys"]) == sorted(s["key"] for s in cat["safety"])
