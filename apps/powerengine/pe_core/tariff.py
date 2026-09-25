@@ -91,3 +91,31 @@ def reclassify(start: datetime, v: dict, window: set[int], tz=None) -> Rates:
     act, ovn, peak, exp = v["act"], v["ovn"], v.get("peak") or v["std"], v["exp"]
     slot = bool(window) and act < peak - EPS and act <= ovn + EPS and tod(start, tz) not in window
     return Rates(actual=act, standard=peak if slot else act, overnight=ovn, export=exp, smart_slot=slot, peak=peak)
+
+
+BAND = 0.2      # "cheap" = within the bottom fifth of the day's price range
+
+
+def cheap_threshold(prices: list[float | None], cap_p: float, rte: float = 0.9, wear_p: float = 2.0) -> float:
+    """The price (p/kWh) at or below which import counts as cheap, worked out from the prices ahead.
+
+    The lowest of:
+      - the bottom fifth of the price range (so only genuinely cheap slots count, however the tariff is shaped);
+      - what stored energy is worth later: the average of the other prices x round-trip efficiency, less battery
+        wear (so buying is never 'cheap' if storing it can't pay);
+      - the configured maximum (cap_p).
+    A flat tariff has nothing cheap. Free or negative prices always count as cheap.
+    """
+    ps = [p * 100 for p in prices if p is not None]
+    if not ps:
+        return cap_p
+    lo, hi = min(ps), max(ps)
+    if hi - lo < 1.0:                                        # flat: storing gains nothing
+        return 0.0 if lo <= 0 else lo - 0.01
+    band = lo + BAND * (hi - lo)
+    rest = [p for p in ps if p > band]
+    worth = (sum(rest) / len(rest)) * rte - wear_p if rest else band
+    t = min(band, worth, cap_p)
+    if lo <= 0:
+        return round(max(t, 0.0), 2)
+    return round(t, 2) if t >= lo else round(lo - 0.01, 2)      # below the cheapest price: nothing is cheap

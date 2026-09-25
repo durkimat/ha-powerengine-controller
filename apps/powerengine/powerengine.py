@@ -503,7 +503,9 @@ class PowerEngine(hass.Hass):
         if sig == self._plan_sig and not due or r.battery_soc is None:
             return
         slots = build_slots(r, self._solar_forecast(), self.profile, self.tz)
-        self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz)
+        self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz,
+                              auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)),
+                              wear_p=self.cfg.safety.get("battery_wear_p", 2.0))
         self._plan_sig, self._plan_time = sig, r.now
         self._snapshot_plan(r.now)
         extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0}

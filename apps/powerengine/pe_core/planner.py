@@ -20,6 +20,7 @@ from datetime import datetime
 
 from .decide import FORCE_DISCHARGE, GRID_CHARGE, HOLD, SELF_USE
 from .forecast import Slot
+from .tariff import cheap_threshold
 
 DT_H = 0.5
 MAX_ITERATIONS = 200
@@ -66,6 +67,7 @@ class Plan:
     cost: float = 0.0
     baseline_cost: float = 0.0        # same period, battery in plain self-use
     windows: list[dict] = field(default_factory=list)
+    cheap_p: float | None = None      # the cheap-import threshold used (p/kWh)
     extra_kwh: float = 0.0            # energy left in the battery at the end, compared with plain self-use
     extra_value: float = 0.0          # that energy valued at the cheapest import price in the period (GBP)
 
@@ -214,7 +216,10 @@ def _first_problem(plan: list[PlanSlot], p: Params, start: int, eff2: float):
     return None
 
 
-def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None) -> Plan:
+def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None, auto_cheap: bool = False,
+              wear_p: float = 2.0) -> Plan:
+    if auto_cheap:
+        p = replace(p, cheap_cap_p=cheap_threshold([s.price for s in slots], p.cheap_cap_p, p.efficiency ** 2, wear_p))
     plan = [_default(s, p, tz) for s in slots]
     eff2 = p.efficiency ** 2
     baseline = [PlanSlot(s, FORCE_DISCHARGE if (p.axle_enabled and s.axle) else SELF_USE, "") for s in slots]
@@ -254,7 +259,8 @@ def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None) 
         plan[best] = replace(c, action=GRID_CHARGE, reason=reason, target_soc=target)
         simulate(plan, soc, p)
 
-    result = Plan(slots=plan, made_at=now, cost=sum(ps.cost for ps in plan), baseline_cost=baseline_cost)
+    result = Plan(slots=plan, made_at=now, cheap_p=p.cheap_cap_p, cost=sum(ps.cost for ps in plan),
+                  baseline_cost=baseline_cost)
     if plan and baseline:
         extra_kwh = (plan[-1].soc_end - baseline[-1].soc_end) / 100 * p.capacity_kwh
         prices = [s.price for s in slots if s.price is not None]
@@ -375,7 +381,7 @@ def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
     nxt = plan.windows[1] if len(plan.windows) > 1 else None
     attrs = {"windows": plan.windows, "series": ser, "cost": round(plan.cost, 2),
              "baseline_cost": round(plan.baseline_cost, 2), "saving": round(plan.saving, 2),
-             "extra_kwh": round(plan.extra_kwh, 1), "extra_value": round(plan.extra_value, 2),
+             "extra_kwh": round(plan.extra_kwh, 1), "cheap_p": plan.cheap_p, "extra_value": round(plan.extra_value, 2),
              "horizon_end": plan.slots[-1].slot.end.isoformat() if plan.slots else None,
              "estimated_prices_from": est}
     attrs.update(extra or {})

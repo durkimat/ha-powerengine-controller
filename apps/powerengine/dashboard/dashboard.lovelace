@@ -172,6 +172,8 @@ views:
 
               Plan made {{ as_timestamp(made) | timestamp_custom('%H:%M') if made not in ['unknown', 'unavailable', ''] else '–' }}
               · re-plans every 5 minutes and when prices, slots or events change
+              {%- if state_attr('sensor.pe_plan', 'cheap_p') is not none %}
+              · import counts as cheap at or below {{ state_attr('sensor.pe_plan', 'cheap_p') }}p for this plan{% endif %}
               · house load learned from {{ state_attr('sensor.pe_plan', 'load_profile_days') or 0 }} days of history
               {%- if (state_attr('sensor.pe_plan', 'load_profile_days') or 0) < 2 %}
               · **the load forecast is still learning**, so treat this plan as rough for the first day or two{% endif %}

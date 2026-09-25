@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.5 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- **Automatic cheap threshold (#12)**, on by default. What counts as cheap is worked out from the prices ahead:
+  the bottom fifth of the price range, and only where storing the energy pays (the other prices x round-trip
+  efficiency, less battery wear). The *Cheap import threshold* setting becomes the maximum. On today's EDF tariff
+  (6.99p / 30.28p) nothing changes; it matters if the tariff changes or prices vary more. A flat tariff has nothing
+  cheap; free or negative prices always count. The Plan tab shows the threshold used. Turn it off on the Config
+  tab to use the fixed setting as before.
+
 ## 0.5.4 (beta)
 
 ### Behaviour changes
