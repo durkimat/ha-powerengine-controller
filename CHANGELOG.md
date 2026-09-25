@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.3 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Plan chart: each vertical axis (labels, title and axis line) is drawn in the colour of what it measures:
+  green for battery %, orange for import price, blue for kWh per half-hour (solar, load and the bars).
+
 ## 0.4.2 (beta)
 
 ### Behaviour changes
