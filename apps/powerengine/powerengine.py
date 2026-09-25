@@ -29,7 +29,8 @@ from pe_core.entities import (
     removal_messages,
     validate_definitions,
 )
-from pe_core.forecast import LoadProfile, build_load_profile, build_slots, parse_history
+from pe_core.forecast import LoadProfile, build_slots, house_only_means, parse_history, profile_from_means
+from pe_core.loadstore import LoadStore
 from pe_core.modes import effective_mode
 from pe_core.planner import make_plan, params_from, plan_entity_states
 from pe_core.readings import read
@@ -89,6 +90,14 @@ class PowerEngine(hass.Hass):
             saved = None
         self.activity = ActivityLog(saved if isinstance(saved, list) else None)
         self.profile: LoadProfile | None = None
+        self._hist_means: dict = {}
+        self.loadstore = LoadStore(os.path.join(os.path.dirname(self._save_path()), "load_history.json"))
+        try:
+            n = self.loadstore.load()
+            if n:
+                self.log(f"Load record: {n} half-hours recorded by PowerEngine")
+        except Exception as err:
+            self.log(f"Could not read the load record: {err!r}", level="WARNING")
         self.plan, self._plan_sig, self._plan_time = None, None, None
         self.sim = SimBattery()
         try:
@@ -161,6 +170,7 @@ class PowerEngine(hass.Hass):
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
                 readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
+                self._record_load(readings)
                 self._maybe_replan(readings)
                 decision = decide(readings, self.cfg, self._decision, self.tz, plan=self.plan)
                 sim = self.sim.update(decision, readings, params_from(self.cfg), self.tz)
@@ -195,21 +205,43 @@ class PowerEngine(hass.Hass):
         return spec.get("entity")
 
     def _learn_load(self, kwargs):
-        """Build the house-load profile from the last 14 days of HA history."""
+        """Read 14 days of house-load (and car) history from HA, then rebuild the load profile."""
         house, car = self._role_entity("house_load_power"), self._role_entity("ev_charge_power")
         if not house:
+            self.log("Load history: no house-load input mapped yet", level="WARNING")
             return
         try:
-            def hist(eid):
-                rows = self.get_history(entity_id=eid, days=HISTORY_DAYS) if eid else []
-                return parse_history(rows[0] if rows and isinstance(rows[0], list) else rows)
             now = datetime.now(timezone.utc)
-            self.profile = build_load_profile(hist(house), hist(car), now, self.tz,
-                                              subtract_car=bool(self.cfg.system.get("house_load_includes_ev", True)))
-            self.log(f"Load profile built from {self.profile.days:.1f} days of history")
-            self._plan_sig = None                                   # force a re-plan with the new profile
+            house_rows = parse_history(self.get_history(entity_id=house, days=HISTORY_DAYS))
+            car_rows = parse_history(self.get_history(entity_id=car, days=HISTORY_DAYS)) if car else []
+            self._hist_means = house_only_means(house_rows, car_rows, now,
+                                                bool(self.cfg.system.get("house_load_includes_ev", True)))
+            self.log(f"Load history from HA: {len(house_rows)} house readings, {len(car_rows)} car readings "
+                     f"-> {len(self._hist_means)} half-hours")
         except Exception as err:
-            self.log(f"Could not build the load profile: {err!r}", level="WARNING")
+            self.log(f"Could not read load history from HA ({err!r}); retrying in an hour. "
+                     "PowerEngine's own load record is still used.", level="WARNING")
+            self.run_in(self._learn_load, 3600)
+        self._rebuild_profile()
+
+    def _record_load(self, r):
+        """Add the current house-only load to PowerEngine's own half-hourly record."""
+        if self.loadstore.add(r.now, r.house_power):
+            try:
+                self.loadstore.save()
+            except OSError as err:
+                self.log(f"Could not save the load record: {err}", level="WARNING")
+            if r.now.minute < 30:                                   # rebuild once an hour
+                self._rebuild_profile()
+
+    def _rebuild_profile(self):
+        means = {**self._hist_means, **self.loadstore.means}
+        if not means:
+            return
+        self.profile = profile_from_means(means, datetime.now(timezone.utc), self.tz)
+        self.log(f"Load profile: {self.profile.days:.1f} days ({len(self._hist_means)} half-hours from HA history, "
+                 f"{len(self.loadstore.means)} recorded by PowerEngine)")
+        self._plan_sig = None                                       # re-plan with the new profile
 
     def _solar_forecast(self):
         items = []

@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.3.1 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Until a load profile exists, the planner assumes a steady 500 W house load instead of the live house power
+  (a momentary spike was being planned as a 36-hour load).
+- PowerEngine keeps its own half-hourly record of house-only load in `/homeassistant/powerengine/load_history.json`
+  (15 days), so the load forecast learns even if HA history can't be read, and survives restarts.
+
+### Fixed
+- Plan tab: the chart no longer overlaps the actions table.
+- Reading load history from HA now copes with every shape AppDaemon returns, logs what it found, and retries hourly
+  on failure.
+- Plan tab warns while the load forecast is still learning.
+
 ## 0.3.0 (beta): "Plan"
 
 ### Behaviour changes

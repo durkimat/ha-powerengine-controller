@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from .readings import Readings, Window, parse_time
 
 SLOT = timedelta(minutes=30)
-DEFAULT_LOAD_W = 400.0          # used until there's enough history
+DEFAULT_LOAD_W = 500.0          # steady assumption until a load profile exists
 HALF_LIFE_DAYS = 7.0            # recency weighting for the load profile
 
 
@@ -73,35 +73,58 @@ def half_hour_means(samples: list[tuple[datetime, float]], end: datetime) -> dic
     return {s: energy[s] / covered[s] for s in energy if covered[s] >= 600}   # need 10 min of data
 
 
+def house_only_means(house: list[tuple[datetime, float]], car: list[tuple[datetime, float]] | None,
+                     now: datetime, subtract_car: bool = True) -> dict[datetime, float]:
+    """Half-hour mean house-only load (W) from raw history samples."""
+    h = half_hour_means(house, now)
+    c = half_hour_means(car or [], now) if subtract_car else {}
+    return {s: max(0.0, w - max(0.0, c.get(s, 0.0))) for s, w in h.items()}
+
+
 def build_load_profile(house: list[tuple[datetime, float]], car: list[tuple[datetime, float]] | None,
                        now: datetime, tz, subtract_car: bool = True) -> LoadProfile:
     """Recency-weighted weekday/weekend half-hour profile of house-only load."""
-    h = half_hour_means(house, now)
-    c = half_hour_means(car or [], now) if subtract_car else {}
+    return profile_from_means(house_only_means(house, car, now, subtract_car), now, tz)
+
+
+def profile_from_means(means: dict[datetime, float], now: datetime, tz) -> LoadProfile:
     sums: dict[tuple[bool, int], float] = defaultdict(float)
     weights: dict[tuple[bool, int], float] = defaultdict(float)
-    for s, w in h.items():
-        house_only = max(0.0, w - max(0.0, c.get(s, 0.0)))
+    for s, house_only in means.items():
         age_days = (now - s).total_seconds() / 86400
         weight = math.pow(0.5, age_days / HALF_LIFE_DAYS)
         local = s.astimezone(tz) if tz else s
         key = (local.weekday() >= 5, local.hour * 2 + local.minute // 30)
         sums[key] += house_only * weight
         weights[key] += weight
-    days = len(h) / 48
-    return LoadProfile({k: sums[k] / weights[k] for k in sums}, days)
+    return LoadProfile({k: sums[k] / weights[k] for k in sums}, len(means) / 48)
+
+
+def flatten_history(result) -> list[dict]:
+    """AppDaemon's get_history result in whatever shape it comes (list of lists, list, or dict) -> rows."""
+    if not result:
+        return []
+    if isinstance(result, dict):
+        rows = []
+        for v in result.values():
+            rows += flatten_history(v)
+        return rows
+    if isinstance(result, list) and result and all(isinstance(x, list) for x in result):
+        return [row for sub in result for row in sub if isinstance(row, dict)]
+    return [row for row in result if isinstance(row, dict)]
 
 
 def parse_history(rows: list | None) -> list[tuple[datetime, float]]:
     """AppDaemon/HA history rows ([{'state', 'last_changed'}...]) -> (time, W)."""
     out = []
-    for row in rows or []:
+    unit = None
+    for row in flatten_history(rows):
+        unit = (row.get("attributes") or {}).get("unit_of_measurement") or unit   # minimal responses carry it once
         t = parse_time(row.get("last_changed") or row.get("last_updated"))
         try:
             v = float(row.get("state"))
         except (TypeError, ValueError):
             continue
-        unit = (row.get("attributes") or {}).get("unit_of_measurement")
         out.append((t, v * 1000 if unit == "kW" else v))
     return [x for x in out if x[0] is not None]
 
@@ -145,7 +168,7 @@ def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | No
     slots, s = [], start
     while s < end:
         price, est = price_at(s)
-        load_w = profile.expected_w(s, tz) if profile else (r.house_power or DEFAULT_LOAD_W)
+        load_w = profile.expected_w(s, tz) if profile and profile.watts else DEFAULT_LOAD_W
         slots.append(Slot(start=s, price=price, export=r.export_rate, solar_kwh=solar_by_slot.get(s, 0.0),
                           load_kwh=load_w / 1000 * 0.5, price_estimated=est, smart_slot=_in(r.dispatches, s),
                           axle=_in(axle, s), free=_in(free, s)))

@@ -173,11 +173,13 @@ views:
               <small>Plan made {{ as_timestamp(made) | timestamp_custom('%H:%M') if made not in ['unknown', 'unavailable', ''] else '–' }}
               · re-plans every 5 minutes and when prices, slots or events change
               · house load learned from {{ state_attr('sensor.pe_plan', 'load_profile_days') or 0 }} days of history
+              {%- if (state_attr('sensor.pe_plan', 'load_profile_days') or 0) < 2 %}
+              · **the load forecast is still learning**, so treat this plan as rough for the first day or two{% endif %}
               · expected cost £{{ state_attr('sensor.pe_plan', 'cost') }} vs £{{ state_attr('sensor.pe_plan', 'baseline_cost') }} with plain self-use
               {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}
               · prices after {{ as_timestamp(state_attr('sensor.pe_plan', 'estimated_prices_from')) | timestamp_custom('%a %H:%M') }} are estimated (not yet published){% endif %}</small>
           - type: custom:apexcharts-card
-            grid_options: {columns: full, rows: 8}
+            grid_options: {columns: full, rows: auto}
             graph_span: 36h
             span:
               start: minute
@@ -189,6 +191,7 @@ views:
               title: Next 36 hours
               show_states: false
             apex_config:
+              chart: {height: 380}
               legend: {show: true}
               tooltip: {shared: true}
             yaxis:
