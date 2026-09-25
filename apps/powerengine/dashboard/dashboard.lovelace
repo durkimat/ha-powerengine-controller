@@ -1,0 +1,138 @@
+# PowerEngine dashboard: managed by the PowerEngine app.
+# This file is rewritten whenever PowerEngine is updated; local edits will be lost.
+# Needs: Power Flow Card Plus (HACS). See docs/INSTALL.md, Step 7.
+title: PowerEngine
+views:
+  - title: Monitoring
+    path: monitoring
+    icon: mdi:lightning-bolt
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          - type: markdown
+            grid_options: {columns: full}
+            content: >-
+              {% set t = state_attr('sensor.pe_state_summary', 'text') or states('sensor.pe_state_summary') %}
+              {% set parts = t.split('. ', 1) %}
+              **{{ parts[0] }}**{% if parts | count > 1 %} {{ parts[1] }}{% endif %}
+          - type: tile
+            entity: sensor.pe_state_operation_mode
+            name: Mode
+            grid_options: {columns: 6}
+          - type: tile
+            entity: sensor.pe_state_battery_soc
+            name: Battery
+            grid_options: {columns: 6}
+            features:
+              - type: bar-gauge
+      - type: grid
+        column_span: 2
+        cards:
+          - type: heading
+            heading: Energy flow
+          - type: custom:power-flow-card-plus
+            grid_options: {columns: full}
+            watt_threshold: 1000
+            kw_decimals: 1
+            min_flow_rate: 1
+            max_flow_rate: 6
+            clickable_entities: true
+            display_zero_lines:
+              mode: transparency
+              transparency: 70
+            entities:
+              battery:
+                entity: sensor.pe_state_battery_power
+                state_of_charge: sensor.pe_state_battery_soc
+              grid:
+                entity: sensor.pe_state_grid_power
+              solar:
+                entity: sensor.pe_state_solar_power
+                display_zero_state: true
+              home:
+                entity: sensor.pe_state_house_power
+                override_state: true
+              individual:
+                - entity: sensor.pe_state_ev_power
+                  name: Car
+                  icon: mdi:car-electric
+                  display_zero: true
+                  display_zero_tolerance: 50
+      - type: grid
+        cards:
+          - type: heading
+            heading: Now
+          - type: markdown
+            content: >-
+              {% set imp = state_attr('sensor.pe_state_import_rate', 'pence') %}
+              {% set until = state_attr('sensor.pe_state_import_rate', 'until') %}
+              {% set nxt = state_attr('sensor.pe_state_import_rate', 'next_rate_pence') %}
+              {% set exp = state_attr('sensor.pe_state_export_rate', 'pence') %}
+              **Import** {{ imp if imp is not none else '–' }}p
+              {%- if state_attr('sensor.pe_state_import_rate', 'in_smart_slot') %} (smart slot){% endif %}
+              {%- if until and nxt is not none %}, then {{ nxt }}p from {{ until }}{% endif %}
+
+              **Export** {{ exp if exp is not none else '–' }}p
+          - type: tile
+            entity: sensor.pe_state_ev
+            name: Car
+          - type: tile
+            entity: sensor.pe_state_smart_charge
+            name: EDF smart charge
+          - type: tile
+            entity: sensor.pe_state_axle
+            name: Axle
+          - type: tile
+            entity: sensor.pe_state_free_power
+            name: Free power
+          - type: markdown
+            content: >-
+              {% set t = state_attr('sensor.pe_state_solar_power', 'forecast_today_kwh') %}
+              {% set m = state_attr('sensor.pe_state_solar_power', 'forecast_tomorrow_kwh') %}
+              **Solar forecast** today {{ t if t is not none else '–' }} kWh · tomorrow {{ m if m is not none else '–' }} kWh
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Last 24 hours
+          - type: history-graph
+            grid_options: {columns: full}
+            hours_to_show: 24
+            entities:
+              - entity: sensor.pe_state_solar_power
+                name: Solar
+              - entity: sensor.pe_state_house_power
+                name: House
+              - entity: sensor.pe_state_battery_power
+                name: Battery (+ discharging)
+              - entity: sensor.pe_state_grid_power
+                name: Grid (+ importing)
+              - entity: sensor.pe_state_ev_power
+                name: Car
+          - type: history-graph
+            grid_options: {columns: full}
+            hours_to_show: 24
+            entities:
+              - entity: sensor.pe_state_battery_soc
+                name: Battery %
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: PowerEngine health
+            heading_style: subtitle
+          - type: tile
+            entity: sensor.pe_diag_heartbeat
+            name: Heartbeat
+            grid_options: {columns: 4}
+          - type: tile
+            entity: binary_sensor.pe_diag_config_ok
+            name: Config OK
+            grid_options: {columns: 4}
+          - type: tile
+            entity: sensor.pe_diag_version
+            name: Version
+            grid_options: {columns: 4}

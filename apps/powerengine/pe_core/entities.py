@@ -75,6 +75,29 @@ ENTITIES: tuple[EntityDef, ...] = (
                "device_class": "enum", "options": ["unconfigured", "passive", "active"]}),
 )
 
+POWER = {"device_class": "power", "unit_of_measurement": "W", "state_class": "measurement"}
+RATE = {"unit_of_measurement": "GBP/kWh", "state_class": "measurement", "icon": "mdi:currency-gbp",
+        "suggested_display_precision": 4}
+
+STATE_ENTITIES: tuple[EntityDef, ...] = (
+    EntityDef("sensor", "state_summary", "Status", {"icon": "mdi:text-box-outline"}),
+    EntityDef("sensor", "state_battery_soc", "Battery",
+              {"device_class": "battery", "unit_of_measurement": "%", "state_class": "measurement"}),
+    EntityDef("sensor", "state_battery_power", "Battery power", {**POWER, "icon": "mdi:home-battery"}),
+    EntityDef("sensor", "state_grid_power", "Grid power", {**POWER, "icon": "mdi:transmission-tower"}),
+    EntityDef("sensor", "state_solar_power", "Solar power", {**POWER, "icon": "mdi:solar-power"}),
+    EntityDef("sensor", "state_house_power", "House power", {**POWER, "icon": "mdi:home-lightning-bolt"}),
+    EntityDef("sensor", "state_ev_power", "Car charging power", {**POWER, "icon": "mdi:car-electric"}),
+    EntityDef("sensor", "state_import_rate", "Import rate", RATE),
+    EntityDef("sensor", "state_export_rate", "Export rate", RATE),
+    EntityDef("sensor", "state_ev", "Car", {"icon": "mdi:car-electric"}),
+    EntityDef("sensor", "state_smart_charge", "Smart charge", {"icon": "mdi:ev-station"}),
+    EntityDef("sensor", "state_axle", "Axle", {"icon": "mdi:transmission-tower-export"}),
+    EntityDef("sensor", "state_free_power", "Free power", {"icon": "mdi:gift-outline"}),
+)
+
+ENTITIES = ENTITIES + STATE_ENTITIES
+
 
 def device(version: str) -> dict[str, Any]:
     return {

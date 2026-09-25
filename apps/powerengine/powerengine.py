@@ -10,12 +10,14 @@ MQTT and never write to the inverter or any other device.
 import json
 import os
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
 
 from pe_core import __version__
 from pe_core.checks import OK, check, summarise
 from pe_core.config import DEFAULT_PATHS, ConfigError, load_config, required_roles
+from pe_core.dashboard import sync_dashboard
 from pe_core.entities import (
     AVAILABILITY_TOPIC,
     ENTITIES,
@@ -26,10 +28,13 @@ from pe_core.entities import (
     validate_definitions,
 )
 from pe_core.modes import effective_mode
+from pe_core.readings import read
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue
+from pe_core.status import entity_states
 from pe_core.store import save_config
 
 HEARTBEAT_SECONDS = 60
+CYCLE_SECONDS = 30
 RECHECK_SECONDS = 300
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
@@ -69,12 +74,20 @@ class PowerEngine(hass.Hass):
         self._publish_state("diag_version", __version__)
         self._publish_state("map_catalogue", str(len(ROLES)), catalogue())
         self._last_checks = None
+        self._published = {}
+        try:
+            self.tz = ZoneInfo(str(self.get_timezone()))
+        except Exception:
+            self.tz = None
         self._evaluate()                                   # also publishes mode + config status
+        self._cycle({})
+        self._sync_dashboard()
 
         self.listen_event(self._on_save, SAVE_EVENT)
         self._beat({})
         self.run_every(self._beat, "now+60", HEARTBEAT_SECONDS)
         self.run_every(lambda kwargs: self._evaluate(), f"now+{RECHECK_SECONDS}", RECHECK_SECONDS)
+        self.run_every(self._cycle, f"now+{CYCLE_SECONDS}", CYCLE_SECONDS)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
 
     def terminate(self):
@@ -95,6 +108,7 @@ class PowerEngine(hass.Hass):
                 checks[role.key] = check(role, spec, state)
         missing = [k for k in required if checks.get(k, ("unmapped", ""))[0] != OK]
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing)
+        self.mode = mode
 
         if self.cfg_error:
             overall = "error"
@@ -120,6 +134,29 @@ class PowerEngine(hass.Hass):
             "error": self.cfg_error,
         })
         self.log(f"Inputs: {overall}; mode {mode.effective} ({mode.reason})")
+
+    # --- the monitoring cycle ------------------------------------------------------
+
+    def _cycle(self, kwargs):
+        """Read every mapped input, then publish the state_* entities that changed."""
+        readings = None
+        if self.cfg is not None and self.mode.effective != "unconfigured":
+            try:
+                readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
+            except Exception as err:          # never let one bad reading stop the app
+                self.log(f"Reading inputs failed: {err!r}", level="WARNING")
+        for key, (state, attrs) in entity_states(readings, self.mode, self.tz).items():
+            if self._published.get(key) != (state, attrs):
+                self._published[key] = (state, attrs)
+                self._publish_state(key, state, attrs)
+
+    def _sync_dashboard(self):
+        target = os.path.join(os.path.dirname(self._save_path()), "dashboard.yaml")
+        try:
+            if sync_dashboard(target):
+                self.log(f"Dashboard updated: {target} (refresh the PowerEngine dashboard to see it)")
+        except OSError as err:
+            self.log(f"Could not write the dashboard file {target}: {err}", level="WARNING")
 
     # --- saving from the config card -------------------------------------------------
 
@@ -160,6 +197,7 @@ class PowerEngine(hass.Hass):
             self.cfg, self.cfg_error = None, str(err)
         self._last_checks = None
         self._evaluate()
+        self._cycle({})
 
     def _user_name(self, data):
         ctx = (data.get("metadata") or {}).get("context") or data.get("context") or {}

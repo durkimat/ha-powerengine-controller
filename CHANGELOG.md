@@ -2,6 +2,25 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.1.0 (beta): "See"
+
+### Behaviour changes
+- None to your devices: still Passive-only.
+- PowerEngine now reads every mapped input each 30 seconds and publishes a normalised picture of the
+  system: 13 new `sensor.pe_state_*` entities (status sentence, battery, grid, solar, house, car, rates,
+  smart charge, Axle, free power). Power is in W with fixed signs: battery + = discharging, grid + = importing.
+- The car's charging power is subtracted from the house load, so *House power* is the house only.
+- PowerEngine writes its dashboard to `/homeassistant/powerengine/dashboard.yaml` on start.
+
+### Added
+- Status sentence, e.g. *"PASSIVE (monitoring only). Battery 71%, discharging 1.0 kW. Solar 0.1 kW,
+  house 1.2 kW, exporting 0.2 kW. Import 30.28p, 6.99p from 21:00; export 15p. Next smart slot 21:00."*
+- PowerEngine dashboard (Monitoring view): status, mode, battery, energy flow, rates, car, smart charge,
+  Axle, free power, solar forecast, 24-hour history, health.
+
+### Docs
+- Install guide Step 7: register the dashboard (one-off) and install Power Flow Card Plus.
+
 ## 0.0.4 (beta)
 
 ### Behaviour changes
