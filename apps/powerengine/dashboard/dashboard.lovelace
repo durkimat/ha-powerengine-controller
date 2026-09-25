@@ -170,7 +170,7 @@ views:
               {% set made = states('sensor.pe_plan') -%}
               **{{ state_attr('sensor.pe_plan_headline', 'text') or 'No plan yet.' }}**
 
-              <small>Plan made {{ as_timestamp(made) | timestamp_custom('%H:%M') if made not in ['unknown', 'unavailable', ''] else '–' }}
+              Plan made {{ as_timestamp(made) | timestamp_custom('%H:%M') if made not in ['unknown', 'unavailable', ''] else '–' }}
               · re-plans every 5 minutes and when prices, slots or events change
               · house load learned from {{ state_attr('sensor.pe_plan', 'load_profile_days') or 0 }} days of history
               {%- if (state_attr('sensor.pe_plan', 'load_profile_days') or 0) < 2 %}
@@ -178,7 +178,7 @@ views:
               {%- macro money(v) -%}{% set v = v | float(0) %}{{ ('earns £%.2f' | format(-v)) if v < -0.005 else ('costs £%.2f' | format(v)) }}{%- endmacro %}
               · this plan {{ money(state_attr('sensor.pe_plan', 'cost')) }} over the period; plain self-use {{ money(state_attr('sensor.pe_plan', 'baseline_cost')) }}
               {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}
-              · prices after {{ as_timestamp(state_attr('sensor.pe_plan', 'estimated_prices_from')) | timestamp_custom('%a %H:%M') }} are estimated (not yet published){% endif %}</small>
+              · prices after {{ as_timestamp(state_attr('sensor.pe_plan', 'estimated_prices_from')) | timestamp_custom('%a %H:%M') }} are estimated (not yet published){% endif %}
           - type: custom:apexcharts-card
             grid_options: {columns: full, rows: auto}
             graph_span: 36h
@@ -207,8 +207,10 @@ views:
                 decimals: 0
                 apex_config: {title: {text: "p/kWh"}}
               - id: kwh
-                show: false
+                opposite: true
                 min: 0
+                decimals: 1
+                apex_config: {title: {text: "kWh per half-hour"}}
             series:
               - entity: sensor.pe_plan
                 name: Battery (planned)
@@ -216,6 +218,7 @@ views:
                 type: line
                 color: "#43a047"
                 stroke_width: 3
+                extend_to: false
                 data_generator: |
                   const s = entity.attributes.series || {t: []};
                   return s.t.map((t, i) => [new Date(t).getTime() + 1800000, s.soc[i]]);
@@ -226,6 +229,7 @@ views:
                 curve: stepline
                 color: "#fb8c00"
                 stroke_width: 2
+                extend_to: false
                 data_generator: |
                   const s = entity.attributes.series || {t: []};
                   return s.t.map((t, i) => [new Date(t).getTime(), s.price_p[i]]);
@@ -235,6 +239,7 @@ views:
                 type: area
                 color: "#fdd835"
                 opacity: 0.3
+                extend_to: false
                 data_generator: |
                   const s = entity.attributes.series || {t: []};
                   return s.t.map((t, i) => [new Date(t).getTime(), s.solar_kwh[i]]);
@@ -244,6 +249,7 @@ views:
                 type: line
                 color: "#9e9e9e"
                 stroke_width: 1
+                extend_to: false
                 data_generator: |
                   const s = entity.attributes.series || {t: []};
                   return s.t.map((t, i) => [new Date(t).getTime(), s.load_kwh[i]]);
@@ -252,6 +258,7 @@ views:
                 yaxis_id: kwh
                 type: column
                 color: "#1e88e5"
+                extend_to: false
                 data_generator: |
                   const s = entity.attributes.series || {t: []};
                   return s.t.map((t, i) => [new Date(t).getTime(), s.charge_kwh[i]]);
@@ -260,6 +267,7 @@ views:
                 yaxis_id: kwh
                 type: column
                 color: "#e53935"
+                extend_to: false
                 data_generator: |
                   const s = entity.attributes.series || {t: []};
                   return s.t.map((t, i) => [new Date(t).getTime(), s.discharge_kwh[i]]);
@@ -274,7 +282,7 @@ views:
               | Time | Action | Target | Price | Battery | Why |
               |---|---|---|---|---|---|
               {%- for w in state_attr('sensor.pe_plan', 'windows') or [] %}
-              | {{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}** | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
+              | {{ (w.day ~ ' ') if w.day }}{{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}** | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
               {%- endfor %}
   - title: Config
     path: config

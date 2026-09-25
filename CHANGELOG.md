@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.3.6 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+
+### Plan tab
+- Summary text at the top is normal size.
+- Actions table and headline show the day ("tomorrow", "Sun") for anything not today, including windows that run
+  past midnight.
+- Back-to-back grid-charge slots are shown as one window, and its target is the level the plan actually reaches
+  (e.g. 87%) rather than the 100% ceiling.
+- Charge reasons read "to avoid buying at 30.28p from 21:00 tomorrow" instead of the ambiguous "to cover 21:00 onwards".
+- Chart: lines stop where the plan ends instead of being stretched flat to the edge, and the kWh axis is shown so
+  the bars can be read.
+
 ## 0.3.5 (beta)
 
 ### Behaviour changes

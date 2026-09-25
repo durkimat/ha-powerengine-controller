@@ -72,6 +72,25 @@ def _hhmm(t: datetime, tz) -> str:
     return (t.astimezone(tz) if tz else t).strftime("%H:%M")
 
 
+def _day(t: datetime, now: datetime | None, tz) -> str:
+    """'' for today, 'tomorrow', else a short weekday; all in local time."""
+    if now is None:
+        return ""
+    d = (t.astimezone(tz) if tz else t).date()
+    today = (now.astimezone(tz) if tz else now).date()
+    delta = (d - today).days
+    if delta == 0:
+        return ""
+    if delta == 1:
+        return "tomorrow"
+    return (t.astimezone(tz) if tz else t).strftime("%a")
+
+
+def _when(t: datetime, now: datetime | None, tz) -> str:
+    day = _day(t, now, tz)
+    return f"{_hhmm(t, tz)} {day}".strip()
+
+
 # --- battery physics for one slot ----------------------------------------------------
 
 def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
@@ -192,29 +211,35 @@ def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None) 
             scan_from = i + 1                           # can't fix this one economically
             continue
         c = plan[best]
-        when = f"{_hhmm(plan[i].slot.start, tz)}"
+        when = _when(plan[i].slot.start, now, tz)
         if kind == "axle":
             reason = f"top up for the Axle event at {when} (charging at {_p(c.slot.price)} to earn £1/kWh)"
             target = 100.0
         else:
-            reason = f"cheapest time ({_p(c.slot.price)}) to cover {when} onwards at {_p(value)}"
+            reason = f"cheapest time ({_p(c.slot.price)}) to avoid buying at {_p(value)} from {when}"
             target = p.target_soc
         plan[best] = replace(c, action=GRID_CHARGE, reason=reason, target_soc=target)
         simulate(plan, soc, p)
 
     result = Plan(slots=plan, made_at=now, cost=sum(ps.cost for ps in plan), baseline_cost=baseline_cost)
-    result.windows = windows(plan, tz)
+    result.windows = windows(plan, tz, now)
     return result
 
 
 # --- presenting the plan -------------------------------------------------------------
 
-def windows(plan: list[PlanSlot], tz=None) -> list[dict]:
-    """Merge consecutive slots with the same action and reason into windows."""
+def windows(plan: list[PlanSlot], tz=None, now: datetime | None = None) -> list[dict]:
+    """Merge consecutive slots with the same action and reason into windows.
+
+    Back-to-back grid-charge slots merge even when their reasons differ (each names the shortfall it fixes); the
+    window keeps the first reason, which is the earliest shortfall. A grid-charge window's target is the level the
+    plan actually reaches, not the configured ceiling.
+    """
     out: list[dict] = []
     for ps in plan:
         key = (ps.action, ps.reason, ps.target_soc)
-        if out and out[-1]["_key"] == key:
+        same = out and (out[-1]["_key"] == key or (ps.action == GRID_CHARGE and out[-1]["action"] == GRID_CHARGE))
+        if same:
             w = out[-1]
             w["end"] = ps.slot.end
             w["prices"].append(ps.slot.price)
@@ -231,6 +256,12 @@ def windows(plan: list[PlanSlot], tz=None) -> list[dict]:
         lo, hi = (min(prices), max(prices)) if prices else (None, None)
         w["price"] = _p(lo) if lo == hi else f"{_p(lo)}–{_p(hi)}"
         w["from"], w["to"] = _hhmm(w["start"], tz), _hhmm(w["end"], tz)
+        w["day"] = _day(w["start"], now, tz)
+        end_day = _day(w["end"], now, tz)
+        if end_day != w["day"] and w["to"] != "00:00":         # a window running past midnight
+            w["to"] = f"{w['to']} {end_day or 'today'}"
+        if w["action"] == GRID_CHARGE and w["target_soc"] is not None:
+            w["target_soc"] = float(round(w["soc_end"]))
         w["start"], w["end"] = w["start"].isoformat(), w["end"].isoformat()
         w["soc_start"], w["soc_end"] = round(w["soc_start"]), round(w["soc_end"])
         w["cost"] = round(w["cost"], 2)
@@ -252,7 +283,8 @@ def headline(plan: Plan) -> str:
     verb = ACTION_WORDS[nxt["action"]]
     if nxt["action"] == GRID_CHARGE and nxt["target_soc"]:
         verb += f" to {nxt['target_soc']:.0f}%"
-    when = "Now" if nxt is now_w else f"{nxt['from']}–{nxt['to']}"
+    day = f"{nxt['day'].capitalize()} " if nxt.get("day") else ""
+    when = "Now" if nxt is now_w else f"{day}{nxt['from']}–{nxt['to']}"
     saving = plan.baseline_cost - plan.cost
     tail = f" Plan saves £{saving:.2f} vs plain self-use over this period." if saving > 0.005 else ""
     return f"{when}: {verb.lower() if when != 'Now' else verb} ({nxt['price']}): {nxt['reason']}.{tail}"
