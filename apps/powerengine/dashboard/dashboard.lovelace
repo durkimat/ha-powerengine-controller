@@ -610,6 +610,26 @@ views:
               No smart-charge slots seen yet. PowerEngine records each one EDF plans (and what the car actually drew) from now on.
               {%- endif %}
           - type: heading
+            heading: Asking EDF for slots
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set q = state_attr('sensor.pe_diag_health', 'smart_requests') %}
+              {%- if q and q.recent %}
+              {%- macro r(x) -%}{{ x.tries }} tr{{ 'y' if x.tries == 1 else 'ies' }}{{ (', ' ~ x.won ~ ' got slots (' ~ x.rate ~ '%)') if x.tries else '' }}{%- endmacro %}
+              Last {{ q.days }} days: your current automations {{ r(q.other) }}; PowerEngine {{ r(q.powerengine) }}.{{ (' In Passive mode it would have asked ' ~ q.would_today ~ ' time' ~ ('' if q.would_today == 1 else 's') ~ ' today.') if q.would_today else '' }}
+
+              | When | Who | Ready-by change | Result | Why |
+              |---|---|---|---|---|
+              {%- for x in q.recent | reverse %}
+              | {{ x.when }} | {{ {'other': 'your automations', 'powerengine': 'PowerEngine', 'would': 'PowerEngine (would)'}[x.by] }} | {{ x.change }} | {{ ({'slots': x.gained ~ ' new slot' ~ ('' if x.gained == 1 else 's'), 'none': 'no new slots'}[x.result]) if x.result in ['slots', 'none'] else x.result }} | {{ x.why }} |
+              {%- endfor %}
+
+              Changing the car's ready-by time prompts EDF to re-plan, which often adds slots. PowerEngine asks only when it's worth it (car plugged in, no slot soon, battery has room or arbitrage is on), picks the next nearest time, checks 15 minutes later, and backs off (30 minutes, 1, 2, then 4 hours) with at most 6 requests a day. It only sends requests in Active mode.
+              {%- else %}
+              No ready-by changes seen yet. PowerEngine records every change (yours or its own) and whether EDF added slots within 15 minutes.
+              {%- endif %}
+          - type: heading
             heading: Inverter writes (EEPROM wear)
           - type: markdown
             grid_options: {columns: full}

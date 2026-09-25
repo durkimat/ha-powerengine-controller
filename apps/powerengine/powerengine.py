@@ -29,7 +29,7 @@ from pe_core.config import (
 from pe_core.costbook import MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import sync_dashboard
-from pe_core.decide import decide
+from pe_core.decide import cheap_limit, decide
 from pe_core.eeprom import WriteLog, WriteModel
 from pe_core.energy import Recorder
 from pe_core.entities import (
@@ -53,6 +53,7 @@ from pe_core.replay import Timeline, flow_id, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue
 from pe_core.simulate import SimBattery
 from pe_core.slots import SlotTracker
+from pe_core.smartcharge import SmartCharger, worth_asking
 from pe_core.status import entity_states
 from pe_core.store import save_config
 
@@ -135,6 +136,9 @@ class PowerEngine(hass.Hass):
         self._publish_writes()
         self.slots = SlotTracker(os.path.join(os.path.dirname(self._save_path()), "costs", "slots.json"))
         self._slots_last = None
+        self.smart = SmartCharger(os.path.join(os.path.dirname(self._save_path()), "costs", "smart_requests.json"))
+        self._our_write, self._last_readings = None, None
+        self._watch_ready_by()
         self.costbook, self._months, self.measured = None, [], None
         try:
             self.costbook = CostBook(os.path.join(os.path.dirname(self._save_path()), "costs"), self.tz)
@@ -226,6 +230,7 @@ class PowerEngine(hass.Hass):
                 self._record_costs(readings)
                 self._watch_events(readings)
                 self._track_slots(readings)
+                self._smart_step(readings)
                 self._maybe_replan(readings)
                 decision = decide(readings, self.cfg, self._decision, self.tz, plan=self.plan)
                 sim = self.sim.update(decision, readings, self._params(), self.tz)
@@ -622,6 +627,78 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Could not publish inverter writes: {err!r}", level="WARNING")
 
+    # --- smart-charge optimisation (FR-8) -------------------------------------------------
+
+    def _watch_ready_by(self):
+        if getattr(self, "_ready_by_handle", None):
+            try:
+                self.cancel_listen_state(self._ready_by_handle)
+            except Exception:
+                pass
+        self._ready_by_handle = None
+        eid = self._role_entity("smart_target_time") if self.cfg else None
+        if eid:
+            self._ready_by_handle = self.listen_state(self._on_ready_by_change, eid)
+
+    def _on_ready_by_change(self, entity, attribute, old, new, kwargs):
+        if old == new or new in (None, "unknown", "unavailable"):
+            return
+        ours = self._our_write
+        if ours and ours[0] == str(new)[:5] and (datetime.now(timezone.utc) - ours[1]).total_seconds() < 120:
+            return                                                   # PowerEngine's own change
+        r = self._last_readings
+        self.smart.observe_external(datetime.now(timezone.utc), str(old)[:5] if old else None, str(new)[:5],
+                                    r.dispatches if r else [])
+        self._save_smart()
+
+    def _save_smart(self):
+        try:
+            self.smart.save()
+        except OSError as err:
+            self.log(f"Could not save smart-charge requests: {err}", level="WARNING")
+        self._health()
+
+    def _smart_step(self, r):
+        self._last_readings = r
+        changed = self.smart.resolve(r.now, r.dispatches)
+        eid = self._role_entity("smart_target_time")
+        if not eid or not self.cfg.features.get("smart_charge_optimisation"):
+            if changed:
+                self._save_smart()
+            return
+        st = self.get_state(eid, attribute="all") or {}
+        options = (st.get("attributes") or {}).get("options") or [f"{h:02d}:{m:02d}" for h in range(4, 12)
+                                                                   for m in (0, 30)][:15]
+        cheap_p = cheap_limit(r, self.cfg)
+        worth = worth_asking(r.ev_state(), r.dispatches, r.now,
+                             r.import_rate is not None and r.import_rate * 100 <= cheap_p, r.battery_soc,
+                             self.cfg.safety["grid_charge_target_soc"], bool(self.cfg.features.get("arbitrage")),
+                             r.export_rate * 100 if r.export_rate is not None else None, cheap_p)
+        active = self.mode.effective == "active"
+        now_local = r.now.astimezone(self.tz) if self.tz else r.now
+        a = self.smart.step(r.now, now_local, worth, options, st.get("state"), r.dispatches, active)
+        if a:
+            verb = "Asking" if active else "Would ask"
+            self.log(f"{verb} EDF for smart-charge slots: ready-by {a['from']} → {a['to']} ({a['why']})")
+            if active:
+                self._request_slots(eid, a["to"])
+        if a or changed:
+            self._save_smart()
+
+    def _request_slots(self, eid, value):
+        """Active mode only: set the ready-by time (and keep the charge target at 100%)."""
+        try:
+            self._our_write = (value, datetime.now(timezone.utc))
+            if eid.startswith("select."):
+                self.call_service("select/select_option", entity_id=eid, option=value)
+            else:
+                self.call_service("time/set_value", entity_id=eid, time=f"{value}:00")
+            target = self._role_entity("smart_target_soc")
+            if target and str(self.get_state(target)) not in ("100", "100.0"):
+                self.call_service("number/set_value", entity_id=target, value=100)
+        except Exception as err:
+            self.log(f"Could not request smart-charge slots: {err!r}", level="WARNING")
+
     def _track_slots(self, r):
         dt = (r.now - self._slots_last).total_seconds() if self._slots_last else 0.0
         self._slots_last = r.now
@@ -647,6 +724,7 @@ class PowerEngine(hass.Hass):
         try:
             h = self.costbook.health(self._today(), getattr(self, "_checks", None))
             h["slots"] = self.slots.summary(datetime.now(timezone.utc), tz=self.tz)
+            h["smart_requests"] = self.smart.summary(datetime.now(timezone.utc), tz=self.tz)
             self._publish_state("diag_health", h["state"], h)
             self._notify("health", health_message(h))
         except Exception as err:
@@ -696,6 +774,7 @@ class PowerEngine(hass.Hass):
         except ConfigError as err:
             self.cfg, self.cfg_error = None, str(err)
         self._watch_controls()
+        self._watch_ready_by()
         if self.cfg is not None and self.costbook is not None:
             fid = flow_id(self.cfg)
             if fid != self.costbook.flow_id:              # inputs that shape the flows changed: rebuild from history
