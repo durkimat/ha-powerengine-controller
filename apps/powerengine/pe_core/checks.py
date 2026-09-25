@@ -16,8 +16,16 @@ OK, UNMAPPED, MISSING, UNAVAILABLE, WRONG_UNIT, WRONG_DOMAIN, STALE, FORBIDDEN, 
     "bad_static", "no_attribute",
 )
 
-# Live readings that should change regularly; everything else isn't age-checked.
+# Live readings that should change regularly; everything else isn't age-checked. A power reading of exactly 0
+# is never stale (see check()).
 STALE_AFTER = {"power": timedelta(minutes=30), "percent": timedelta(hours=6)}
+
+
+def _is_zero(value: Any) -> bool:
+    try:
+        return float(value) == 0
+    except (TypeError, ValueError):
+        return False
 
 
 def _age(state: dict[str, Any], now: datetime) -> timedelta | None:
@@ -56,8 +64,10 @@ def check(role: Role, spec: dict[str, Any] | None, state: dict[str, Any] | None,
         return WRONG_DOMAIN, f"Expected a {' or '.join(role.domains)} entity"
     if state is None:
         return MISSING, "Entity not found"
-    if str(state.get("state")) in ("unavailable", "unknown") and role.kind not in ("timestamp", "control"):
-        # timestamps are legitimately 'unknown' when no event is scheduled
+    value = str(state.get("state"))
+    idle_unknown = value == "unknown" and (role.unknown_ok or role.kind in ("timestamp", "control"))
+    if value in ("unavailable", "unknown") and not idle_unknown:
+        # timestamps and some event sensors are legitimately 'unknown' when no event is scheduled
         return UNAVAILABLE, f"Entity is {state.get('state')}"
     attrs = state.get("attributes") or {}
     attr = spec.get("attribute") or role.attribute
@@ -69,6 +79,9 @@ def check(role: Role, spec: dict[str, Any] | None, state: dict[str, Any] | None,
         if unit not in allowed:
             return WRONG_UNIT, f"Unit is {unit or 'none'}; expected {' or '.join(allowed)}"
     limit = STALE_AFTER.get(role.kind)
+    if limit and role.kind == "power" and _is_zero(state.get("state")):
+        # An idle charger or solar at night sits at 0 W, and many integrations only write on change.
+        limit = None
     age = _age(state, now)
     if limit and age is not None and age > limit:
         return STALE, f"No update for {int(age.total_seconds() // 60)} min"

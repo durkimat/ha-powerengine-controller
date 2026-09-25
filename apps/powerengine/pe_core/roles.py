@@ -40,6 +40,7 @@ class Role:
     suggest: tuple[str, ...] = ()  # regex patterns for a pre-filled suggestion
     suggest_not: tuple[str, ...] = ()
     suggest_static: float | None = None
+    unknown_ok: bool = False       # 'unknown' is a normal idle state (e.g. no event scheduled)
 
     def as_dict(self) -> dict:
         d = asdict(self)
@@ -143,7 +144,7 @@ ROLES: tuple[Role, ...] = (
     Role("axle_event_end", "axle", "Axle event end", "End of the next event.",
          "timestamp", required="axle", suggest=(r"^sensor\.axle_vpp_axle_end_time_friendly$",)),
     Role("axle_direction", "axle", "Axle event direction", "Import or export event (only export is acted on).",
-         "text", required="no", suggest=(r"^sensor\.axle_vpp_axle_import_export$",)),
+         "text", required="no", unknown_ok=True, suggest=(r"^sensor\.axle_vpp_axle_import_export$",)),
     # --- free power ---
     Role("free_power_active", "free", "Free power now", "On during a free-electricity session.",
          "binary", required="free_power", domains=("binary_sensor",),

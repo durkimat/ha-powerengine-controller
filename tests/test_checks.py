@@ -39,6 +39,12 @@ def test_stale_power():
     assert check(R["grid_power"], {"entity": "sensor.g"}, st("5", "W", minutes_ago=90), NOW)[0] == "stale"
 
 
+def test_idle_power_at_zero_is_not_stale():
+    # e.g. the Zappi's charging power sits at 0 W for hours and the integration only writes on change
+    assert check(R["ev_charge_power"], {"entity": "sensor.c"}, st("0", "W", minutes_ago=600), NOW)[0] == "ok"
+    assert check(R["ev_charge_power"], {"entity": "sensor.c"}, st("0.0", "kW", minutes_ago=600), NOW)[0] == "ok"
+
+
 def test_attribute_roles():
     role = R["import_rates_today"]
     assert check(role, {"entity": "event.r"}, st("2026-09-25", rates=[{"value_inc_vat": 0.07}]), NOW)[0] == "ok"
@@ -59,3 +65,8 @@ def test_summary():
     assert summarise({"a": ok}, ["a"]) == "ok"
     assert summarise({"a": ("missing", "")}, ["a"]) == "incomplete"
     assert summarise({"a": ok, "b": ("stale", "")}, ["a"]) == "warnings"
+
+
+def test_axle_direction_unknown_between_events_is_ok():
+    assert check(R["axle_direction"], {"entity": "sensor.a"}, st("unknown", None), NOW)[0] == "ok"
+    assert check(R["axle_direction"], {"entity": "sensor.a"}, st("unavailable", None), NOW)[0] == "unavailable"
