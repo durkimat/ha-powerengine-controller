@@ -119,3 +119,22 @@ def test_simulate_total_cost_matches_slots():
 
 def test_slot_end():
     assert Slot(T0, 0.1, 0.1).end == T0 + timedelta(minutes=30)
+
+
+def test_charge_windows_merge_show_reached_level_and_name_the_day():
+    plan = make_plan(day(n=72), soc=20.0, p=P, now=T0)
+    charges = [w for w in plan.windows if w["action"] == GRID_CHARGE]
+    assert len(charges) == 1                                  # back-to-back charge slots are one window
+    w = charges[0]
+    assert w["target_soc"] == round(w["soc_end"])             # the level reached, not the 100% ceiling
+    assert w["day"] == "tomorrow"                             # 00:00 UTC on the 23rd
+    assert "from" in w["reason"]
+    assert plan.windows[-1]["to"].endswith("Thu")            # a window running past midnight says so
+
+
+def test_day_labels():
+    from pe_core.planner import _day
+    assert _day(T0 + timedelta(hours=1), T0, timezone.utc) == ""
+    assert _day(T0 + timedelta(hours=8), T0, timezone.utc) == "tomorrow"
+    assert _day(T0 + timedelta(hours=40), T0, timezone.utc) == "Thu"
+    assert _day(T0, None, timezone.utc) == ""
