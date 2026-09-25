@@ -63,3 +63,10 @@ def test_helpers():
     assert parse_time("2026-09-22T19:00:00+01:00").tzinfo is not None
     assert forecast_kwh([{"pv_estimate": 2.0}] * 4) == 4.0
     assert parse_windows([{"start": "bad"}, "junk"]) == []
+
+
+def test_car_not_subtracted_when_house_load_excludes_it():
+    cfg = dataclasses.replace(CONFIG, system={"house_load_includes_ev": False})
+    states = {**STATES, "sensor.car_power": S("7000", "W"), "sensor.house_load": S("1200", "W")}
+    r = read(cfg, get_state(states), NOW)
+    assert r.house_power == 1200

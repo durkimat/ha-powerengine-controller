@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import datetime, tzinfo
 from typing import Any
 
+from .decide import Decision
 from .modes import ModeDecision
 from .readings import Readings
 
@@ -88,12 +89,14 @@ def _events(r: Readings, tz: tzinfo | None) -> list[str]:
     return out
 
 
-def summary(r: Readings | None, mode: ModeDecision, tz: tzinfo | None = None) -> str:
-    """One paragraph: mode, then what is happening now."""
+def summary(r: Readings | None, mode: ModeDecision, tz: tzinfo | None = None,
+            decision: Decision | None = None) -> str:
+    """One paragraph: mode, the decision and why, then what is happening now."""
     if mode.effective == "unconfigured" or r is None:
         return f"UNCONFIGURED. {mode.reason}"
-    prefix = "PASSIVE (monitoring only)." if mode.effective == "passive" else "ACTIVE."
-    parts = [p for p in (_battery(r), _flows(r), _price(r, tz)) if p] + _events(r, tz)
+    prefix = "PASSIVE." if mode.effective == "passive" else "ACTIVE."
+    lead = [decision.sentence(passive=mode.effective == "passive").rstrip(".")] if decision else []
+    parts = lead + [p for p in (_battery(r), _flows(r), _price(r, tz)) if p] + _events(r, tz)
     if r.problems:
         parts.append("No reading for: " + ", ".join(p.replace("_", " ") for p in r.problems))
     return prefix + " " + ". ".join(parts) + "."
@@ -103,10 +106,18 @@ def short(text: str) -> str:
     return text if len(text) <= MAX_STATE_LEN else text[: MAX_STATE_LEN - 1] + "…"
 
 
-def entity_states(r: Readings | None, mode: ModeDecision, tz: tzinfo | None = None) -> dict[str, tuple[Any, dict]]:
-    """key -> (state, attributes) for every state_* entity."""
-    text = summary(r, mode, tz)
+def entity_states(r: Readings | None, mode: ModeDecision, tz: tzinfo | None = None,
+                  decision: Decision | None = None, since: str | None = None) -> dict[str, tuple[Any, dict]]:
+    """key -> (state, attributes) for every state_* entity (except the activity log)."""
+    text = summary(r, mode, tz, decision)
     out: dict[str, tuple[Any, dict]] = {"state_summary": (short(text), {"text": text})}
+    if decision is not None:
+        out["state_decision"] = (decision.action, {
+            "sentence": decision.sentence(passive=mode.effective != "active"),
+            "rule": decision.rule, "reason": decision.reason,
+            "target_soc": decision.target_soc, "power_w": decision.power_w,
+            "since": since, "passive": mode.effective != "active",
+        })
     if r is None:
         return out
 

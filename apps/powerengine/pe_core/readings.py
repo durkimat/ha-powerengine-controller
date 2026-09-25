@@ -38,6 +38,7 @@ class Readings:
     grid_power: float | None = None      # W, + importing
     house_power: float | None = None     # W, house only (car removed)
     house_power_raw: float | None = None
+    house_includes_ev: bool = True       # the inverter's house load includes the car charger
     ev_power: float | None = None        # W
     solar_power: float | None = None     # W, all enabled plants
     solar_by_plant: dict[str, float | None] = field(default_factory=dict)
@@ -211,8 +212,9 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None) -> Readi
     r.grid_power = _power_w(state("grid_power"), inv("grid_power"))
     r.house_power_raw = _power_w(state("house_load_power"))
     r.ev_power = _power_w(state("ev_charge_power"))
+    r.house_includes_ev = bool(cfg.system.get("house_load_includes_ev", True))
     if r.house_power_raw is not None:
-        car = r.ev_power if r.ev_power and r.ev_power > 0 else 0.0
+        car = r.ev_power if (r.house_includes_ev and r.ev_power and r.ev_power > 0) else 0.0
         r.house_power = max(0.0, r.house_power_raw - car)
 
     total, seen = 0.0, False

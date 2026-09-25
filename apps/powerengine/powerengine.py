@@ -15,9 +15,11 @@ from zoneinfo import ZoneInfo
 import appdaemon.plugins.hass.hassapi as hass
 
 from pe_core import __version__
+from pe_core.activity import ActivityLog
 from pe_core.checks import OK, check, summarise
-from pe_core.config import DEFAULT_PATHS, ConfigError, load_config, required_roles
+from pe_core.config import DEFAULT_PATHS, ConfigError, load_config, required_roles, settings_catalogue
 from pe_core.dashboard import sync_dashboard
+from pe_core.decide import decide
 from pe_core.entities import (
     AVAILABILITY_TOPIC,
     ENTITIES,
@@ -72,9 +74,15 @@ class PowerEngine(hass.Hass):
             self._publish(ent.discovery_topic, discovery_payload(ent, __version__))
         self._publish(AVAILABILITY_TOPIC, ONLINE)
         self._publish_state("diag_version", __version__)
-        self._publish_state("map_catalogue", str(len(ROLES)), catalogue())
+        self._publish_state("map_catalogue", str(len(ROLES)), {**catalogue(), "settings": settings_catalogue()})
         self._last_checks = None
         self._published = {}
+        self._decision, self._since = None, None
+        try:   # keep the activity log across restarts (it lives in the entity's attributes)
+            saved = self.get_state("sensor.pe_state_activity", attribute="entries")
+        except Exception:
+            saved = None
+        self.activity = ActivityLog(saved if isinstance(saved, list) else None)
         try:
             self.tz = ZoneInfo(str(self.get_timezone()))
         except Exception:
@@ -138,14 +146,25 @@ class PowerEngine(hass.Hass):
     # --- the monitoring cycle ------------------------------------------------------
 
     def _cycle(self, kwargs):
-        """Read every mapped input, then publish the state_* entities that changed."""
-        readings = None
+        """Read inputs, decide (Passive: would-do only), then publish entities that changed."""
+        readings, decision = None, None
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
                 readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
+                decision = decide(readings, self.cfg, self._decision, self.tz)
             except Exception as err:          # never let one bad reading stop the app
-                self.log(f"Reading inputs failed: {err!r}", level="WARNING")
-        for key, (state, attrs) in entity_states(readings, self.mode, self.tz).items():
+                self.log(f"Reading or deciding failed: {err!r}", level="WARNING")
+        if decision is not None:
+            passive = self.mode.effective != "active"
+            entry = self.activity.record(decision, readings.now, passive, self.tz)
+            if entry:
+                self._since = entry["hhmm"]
+                self.log(f"Decision: {entry['text']}")
+                self.call_service("logbook/log", name="PowerEngine", message=entry["text"],
+                                  entity_id="sensor.pe_state_decision")
+                self._publish_state("state_activity", entry["time"], {"entries": self.activity.entries})
+            self._decision = decision
+        for key, (state, attrs) in entity_states(readings, self.mode, self.tz, decision, self._since).items():
             if self._published.get(key) != (state, attrs):
                 self._published[key] = (state, attrs)
                 self._publish_state(key, state, attrs)

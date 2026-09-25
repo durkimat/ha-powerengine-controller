@@ -2,6 +2,28 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.2.0 (beta): "Decide"
+
+### Behaviour changes
+- None to your devices: still Passive-only.
+- PowerEngine now **decides** every 30 seconds what it would do, and why. The status sentence starts with it,
+  e.g. *"PASSIVE. Would grid-charge to 100%: import is cheap (6.99p ≤ 10p)."*
+- Each change of decision is added to an **Activity** log (last 20, kept across restarts) and to the HA logbook.
+- New entities: `sensor.pe_state_decision` (self_use / grid_charge / hold / force_discharge) and `sensor.pe_state_activity`.
+- *House power* only subtracts the car when **House load includes the car charger** is ticked (default: on).
+
+### Added
+- Rule stack, highest priority first: Axle event active → keep charge for an upcoming Axle event →
+  free-power session → car charging (never let the battery charge the car) → cheap import → minimum reserve → self-use.
+- Charge hysteresis so decisions don't flap near the target.
+- Settings: minimum reserve, cheap-import threshold, grid-charge target, restart margin, Axle look-ahead and margin,
+  house-load-includes-car.
+- Dashboard: Decision tile, Activity list, and a **Config** tab (the config card now lives here).
+
+### Docs
+- Install guide: the config card is on the dashboard's Config tab (no separate dashboard); the dashboard step is now
+  Step 5 with a copy-paste terminal method; Step 6 covers the new settings.
+
 ## 0.1.0 (beta): "See"
 
 ### Behaviour changes

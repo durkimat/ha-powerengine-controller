@@ -21,11 +21,15 @@ views:
           - type: tile
             entity: sensor.pe_state_operation_mode
             name: Mode
-            grid_options: {columns: 6}
+            grid_options: {columns: 4}
+          - type: tile
+            entity: sensor.pe_state_decision
+            name: Decision
+            grid_options: {columns: 4}
           - type: tile
             entity: sensor.pe_state_battery_soc
             name: Battery
-            grid_options: {columns: 6}
+            grid_options: {columns: 4}
             features:
               - type: bar-gauge
       - type: grid
@@ -97,6 +101,19 @@ views:
         column_span: 3
         cards:
           - type: heading
+            heading: Activity
+          - type: markdown
+            grid_options: {columns: full}
+            content: >-
+              {% set entries = state_attr('sensor.pe_state_activity', 'entries') or [] %}
+              {% if entries | count == 0 %}No decisions yet.{% endif %}
+              {% for e in entries[:8] %}
+              **{{ e.hhmm }}** {{ e.text }}
+              {% endfor %}
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
             heading: Last 24 hours
           - type: history-graph
             grid_options: {columns: full}
@@ -136,3 +153,9 @@ views:
             entity: sensor.pe_diag_version
             name: Version
             grid_options: {columns: 4}
+  - title: Config
+    path: config
+    icon: mdi:cog
+    panel: true
+    cards:
+      - type: custom:powerengine-config-card

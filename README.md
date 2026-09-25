@@ -11,7 +11,7 @@ smart-charge slots and VPP events, and explains every decision in plain English.
 ## Install
 
 Follow the **[installation guide](docs/INSTALL.md)**. It covers the MQTT broker,
-AppDaemon setup, HACS, the config page, updating, rollback, uninstalling and
+AppDaemon setup, HACS, the PowerEngine dashboard, configuration, updating, rollback, uninstalling and
 troubleshooting, with a check at each step.
 
 A fresh install runs in **Passive** mode: it monitors, plans and simulates, but

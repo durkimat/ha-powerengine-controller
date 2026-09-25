@@ -29,6 +29,7 @@ KNOWN_KEYS = frozenset(
         "schema_version",
         "inputs",
         "solar_plants",
+        "system",
         "features",
         "safety",
         "tariff",
@@ -42,6 +43,38 @@ MODES = ("passive", "active")
 FORECAST_SOURCES = ("none", "solcast_site", "scaled")
 FEATURES = ("smart_charge_optimisation", "arbitrage", "axle", "free_power_days")
 FEATURE_DEFAULTS = {"smart_charge_optimisation": True, "arbitrage": False, "axle": True, "free_power_days": True}
+# name: (default, min, max) -- numeric safety settings, all validated
+SAFETY = {
+    "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
+    "cheap_threshold_p": (10.0, 0, 100),      # import at or below this is "cheap" (pence/kWh)
+    "grid_charge_target_soc": (100, 10, 100), # charge to this in cheap periods (%)
+    "charge_hysteresis_soc": (3, 0, 20),      # resume charging only below target minus this (%)
+    "pre_axle_lookahead_h": (6.0, 0, 48),     # start protecting charge this long before an event (h)
+    "axle_margin_soc": (5, 0, 50),            # extra above the event's needs (%)
+}
+SYSTEM_DEFAULTS = {"house_load_includes_ev": True}
+
+# Labels and one-line help for the config page (kept next to the defaults they describe).
+SETTING_TEXT = {
+    "min_reserve_soc": ("Minimum reserve", "%", "PowerEngine never plans to take the battery below this."),
+    "cheap_threshold_p": ("Cheap import threshold", "p/kWh", "Import at or below this price counts as cheap."),
+    "grid_charge_target_soc": ("Grid-charge target", "%", "How full to charge from the grid when import is cheap."),
+    "charge_hysteresis_soc": ("Charge restart margin", "%", "Once full, restart only below target minus this."),
+    "pre_axle_lookahead_h": ("Axle look-ahead", "h", "How long before an Axle event to start protecting charge."),
+    "axle_margin_soc": ("Axle safety margin", "%", "Extra charge kept above what an Axle event needs."),
+    "house_load_includes_ev": ("House load includes the car charger", "",
+                               "Tick if the car is inside the inverter's house load. PowerEngine then subtracts it and "
+                               "stops the battery discharging into the car."),
+}
+
+
+def settings_catalogue() -> dict:
+    """Settings schema for the config page: defaults, ranges, labels, help."""
+    safety = [{"key": k, "default": d, "min": lo, "max": hi, "label": SETTING_TEXT[k][0],
+               "unit": SETTING_TEXT[k][1], "help": SETTING_TEXT[k][2]} for k, (d, lo, hi) in SAFETY.items()]
+    system = [{"key": k, "default": d, "label": SETTING_TEXT[k][0], "help": SETTING_TEXT[k][2]}
+              for k, d in SYSTEM_DEFAULTS.items()]
+    return {"safety": safety, "system": system}
 _ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
 _PLANT_ID = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 
@@ -64,6 +97,8 @@ class SolarPlant:
 class Config:
     mode: str = "passive"
     features: dict[str, bool] = field(default_factory=lambda: dict(FEATURE_DEFAULTS))
+    safety: dict[str, float] = field(default_factory=lambda: {k: v[0] for k, v in SAFETY.items()})
+    system: dict[str, bool] = field(default_factory=lambda: dict(SYSTEM_DEFAULTS))
     remove_entities: bool = False
     inputs: dict[str, Any] = field(default_factory=dict)
     solar_plants: tuple[SolarPlant, ...] = ()
@@ -182,9 +217,38 @@ def parse_config(data: Any) -> Config:
             raise ConfigError(f"feature '{key}' must be true or false")
         features[key] = value
 
+    safety = {k: v[0] for k, v in SAFETY.items()}
+    raw_safety = data.get("safety") or {}
+    if not isinstance(raw_safety, dict):
+        raise ConfigError("'safety' must be a mapping")
+    for key, value in raw_safety.items():
+        if key not in SAFETY:
+            raise ConfigError(f"unknown safety setting '{key}'")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ConfigError(f"safety setting '{key}' must be a number")
+        _, lo, hi = SAFETY[key]
+        if not lo <= value <= hi:
+            raise ConfigError(f"safety setting '{key}' must be between {lo} and {hi}")
+        safety[key] = value
+    if safety["min_reserve_soc"] >= safety["grid_charge_target_soc"]:
+        raise ConfigError("minimum reserve must be below the grid-charge target")
+
+    system = dict(SYSTEM_DEFAULTS)
+    raw_system = data.get("system") or {}
+    if not isinstance(raw_system, dict):
+        raise ConfigError("'system' must be a mapping")
+    for key, value in raw_system.items():
+        if key not in SYSTEM_DEFAULTS:
+            raise ConfigError(f"unknown system setting '{key}'")
+        if not isinstance(value, bool):
+            raise ConfigError(f"system setting '{key}' must be true or false")
+        system[key] = value
+
     return Config(
         mode=mode,
         features=features,
+        safety=safety,
+        system=system,
         remove_entities=remove_entities,
         inputs=dict(inputs),
         solar_plants=_parse_plants(data.get("solar_plants")),

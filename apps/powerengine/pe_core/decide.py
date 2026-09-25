@@ -1,0 +1,131 @@
+"""The rule stack: what PowerEngine would do right now, and why.
+
+0.2 is reactive (no forward plan yet; that arrives in 0.3). Rules are checked
+in priority order and the first that applies wins. Each decision carries a
+plain-English reason and the abstract action it implies; how an action maps
+onto a specific inverter's controls is decided in the Active design.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import timedelta, tzinfo
+
+from .config import Config
+from .readings import Readings
+
+SELF_USE, GRID_CHARGE, HOLD, FORCE_DISCHARGE, NONE = "self_use", "grid_charge", "hold", "force_discharge", "none"
+
+ACTION_TEXT = {
+    SELF_USE: "self-use",
+    GRID_CHARGE: "grid-charge",
+    HOLD: "hold the battery",
+    FORCE_DISCHARGE: "force-discharge",
+    NONE: "do nothing",
+}
+
+AXLE_POWER_W_DEFAULT = 4000   # typical Axle export rate if limits aren't mapped
+
+
+@dataclass(frozen=True)
+class Decision:
+    action: str
+    rule: str                      # short id of the rule that decided
+    reason: str                    # plain English, no leading capital needed by callers
+    target_soc: float | None = None
+    power_w: float | None = None
+    details: dict = field(default_factory=dict)
+
+    def sentence(self, passive: bool) -> str:
+        verb = ACTION_TEXT[self.action]
+        if self.action == GRID_CHARGE and self.target_soc is not None:
+            verb += f" to {self.target_soc:.0f}%"
+        if self.action == FORCE_DISCHARGE and self.power_w:
+            verb += f" at {self.power_w / 1000:.1f} kW"
+        if self.action == NONE:
+            return f"No decision: {self.reason}"
+        lead = "Would " if passive else ""
+        text = f"{lead}{verb}: {self.reason}"
+        return text[0].upper() + text[1:]
+
+
+def _static(cfg: Config, role: str, default: float) -> float:
+    spec = cfg.inputs.get(role) or {}
+    try:
+        return float(spec["value"]) if "value" in spec else default
+    except (TypeError, ValueError):
+        return default
+
+
+def pre_axle_reserve(r: Readings, cfg: Config) -> float | None:
+    """SoC (%) needed to cover a scheduled Axle event, or None if there isn't one."""
+    if not (r.axle_start and r.axle_end):
+        return None
+    hours = max(0.0, (r.axle_end - r.axle_start).total_seconds() / 3600)
+    capacity = _static(cfg, "battery_capacity", 0) or None
+    power = min(AXLE_POWER_W_DEFAULT, _static(cfg, "battery_max_discharge_power", AXLE_POWER_W_DEFAULT))
+    if not capacity:
+        return None
+    need = power / 1000 * hours / capacity * 100
+    s = cfg.safety
+    return min(100.0, s["min_reserve_soc"] + need + s["axle_margin_soc"])
+
+
+def decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz: tzinfo | None = None) -> Decision:
+    if r is None:
+        return Decision(NONE, "unconfigured", "PowerEngine isn't configured yet")
+    if r.battery_soc is None or r.import_rate is None:
+        missing = ", ".join(x for x in ("battery SoC" if r.battery_soc is None else "",
+                                        "import rate" if r.import_rate is None else "") if x)
+        return Decision(NONE, "no_data", f"no reading for {missing}")
+
+    s, f = cfg.safety, cfg.features
+    soc, price_p = r.battery_soc, r.import_rate * 100
+    target = s["grid_charge_target_soc"]
+    max_dis = _static(cfg, "battery_max_discharge_power", AXLE_POWER_W_DEFAULT)
+    cheap = price_p <= s["cheap_threshold_p"]
+    price = f"{price_p:.2f}".rstrip("0").rstrip(".") + "p"
+
+    # 1. Axle event in progress
+    if f.get("axle") and r.axle_state() == "active":
+        return Decision(FORCE_DISCHARGE, "axle_active", "Axle event in progress (paid £1/kWh exported)",
+                        power_w=min(AXLE_POWER_W_DEFAULT, max_dis))
+
+    # 2. Keep enough charge for an upcoming Axle event
+    soon = r.axle_state() == "scheduled" and r.axle_start - r.now <= timedelta(hours=s["pre_axle_lookahead_h"])
+    if f.get("axle") and soon:
+        need = pre_axle_reserve(r, cfg)
+        if need is not None and soc < need:
+            when = (r.axle_start.astimezone(tz) if tz else r.axle_start).strftime("%H:%M")
+            if cheap:
+                why = f"Axle event at {when} needs {need:.0f}%, and import is cheap ({price})"
+                return Decision(GRID_CHARGE, "pre_axle", why, target_soc=max(need, target))
+            return Decision(HOLD, "pre_axle", f"keep charge for the Axle event at {when} (needs {need:.0f}%)",
+                            target_soc=need)
+
+    # 3. Free-electricity session
+    if f.get("free_power_days") and r.free_state() == "active":
+        return Decision(GRID_CHARGE, "free_power", "free-electricity session: fill the battery", target_soc=100)
+
+    # 4. Car charging: the battery must never charge the car
+    if r.house_includes_ev and r.ev_state() == "charging":
+        if cheap and soc < target:
+            why = f"car is charging at a cheap rate ({price}); charge the battery too"
+            return Decision(GRID_CHARGE, "car_charging", why, target_soc=target)
+        return Decision(HOLD, "car_charging", "car is charging; stop the battery discharging into it")
+
+    # 5. Cheap import
+    if cheap:
+        was_charging = previous is not None and previous.action == GRID_CHARGE and previous.rule == "cheap_rate"
+        resume_below = target - (0 if was_charging else s["charge_hysteresis_soc"])
+        if soc < resume_below or (was_charging and soc < target):
+            return Decision(GRID_CHARGE, "cheap_rate", f"import is cheap ({price} ≤ {s['cheap_threshold_p']:g}p)",
+                            target_soc=target)
+        why = f"import is cheap ({price}) and the battery is full enough; use the grid, save the battery"
+        return Decision(HOLD, "cheap_rate", why)
+
+    # 6. Default
+    floor = s["min_reserve_soc"]
+    if soc <= floor:
+        return Decision(HOLD, "reserve", f"battery at its {floor:.0f}% minimum reserve")
+    return Decision(SELF_USE, "default", f"nothing better to do at {price}; the battery covers the house")
