@@ -3,8 +3,8 @@
 A thin adapter between AppDaemon/Home Assistant and pe_core. Decision logic
 belongs in pe_core so it can be tested offline.
 
-0.0.x builds are Passive-only: they publish PowerEngine's own entities over
-MQTT and never write to the inverter or any other device.
+Passive (the default) only monitors and simulates. Active writes the Solis timed-slot settings (and, if the
+feature is on, EDF smart-charge requests) behind the handover guards, the pause switch and the daily write limit.
 """
 
 import dataclasses
@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
 
-from pe_core import __version__, testwrite
+from pe_core import __version__, clock, testwrite
 from pe_core.activity import ActivityLog
 from pe_core.checks import OK, check, summarise
 from pe_core.config import (
@@ -26,7 +26,7 @@ from pe_core.config import (
     settings_catalogue,
     uses_battery_pair,
 )
-from pe_core.control import KINDS, desired, readback_mismatches, release, window_end, writes_needed
+from pe_core.control import KINDS, Write, desired, readback_mismatches, release, window_end, writes_needed
 from pe_core.costbook import MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import sync_dashboard
@@ -39,12 +39,13 @@ from pe_core.entities import (
     ENTITIES,
     OFFLINE,
     ONLINE,
+    PAUSE_TOPIC,
     discovery_payload,
     removal_messages,
     validate_definitions,
 )
 from pe_core.forecast import LoadProfile, build_slots, house_only_means, parse_history, profile_from_means
-from pe_core.health import plan_snapshot
+from pe_core.health import overall, plan_snapshot
 from pe_core.loadstore import LoadStore
 from pe_core.modes import GUARDS, effective_mode, guard_problems
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
@@ -75,7 +76,7 @@ PAUSE_ENTITY = "switch.pe_ctl_pause"
 
 class PowerEngine(hass.Hass):
     def initialize(self):
-        self.log(f"PowerEngine {__version__} starting (Passive-only build: nothing is controlled)")
+        self.log(f"PowerEngine {__version__} starting")
         validate_definitions()
 
         # Optional override. Not "config_path": AppDaemon sets that arg itself.
@@ -172,6 +173,7 @@ class PowerEngine(hass.Hass):
         self.run_daily(self._learn_load, "00:10:00")
         self.run_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
         self.run_daily(self._daily_summary, "08:00:00")
+        self.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
@@ -199,7 +201,9 @@ class PowerEngine(hass.Hass):
         guards = guard_problems(self.cfg, self.get_state) if self.cfg is not None else []
         paused = self.get_state(PAUSE_ENTITY) == "on"
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused)
-        self._leave_active(getattr(self, "mode", None), mode)
+        self._leave_active(getattr(self, "mode", None), mode, guards)
+        if getattr(self, "_paused", False) and not paused:          # resumed: allow a fresh day's worth of writes
+            self._cap_base = self.writes.own_today(self._today())
         self.mode = mode
         self._guards, self._paused = guards, paused
 
@@ -607,7 +611,8 @@ class PowerEngine(hass.Hass):
     CONTROL_ROLES = ("timed_charge_start_hour", "timed_charge_start_minute", "timed_charge_end_hour",
                      "timed_charge_end_minute", "timed_charge_current", "timed_discharge_start_hour",
                      "timed_discharge_start_minute", "timed_discharge_end_hour", "timed_discharge_end_minute",
-                     "timed_discharge_current", "timed_update_button", "storage_mode", "inverter_export_limit")
+                     "timed_discharge_current", "timed_update_button", "storage_mode", "inverter_export_limit",
+                     "inverter_clock_sync")
 
     def _watch_controls(self):
         """Count writes to the inverter's control entities by whatever controls it now (e.g. Predbat)."""
@@ -681,7 +686,7 @@ class PowerEngine(hass.Hass):
             recent = ctl["last_write"] is not None and (r.now - ctl["last_write"]).total_seconds() < 60
             if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
                     and not self._test_running()
-                    and (not recent or kind != ctl["kind"])):
+                    and (not recent or kind != ctl["kind"]) and self._within_write_limit(len(writes))):
                 self._execute(writes, entities)
                 ctl["last_write"] = r.now
             ctl["kind"], ctl["end"] = kind, end
@@ -701,11 +706,10 @@ class PowerEngine(hass.Hass):
                 self.call_service("select/select_option", entity_id=eid, option=w.value)
             elif w.kind == "button":
                 self.call_service("button/press", entity_id=eid)
-            self.writes.observed(self._today(), eid)
+            self.writes.own(self._today())          # 'observed' is counted by the state listener
 
     def _execute(self, writes, entities, attempt=1):
-        """Active mode (unreachable while BUILD_SUPPORTS_ACTIVE is False), pause and leaving Active. Write,
-        then verify."""
+        """Active mode, pause and leaving Active. Write, then verify."""
         self._write(writes, entities)
         self.run_in(self._verify_writes, 6, writes=[w.as_dict() for w in writes if w.kind != "button"],
                     entities=entities, attempt=attempt)
@@ -717,7 +721,6 @@ class PowerEngine(hass.Hass):
             return
         if kwargs["attempt"] == 1:
             self.log(f"Inverter read-back mismatch ({[w['role'] for w in bad]}); retrying once", level="WARNING")
-            from pe_core.control import Write
             self._execute([Write(w["role"], w["value"], w["kind"]) for w in bad], kwargs["entities"], attempt=2)
             return
         self._halted = True                              # no more writes until AppDaemon restarts
@@ -726,24 +729,51 @@ class PowerEngine(hass.Hass):
                                 "Settings written to the inverter didn't read back correctly twice. Check the "
                                 "inverter and the SolaX Modbus integration."))
 
+    def _within_write_limit(self, n):
+        """False (and pause control) if these writes would take today's own writes past the daily limit."""
+        limit = int(self.cfg.safety.get("max_writes_per_day", 150))
+        today = self.writes.own_today(self._today())
+        base = getattr(self, "_cap_base", 0)
+        if base > today:                                  # a new day
+            base = self._cap_base = 0
+        if today - base + n <= limit:
+            return True
+        self.log(f"Daily write limit reached ({today - base} writes, limit {limit}); pausing control",
+                 level="WARNING")
+        self._publish(PAUSE_TOPIC, "ON")          # the pause switch; its change returns the inverter to Self-Use
+        self._notify("health", (f"control:limit:{self._today()}", "PowerEngine: control paused",
+                                f"PowerEngine made {today - base} inverter writes today, reaching the daily limit "
+                                f"of {limit}. The inverter is back on Self-Use. Check the Health tab, then resume "
+                                "from the Monitoring tab."))
+        return False
+
     def _control_entities(self, roles):
         entities = {role: self._role_entity(role) for role in list(roles) + ["timed_update_button"]}
         missing = sorted(role for role, eid in entities.items() if not eid)
         return entities, missing
 
-    def _leave_active(self, old, new):
-        """Leaving Active by pause or by choosing Passive hands the inverter back to Self-Use once. Leaving
-        because a handover guard tripped writes nothing: another controller has taken over."""
+    def _leave_active(self, old, new, guards=()):
+        """Leaving Active hands the inverter back to Self-Use once (pause, choosing Passive, or inputs that stopped
+        working), except when a handover guard tripped: then another controller has taken over and PowerEngine
+        writes nothing."""
         if old is None or old.effective != "active" or new.effective == "active":
             return
-        if new.effective == "paused" or new.configured == "passive":
-            self.log(f"Leaving Active ({new.effective}); returning the inverter to Self-Use")
-            self._logbook("control paused; inverter returned to Self-Use" if new.effective == "paused"
-                          else "control stopped; inverter returned to Self-Use")
-            self._release()
-        else:
+        if guards and new.configured == "active":
             self.log(f"Leaving Active: {new.reason}", level="WARNING")
             self._notify("health", ("control:guard", "PowerEngine: control stopped", new.reason))
+            return
+        self.log(f"Leaving Active ({new.effective}: {new.reason}); returning the inverter to Self-Use",
+                 level="INFO" if new.effective == "paused" or new.configured == "passive" else "WARNING")
+        if new.effective == "paused":
+            self._logbook("control paused; inverter returned to Self-Use")
+        elif new.configured == "passive":
+            self._logbook("control stopped (Passive); inverter returned to Self-Use")
+        else:
+            self._logbook(f"control stopped ({new.reason}); inverter returned to Self-Use")
+            self._notify("health", ("control:inputs", "PowerEngine: control stopped",
+                                    f"{new.reason} The inverter is back on Self-Use; control resumes by itself "
+                                    "when the inputs are working again."))
+        self._release()
 
     def _release(self):
         try:
@@ -757,6 +787,35 @@ class PowerEngine(hass.Hass):
                 self._execute(writes, entities)
         except Exception as err:
             self.log(f"Could not return the inverter to Self-Use: {err!r}", level="WARNING")
+
+    # --- inverter clock ------------------------------------------------------------------------
+
+    def _clock_step(self, kwargs):
+        try:
+            eid = self._role_entity("inverter_clock") if self.cfg else None
+            if not eid:
+                return
+            st = self.get_state(eid, attribute="all") or {}
+            read_at = st.get("last_updated") or st.get("last_changed")
+            read_at = datetime.fromisoformat(read_at) if read_at else None
+            drift = clock.drift_seconds(st.get("state"), read_at, self.tz)
+            old = getattr(self, "_clock_drift", None)
+            self._clock_drift = drift
+            button = self._role_entity("inverter_clock_sync")
+            synced = clock.last_sync(self.get_state(button), self.tz) if button else None
+            now = datetime.now(timezone.utc)
+            due = clock.sync_due(drift, synced, now)
+            self._publish_if_changed("diag_inverter_clock", drift if drift is not None else "unknown", {
+                "inverter_time": st.get("state"), "last_sync": synced.isoformat(timespec="seconds") if synced else None,
+                "sync_due": due, "sync_button": button})
+            if due and button and self.mode.effective == "active" and not self._test_running():
+                self.log(f"Syncing the inverter clock ({due}; drift {drift} s)")
+                self._write([Write("inverter_clock_sync", None, "button")], {"inverter_clock_sync": button})
+                self._logbook(f"inverter clock synced ({due}, was {drift} s out)")
+            if (clock.finding(old) is None) != (clock.finding(drift) is None):
+                self._health()
+        except Exception as err:
+            self.log(f"Inverter clock check failed: {err!r}", level="WARNING")
 
     # --- supervised test writes ------------------------------------------------------------
 
@@ -965,6 +1024,10 @@ class PowerEngine(hass.Hass):
             h = self.costbook.health(self._today(), getattr(self, "_checks", None))
             h["slots"] = self.slots.summary(datetime.now(timezone.utc), tz=self.tz)
             h["smart_requests"] = self.smart.summary(datetime.now(timezone.utc), tz=self.tz)
+            f = clock.finding(getattr(self, "_clock_drift", None))
+            if f:
+                h["findings"].append(f)
+                h["state"] = overall(h["findings"])
             self._publish_state("diag_health", h["state"], h)
             self._notify("health", health_message(h))
         except Exception as err:

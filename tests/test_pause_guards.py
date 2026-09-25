@@ -58,8 +58,8 @@ def test_passive_ignores_guards_and_pause():
     assert m.effective == "passive" and "Passive" in m.reason
 
 
-def test_this_build_still_refuses_active_even_with_safe_guards():
-    assert effective_mode(parse_config(GUARDED)).effective == "passive"
+def test_this_build_goes_active_with_safe_guards():
+    assert effective_mode(parse_config(GUARDED)).effective == "active"
 
 
 def test_pause_switch_entity():
@@ -157,7 +157,12 @@ def app(monkeypatch):
     a._notify = lambda event, msg: None
     a._logbook = lambda msg: None
     a._battery_now = lambda: {"soc": 50, "battery_w": 0}
-    a.writes = types.SimpleNamespace(observed=lambda day, eid: None)
+    own = {"n": 0}
+    a.own = own
+
+    def add_own(day, n=1):
+        own["n"] += n
+    a.writes = types.SimpleNamespace(observed=lambda day, eid: None, own=add_own, own_today=lambda day: own["n"])
     a._today = lambda: "2026-09-25"
     return a
 
@@ -222,5 +227,70 @@ def test_guard_trip_writes_nothing(app):
     active = effective_mode(parse_config(GUARDED), build_supports_active=True)
     tripped = effective_mode(parse_config(GUARDED), build_supports_active=True, guards=["x"])
     app.states["number.timed_charge_end_hour"] = 5
-    app._leave_active(active, tripped)
+    app._leave_active(active, tripped, ["x"])
     assert not app.calls
+
+
+def test_inputs_failing_while_active_release(app):
+    active = effective_mode(parse_config(GUARDED), build_supports_active=True)
+    broken = effective_mode(parse_config(GUARDED), build_supports_active=True, missing_required=["battery_soc"])
+    assert broken.effective == "unconfigured"
+    app.states["number.timed_charge_end_hour"] = 5
+    app._leave_active(active, broken, [])
+    assert app.states["number.timed_charge_end_hour"] == 0
+
+
+def test_write_limit_pauses(app):
+    app._publish = lambda topic, payload: app.published.append((topic, payload))
+    app.own["n"] = 148
+    assert app._within_write_limit(2)
+    assert not app._within_write_limit(3)
+    assert ("powerengine/ctl_pause/set", "ON") in app.published
+
+
+def test_write_limit_counts_from_resume(app):
+    app._publish = lambda topic, payload: app.published.append((topic, payload))
+    app.own["n"] = 200
+    app._cap_base = 150                     # resumed after 150 writes
+    assert app._within_write_limit(100) and not app._within_write_limit(101)
+
+
+def test_own_writes_counted(app):
+    app._write(writes_needed(release(), {}), {r: f"number.{r}" for r in release()} | {
+        "storage_mode": "select.storage_mode", "timed_update_button": "button.timed_update_button"})
+    assert app.own["n"] == 10               # 8 times + mode + button
+
+
+def _clock_app(app, mode_active, drift_s, synced_days_ago):
+    from datetime import timedelta
+    app.cfg = parse_config({**GUARDED, "inputs": {**app.cfg.raw["inputs"],
+                                                  "inverter_clock": {"entity": "sensor.solis_rtc"},
+                                                  "inverter_clock_sync": {"entity": "button.solis_sync_rtc"}}})
+    app.mode = effective_mode(app.cfg, build_supports_active=mode_active)
+    read = datetime.now(timezone.utc).replace(microsecond=0)
+    rtc = (read + timedelta(seconds=drift_s)).strftime("%Y-%m-%d %H:%M:%S")
+    pressed = (read - timedelta(days=synced_days_ago)).isoformat()
+    app.get_state = lambda eid, attribute=None: (
+        {"state": rtc, "last_updated": read.isoformat()} if eid == "sensor.solis_rtc" and attribute == "all"
+        else pressed if eid == "button.solis_sync_rtc" else app.states.get(eid))
+    app._publish_if_changed = lambda key, state, attrs: app.published.append((key, state, attrs))
+    app._health = lambda: None
+
+
+def test_clock_synced_in_active_when_drifting(app):
+    _clock_app(app, True, 90, 2)
+    app._clock_step({})
+    assert ("button/press", {"entity_id": "button.solis_sync_rtc"}) in app.calls
+    assert app._clock_drift == 90
+
+
+def test_clock_not_synced_when_recent_and_close(app):
+    _clock_app(app, True, 5, 2)
+    app._clock_step({})
+    assert not app.calls
+
+
+def test_clock_never_synced_in_passive(app):
+    _clock_app(app, False, 3600, 30)
+    app._clock_step({})
+    assert not app.calls and app.published[-1][2]["sync_due"] == "drift"

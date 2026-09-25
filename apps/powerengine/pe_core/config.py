@@ -59,6 +59,7 @@ SAFETY = {
     "export_limit_kw": (6.0, 0, 30),          # DNO-approved export limit (kW)
     "battery_wear_p": (2.0, 0, 20),           # wear cost per kWh cycled through the battery (p/kWh)
     "arbitrage_min_margin_p": (1.0, 0, 50),   # profit per kWh an arbitrage cycle must clear after losses + wear
+    "max_writes_per_day": (150, 20, 2000),    # Active: pause control if PowerEngine's own writes reach this
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True}
 
@@ -97,6 +98,10 @@ SETTING_TEXT = {
     "arbitrage_min_margin_p": ("Arbitrage minimum profit", "p/kWh",
                                "Arbitrage runs only if, per kWh exported, export price − purchase price ÷ losses − "
                                "wear is at least this."),
+    "max_writes_per_day": ("Daily write limit", "writes",
+                           "Safety stop for inverter EEPROM wear: if PowerEngine's own writes today reach this, it "
+                           "pauses control (inverter back to Self-Use) and notifies you. Resuming allows this many "
+                           "more. Normal days need far fewer (Health tab)."),
     "house_load_includes_ev": ("House load includes the car charger", "",
                                "Tick if the car is inside the inverter's house load. PowerEngine then subtracts it and "
                                "stops the battery discharging into the car."),
@@ -110,6 +115,7 @@ SETTING_SECTIONS = (
     ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
     ("axle", "Axle events", ("pre_axle_lookahead_h", "axle_margin_soc")),
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p")),
+    ("control", "Inverter control", ("max_writes_per_day",)),
 )
 
 

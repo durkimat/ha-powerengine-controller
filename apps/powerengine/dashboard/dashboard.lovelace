@@ -703,6 +703,8 @@ views:
               | | Writes today | Per day (average) | 100,000 writes would last |
               |---|---:|---:|---:|
               | Your current setup (observed) | {{ o.today }} | {{ o.per_day if o.per_day is not none else '–' }} | {{ (o.years ~ ' years') if o.years else ('no writes' if o.per_day == 0 else '–') }} |
+              {%- set m = w.attributes.own %}{% if m and (m.today or m.per_day) %}
+              | PowerEngine's own writes (included above) | {{ m.today }} | {{ m.per_day if m.per_day is not none else '–' }} | {{ (m.years ~ ' years') if m.years else '–' }} |{% endif %}
               | PowerEngine, rolling 35-minute windows (would) | {{ p.today }} | {{ p.per_day if p.per_day is not none else '–' }} | {{ (p.years ~ ' years') if p.years else ('no writes' if p.per_day == 0 else '–') }} |
               {%- set b = w.attributes.would_block %}{% if b %}
               | PowerEngine, one window per block (would) | {{ b.today }} | {{ b.per_day if b.per_day is not none else '–' }} | {{ (b.years ~ ' years') if b.years else ('no writes' if b.per_day == 0 else '–') }} |{% endif %}
@@ -710,6 +712,20 @@ views:
               *Observed* counts changes to the inverter's control entities mapped on the Config tab (a press of the timed-window update button is one write; setting a value to what it already is isn't seen, so this can undercount). *Rolling* follows the current Active design: one write to open, roll forward or close a timed window, and one per change of charge current. *One window per block* is the low-write alternative (#44): each window runs to the end of the plan's block and usually expires by itself; safety then comes from an HA automation that closes the windows if PowerEngine stops. Target for 25 years: about 11 a day. Averages use full days since {{ w.attributes.since or 'tracking started' }}.
               {%- else %}
               Counting starts once PowerEngine 0.5.3 is running; map the timed-window controls on the Config tab to see what your current setup writes.
+              {%- endif %}
+          - type: heading
+            heading: Inverter clock
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set k = states.sensor.pe_diag_inverter_clock %}
+              {%- if k and k.state not in ['unknown', 'unavailable'] %}
+              The inverter's clock is **{{ k.state | float | abs | round(0) | int }} s {{ 'ahead of' if k.state | float > 0 else 'behind' }}** Home Assistant (includes a few seconds of polling delay). Its timed windows run on this clock.
+              Last synced: {{ k.attributes.last_sync | as_timestamp | timestamp_custom('%a %d %b %H:%M') if k.attributes.last_sync else 'unknown' }}.
+              {%- if k.attributes.sync_due %} A sync is due ({{ k.attributes.sync_due }}){{ '; PowerEngine does it in Active mode' if states('sensor.pe_state_operation_mode') != 'active' else '' }}.{% endif %}
+              In Active mode PowerEngine syncs it weekly, and within 10 minutes if it drifts by a minute or more (e.g. when the clocks change).
+              {%- else %}
+              Map *Inverter clock* (`sensor.solis_rtc`) and *Sync inverter clock* (`button.solis_sync_rtc`) on the Config tab to check drift.
               {%- endif %}
           - type: heading
             heading: Inputs
