@@ -84,10 +84,17 @@ class Readings:
         return nxt.start if nxt else None
 
     def ev_state(self) -> str:
-        plug = (self.ev_plug or "").lower()
-        if self.ev_power is not None and self.ev_power > 100:
+        """'charging' | 'plugged_in' | 'unplugged', from the Zappi plug status.
+
+        The plug status reads 'Charging' exactly while the car draws power, so it is the source of truth. Charging
+        power is only a fallback for when the plug status is unmapped or unavailable.
+        """
+        plug = (self.ev_plug or "").strip().lower()
+        if plug in ("", "unknown", "unavailable"):
+            return "charging" if (self.ev_power or 0) > 100 else "unplugged"
+        if plug == "charging":
             return "charging"
-        if not plug or "disconnect" in plug or plug in ("unknown", "unavailable"):
+        if "disconnect" in plug:
             return "unplugged"
         return "plugged_in"
 

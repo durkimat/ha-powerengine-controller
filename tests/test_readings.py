@@ -23,7 +23,8 @@ def test_invert_flips_sign():
 
 
 def test_car_is_removed_from_house_load():
-    states = {**STATES, "sensor.car_power": S("7000", "W"), "sensor.house_load": S("8200", "W")}
+    states = {**STATES, "sensor.car_power": S("7000", "W"), "sensor.house_load": S("8200", "W"),
+              "sensor.plug": S("Charging")}
     r = read(CONFIG, get_state(states), NOW)
     assert r.house_power == 1200 and r.ev_state() == "charging"
 
@@ -70,3 +71,15 @@ def test_car_not_subtracted_when_house_load_excludes_it():
     states = {**STATES, "sensor.car_power": S("7000", "W"), "sensor.house_load": S("1200", "W")}
     r = read(cfg, get_state(states), NOW)
     assert r.house_power == 1200
+
+
+def test_car_charging_comes_from_the_plug_status():
+    from pe_core.readings import Readings
+    def st(plug, power):
+        return Readings(now=NOW, ev_plug=plug, ev_power=power).ev_state()
+    assert st("Charging", 0) == "charging"               # plug status wins, even before the power sensor updates
+    assert st("Waiting for EV", 7000) == "plugged_in"    # a stale power reading doesn't count
+    assert st("Charge Complete", 0) == "plugged_in"
+    assert st("EV Disconnected", 0) == "unplugged"
+    assert st(None, 7000) == "charging"                  # plug status unmapped: fall back to power
+    assert st("unavailable", 0) == "unplugged"

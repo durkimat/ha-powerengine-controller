@@ -33,6 +33,7 @@ class Slot:
     smart_slot: bool = False            # planned EDF smart-charge dispatch
     axle: bool = False                  # Axle event in this slot
     free: bool = False                  # free-electricity session
+    car_kw: float | None = None         # known car draw (live); None = assume the charger rating in smart slots
 
     @property
     def end(self) -> datetime:
