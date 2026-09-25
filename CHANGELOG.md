@@ -2,6 +2,11 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## Unreleased
+
+### Docs
+- Full installation guide (`docs/INSTALL.md`), linked from the README.
+
 ## 0.0.3 (beta)
 
 ### Behaviour changes
