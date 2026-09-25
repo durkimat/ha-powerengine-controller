@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.9 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- **Second write model for EEPROM wear (#44).** Alongside the rolling 35-minute window design, PowerEngine now also
+  counts what a one-window-per-block design would write on the same decisions: each window runs to the end of
+  the plan's block and usually expires by itself (no write to close), with an HA automation as the safety net
+  instead of short windows. Both show on the Health tab against the 25-year target (about 11 writes a day).
+
 ## 0.5.8 (beta)
 
 ### Behaviour changes

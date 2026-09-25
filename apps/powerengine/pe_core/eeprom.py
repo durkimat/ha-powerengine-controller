@@ -65,10 +65,50 @@ class WriteModel:
         return events
 
 
+class BlockWriteModel(WriteModel):
+    """The low-write alternative (#44): one window per planned block instead of a rolling 35 minutes.
+
+    The window opens with its end set to the end of the plan's block for that action, so it usually expires by
+    itself (no write to close). Writes: opening (one button press), extending if the plan moves the end later,
+    closing early if the decision changes before the block ends, a new window at midnight (windows can't span
+    it), and one per change of current. Safety then relies on an HA automation that closes the windows if
+    PowerEngine's heartbeat stops, instead of on short windows.
+    """
+
+    def step(self, now: datetime, d: Decision | None, max_charge_w: float = 4800, max_discharge_w: float = 4800,
+             block_end: datetime | None = None, tz=None) -> list[str]:
+        events: list[str] = []
+        kind = ACTIONS_WITH_WINDOW.get(d.action) if d else None
+        if self.end is not None and now >= self.end:            # expired by itself: no write
+            self.kind, self.end = None, None
+        if kind is None:
+            if self.kind is not None:
+                events.append(f"{self.kind}_window")             # close early
+                self.kind, self.end = None, None
+            return events
+        want_end = block_end if block_end and block_end > now else now + timedelta(minutes=30)
+        local_now = now.astimezone(tz) if tz else now
+        midnight = (local_now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        want_end = min(want_end, midnight.astimezone(now.tzinfo) if tz else midnight)
+        amps = self._amps(d, max_charge_w if kind == "charge" else max_discharge_w)
+        if self.kind != kind:
+            if self.kind is not None:
+                events.append(f"{self.kind}_window")
+            events.append(f"{kind}_window")                      # open to the block's end
+            self.kind, self.end = kind, want_end
+        elif want_end > self.end + timedelta(minutes=5):
+            events.append(f"{kind}_window")                      # the plan extended the block
+            self.end = want_end
+        if self.current[kind] != amps:
+            events.append(f"{kind}_current")
+            self.current[kind] = amps
+        return events
+
+
 class WriteLog:
     def __init__(self, path: str | None = None):
         self.path = path
-        self.data: dict = {"observed": {}, "would": {}, "by_entity": {}, "since": None}
+        self.data: dict = {"observed": {}, "would": {}, "would_block": {}, "by_entity": {}, "since": None}
         if path and os.path.exists(path):
             try:
                 with open(path, encoding="utf-8") as fh:
@@ -85,8 +125,8 @@ class WriteLog:
         self.data["since"] = self.data["since"] or key
         self._dirty = True
 
-    def would(self, day: date, n: int) -> None:
-        self._add("would", day, n)
+    def would(self, day: date, n: int, model: str = "would") -> None:
+        self._add(model, day, n)
 
     def observed(self, day: date, entity_id: str) -> None:
         self._add("observed", day)
@@ -96,8 +136,8 @@ class WriteLog:
         if not self.path or not (self._dirty or force):
             return
         cutoff = (date.today() - timedelta(days=400)).isoformat()
-        for kind in ("observed", "would"):
-            self.data[kind] = {d: n for d, n in self.data[kind].items() if d >= cutoff}
+        for kind in ("observed", "would", "would_block"):
+            self.data[kind] = {d: n for d, n in self.data.get(kind, {}).items() if d >= cutoff}
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(self.data, fh)
@@ -107,8 +147,8 @@ class WriteLog:
     def summary(self, today: date, days: int = 14) -> dict:
         since = self.data.get("since")
         out: dict = {"budget": BUDGET, "since": since, "by_entity": self.data["by_entity"]}
-        for kind in ("observed", "would"):
-            counts = self.data[kind]
+        for kind in ("observed", "would", "would_block"):
+            counts = self.data.get(kind, {})
             window = [(today - timedelta(days=i)).isoformat() for i in range(days, 0, -1)]
             full = [d for d in window if since and d > since]          # skip the first (partial) day
             total = sum(counts.get(d, 0) for d in full)

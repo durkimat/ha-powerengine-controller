@@ -47,3 +47,27 @@ def test_log_and_lifespan(tmp_path):
     assert s["would"]["per_day"] == 20 and s["would"]["years"] == round(100_000 / (20 * 365), 1)
     assert s["observed"]["per_day"] == 4 and s["by_entity"]["button.solis_update_charge_discharge_times"] == 60
     assert s["would"]["days"] == 14                             # the first (partial) day is left out
+
+
+def test_block_model_writes_far_less_than_rolling():
+    from pe_core.eeprom import BlockWriteModel
+    charge = Decision(GRID_CHARGE, "plan", "x", target_soc=100)
+    selfuse = Decision(SELF_USE, "plan", "x")
+    block_end = T0 + timedelta(hours=6)                        # the plan's charge block: 23:00-05:00 UTC
+    m, ev = BlockWriteModel(), []
+    for minute in range(400):
+        now = T0 + timedelta(minutes=minute)
+        d = charge if minute < 360 else selfuse
+        ev += m.step(now, d, block_end=block_end if d is charge else None)
+    # open (2 windows: split at midnight) + current once; expires by itself at the block end (no close)
+    assert ev.count("charge_window") == 2 and ev.count("charge_current") == 1
+    rolling = run(WriteModel(), [(0, charge), (360, selfuse)], 400)
+    assert len(ev) < len(rolling) / 4
+
+
+def test_block_model_closes_early_if_the_decision_changes():
+    from pe_core.eeprom import BlockWriteModel
+    m = BlockWriteModel()
+    assert m.step(T0, Decision(HOLD, "x", "x"), block_end=T0 + timedelta(minutes=50)) == ["charge_window",
+                                                                                          "charge_current"]
+    assert m.step(T0 + timedelta(minutes=20), Decision(SELF_USE, "x", "x")) == ["charge_window"]

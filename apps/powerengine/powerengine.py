@@ -30,7 +30,7 @@ from pe_core.costbook import MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import sync_dashboard
 from pe_core.decide import cheap_limit, decide
-from pe_core.eeprom import WriteLog, WriteModel
+from pe_core.eeprom import BlockWriteModel, WriteLog, WriteModel
 from pe_core.energy import Recorder
 from pe_core.entities import (
     AVAILABILITY_TOPIC,
@@ -131,6 +131,7 @@ class PowerEngine(hass.Hass):
         self._bad_since = {}
         self.writes = WriteLog(os.path.join(os.path.dirname(self._save_path()), "inverter_writes.json"))
         self.write_model = WriteModel()
+        self.block_model = BlockWriteModel()
         self._write_listeners = []
         self._watch_controls()
         self._publish_writes()
@@ -613,6 +614,12 @@ class PowerEngine(hass.Hass):
             p = self._params(r)
             events = self.write_model.step(r.now, decision, p.max_charge_kw * 1000, p.max_discharge_kw * 1000)
             self.writes.would(self._today(), len(events))
+            block_end = None
+            if self.plan is not None and self.plan.windows and self.plan.windows[0]["action"] == decision.action:
+                block_end = datetime.fromisoformat(self.plan.windows[0]["end"])
+            events = self.block_model.step(r.now, decision, p.max_charge_kw * 1000, p.max_discharge_kw * 1000,
+                                           block_end, self.tz)
+            self.writes.would(self._today(), len(events), "would_block")
             if r.now.minute % 10 == 0 and r.now.second < CYCLE_SECONDS:     # save every 10 minutes
                 self._publish_writes()
         except Exception as err:

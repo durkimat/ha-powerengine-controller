@@ -641,9 +641,11 @@ views:
               | | Writes today | Per day (average) | 100,000 writes would last |
               |---|---:|---:|---:|
               | Your current setup (observed) | {{ o.today }} | {{ o.per_day if o.per_day is not none else '–' }} | {{ (o.years ~ ' years') if o.years else ('no writes' if o.per_day == 0 else '–') }} |
-              | PowerEngine in Active mode (would) | {{ p.today }} | {{ p.per_day if p.per_day is not none else '–' }} | {{ (p.years ~ ' years') if p.years else ('no writes' if p.per_day == 0 else '–') }} |
+              | PowerEngine, rolling 35-minute windows (would) | {{ p.today }} | {{ p.per_day if p.per_day is not none else '–' }} | {{ (p.years ~ ' years') if p.years else ('no writes' if p.per_day == 0 else '–') }} |
+              {%- set b = w.attributes.would_block %}{% if b %}
+              | PowerEngine, one window per block (would) | {{ b.today }} | {{ b.per_day if b.per_day is not none else '–' }} | {{ (b.years ~ ' years') if b.years else ('no writes' if b.per_day == 0 else '–') }} |{% endif %}
 
-              *Observed* counts changes to the inverter's control entities mapped on the Config tab (a press of the timed-window update button is one write; setting a value to what it already is isn't seen, so this can undercount). *Would* follows the Active design: one write to open, roll forward or close a timed window, and one per change of charge current. Averages use full days since {{ w.attributes.since or 'tracking started' }}.
+              *Observed* counts changes to the inverter's control entities mapped on the Config tab (a press of the timed-window update button is one write; setting a value to what it already is isn't seen, so this can undercount). *Rolling* follows the current Active design: one write to open, roll forward or close a timed window, and one per change of charge current. *One window per block* is the low-write alternative (#44): each window runs to the end of the plan's block and usually expires by itself; safety then comes from an HA automation that closes the windows if PowerEngine stops. Target for 25 years: about 11 a day. Averages use full days since {{ w.attributes.since or 'tracking started' }}.
               {%- else %}
               Counting starts once PowerEngine 0.5.3 is running; map the timed-window controls on the Config tab to see what your current setup writes.
               {%- endif %}
