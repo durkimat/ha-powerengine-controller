@@ -8,7 +8,8 @@ from pe_core.planner import Params, PlanSlot, headline, make_plan, simulate, ste
 
 T0 = datetime(2026, 9, 22, 17, 0, tzinfo=timezone.utc)
 PEAK, CHEAP = 0.30, 0.07
-P = Params()
+P = Params(fill_when_cheap=False)         # the heuristic on its own; fill-when-cheap is tested separately
+FILL = Params()
 
 
 def day(n=48, load=0.5, solar=0.0, cheap_from=14, cheap_to=24, **flags):
@@ -151,3 +152,26 @@ def test_fuse_limits_grid_charging_while_the_car_charges():
     assert grid_charge_kw(no_car, p60) == pytest.approx(4.8)
     live = Slot(T0, CHEAP, 0.15, load_kwh=0.5, car_kw=11.0)               # live reading beats the assumption
     assert grid_charge_kw(live, p60) == pytest.approx(0.42)
+
+
+def test_fill_when_cheap_tops_up_in_the_cheap_window_and_only_there():
+    plan = make_plan(day(), soc=60.0, p=FILL, now=T0)
+    assert all(plan.slots[i].action == GRID_CHARGE for i in range(14, 24))
+    assert max(ps.soc_end for ps in plan.slots[14:24]) == pytest.approx(100, abs=0.1)
+    assert all(plan.slots[i].action != GRID_CHARGE for i in range(0, 14))
+    # without it, the heuristic buys only what the forecast needs
+    lean = make_plan(day(), soc=60.0, p=P, now=T0)
+    assert max(ps.soc_end for ps in lean.slots[14:24]) < 100
+
+
+def test_charge_bars_count_only_energy_into_the_battery():
+    from pe_core.planner import plan_entity_states
+    plan = make_plan(day(load=0.3, solar=0.3), soc=100.0, p=FILL, now=T0)   # stays full: nothing to charge
+    ser = plan_entity_states(plan)["plan"][1]["series"]
+    assert sum(ser["charge_kwh"]) < 0.2
+
+
+def test_charge_left_at_the_end_counts_in_the_saving():
+    plan = make_plan(day(n=30), soc=60.0, p=FILL, now=T0)       # ends in the cheap window, freshly topped up
+    assert plan.extra_kwh > 0 and plan.extra_value == pytest.approx(plan.extra_kwh * CHEAP)
+    assert plan.saving == pytest.approx(plan.baseline_cost - plan.cost + plan.extra_value)

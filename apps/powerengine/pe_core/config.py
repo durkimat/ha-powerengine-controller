@@ -41,8 +41,9 @@ KNOWN_KEYS = frozenset(
 
 MODES = ("passive", "active")
 FORECAST_SOURCES = ("none", "solcast_site", "scaled")
-FEATURES = ("smart_charge_optimisation", "arbitrage", "axle", "free_power_days")
-FEATURE_DEFAULTS = {"smart_charge_optimisation": True, "arbitrage": False, "axle": True, "free_power_days": True}
+FEATURES = ("fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle", "free_power_days")
+FEATURE_DEFAULTS = {"fill_when_cheap": True, "smart_charge_optimisation": True, "arbitrage": False, "axle": True,
+                    "free_power_days": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 SAFETY = {
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
@@ -53,6 +54,9 @@ SAFETY = {
     "axle_margin_soc": (5, 0, 50),            # extra above the event's needs (%)
     "main_fuse_a": (60, 20, 200),             # supply fuse; import is planned to stay under 90% of it (A)
     "ev_charger_kw": (7.4, 0, 22),            # car charger power, assumed during planned smart slots (kW)
+    "export_limit_kw": (6.0, 0, 30),          # DNO-approved export limit (kW)
+    "battery_wear_p": (2.0, 0, 20),           # wear cost per kWh cycled through the battery (p/kWh)
+    "arbitrage_min_margin_p": (1.0, 0, 50),   # profit per kWh an arbitrage cycle must clear after losses + wear
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True}
 
@@ -71,6 +75,14 @@ SETTING_TEXT = {
     "ev_charger_kw": ("Car charger power", "kW",
                       "What the car draws while charging (7.4 kW for a 32 A Zappi). Used to plan the fuse limit "
                       "during smart-charge slots."),
+    "export_limit_kw": ("Export limit", "kW",
+                        "The export limit your DNO approved. PowerEngine never plans to export more than this."),
+    "battery_wear_p": ("Battery wear cost", "p/kWh",
+                       "Cost of wear per kWh through the battery: battery price ÷ (capacity kWh × rated cycles). "
+                       "E.g. £4,000 ÷ (18 × 8,000) ≈ 2.8p. Used only to decide whether arbitrage is worth it."),
+    "arbitrage_min_margin_p": ("Arbitrage minimum profit", "p/kWh",
+                               "Arbitrage runs only if, per kWh exported, export price − purchase price ÷ losses − "
+                               "wear is at least this."),
     "house_load_includes_ev": ("House load includes the car charger", "",
                                "Tick if the car is inside the inverter's house load. PowerEngine then subtracts it and "
                                "stops the battery discharging into the car."),

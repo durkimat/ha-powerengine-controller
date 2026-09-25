@@ -42,6 +42,7 @@ class Params:
     hold_for_car: bool = True         # car in house load: don't let the battery feed it
     fuse_kw: float = 60 * 0.230 * 0.9  # import limit: 90% of the main fuse at 230 V
     ev_charger_kw: float = 7.4        # car draw assumed during planned smart slots
+    fill_when_cheap: bool = True      # top up to the target in every cheap slot (a buffer against forecast error)
 
 
 @dataclass
@@ -54,6 +55,7 @@ class PlanSlot:
     soc_end: float = 0.0
     grid_import: float = 0.0          # kWh
     grid_export: float = 0.0
+    grid_to_battery: float = 0.0      # kWh drawn from the grid into the battery (grid-charge only)
     cost: float = 0.0                 # GBP (negative = income)
 
 
@@ -64,6 +66,13 @@ class Plan:
     cost: float = 0.0
     baseline_cost: float = 0.0        # same period, battery in plain self-use
     windows: list[dict] = field(default_factory=list)
+    extra_kwh: float = 0.0            # energy left in the battery at the end, compared with plain self-use
+    extra_value: float = 0.0          # that energy valued at the cheapest import price in the period (GBP)
+
+    @property
+    def saving(self) -> float:
+        """Cash saving plus the value of any extra charge left at the end (so topping up isn't counted as a loss)."""
+        return self.baseline_cost - self.cost + self.extra_value
 
 
 def _p(gbp: float | None) -> str:
@@ -120,6 +129,7 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
     net = s.load_kwh - s.solar_kwh                     # + house needs energy
     imp = exp = 0.0
     axle_export = 0.0
+    ps.grid_to_battery = 0.0
 
     def charge_from_surplus(surplus: float, limit_soc: float = 100.0) -> float:
         nonlocal stored
@@ -133,6 +143,7 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
         room = max(0.0, target / 100 * cap - stored)
         into = min(grid_charge_kw(s, p, dt_h) * dt_h, room / p.efficiency)
         stored += into * p.efficiency
+        ps.grid_to_battery = into
         flow = net + into
         imp, exp = max(0.0, flow), max(0.0, -flow)
     elif ps.action == FORCE_DISCHARGE:
@@ -176,9 +187,13 @@ def _default(s: Slot, p: Params, tz) -> PlanSlot:
         return PlanSlot(s, FORCE_DISCHARGE, "Axle event: export for £1/kWh")
     if p.free_enabled and s.free:
         return PlanSlot(s, GRID_CHARGE, "free-electricity session: fill the battery", target_soc=100.0)
+    cheap = s.price is not None and s.price * 100 <= p.cheap_cap_p
+    if cheap and p.fill_when_cheap:
+        why = f"cheap import ({_p(s.price)}): top up to {p.target_soc:.0f}% as a buffer in case the forecast is wrong"
+        return PlanSlot(s, GRID_CHARGE, why, target_soc=p.target_soc)
     if p.hold_for_car and s.smart_slot:
         return PlanSlot(s, HOLD, f"car smart-charge slot ({_p(s.price)}): the battery mustn't feed the car")
-    if s.price is not None and s.price * 100 <= p.cheap_cap_p:
+    if cheap:
         why = f"cheap import ({_p(s.price)}): the grid covers the house, the battery is saved for later"
         return PlanSlot(s, HOLD, why)
     return PlanSlot(s, SELF_USE, "the battery covers the house")
@@ -240,6 +255,11 @@ def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None) 
         simulate(plan, soc, p)
 
     result = Plan(slots=plan, made_at=now, cost=sum(ps.cost for ps in plan), baseline_cost=baseline_cost)
+    if plan and baseline:
+        extra_kwh = (plan[-1].soc_end - baseline[-1].soc_end) / 100 * p.capacity_kwh
+        prices = [s.price for s in slots if s.price is not None]
+        result.extra_kwh = extra_kwh
+        result.extra_value = extra_kwh * min(prices) if prices else 0.0
     result.windows = windows(plan, tz, now)
     return result
 
@@ -303,7 +323,7 @@ def headline(plan: Plan) -> str:
         verb += f" to {nxt['target_soc']:.0f}%"
     day = f"{nxt['day'].capitalize()} " if nxt.get("day") else ""
     when = "Now" if nxt is now_w else f"{day}{nxt['from']}–{nxt['to']}"
-    saving = plan.baseline_cost - plan.cost
+    saving = plan.saving
     tail = f" Plan saves £{saving:.2f} vs plain self-use over this period." if saving > 0.005 else ""
     return f"{when}: {verb.lower() if when != 'Now' else verb} ({nxt['price']}): {nxt['reason']}.{tail}"
 
@@ -330,6 +350,7 @@ def params_from(cfg, readings=None) -> Params:
         free_enabled=bool(f.get("free_power_days")),
         hold_for_car=bool(cfg.system.get("house_load_includes_ev", True)),
         fuse_kw=s.get("main_fuse_a", 60) * 0.230 * 0.9,
+        fill_when_cheap=bool(f.get("fill_when_cheap", True)),
         ev_charger_kw=s.get("ev_charger_kw", 7.4),
     )
 
@@ -346,14 +367,15 @@ def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
         ser["price_p"].append(None if ps.slot.price is None else round(ps.slot.price * 100, 2))
         ser["solar_kwh"].append(round(ps.slot.solar_kwh, 2))
         ser["load_kwh"].append(round(ps.slot.load_kwh, 2))
-        ser["charge_kwh"].append(round(ps.grid_import, 2) if ps.action == GRID_CHARGE else 0)
+        ser["charge_kwh"].append(round(ps.grid_to_battery, 2))
         ser["discharge_kwh"].append(round(ps.grid_export, 2) if ps.action == FORCE_DISCHARGE else 0)
         ser["action"].append(ps.action)
     text = headline(plan)
     est = next((ps.slot.start.isoformat() for ps in plan.slots if ps.slot.price_estimated), None)
     nxt = plan.windows[1] if len(plan.windows) > 1 else None
     attrs = {"windows": plan.windows, "series": ser, "cost": round(plan.cost, 2),
-             "baseline_cost": round(plan.baseline_cost, 2), "saving": round(plan.baseline_cost - plan.cost, 2),
+             "baseline_cost": round(plan.baseline_cost, 2), "saving": round(plan.saving, 2),
+             "extra_kwh": round(plan.extra_kwh, 1), "extra_value": round(plan.extra_value, 2),
              "horizon_end": plan.slots[-1].slot.end.isoformat() if plan.slots else None,
              "estimated_prices_from": est}
     attrs.update(extra or {})
