@@ -172,6 +172,8 @@ views:
 
               Plan made {{ as_timestamp(made) | timestamp_custom('%H:%M') if made not in ['unknown', 'unavailable', ''] else '–' }}
               · re-plans every 5 minutes and when prices, slots or events change
+              {%- set o = state_attr('sensor.pe_plan', 'optimiser') %}{% if o %}
+              · for comparison (not used), an optimiser finds {{ ('a plan £%.2f cheaper' | format(o.better_by)) if o.better_by >= 0.01 else 'nothing better' }} over the same period{{ (' (it differs in ' ~ o.half_hours_differ ~ ' half-hours; thin green line on the chart)') if o.better_by >= 0.01 else '' }}{% endif %}
               {%- if state_attr('sensor.pe_plan', 'cheap_p') is not none %}
               · import counts as cheap at or below {{ state_attr('sensor.pe_plan', 'cheap_p') }}p for this plan{% endif %}
               · house load learned from {{ state_attr('sensor.pe_plan', 'load_profile_days') or 0 }} days of history
@@ -236,6 +238,18 @@ views:
                 data_generator: |
                   const s = entity.attributes.series || {t: []};
                   return s.t.map((t, i) => [new Date(t).getTime() + 1800000, s.soc[i]]);
+              - entity: sensor.pe_plan
+                name: Battery (optimiser)
+                yaxis_id: soc
+                type: line
+                color: "#43a047"
+                stroke_width: 1
+                opacity: 0.6
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {t: []};
+                  const o = (entity.attributes.optimiser || {}).soc || [];
+                  return s.t.map((t, i) => [new Date(t).getTime() + 1800000, o[i] ?? null]).filter(p => p[1] !== null);
               - entity: sensor.pe_plan
                 name: Import price
                 yaxis_id: price

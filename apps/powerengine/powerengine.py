@@ -47,6 +47,7 @@ from pe_core.health import plan_snapshot
 from pe_core.loadstore import LoadStore
 from pe_core.modes import effective_mode
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
+from pe_core.optimiser import compare, optimise
 from pe_core.planner import make_plan, params_from, plan_entity_states
 from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
@@ -526,6 +527,11 @@ class PowerEngine(hass.Hass):
         self._plan_sig, self._plan_time = sig, r.now
         self._snapshot_plan(r.now)
         extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0}
+        try:                                          # the optimiser, for comparison only
+            p = self._params(r)
+            extra["optimiser"] = compare(self.plan, optimise(slots, r.battery_soc, p), p)
+        except Exception as err:
+            self.log(f"Optimiser comparison failed: {err!r}", level="WARNING")
         for key, (state, attrs) in plan_entity_states(self.plan, extra).items():
             self._publish_if_changed(key, state, attrs)
 
