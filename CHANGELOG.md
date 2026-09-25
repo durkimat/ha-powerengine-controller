@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.11 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Costs tab: the alignment control is a small one-row tile at the far right, labelled "Alignment", with the toggle
+  beside the name.
+
 ## 0.4.10 (beta)
 
 ### Behaviour changes
