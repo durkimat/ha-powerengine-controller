@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.3.5 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Input checks no longer mark a power sensor as stale when it is sitting at 0 W. The Zappi's charging power only
+  updates when it changes, so an idle charger was flagged stale, which made the inputs "incomplete" and stopped
+  PowerEngine planning and simulating until the car next charged.
+- The Axle direction input is no longer a warning when it is "unknown" between events.
+
 ## 0.3.4 (beta)
 
 ### Behaviour changes
