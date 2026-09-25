@@ -234,7 +234,7 @@ views:
                 min: 0
                 decimals: 1
                 apex_config:
-                  title: {text: "kWh per half-hour (solar, load, charge)", style: {color: "#1e88e5"}}
+                  title: {text: "kWh per half-hour (solar, load, charge, export)", style: {color: "#1e88e5"}}
                   labels: {style: {colors: "#1e88e5"}}
                   axisBorder: {show: true, color: "#1e88e5", width: 3}
             series:
@@ -319,6 +319,22 @@ views:
                 data_generator: |
                   const s = entity.attributes.series || {t: []};
                   const pts = s.t.map((t, i) => [new Date(t).getTime(), s.discharge_kwh[i]]);
+                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                  return pts;
+              - entity: sensor.pe_plan
+                name: Solar export (kWh)
+                yaxis_id: kwh
+                type: area
+                curve: stepline
+                opacity: 0.75
+                stroke_width: 1
+                color: "#f9a825"
+                extend_to: false
+                # surplus solar the battery can't take (full, or charging at its limit), as half-hour blocks
+                data_generator: |
+                  const s = entity.attributes.series || {t: []};
+                  const e = s.solar_export_kwh || [];
+                  const pts = s.t.map((t, i) => [new Date(t).getTime(), e[i] ?? 0]);
                   if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
                   return pts;
       - type: grid

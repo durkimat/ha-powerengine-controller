@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.15 (beta)
+
+### Behaviour changes
+- None to your devices.
+- **Plan chart: solar export** (#59). Forecast export of surplus solar (the battery full, or charging as fast as it
+  can) is drawn as amber half-hour blocks on the kWh axis, separate from battery export (red). Battery export now
+  counts only energy from the battery; before, a half-hour selling from the battery also included any solar
+  exported alongside it.
+
 ## 0.5.14 (beta)
 
 ### Behaviour changes
