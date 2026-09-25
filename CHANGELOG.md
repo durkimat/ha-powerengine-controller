@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.7 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- With **Battery charging power** and **Battery discharging power** both mapped, the single **Battery power**
+  sensor is no longer used or required (it can stay mapped or be cleared), and the pair become required. If either
+  of the pair is unavailable, battery power is treated as unknown rather than falling back to the unsigned sensor.
+  PowerEngine's check shows "Not used" for the single sensor. Needs card 0.4.7 for the matching config page.
+
 ## 0.4.6 (beta)
 
 ### Behaviour changes

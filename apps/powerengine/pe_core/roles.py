@@ -65,7 +65,7 @@ ROLES: tuple[Role, ...] = (
     # --- battery ---
     Role("battery_soc", "battery", "Battery state of charge", "How full the battery is. Used by every decision.",
          "percent", suggest=(r"^sensor\.solis_battery_soc$",)),
-    Role("battery_power", "battery", "Battery power", "Live charge/discharge power, for the energy flow and battery ledger.",
+    Role("battery_power", "battery", "Battery power", "Live charge/discharge power. Not used if the charging and discharging sensors below are mapped.",
          "power", signed=True, sign_note="+ discharging, - charging", suggest=(r"^sensor\.solis_battery_power$",)),
     Role("battery_charge_power", "battery", "Battery charging power", "Only if Battery power has no sign: power into the battery.",
          "power", required="no", suggest=(r"^sensor\.solis_battery_input_energy$",)),

@@ -94,3 +94,14 @@ def test_unsigned_battery_power_uses_the_in_and_out_sensors():
     discharging = {**STATES, "sensor.b_in": S("0", "W"), "sensor.b_out": S("1.5", "kW")}
     assert read(cfg, get_state(discharging), NOW).battery_power == 1500
     assert read(CONFIG, get_state(charging), NOW).battery_power == 2000     # not mapped: the plain sensor as before
+    gap = {**STATES, "sensor.bat_power": S("2000", "W"), "sensor.b_in": S("unavailable"), "sensor.b_out": S("0", "W")}
+    assert read(cfg, get_state(gap), NOW).battery_power is None             # never falls back to the unsigned sensor
+
+
+def test_battery_pair_replaces_the_single_sensor_as_a_required_input():
+    from pe_core.config import required_roles
+    pair = dataclasses.replace(CONFIG, inputs={**CONFIG.inputs, "battery_charge_power": {"entity": "sensor.b_in"},
+                                               "battery_discharge_power": {"entity": "sensor.b_out"}})
+    assert "battery_power" in required_roles(CONFIG) and "battery_charge_power" not in required_roles(CONFIG)
+    req = required_roles(pair)
+    assert "battery_power" not in req and {"battery_charge_power", "battery_discharge_power"} <= set(req)

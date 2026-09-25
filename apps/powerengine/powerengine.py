@@ -17,7 +17,14 @@ import appdaemon.plugins.hass.hassapi as hass
 from pe_core import __version__
 from pe_core.activity import ActivityLog
 from pe_core.checks import OK, check, summarise
-from pe_core.config import DEFAULT_PATHS, ConfigError, load_config, required_roles, settings_catalogue
+from pe_core.config import (
+    DEFAULT_PATHS,
+    ConfigError,
+    load_config,
+    required_roles,
+    settings_catalogue,
+    uses_battery_pair,
+)
 from pe_core.costbook import CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import sync_dashboard
@@ -151,6 +158,8 @@ class PowerEngine(hass.Hass):
                 if spec and "entity" in spec:
                     state = self.get_state(spec["entity"], attribute="all")
                 checks[role.key] = check(role, spec, state)
+            if uses_battery_pair(self.cfg) and "battery_power" in self.cfg.inputs:
+                checks["battery_power"] = (OK, "Not used: the charging and discharging sensors are mapped")
         missing = [k for k in required if checks.get(k, ("unmapped", ""))[0] != OK]
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing)
         self.mode = mode

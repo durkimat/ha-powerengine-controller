@@ -216,11 +216,13 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None) -> Readi
         return ((s or {}).get("attributes") or {}).get(name)
 
     r.battery_soc = _num((state("battery_soc") or {}).get("state"))
-    r.battery_power = _power_w(state("battery_power"), inv("battery_power"))
-    # some inverters (Solis via SolaX Modbus) report battery power without a sign, plus separate in/out sensors
-    b_in, b_out = _power_w(state("battery_charge_power")), _power_w(state("battery_discharge_power"))
-    if b_in is not None and b_out is not None:
-        r.battery_power = abs(b_out) - abs(b_in)
+    # some inverters (Solis via SolaX Modbus) report battery power without a sign, plus separate in/out sensors;
+    # when both are mapped they replace the single sensor entirely (no fallback to an unsigned value)
+    if all("entity" in (inputs.get(k) or {}) for k in ("battery_charge_power", "battery_discharge_power")):
+        b_in, b_out = _power_w(state("battery_charge_power")), _power_w(state("battery_discharge_power"))
+        r.battery_power = abs(b_out) - abs(b_in) if b_in is not None and b_out is not None else None
+    else:
+        r.battery_power = _power_w(state("battery_power"), inv("battery_power"))
     r.grid_power = _power_w(state("grid_power"), inv("grid_power"))
     r.house_power_raw = _power_w(state("house_load_power"))
     r.ev_power = _power_w(state("ev_charge_power"))
