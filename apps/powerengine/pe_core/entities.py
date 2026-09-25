@@ -123,13 +123,14 @@ COST_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "event_months", "Special events this month", {**MONEY, "icon": "mdi:calendar-star"}),
 )
 
-# Dashboard display preferences. Handled entirely by HA and the MQTT broker (optimistic, retained): the app never
-# reads or writes them, so they need no config-page entry.
+# Dashboard display preferences. Handled by HA and the MQTT broker: the command topic is also the state topic and is
+# retained, so HA's own command comes straight back as the state. Not optimistic, so HA shows a normal toggle
+# (an optimistic switch is drawn as two lightning-bolt buttons).
 _UI_TOPIC = f"{BASE_TOPIC}/ui_right_align/set"
 UI_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("switch", "ui_right_align", "Right-align numbers",
               {"icon": "mdi:format-align-right", "entity_category": "config", "command_topic": _UI_TOPIC,
-               "state_topic": _UI_TOPIC, "optimistic": True, "retain": True}),
+               "state_topic": _UI_TOPIC, "optimistic": False, "retain": True}),
 )
 
 ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES + UI_ENTITIES

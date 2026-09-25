@@ -320,9 +320,9 @@ views:
           - type: heading
             heading: Costs
             heading_style: title
-            grid_options: {columns: 8}
+            grid_options: {columns: 6}
           - type: entities
-            grid_options: {columns: 4}
+            grid_options: {columns: 6}
             show_header_toggle: false
             entities:
               - entity: switch.pe_ui_right_align
