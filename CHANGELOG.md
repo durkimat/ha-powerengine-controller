@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.12 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Costs tab: "Costs" on the left and a small **Alignment** switch at the far right of the same row, with no box
+  around it. The icon shows the current alignment. Needs PowerEngine card 0.4.12 (new `powerengine-toggle-card`).
+
 ## 0.4.11 (beta)
 
 ### Behaviour changes

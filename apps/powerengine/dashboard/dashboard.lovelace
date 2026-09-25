@@ -317,21 +317,12 @@ views:
       - type: grid
         column_span: 3
         cards:
-          - type: heading
-            heading: Costs
-            heading_style: title
-            grid_options: {columns: 8}
-          # a small one-row tile at the far right: name and toggle side by side
-          - type: tile
+          # title on the left, a small alignment switch on the right (from the PowerEngine card bundle)
+          - type: custom:powerengine-toggle-card
+            title: Costs
             entity: switch.pe_ui_right_align
             name: Alignment
-            icon: mdi:format-align-right
-            hide_state: true
-            vertical: false
-            features_position: inline
-            features:
-              - type: toggle
-            grid_options: {columns: 4, rows: 1}
+            grid_options: {columns: full, rows: 1}
           - type: markdown
             grid_options: {columns: full}
             content: |-
