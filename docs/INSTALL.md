@@ -6,7 +6,7 @@ with a **Check** so you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.5.0 (beta, Passive-only)
+**Version this guide matches:** 0.5.1 (beta, Passive-only)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.5.0 starting (Passive-only build: nothing is controlled)
+PowerEngine 0.5.1 starting (Passive-only build: nothing is controlled)
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published 28 entities under the PowerEngine device
@@ -266,9 +266,12 @@ that needs attention opens by itself and shows how many items to check.
      which despite their names are power in W); PowerEngine then uses out − in, and
      the single **Battery power** input shows *Not used* (leave it or clear it).
    - Fix anything shown in red.
-6. **Solar plants:** the main plant (on the hybrid inverter) is pre-filled. Use
+6. **Notifications (optional):** under *Notifications*, pick your phone's notify service
+   (from the HA companion app, usually `notify.mobile_app_<phone name>`) and tick what you
+   want to hear about. Nothing is sent until a service is chosen.
+7. **Solar plants:** the main plant (on the hybrid inverter) is pre-filled. Use
    **+ Add solar plant** for any extra arrays.
-7. **Save.** PowerEngine checks everything, writes
+8. **Save.** PowerEngine checks everything, writes
    `/homeassistant/powerengine/config.yaml` and keeps the previous version as a
    backup (`config.yaml.bak-<date>`).
 

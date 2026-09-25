@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.1 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only. (Notifications are messages to your phone, not control.)
+- **Phone notifications** through the HA companion app, set on the Config tab under *Notifications* (needs card
+  0.5.1). Off until you choose a notify service. Then, each switchable: Health problems, inputs not working for
+  15 minutes, Axle events scheduled, free-power sessions announced, and (off by default) a daily summary at 08:00.
+  Each thing is sent once (an input that recovers can alert again later), at most 10 a day.
+
 ## 0.5.0 (beta)
 
 ### Behaviour changes

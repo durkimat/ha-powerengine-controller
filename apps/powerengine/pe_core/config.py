@@ -60,6 +60,16 @@ SAFETY = {
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True}
 
+# Phone notifications via the HA companion app (a notify.* service). Off until a service is chosen.
+NOTIFY_EVENTS = {
+    "health": (True, "Health problems", "When the Health tab finds a problem (checked after start-up and each night)."),
+    "inputs": (True, "Inputs not working", "When a required input has been unavailable or stale for 15 minutes."),
+    "axle": (True, "Axle events", "When an Axle event is scheduled, with its time."),
+    "free_power": (True, "Free-power sessions", "When a free-electricity session is announced."),
+    "daily": (False, "Daily summary", "Each morning: yesterday's cost and savings."),
+}
+_NOTIFY_SERVICE = re.compile(r"^notify\.[a-z0-9_]+$")
+
 # Labels and one-line help for the config page (kept next to the defaults they describe).
 SETTING_TEXT = {
     "min_reserve_soc": ("Minimum reserve", "%", "PowerEngine never plans to take the battery below this."),
@@ -133,6 +143,7 @@ class Config:
     safety: dict[str, float] = field(default_factory=lambda: {k: v[0] for k, v in SAFETY.items()})
     system: dict[str, bool] = field(default_factory=lambda: dict(SYSTEM_DEFAULTS))
     remove_entities: bool = False
+    notifications: dict[str, Any] = field(default_factory=lambda: _parse_notifications(None))
     inputs: dict[str, Any] = field(default_factory=dict)
     solar_plants: tuple[SolarPlant, ...] = ()
     raw: dict[str, Any] = field(default_factory=dict)
@@ -207,6 +218,29 @@ def _parse_plants(data: Any) -> tuple[SolarPlant, ...]:
     return tuple(plants)
 
 
+def _parse_notifications(raw: Any) -> dict[str, Any]:
+    raw = raw or {}
+    if not isinstance(raw, dict):
+        raise ConfigError("'notifications' must be a mapping")
+    unknown = sorted(set(raw) - {"service", "events"})
+    if unknown:
+        raise ConfigError(f"unknown notification setting(s): {', '.join(unknown)}")
+    service = raw.get("service") or ""
+    if not isinstance(service, str) or (service and not _NOTIFY_SERVICE.match(service)):
+        raise ConfigError("notifications.service must be a notify service, e.g. notify.mobile_app_my_phone")
+    events = {k: v[0] for k, v in NOTIFY_EVENTS.items()}
+    raw_events = raw.get("events") or {}
+    if not isinstance(raw_events, dict):
+        raise ConfigError("'notifications.events' must be a mapping")
+    for key, value in raw_events.items():
+        if key not in NOTIFY_EVENTS:
+            raise ConfigError(f"unknown notification '{key}'")
+        if not isinstance(value, bool):
+            raise ConfigError(f"notification '{key}' must be true or false")
+        events[key] = value
+    return {"service": service, "events": events}
+
+
 def parse_config(data: Any) -> Config:
     """Validate an already-loaded YAML document and return a Config."""
     if data is None:
@@ -266,6 +300,8 @@ def parse_config(data: Any) -> Config:
     if safety["min_reserve_soc"] >= safety["grid_charge_target_soc"]:
         raise ConfigError("minimum reserve must be below the grid-charge target")
 
+    notifications = _parse_notifications(data.get("notifications"))
+
     system = dict(SYSTEM_DEFAULTS)
     raw_system = data.get("system") or {}
     if not isinstance(raw_system, dict):
@@ -283,6 +319,7 @@ def parse_config(data: Any) -> Config:
         safety=safety,
         system=system,
         remove_entities=remove_entities,
+        notifications=notifications,
         inputs=dict(inputs),
         solar_plants=_parse_plants(data.get("solar_plants")),
         raw=data,
