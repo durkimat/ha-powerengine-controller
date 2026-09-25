@@ -138,3 +138,16 @@ def test_day_labels():
     assert _day(T0 + timedelta(hours=8), T0, timezone.utc) == "tomorrow"
     assert _day(T0 + timedelta(hours=40), T0, timezone.utc) == "Thu"
     assert _day(T0, None, timezone.utc) == ""
+
+
+def test_fuse_limits_grid_charging_while_the_car_charges():
+    from pe_core.planner import grid_charge_kw
+    p60 = Params(fuse_kw=60 * 0.230 * 0.9, ev_charger_kw=7.4)           # 12.42 kW
+    p80 = Params(fuse_kw=80 * 0.230 * 0.9, ev_charger_kw=7.4)           # 16.56 kW
+    house_1kw = Slot(T0, CHEAP, 0.15, load_kwh=0.5, smart_slot=True)
+    assert grid_charge_kw(house_1kw, p80) == pytest.approx(4.8)           # 1 + 7.4 + 4.8 = 13.2 < 16.56
+    assert grid_charge_kw(house_1kw, p60) == pytest.approx(12.42 - 1 - 7.4)
+    no_car = Slot(T0, CHEAP, 0.15, load_kwh=0.5)
+    assert grid_charge_kw(no_car, p60) == pytest.approx(4.8)
+    live = Slot(T0, CHEAP, 0.15, load_kwh=0.5, car_kw=11.0)               # live reading beats the assumption
+    assert grid_charge_kw(live, p60) == pytest.approx(0.42)

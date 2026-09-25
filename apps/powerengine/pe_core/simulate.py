@@ -35,7 +35,8 @@ class SimBattery:
         if dt_h == 0:
             return self.soc
         slot = Slot(r.now, r.import_rate, r.export_rate,
-                    solar_kwh=(r.solar_power or 0.0) / 1000 * dt_h, load_kwh=r.house_power / 1000 * dt_h)
+                    solar_kwh=(r.solar_power or 0.0) / 1000 * dt_h, load_kwh=r.house_power / 1000 * dt_h,
+                    car_kw=(r.ev_power or 0.0) / 1000 if r.ev_state() == "charging" else 0.0)
         ps = PlanSlot(slot, decision.action, decision.reason, target_soc=decision.target_soc)
         self.soc = step(ps, self.soc, p, dt_h)
         self.cost_today += ps.cost

@@ -40,6 +40,8 @@ class Params:
     axle_enabled: bool = True
     free_enabled: bool = True
     hold_for_car: bool = True         # car in house load: don't let the battery feed it
+    fuse_kw: float = 60 * 0.230 * 0.9  # import limit: 90% of the main fuse at 230 V
+    ev_charger_kw: float = 7.4        # car draw assumed during planned smart slots
 
 
 @dataclass
@@ -93,6 +95,22 @@ def _when(t: datetime, now: datetime | None, tz) -> str:
 
 # --- battery physics for one slot ----------------------------------------------------
 
+def car_kw(s: Slot, p: Params) -> float:
+    if s.car_kw is not None:
+        return max(0.0, s.car_kw)
+    return p.ev_charger_kw if s.smart_slot else 0.0
+
+
+def grid_charge_kw(s: Slot, p: Params, dt_h: float = DT_H) -> float:
+    """Battery grid-charge power allowed in this slot: the inverter limit, reduced to keep total import under the fuse.
+
+    House (net of solar) and car come first; the battery gets what is left.
+    """
+    house_kw = max(0.0, (s.load_kwh - s.solar_kwh) / dt_h) if dt_h else 0.0
+    headroom = p.fuse_kw - house_kw - car_kw(s, p)
+    return max(0.0, min(p.max_charge_kw, headroom))
+
+
 def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
     """Apply ps.action for `dt_h` hours starting at `soc` (%). Fills in flows and cost; returns end SoC."""
     s = ps.slot
@@ -113,7 +131,7 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
     if ps.action == GRID_CHARGE:
         target = ps.target_soc if ps.target_soc is not None else p.target_soc
         room = max(0.0, target / 100 * cap - stored)
-        into = min(p.max_charge_kw * dt_h, room / p.efficiency)
+        into = min(grid_charge_kw(s, p, dt_h) * dt_h, room / p.efficiency)
         stored += into * p.efficiency
         flow = net + into
         imp, exp = max(0.0, flow), max(0.0, -flow)
@@ -311,6 +329,8 @@ def params_from(cfg, readings=None) -> Params:
         axle_enabled=bool(f.get("axle")),
         free_enabled=bool(f.get("free_power_days")),
         hold_for_car=bool(cfg.system.get("house_load_includes_ev", True)),
+        fuse_kw=s.get("main_fuse_a", 60) * 0.230 * 0.9,
+        ev_charger_kw=s.get("ev_charger_kw", 7.4),
     )
 
 

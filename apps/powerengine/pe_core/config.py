@@ -51,6 +51,8 @@ SAFETY = {
     "charge_hysteresis_soc": (3, 0, 20),      # resume charging only below target minus this (%)
     "pre_axle_lookahead_h": (6.0, 0, 48),     # start protecting charge this long before an event (h)
     "axle_margin_soc": (5, 0, 50),            # extra above the event's needs (%)
+    "main_fuse_a": (60, 20, 200),             # supply fuse; import is planned to stay under 90% of it (A)
+    "ev_charger_kw": (7.4, 0, 22),            # car charger power, assumed during planned smart slots (kW)
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True}
 
@@ -62,6 +64,13 @@ SETTING_TEXT = {
     "charge_hysteresis_soc": ("Charge restart margin", "%", "Once full, restart only below target minus this."),
     "pre_axle_lookahead_h": ("Axle look-ahead", "h", "How long before an Axle event to start protecting charge."),
     "axle_margin_soc": ("Axle safety margin", "%", "Extra charge kept above what an Axle event needs."),
+    "main_fuse_a": ("Main supply fuse", "A",
+                    "Rating of the main fuse at the supply cutout. PowerEngine plans grid charging so house + car + "
+                    "battery import stays under 90% of it (230 V), reducing battery charging first. Change it if "
+                    "the fuse is upgraded."),
+    "ev_charger_kw": ("Car charger power", "kW",
+                      "What the car draws while charging (7.4 kW for a 32 A Zappi). Used to plan the fuse limit "
+                      "during smart-charge slots."),
     "house_load_includes_ev": ("House load includes the car charger", "",
                                "Tick if the car is inside the inverter's house load. PowerEngine then subtracts it and "
                                "stops the battery discharging into the car."),

@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.3.7 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Car charging is now taken from the Zappi plug status ("Charging"), not from charging power above 100 W. Charging
+  power is only used if the plug status is unavailable.
+- New settings **Main supply fuse** (A, default 60) and **Car charger power** (kW, default 7.4). The plan and the
+  Passive simulation cap battery grid charging so house + car + battery stay under 90% of the fuse, reducing the
+  battery first. **Set the fuse to 80 A on the config page.**
+
 ## 0.3.6 (beta)
 
 ### Behaviour changes

@@ -117,7 +117,7 @@ ROLES: tuple[Role, ...] = (
          "binary", domains=("binary_sensor",),
          suggest=(r"^binary_sensor\.edf_energy_electricity_.*_off_peak$",), suggest_not=(r"export",)),
     # --- EV ---
-    Role("ev_plug_status", "ev", "Car plug status", "Whether the car is plugged in; smart slots only exist while it is.",
+    Role("ev_plug_status", "ev", "Car plug status", "How PowerEngine knows the car is charging: the status reads 'Charging' while the car draws power. Also shows whether it is plugged in.",
          "text", suggest=(r"^sensor\.myenergi_zappi_.*_plug_status$",)),
     Role("ev_charger_status", "ev", "Charger status", "What the charger is doing, for the status view.",
          "text", suggest=(r"^sensor\.myenergi_zappi_[0-9]+_status$",)),

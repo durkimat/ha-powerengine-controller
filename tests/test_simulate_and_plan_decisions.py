@@ -56,7 +56,7 @@ def test_decision_follows_plan():
 
 def test_live_car_charging_overrides_plan():
     plan = _plan_with_first(0.30)
-    d = decide(R(ev_power=7000), CFG, plan=plan)
+    d = decide(R(ev_power=7000, ev_plug="Charging"), CFG, plan=plan)
     assert d.action == HOLD and d.rule == "car_charging"
 
 
