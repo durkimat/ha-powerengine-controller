@@ -286,6 +286,159 @@ views:
               {%- for w in state_attr('sensor.pe_plan', 'windows') or [] %}
               | {{ (w.day ~ ' ') if w.day }}{{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}** | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
               {%- endfor %}
+  - title: Costs
+    path: costs
+    icon: mdi:cash-multiple
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v)) }}{%- endmacro %}
+              {%- set days = state_attr('sensor.pe_cost_days', 'days') or [] %}
+              {%- set done = days | selectattr('complete') | list %}
+              {%- if done %}{% set y = done | last %}
+              **{{ as_timestamp(y.date) | timestamp_custom('%a %d %b') }}: {{ gbp(y.actual) }} actual vs {{ gbp(y.s0) }} with no solar or battery.** Solar saved {{ gbp(y.solar) }}, smart charge {{ gbp(y.smart) }}, battery {{ gbp(y.s3a) }} (default) + {{ gbp(y.s3b) }} (app), arbitrage {{ gbp(y.arbitrage) }}.
+              {%- else %}
+              **No complete days yet.** PowerEngine counts forward from when 0.4 was installed; the first full day appears after midnight.
+              {%- endif %}
+              {%- set t = states.sensor.pe_cost_today %}
+              {%- if t and t.attributes.actual is defined %}
+
+              Today so far: {{ gbp(t.attributes.actual) }} actual vs {{ gbp(t.attributes.s0) }} with no solar or battery ({{ t.attributes.half_hours }} half-hours recorded).
+              {%- endif %}
+              {%- if done and (done | last).coverage < 0.95 %}
+
+              PowerEngine was recording for {{ ((done | last).coverage * 100) | round(0) | int }}% of that day (restarts or gaps), so the day's figures are partial.
+              {%- endif %}
+          - type: custom:apexcharts-card
+            grid_options: {columns: full, rows: auto}
+            graph_span: 8d
+            span:
+              end: day
+            header:
+              show: true
+              title: Daily cost, step by step
+              show_states: false
+            apex_config:
+              chart: {height: 380}
+              legend: {show: true}
+              tooltip: {shared: true}
+              xaxis: {labels: {format: "ddd dd"}}
+            yaxis:
+              - decimals: 2
+                apex_config: {title: {text: "£ per day"}}
+            series:
+              - entity: sensor.pe_cost_days
+                name: "S0: no solar or battery"
+                type: column
+                color: "#8d6e63"
+                extend_to: false
+                data_generator: |
+                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T12:00:00").getTime(), d.steps[0][1]]);
+              - entity: sensor.pe_cost_days
+                name: "S1: + solar"
+                type: column
+                color: "#fdd835"
+                extend_to: false
+                data_generator: |
+                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T12:00:00").getTime(), d.steps[1][1]]);
+              - entity: sensor.pe_cost_days
+                name: "S2: + smart charge"
+                type: column
+                color: "#26a69a"
+                extend_to: false
+                data_generator: |
+                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T12:00:00").getTime(), d.steps[2][1]]);
+              - entity: sensor.pe_cost_days
+                name: "S3a: + battery (default)"
+                type: column
+                color: "#42a5f5"
+                extend_to: false
+                data_generator: |
+                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T12:00:00").getTime(), d.steps[3][1]]);
+              - entity: sensor.pe_cost_days
+                name: "S3b: + battery (app)"
+                type: column
+                color: "#1e88e5"
+                extend_to: false
+                data_generator: |
+                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T12:00:00").getTime(), d.steps[4][1]]);
+              - entity: sensor.pe_cost_days
+                name: "S4: + arbitrage"
+                type: column
+                color: "#ab47bc"
+                extend_to: false
+                data_generator: |
+                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T12:00:00").getTime(), d.steps[5][1]]);
+              - entity: sensor.pe_cost_days
+                name: "Actual"
+                type: column
+                color: "#424242"
+                extend_to: false
+                data_generator: |
+                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T12:00:00").getTime(), d.steps[7][1]]);
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: By day
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v)) }}{%- endmacro %}
+              | Day | No solar/battery | Solar | Smart | Battery (default) | Battery (app) | Arbitrage | Carried in battery | Actual | Unexplained |
+              |---|---|---|---|---|---|---|---|---|---|
+              {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse %}
+              | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }}{{ ' (so far)' if not d.complete else '' }} | {{ gbp(d.s0) }} | {{ gbp(d.solar) }} | {{ gbp(d.smart) }} | {{ gbp(d.s3a) }} | {{ gbp(d.s3b) }} | {{ gbp(d.arbitrage) }} | {{ gbp(d.stored) }} | **{{ gbp(d.actual) }}** | {{ gbp(d.unexplained) }} |
+              {%- endfor %}
+
+              Savings columns reduce the cost; "Carried in battery" is energy bought or stored for later use (it adds to today's cost and is credited when used).
+          - type: heading
+            heading: Special events
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v)) }}{%- endmacro %}
+              {%- set e = states.sensor.pe_event_last %}
+              {%- if e and e.attributes.type is defined %}
+              **Last event:** {{ 'Axle export' if e.attributes.type == 'axle' else 'Free power' }} on {{ as_timestamp(e.attributes.date) | timestamp_custom('%a %d %b') }} from {{ e.attributes.time }}: {{ e.attributes.kwh }} kWh, worth {{ gbp(e.attributes.gross) }} ({{ gbp(e.attributes.net) }} net).
+              {%- else %}
+              No Axle or free-power events recorded yet.
+              {%- endif %}
+
+              | Month | Axle (net) | Free power (net) | Everyday actual |
+              |---|---|---|---|
+              {%- for m in (state_attr('sensor.pe_event_months', 'months') or []) | reverse %}
+              | {{ as_timestamp(m.month ~ '-01') | timestamp_custom('%b %Y') }} | {{ gbp(m.axle_net) }} | {{ gbp(m.free_power_net) }} | {{ gbp(m.actual) }} |
+              {%- endfor %}
+
+              Axle and free-power half-hours are kept out of the daily layers above so rare, large events don't distort them. Net value is what the event added: Axle kWh × £1, less what that energy was worth (its cost in the battery, or 15p exported); free power is the kWh used × the rate that would otherwise have applied.
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: How these numbers are calculated
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              Each half-hour, PowerEngine splits the energy into flows: solar, battery and grid supplying the house, the car, the battery and export (solar first, then battery, then grid). Each flow is valued at that half-hour's rates.
+
+              - **No solar or battery (S0):** house kWh × standard rate + car kWh × overnight rate + standing charge. Assumes the car would otherwise have charged overnight.
+              - **Solar:** solar used by the house × standard rate, plus solar exported or stored × export rate.
+              - **Smart charge:** every kWh bought in an EDF smart slot × (standard rate − slot rate), split between house, car (against the overnight rate) and battery by where it went. The standard rate in a slot is the day's peak rate.
+              - **Battery (default):** a half-hour simulation of the inverter's plain self-use with the same battery: charges only from surplus solar, covers the house.
+              - **Battery (app):** the battery's real value minus the default. Energy delivered is valued at the rate it avoided; energy used is costed from a first-in-first-out ledger (solar at the export rate, grid at the standard rate when bought), losses included. Can be negative.
+              - **Arbitrage:** grid-bought energy later exported: export revenue − its cost.
+              - **Carried in battery:** the change in the ledger's value: energy bought or stored today for later.
+              - **Actual:** metered import × rate − metered export × export rate + standing charge.
+              - **Unexplained:** Actual minus the layers. Inverter losses, standby use and meter mismatch land here; if it grows, the model needs fixing.
+
+              Caveats: half-hour resolution from HA's sensors, which may differ slightly from EDF's bill; rates are the ones seen at the time; first-in-first-out is a convention, not physics; round-trip efficiency is the configured figure until measured losses arrive (0.4.2). Method version {{ state_attr('sensor.pe_cost_days', 'method') or 1 }}.
   - title: Config
     path: config
     icon: mdi:cog

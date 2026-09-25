@@ -44,6 +44,7 @@ class Readings:
     solar_by_plant: dict[str, float | None] = field(default_factory=dict)
     import_rate: float | None = None     # GBP/kWh now
     export_rate: float | None = None
+    standing_charge: float | None = None  # GBP/day
     rates: list[Window] = field(default_factory=list)          # today + tomorrow
     dispatches: list[Window] = field(default_factory=list)     # planned smart-charge slots
     ev_plug: str | None = None
@@ -238,6 +239,11 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None) -> Readi
 
     r.import_rate = _rate(state("import_rate_now"))
     r.export_rate = _rate(state("export_rate"))
+    sc = state("standing_charge")
+    r.standing_charge = _num((sc or {}).get("state"))
+    sc_unit = ((sc or {}).get("attributes") or {}).get("unit_of_measurement")
+    if r.standing_charge is not None and sc_unit in ("p", "p/day"):
+        r.standing_charge /= 100
     r.rates = parse_windows(attr("import_rates_today", "rates")) + parse_windows(attr("import_rates_tomorrow", "rates"))
     r.dispatches = parse_windows(attr("smart_dispatches", "planned_dispatches"), ("charge_in_kwh",))
 
