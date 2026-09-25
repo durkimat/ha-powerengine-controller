@@ -1,12 +1,12 @@
 # PowerEngine: installation guide
 
-A complete, from-scratch setup, in order. Allow about 45 minutes. Each step ends
-with a **Check** so you know it worked before moving on.
+A complete, from-scratch setup, in order: seven steps, about 45 minutes. Each step ends with a **Check** so
+you know it worked before moving on.
 
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.5.9 (beta, Passive-only)
+**Version this guide matches:** 0.5.10 (beta, Passive-only)
 
 ---
 
@@ -151,10 +151,10 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.5.9 starting (Passive-only build: nothing is controlled)
+PowerEngine 0.5.10 starting (Passive-only build: nothing is controlled)
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
-Published 28 entities under the PowerEngine device
+Published NN entities under the PowerEngine device
 ```
 
 **Check the device:** *Settings → Devices & services → MQTT → PowerEngine*:
@@ -166,7 +166,7 @@ Published 28 entities under the PowerEngine device
 | Config OK | Off (until configured) |
 | Operation mode / Configured mode | unconfigured |
 | Input mapping | unconfigured |
-| Input catalogue | the number of inputs PowerEngine knows about |
+| Input catalogue / Settings catalogue | the number of inputs and settings PowerEngine knows about |
 
 ---
 
@@ -214,11 +214,9 @@ writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once
 
    When HA is back, restart AppDaemon: `ha apps restart a0d7b954_appdaemon`
 
-**Check:** *PowerEngine* appears in the sidebar with five tabs: **Monitoring**
-(it will say *UNCONFIGURED* until Step 6), **Plan**, **Costs** (after Step 6, PowerEngine
-fills the last 14 days from HA history within a few minutes, then counts live), **Health**, and **Config**, which opens the
-configuration card with suggested entities pre-filled. PowerEngine keeps its cost records in
-`/homeassistant/powerengine/costs/` (about 20 KB a day, kept for 400 days).
+**Check:** *Power Engine* appears in the sidebar with five tabs: **Monitoring** (it says *UNCONFIGURED*
+until Step 6), **Plan**, **Costs**, **Health** and **Config** (the configuration card, with suggested entities
+pre-filled).
 
 Anyone can open the Config tab, but only admins can save; other users see it
 read-only.
@@ -226,75 +224,88 @@ read-only.
 - The dashboard is managed: edits to `dashboard.yaml` are overwritten on the
   next update. To customise, copy the cards into a dashboard of your own.
 
-> Upgrading from 0.1 or earlier? You can delete the separate *PowerEngine config*
-> dashboard you created before: the card now lives on the Config tab.
-
 ---
 
 ## Step 6: configure PowerEngine
 
-On the PowerEngine dashboard's **Config** tab (you must be an admin to save):
+Open the PowerEngine dashboard's **Config** tab (you must be an admin to save). The page is split into
+collapsible sections: *Expand all* opens everything, and a section that needs attention opens by itself and
+shows how many items to check. Work through it top to bottom:
 
-The page is split into collapsible sections; *Expand all* opens everything, and any section
-that needs attention opens by itself and shows how many items to check.
-
-1. **Operation:** leave on **Passive** (monitor and simulate only).
-2. **Features:** tick the ones you use (Axle, free-power sessions, and so on). *Top up when
-   cheap* is on by default. Before turning on *Energy arbitrage*, check your export tariff allows
-   exporting energy bought from the grid.
-   Inputs only needed by a feature you've switched off become optional.
-3. **Safety, limits and thresholds:** the defaults are sensible; change the cheap-import
-   threshold and grid-charge target to suit your tariff. Set **Main supply fuse** to the rating on
-   your supply cutout (default 60 A, the cautious choice) and **Car charger power** to your
-   charger (7.4 kW for a 32 A Zappi). Update the fuse setting if the fuse is ever upgraded. Set
-   **Export limit** to your DNO-approved limit and **Battery wear cost** from your battery's price
-   and rated cycles (the help text shows the sum).
-4. **Grid and house:** tick **House load includes the car charger** if your
-   inverter's house load includes the car (car on the same meter/CT). If unsure,
-   compare *House power* on the Monitoring tab with and without the car charging.
-5. **Inputs:** work down each section. For every input:
-   - Pick the entity (suggestions are pre-filled on first use) or enter a fixed value where offered.
-   - Check the **Now:** value looks right for that input.
-   - For signed inputs (battery power, grid power), read the **reads as** text.
-     If it says *charging* when the battery is discharging (or *importing* when
-     you're exporting), tick **Invert**.
-   - **Battery power must have a sign.** Watch it while the battery charges: if it
-     still reads *discharging* (the value never goes negative), your inverter reports
-     it unsigned. Solis via SolaX Modbus does this. Then also map **Battery charging
-     power** and **Battery discharging power** (for Solis:
-     `sensor.solis_battery_input_energy` and `sensor.solis_battery_output_energy`,
-     which despite their names are power in W); PowerEngine then uses out − in, and
-     the single **Battery power** input shows *Not used* (leave it or clear it).
-   - **Control outputs** (the Solis timed-slot numbers, update button and storage
-     mode) are only written in Active mode, but map them now: PowerEngine counts
-     the writes your current setup makes to them (Health tab, EEPROM wear).
+1. **Operation and features**
+   - *Operation*: leave on **Passive** (monitor and simulate only; nothing is controlled).
+   - *Features*: tick what you use. *Automatic cheap threshold* and *Top up when cheap* are on by default.
+     *Smart-charge optimisation* only records what it would ask EDF for until Active mode. Before turning on
+     *Energy arbitrage*, check your export tariff allows exporting energy bought from the grid (in Passive mode it
+     only plans and simulates). Inputs only needed by a feature you've switched off become optional.
+2. **Notifications (optional):** pick your phone's notify service (from the HA companion app, usually
+   `notify.mobile_app_<phone name>`) and tick what you want to hear about. Nothing is sent until a service is
+   chosen.
+3. **Settings** (four sections; the defaults are sensible):
+   - *Battery and charging*: minimum reserve, cheap-import threshold (with the automatic threshold on, this is
+     the most it can be), grid-charge target, charge restart margin.
+   - *Supply limits*: **Main supply fuse** (the rating on your supply cutout; default 60 A, the cautious
+     choice; update it if the fuse is upgraded), **Car charger power** (7.4 kW for a 32 A Zappi), **Export
+     limit** (your DNO-approved limit).
+   - *Axle events*: look-ahead and safety margin.
+   - *Arbitrage*: **Battery wear cost** (battery price ÷ (capacity × rated cycles); the help text shows an
+     example) and the minimum profit per kWh.
+4. **Inputs**, one section per group. Unmapped inputs show **Suggested: <entity>** (click to use it), and a
+   section with several has **Use all N suggested entities**. For every input:
+   - Check the **Now:** value looks right.
+   - Signed inputs (battery power, grid power): read the **reads as** text. If it says *charging* when the
+     battery is discharging (or *importing* when you're exporting), tick **Invert**.
+   - **Battery power must have a sign.** Watch it while the battery charges: if it never goes negative, the
+     sensor is unsigned (Solis via SolaX Modbus is). Then map **Battery charging power** and **Battery
+     discharging power** (Solis: `sensor.solis_battery_input_energy` / `sensor.solis_battery_output_energy`,
+     which despite their names are power in W). The single **Battery power** input then shows *Not used*.
+   - *Grid and house*: tick **House load includes the car charger** if the inverter's house load includes
+     the car. If unsure, compare *House power* on the Monitoring tab with and without the car charging.
+   - *Control outputs* (Solis timed-slot hours/minutes, currents, update button, storage mode, export limit):
+     only written in Active mode, but map them now so PowerEngine can count the writes your current setup makes
+     (Health tab, EEPROM wear).
    - Fix anything shown in red.
-6. **Notifications (optional):** under *Notifications*, pick your phone's notify service
-   (from the HA companion app, usually `notify.mobile_app_<phone name>`) and tick what you
-   want to hear about. Nothing is sent until a service is chosen.
-7. **Solar plants:** the main plant (on the hybrid inverter) is pre-filled. Use
-   **+ Add solar plant** for any extra arrays.
-8. **Save.** PowerEngine checks everything, writes
-   `/homeassistant/powerengine/config.yaml` and keeps the previous version as a
-   backup (`config.yaml.bak-<date>`).
+5. **Solar plants:** the main plant (on the hybrid inverter) is pre-filled. Use **+ Add solar plant** for
+   extra arrays.
+6. **Save.** PowerEngine checks everything, writes `/homeassistant/powerengine/config.yaml` and keeps the
+   previous version as `config.yaml.bak-<date>`.
 
-**Check:** the banner says *Saved*, each input shows *PowerEngine check: OK*,
-and *Operation mode* becomes **passive**. On the Monitoring tab the status now
-starts with what PowerEngine *would* do, e.g. *"PASSIVE. Would self-use:
-nothing better to do at 30.28p…"*, and the Activity list fills as decisions change.
+**Check:** the banner says *Saved*, inputs show *PowerEngine check: OK*, and *Operation mode* becomes
+**passive**. If it stays *unconfigured*, the reason (on the entity, and at the top of the card after a refresh)
+lists the inputs still needing attention.
 
-The **Plan** tab shows the next 24–48 hours: a one-line headline, a chart
-(planned battery %, prices, solar and house-load forecasts, grid charging) and
-a table of actions with the reason for each. Within a few seconds of starting,
-PowerEngine learns your typical house load from the last 14 days of history.
+---
 
-Signs look wrong (battery shows charging while discharging)? Fix it with
-**Invert** on the Config tab, not in the dashboard. If it stays *unconfigured*, its
-reason (on the entity, and at the top of the card after a refresh) lists the
-inputs still needing attention.
+## Step 7: first-day checks
 
-To restore a previous configuration, copy a backup over `config.yaml` and
-restart AppDaemon.
+| Tab | What to expect |
+| --- | --- |
+| **Monitoring** | A status line saying what PowerEngine *would* do and why ("PASSIVE. Would self-use: …"), the energy flow, and an activity list that fills as decisions change. |
+| **Plan** | A headline, a 36-hour chart (planned battery %, prices, solar and house-load forecasts, grid charging) and the actions table. The house-load forecast is learned from the last 14 days of history within a few minutes. |
+| **Costs** | About 14 days filled from HA history within a few minutes of starting (the log shows `Cost backfill: …` lines), then counted live every half-hour. The *Unexplained* column should be small (tens of pence a day); if it's pounds, check the sensors (see Troubleshooting). |
+| **Health** | Findings (if any), battery efficiency and losses, plan vs what happened (from the second day), smart-charge slots, requests to EDF, inverter writes. |
+
+After **14 full days**, the battery's round-trip efficiency and usable capacity are measured and replace the
+configured figures (Health tab says *measured*).
+
+### What PowerEngine keeps
+
+All in `/homeassistant/powerengine/` (outside the app folder, so updates never touch it):
+
+| File | What |
+| --- | --- |
+| `config.yaml` (+ `.bak-<date>`) | Your configuration and backups |
+| `dashboard.yaml` | The managed dashboard (rewritten on update) |
+| `costs/` | Half-hour energy and cost records (about 20 KB a day, 400 days), plan snapshots, smart-charge slot and request history |
+| `load_history.json` | PowerEngine's own house-load record |
+| `inverter_writes.json`, `notifications.json`, `ui.json` | Write counts, sent notifications, dashboard defaults |
+
+---
+
+## Active mode
+
+Not available yet: every current build is Passive-only. The design (Solis timed slots, safety rules, handover
+from Predbat) is in the spec; this section will describe switching over when it's released.
 
 ---
 
@@ -322,7 +333,7 @@ for the card, then restart AppDaemon.
    line if it doesn't exist), restart AppDaemon, and wait for the log to say
    the entities were removed.
 2. HACS: remove both repos.
-3. Optional: delete the config dashboard, `/homeassistant/powerengine/`, the
+3. Optional: remove the `powerengine-dash:` entry from `configuration.yaml`, delete `/homeassistant/powerengine/`, the
    `powerengine` HA user, and the `MQTT:` block in `appdaemon.yaml`. Keep
    `app_dir` if other AppDaemon apps now live in `/homeassistant/appdaemon/apps/`.
 
@@ -348,3 +359,7 @@ for the card, then restart AppDaemon.
 | Save says *could not send* | You're not an admin | Log in as an admin user |
 | Save says *no reply from PowerEngine* | App not running, or can't write its folder | Check the AppDaemon log for the reason |
 | Mode stays *unconfigured* after saving | Required inputs missing or failing checks | See the reason on *Operation mode*; fix the inputs flagged on the card |
+| Costs tab empty after a few minutes | The backfill couldn't read history (recorder excludes an input, or a sensor was renamed) | Check the AppDaemon log for `Cost backfill` lines and warnings |
+| Health: *Battery power never shows charging* | Unsigned battery power sensor | Step 6.4: map the charging/discharging pair |
+| Costs: *Unexplained* is pounds a day | A sensor is wrong or missing (house load, grid, battery, solar) | Compare the *Energy by day* table with the inverter's daily counters |
+| Health: many inverter writes a day | Your current controller (e.g. Predbat) writes often | See the EEPROM section on the Health tab |
