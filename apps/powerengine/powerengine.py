@@ -45,6 +45,7 @@ from pe_core.forecast import LoadProfile, build_slots, house_only_means, parse_h
 from pe_core.health import plan_snapshot
 from pe_core.loadstore import LoadStore
 from pe_core.modes import effective_mode
+from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
 from pe_core.planner import make_plan, params_from, plan_entity_states
 from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
@@ -122,6 +123,8 @@ class PowerEngine(hass.Hass):
         except Exception:
             self.tz = None
         self.recorder = Recorder()
+        self.notifier = Notifier(os.path.join(os.path.dirname(self._save_path()), "notifications.json"))
+        self._bad_since = {}
         self.costbook, self._months, self.measured = None, [], None
         try:
             self.costbook = CostBook(os.path.join(os.path.dirname(self._save_path()), "costs"), self.tz)
@@ -146,6 +149,7 @@ class PowerEngine(hass.Hass):
         self.run_in(self._learn_load, 5)                     # load profile from history, then daily
         self.run_daily(self._learn_load, "00:10:00")
         self.run_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
+        self.run_daily(self._daily_summary, "08:00:00")
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
@@ -169,6 +173,7 @@ class PowerEngine(hass.Hass):
             if uses_battery_pair(self.cfg) and "battery_power" in self.cfg.inputs:
                 checks["battery_power"] = (OK, "Not used: the charging and discharging sensors are mapped")
         missing = [k for k in required if checks.get(k, ("unmapped", ""))[0] != OK]
+        self._watch_inputs(checks, required)
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing)
         self.mode = mode
 
@@ -209,6 +214,7 @@ class PowerEngine(hass.Hass):
                 readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
                 self._record_load(readings)
                 self._record_costs(readings)
+                self._watch_events(readings)
                 self._maybe_replan(readings)
                 decision = decide(readings, self.cfg, self._decision, self.tz, plan=self.plan)
                 sim = self.sim.update(decision, readings, self._params(), self.tz)
@@ -508,12 +514,58 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Could not save the plan snapshot: {err!r}", level="WARNING")
 
+    # --- notifications (HA companion app) ------------------------------------------------
+
+    def _notify(self, event, msg):
+        """Send (key, title, message) if that kind of notification is on and it hasn't been sent already."""
+        if not msg or self.cfg is None:
+            return
+        n = self.cfg.notifications
+        key, title, message = msg
+        now = datetime.now(timezone.utc)
+        if not n["service"] or not n["events"].get(event) or not self.notifier.should_send(key, now):
+            return
+        try:
+            self.call_service(n["service"].replace(".", "/", 1), title=title, message=message)
+            self.notifier.mark(key, now)
+            self.log(f"Notified: {title}")
+        except Exception as err:
+            self.log(f"Could not send a notification via {n['service']}: {err!r}", level="WARNING")
+
+    def _watch_inputs(self, checks, required):
+        now = datetime.now(timezone.utc)
+        for key in required:
+            status, message = checks.get(key, ("unmapped", "Not set"))
+            if status == OK:
+                if self._bad_since.pop(key, None) is not None:
+                    self.notifier.clear(f"input:{key}")
+                continue
+            since = self._bad_since.setdefault(key, now)
+            if (now - since).total_seconds() >= 15 * 60:
+                role = ROLE_BY_KEY.get(key)
+                self._notify("inputs", input_message(key, role.label if role else key, status, message))
+
+    def _watch_events(self, r):
+        if r.axle_start and r.axle_start > r.now:
+            self._notify("axle", axle_message(r.axle_start, r.axle_end, r.now, self.tz))
+        if r.free_start and r.free_start > r.now:
+            self._notify("free_power", free_message(r.free_start, r.free_end, r.now, self.tz))
+
+    def _daily_summary(self, kwargs):
+        if self.costbook is None:
+            return
+        today = self._today()
+        s = self.costbook.summary(today - timedelta(days=1), today)
+        if s:
+            self._notify("daily", daily_message(s))
+
     def _health(self):
         if self.costbook is None or getattr(self, "mqtt", None) is None:
             return
         try:
             h = self.costbook.health(self._today(), getattr(self, "_checks", None))
             self._publish_state("diag_health", h["state"], h)
+            self._notify("health", health_message(h))
         except Exception as err:
             self.log(f"Could not evaluate health: {err!r}", level="WARNING")
 
