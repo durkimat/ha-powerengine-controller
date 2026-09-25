@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.6 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- **Learned battery parameters (#6).** From the recorded half-hours PowerEngine now measures the battery's
+  usable capacity (energy in/out against change in charge), the highest charge and discharge rates it has
+  actually run at, and the lowest charge seen. New `sensor.pe_diag_battery_capacity`; shown on the Health tab.
+  Once 14 full days and 100 samples agree with the configured capacity within 30%, the measured capacity is used
+  for planning, simulation and costs (as the measured efficiency already is). Rates are shown, not used: they
+  reflect how the battery has been run, not necessarily its limit. (Checked against your data for 25 Sep:
+  18.1 kWh measured against 18 kWh configured.)
+
 ## 0.5.5 (beta)
 
 ### Behaviour changes
