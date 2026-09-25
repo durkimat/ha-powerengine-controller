@@ -2,6 +2,14 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.4.8 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+- Costs tab: a **Right-align numbers** toggle (`switch.pe_ui_right_align`, on by default) right-aligns every number
+  column in the Costs tables; the day/month column always stays left-aligned. The setting is kept by HA and the MQTT
+  broker, so it survives restarts.
+
 ## 0.4.7 (beta)
 
 ### Behaviour changes

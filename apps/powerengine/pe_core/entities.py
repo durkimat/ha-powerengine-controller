@@ -18,7 +18,7 @@ AVAILABILITY_TOPIC = f"{BASE_TOPIC}/status"
 ONLINE, OFFLINE = "online", "offline"
 REPO_URL = "https://github.com/durkimat/ha-powerengine-controller"
 
-GROUPS = ("cfg", "ctl", "state", "plan", "map", "diag", "cost", "event")
+GROUPS = ("cfg", "ctl", "state", "plan", "map", "diag", "cost", "event", "ui")
 _KEY = re.compile(r"^(" + "|".join(GROUPS) + r")(_[a-z0-9_]+)?$")   # e.g. plan, plan_next_mode
 
 # HA only allows entity_category "config" on controllable entities (switch,
@@ -123,7 +123,16 @@ COST_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "event_months", "Special events this month", {**MONEY, "icon": "mdi:calendar-star"}),
 )
 
-ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES
+# Dashboard display preferences. Handled entirely by HA and the MQTT broker (optimistic, retained): the app never
+# reads or writes them, so they need no config-page entry.
+_UI_TOPIC = f"{BASE_TOPIC}/ui_right_align/set"
+UI_ENTITIES: tuple[EntityDef, ...] = (
+    EntityDef("switch", "ui_right_align", "Right-align numbers",
+              {"icon": "mdi:format-align-right", "entity_category": "config", "command_topic": _UI_TOPIC,
+               "state_topic": _UI_TOPIC, "optimistic": True, "retain": True}),
+)
+
+ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES + UI_ENTITIES
 
 
 def device(version: str) -> dict[str, Any]:
@@ -162,6 +171,8 @@ def removal_messages() -> list[tuple[str, str]]:
     msgs: list[tuple[str, str]] = []
     for ent in ENTITIES:
         msgs += [(ent.discovery_topic, ""), (ent.state_topic, ""), (ent.attributes_topic, "")]
+        if "command_topic" in ent.options:                       # retained UI preference
+            msgs.append((ent.options["command_topic"], ""))
     msgs.append((AVAILABILITY_TOPIC, ""))
     return msgs
 
