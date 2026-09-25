@@ -193,9 +193,13 @@ class PowerEngine(hass.Hass):
             self._publish_if_changed(key, state, attrs)
 
     def _logbook(self, message):
-        """Write to the HA logbook. No entity_id: AppDaemon would move it into 'target', which logbook.log rejects."""
+        """Write to the HA logbook.
+
+        Only name + message: AppDaemon moves `entity_id` into a service target (logbook.log rejects it) and
+        reserves `domain` as its own argument name.
+        """
         try:
-            self.call_service("logbook/log", name="PowerEngine", message=message, domain="powerengine")
+            self.call_service("logbook/log", name="PowerEngine", message=message)
         except Exception as err:
             self.log(f"Could not write to the logbook: {err!r}", level="WARNING")
 

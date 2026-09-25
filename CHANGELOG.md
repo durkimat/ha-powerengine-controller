@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.3.4 (beta)
+
+### Behaviour changes
+- None to your devices: Passive-only.
+
+### Fixed
+- Logbook entries failed with `got multiple values for argument 'domain'` (AppDaemon reserves `domain`). A test now
+  guards the logbook call's arguments.
+
 ## 0.3.3 (beta)
 
 ### Behaviour changes
