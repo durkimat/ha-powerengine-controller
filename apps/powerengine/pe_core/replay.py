@@ -18,7 +18,8 @@ from .readings import Readings, parse_time, read
 STEP = timedelta(seconds=30)
 
 # roles the cost book needs from history (attribute roles are fetched with attributes)
-COST_ROLES = ("battery_soc", "battery_power", "grid_power", "house_load_power", "ev_charge_power", "ev_plug_status",
+COST_ROLES = ("battery_soc", "battery_power", "battery_charge_power", "battery_discharge_power", "grid_power",
+              "house_load_power", "ev_charge_power", "ev_plug_status",
               "import_rate_now", "export_rate", "standing_charge", "axle_event_active", "free_power_active")
 ATTRIBUTE_ROLES = ("import_rates_today",)
 

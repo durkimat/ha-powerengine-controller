@@ -83,3 +83,14 @@ def test_car_charging_comes_from_the_plug_status():
     assert st("EV Disconnected", 0) == "unplugged"
     assert st(None, 7000) == "charging"                  # plug status unmapped: fall back to power
     assert st("unavailable", 0) == "unplugged"
+
+
+def test_unsigned_battery_power_uses_the_in_and_out_sensors():
+    cfg = dataclasses.replace(CONFIG, inputs={**CONFIG.inputs, "battery_charge_power": {"entity": "sensor.b_in"},
+                                              "battery_discharge_power": {"entity": "sensor.b_out"}})
+    charging = {**STATES, "sensor.bat_power": S("2000", "W"),
+                "sensor.b_in": S("2000", "W"), "sensor.b_out": S("0", "W")}
+    assert read(cfg, get_state(charging), NOW).battery_power == -2000
+    discharging = {**STATES, "sensor.b_in": S("0", "W"), "sensor.b_out": S("1.5", "kW")}
+    assert read(cfg, get_state(discharging), NOW).battery_power == 1500
+    assert read(CONFIG, get_state(charging), NOW).battery_power == 2000     # not mapped: the plain sensor as before
