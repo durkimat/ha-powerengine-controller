@@ -6,7 +6,7 @@ with a **Check** so you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.0.3 (beta, Passive-only)
+**Version this guide matches:** 0.0.4 (beta, Passive-only)
 
 ---
 
@@ -151,10 +151,10 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.0.3 starting (Passive-only build: nothing is controlled)
+PowerEngine 0.0.4 starting (Passive-only build: nothing is controlled)
 No config.yaml found (...); running unconfigured.
-Operation mode: unconfigured (...)
-Published 5 entities under the PowerEngine device
+Inputs: unconfigured; mode unconfigured (...)
+Published 7 entities under the PowerEngine device
 ```
 
 **Check the device:** *Settings → Devices & services → MQTT → PowerEngine*:
@@ -165,6 +165,8 @@ Published 5 entities under the PowerEngine device
 | Heartbeat | a time that moves on every minute |
 | Config OK | Off (until configured) |
 | Operation mode / Configured mode | unconfigured |
+| Input mapping | unconfigured |
+| Input catalogue | the number of inputs PowerEngine knows about |
 
 ---
 
@@ -184,11 +186,38 @@ A separate dashboard for admins only, hidden from the sidebar.
          - type: custom:powerengine-config-card
    ```
 
-**Check:** the card shows `App v0.0.3 running. Mode: unconfigured` and no
-version-mismatch warning. Bookmark the page.
+**Check:** the card opens with a banner saying suggested entities have been
+pre-filled. Bookmark the page.
 
-> Configuration through this card arrives in a later release. This guide will
-> gain a *Step 6: configure PowerEngine* at that point.
+---
+
+## Step 6: configure PowerEngine
+
+On the config page (you must be an admin to save):
+
+1. **Operation:** leave on **Passive** (monitor and simulate only).
+2. **Features:** tick the ones you use (Axle, free-power sessions, and so on).
+   Inputs only needed by a feature you've switched off become optional.
+3. **Inputs:** work down each section. For every input:
+   - Pick the entity (suggestions are pre-filled on first use) or enter a fixed value where offered.
+   - Check the **Now:** value looks right for that input.
+   - For signed inputs (battery power, grid power), read the **reads as** text.
+     If it says *charging* when the battery is discharging (or *importing* when
+     you're exporting), tick **Invert**.
+   - Fix anything shown in red.
+4. **Solar plants:** the main plant (on the hybrid inverter) is pre-filled. Use
+   **+ Add solar plant** for any extra arrays.
+5. **Save.** PowerEngine checks everything, writes
+   `/homeassistant/powerengine/config.yaml` and keeps the previous version as a
+   backup (`config.yaml.bak-<date>`).
+
+**Check:** the banner says *Saved*, each input shows *PowerEngine check: OK*,
+and *Operation mode* becomes **passive**. If it stays *unconfigured*, its
+reason (on the entity, and at the top of the card after a refresh) lists the
+inputs still needing attention.
+
+To restore a previous configuration, copy a backup over `config.yaml` and
+restart AppDaemon.
 
 ---
 
@@ -232,3 +261,6 @@ for the card, then restart AppDaemon.
 | Card warns about a version mismatch | App and card on different versions | Update both to the same version |
 | `Unknown command: ha` | Commands run on your own computer | Use HA's terminal add-on |
 | `Config problem: ...` in the log | `config.yaml` has an error | The message names the problem; fix or restore the backup |
+| Save says *could not send* | You're not an admin | Log in as an admin user |
+| Save says *no reply from PowerEngine* | App not running, or can't write its folder | Check the AppDaemon log for the reason |
+| Mode stays *unconfigured* after saving | Required inputs missing or failing checks | See the reason on *Operation mode*; fix the inputs flagged on the card |

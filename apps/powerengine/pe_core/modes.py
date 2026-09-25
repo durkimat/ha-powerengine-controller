@@ -24,11 +24,15 @@ class ModeDecision:
 
 
 def effective_mode(cfg: Config | None, config_error: str | None = None,
-                   build_supports_active: bool = BUILD_SUPPORTS_ACTIVE) -> ModeDecision:
+                   build_supports_active: bool = BUILD_SUPPORTS_ACTIVE,
+                   missing_required: list[str] | tuple[str, ...] = ()) -> ModeDecision:
     if config_error:
         return ModeDecision(UNCONFIGURED, UNCONFIGURED, f"Config problem: {config_error}")
     if cfg is None:
         return ModeDecision(UNCONFIGURED, UNCONFIGURED, "No config.yaml yet; set PowerEngine up on the config page.")
+    if missing_required:
+        shown = ", ".join(list(missing_required)[:4]) + ("…" if len(missing_required) > 4 else "")
+        return ModeDecision(cfg.mode, UNCONFIGURED, f"{len(missing_required)} required input(s) not ready: {shown}")
     if cfg.mode == PASSIVE:
         return ModeDecision(PASSIVE, PASSIVE, "Passive: monitoring and simulating only; nothing is controlled.")
     if not build_supports_active:

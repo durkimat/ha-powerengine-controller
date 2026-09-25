@@ -13,6 +13,8 @@ from typing import Any
 
 import yaml
 
+from .roles import ROLE_BY_KEY, is_forbidden_control
+
 SCHEMA_VERSION = 1
 
 # Where the AppDaemon add-on sees HA's config folder differs between add-on
@@ -38,6 +40,9 @@ KNOWN_KEYS = frozenset(
 
 MODES = ("passive", "active")
 FORECAST_SOURCES = ("none", "solcast_site", "scaled")
+FEATURES = ("smart_charge_optimisation", "arbitrage", "axle", "free_power_days")
+FEATURE_DEFAULTS = {"smart_charge_optimisation": True, "arbitrage": False, "axle": True, "free_power_days": True}
+_ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
 _PLANT_ID = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 
 
@@ -58,6 +63,7 @@ class SolarPlant:
 @dataclass(frozen=True)
 class Config:
     mode: str = "passive"
+    features: dict[str, bool] = field(default_factory=lambda: dict(FEATURE_DEFAULTS))
     remove_entities: bool = False
     inputs: dict[str, Any] = field(default_factory=dict)
     solar_plants: tuple[SolarPlant, ...] = ()
@@ -69,6 +75,32 @@ def _check_input_spec(label: str, spec: Any) -> None:
         raise ConfigError(f"{label} must have either 'entity' or 'value'")
     if "entity" in spec and "value" in spec:
         raise ConfigError(f"{label} has both 'entity' and 'value'; use one")
+    if "entity" in spec and not _ENTITY_ID.match(str(spec["entity"])):
+        raise ConfigError(f"{label}: '{spec['entity']}' is not a valid entity id")
+    if "invert" in spec and not isinstance(spec["invert"], bool):
+        raise ConfigError(f"{label}: 'invert' must be true or false")
+
+
+def _check_role(role_key: str, spec: dict) -> None:
+    role = ROLE_BY_KEY.get(role_key)
+    if role is None:
+        raise ConfigError(f"unknown input '{role_key}'")
+    _check_input_spec(f"input '{role_key}'", spec)
+    if spec.get("invert") and not role.signed:
+        raise ConfigError(f"input '{role_key}' can't be inverted")
+    if "value" in spec:
+        if not role.static_ok:
+            raise ConfigError(f"input '{role_key}' must be an entity, not a fixed value")
+        try:
+            float(spec["value"])
+        except (TypeError, ValueError):
+            raise ConfigError(f"input '{role_key}': fixed value must be a number") from None
+    else:
+        domain = str(spec["entity"]).split(".", 1)[0]
+        if domain not in role.domains:
+            raise ConfigError(f"input '{role_key}' must be a {' or '.join(role.domains)} entity")
+        if role.kind == "control" and is_forbidden_control(spec["entity"]):
+            raise ConfigError(f"input '{role_key}': PowerEngine never writes to bump/boost entities")
 
 
 def _parse_plants(data: Any) -> tuple[SolarPlant, ...]:
@@ -136,11 +168,23 @@ def parse_config(data: Any) -> Config:
     inputs = data.get("inputs") or {}
     if not isinstance(inputs, dict):
         raise ConfigError("'inputs' must be a mapping")
-    for role, spec in inputs.items():
-        _check_input_spec(f"input '{role}'", spec)
+    for role_key, spec in inputs.items():
+        _check_role(role_key, spec)
+
+    features = dict(FEATURE_DEFAULTS)
+    raw_features = data.get("features") or {}
+    if not isinstance(raw_features, dict):
+        raise ConfigError("'features' must be a mapping")
+    for key, value in raw_features.items():
+        if key not in FEATURES:
+            raise ConfigError(f"unknown feature '{key}'")
+        if not isinstance(value, bool):
+            raise ConfigError(f"feature '{key}' must be true or false")
+        features[key] = value
 
     return Config(
         mode=mode,
+        features=features,
         remove_entities=remove_entities,
         inputs=dict(inputs),
         solar_plants=_parse_plants(data.get("solar_plants")),
@@ -163,3 +207,13 @@ def load_config(paths: tuple[str, ...] | list[str] = DEFAULT_PATHS) -> tuple[Con
                     raise ConfigError(f"{path} is not valid YAML: {err}") from err
             return parse_config(data), path
     return None, None
+
+
+def required_roles(cfg: Config) -> list[str]:
+    """Role keys that must be mapped, given which features are switched on."""
+    feature_for = {"axle": "axle", "free_power": "free_power_days"}
+    keys = []
+    for role in ROLE_BY_KEY.values():
+        if role.required == "yes" or (role.required in feature_for and cfg.features.get(feature_for[role.required])):
+            keys.append(role.key)
+    return keys

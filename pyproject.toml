@@ -10,3 +10,7 @@ known-first-party = ["pe_core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.lint.per-file-ignores]
+# the role catalogue is a data table; one role per line pair reads better unwrapped
+"apps/powerengine/pe_core/roles.py" = ["E501"]

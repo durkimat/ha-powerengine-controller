@@ -29,3 +29,8 @@ def test_active_allowed_when_build_supports_it():
 def test_this_build_never_goes_active():
     from pe_core import modes
     assert modes.BUILD_SUPPORTS_ACTIVE is False
+
+
+def test_missing_required_inputs_keep_it_unconfigured():
+    m = effective_mode(parse_config({}), missing_required=["battery_soc", "grid_power"])
+    assert m.effective == "unconfigured" and "2 required" in m.reason
