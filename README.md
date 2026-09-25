@@ -10,6 +10,17 @@ smart-charge slots and VPP events, and explains every decision in plain English.
 
 ## Install (HACS)
 
+0. **AppDaemon add-on (one-off):** HACS installs AppDaemon apps into
+   `/homeassistant/appdaemon/apps/`, but recent AppDaemon add-on versions read
+   apps from their own folder (`/addon_configs/a0d7b954_appdaemon/apps/`).
+   Move any existing apps into `/homeassistant/appdaemon/apps/`, then add this
+   under `appdaemon:` in `/addon_configs/a0d7b954_appdaemon/appdaemon.yaml` and
+   restart the add-on:
+
+   ```yaml
+   appdaemon:
+     app_dir: /homeassistant/appdaemon/apps
+   ```
 1. HACS → ⋮ → *Custom repositories* → add this repo with category **AppDaemon**
    (enable AppDaemon apps in the HACS integration options first).
 2. Install **PowerEngine**. The app ships its own app definition, so no

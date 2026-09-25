@@ -16,7 +16,9 @@ from pe_core.config import DEFAULT_PATHS, ConfigError, load_config
 class PowerEngine(hass.Hass):
     def initialize(self):
         self.log(f"PowerEngine {__version__} starting (scaffold build: no control logic)")
-        custom = self.args.get("config_path")
+        # Optional override. Not "config_path": AppDaemon sets that arg itself
+        # (to the app's own YAML file), which 0.0.1 mistakenly read as settings.
+        custom = self.args.get("settings_file")
         paths = [custom] if custom else list(DEFAULT_PATHS)
         try:
             cfg, used = load_config(paths)

@@ -22,6 +22,11 @@ DEFAULT_PATHS = (
 )
 
 
+KNOWN_KEYS = frozenset(
+    {"schema_version", "inputs", "features", "safety", "tariff", "operation", "notifications", "remove_entities"}
+)
+
+
 class ConfigError(ValueError):
     """The config file exists but is not valid."""
 
@@ -40,6 +45,10 @@ def parse_config(data: Any) -> Config:
         data = {}
     if not isinstance(data, dict):
         raise ConfigError("top level of config.yaml must be a mapping")
+
+    unknown = sorted(set(data) - KNOWN_KEYS)
+    if unknown:
+        raise ConfigError(f"unknown top-level key(s): {', '.join(unknown)} (is this the right file?)")
 
     version = data.get("schema_version", SCHEMA_VERSION)
     if version != SCHEMA_VERSION:
