@@ -116,10 +116,12 @@ def flatten_history(result) -> list[dict]:
     return [row for row in result if isinstance(row, dict)]
 
 
-def parse_history(rows: list | None) -> list[tuple[datetime, float]]:
-    """AppDaemon/HA history rows ([{'state', 'last_changed'}...]) -> (time, W)."""
+def parse_history(rows: list | None, unit: str | None = None) -> list[tuple[datetime, float]]:
+    """AppDaemon/HA history rows ([{'state', 'last_changed'}...]) -> (time, W).
+
+    `unit` is the entity's unit when the rows carry no attributes (no_attributes=True).
+    """
     out = []
-    unit = None
     for row in flatten_history(rows):
         unit = (row.get("attributes") or {}).get("unit_of_measurement") or unit   # minimal responses carry it once
         t = parse_time(row.get("last_changed") or row.get("last_updated"))
