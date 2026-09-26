@@ -97,7 +97,7 @@ ENTITIES: tuple[EntityDef, ...] = (
               {"icon": "mdi:format-list-bulleted", "entity_category": "diagnostic"}),
     EntityDef("sensor", "state_operation_mode", "Operation mode",
               {"icon": "mdi:power-settings",
-               "device_class": "enum", "options": ["unconfigured", "passive", "active"]}),
+               "device_class": "enum", "options": ["unconfigured", "passive", "active", "paused"]}),
 )
 
 POWER = {"device_class": "power", "unit_of_measurement": "W", "state_class": "measurement"}
