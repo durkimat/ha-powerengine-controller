@@ -1141,6 +1141,8 @@ views:
     cards:
       - type: vertical-stack
         cards:
+          # Predbat <-> PowerEngine switch (needs docs/ha/powerengine_handover.yaml installed as a package)
+          - type: custom:powerengine-handover-card
           - type: custom:powerengine-config-card
           # supervised inverter test (admin only; refused unless the handover guards are safe)
           - type: custom:powerengine-test-card

@@ -2,6 +2,22 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.7.3 (beta)
+
+### Behaviour changes
+- **Handover package (`docs/ha/powerengine_handover.yaml`), HA side:** `input_select.battery_controller` now offers
+  only **Predbat / PowerEngine** (Predbat first, so it's the fallback if the saved choice was *Legacy automations*).
+  Handing to Predbat is now its own script, `script.battery_handover_to_predbat`: pause PowerEngine, wait until it
+  has left Active and closed its windows, keep the legacy automations off, then turn Predbat's read-only off. It no
+  longer calls the Predbat package's `predbat_handover_to_predbat`. Handing to PowerEngine waits 10 s after Predbat
+  goes read-only before resuming. Nothing in the app changed.
+
+### New
+- **Battery controller panel** at the top of the Config tab (card 0.7.3, `custom:powerengine-handover-card`):
+  Predbat | PowerEngine buttons with a confirm step, *Switching…* while a handover runs, and a table of what Predbat
+  read-only, the legacy automations, PowerEngine pause and PowerEngine mode should be against what they are, with
+  *Re-apply* when they don't match.
+
 ## 0.7.2 (beta)
 
 ### Behaviour changes

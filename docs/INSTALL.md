@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.7.2 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.7.3 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.7.2 starting
+PowerEngine 0.7.3 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -327,18 +327,28 @@ slots. It never uses Backup or Off-Grid mode and never writes bump/boost entitie
    `automation.charge_house_battery_on` and `automation.house_battery_start_charging` must be off).
 2. Check **Daily write limit** (*Inverter control* settings, default 150): control pauses if PowerEngine's own
    writes reach it in a day.
-3. Optional: install the handover selector. Copy `docs/ha/powerengine_handover.yaml` into `/config/packages/`,
-   check the config and restart HA. It adds `input_select.battery_controller` (PowerEngine / Predbat / Legacy
-   automations), which runs the right handover (and pauses PowerEngine before handing to anything else).
+3. Install (or update) the handover package: copy `docs/ha/powerengine_handover.yaml` into `/config/packages/`,
+   check the config and restart HA. It adds `input_select.battery_controller` (**Predbat / PowerEngine**), the two
+   handover scripts and the watchdog. The **Battery controller** panel at the top of the Config tab switches between
+   them and shows what each related entity should be. The legacy automations are no longer an option: both
+   handovers keep them off.
 4. Run the supervised tests (below) with control handed over.
 
 ### Switching
 
-1. Hand over: select *PowerEngine* on `input_select.battery_controller`, or by hand turn the legacy automations
-   off and Predbat's read-only switch on.
+1. Hand over: Config tab, **Battery controller** panel → *PowerEngine* → *Switch to PowerEngine*. Predbat goes
+   read-only, the legacy automations stay off, and PowerEngine resumes. Every row in the panel should show ✓ except
+   *PowerEngine mode* until step 2.
 2. Config tab: *Operation* → **Active**, save.
-3. Check: *Mode* on the Monitoring tab shows **active** (if it shows *passive*, the reason names the unsafe guard),
+3. Check: the panel's *PowerEngine mode* row shows ✓ **active**, *Mode* on the Monitoring tab shows **active** (if it shows *passive*, the reason names the unsafe guard),
    and within a minute *Inverter control preview* on the Health tab shows the settings in place.
+
+### Switching back to Predbat
+
+Config tab, **Battery controller** panel → *Predbat* → *Switch to Predbat*. PowerEngine pauses and closes its
+inverter windows (Self-Use), then about 30 seconds later Predbat leaves read-only and takes over at its next update.
+Operation stays Active, so switching back to PowerEngine later needs only the panel. If a row shows ✗ (something was
+changed by hand, or a handover didn't finish), *Re-apply* runs the chosen controller's handover again.
 
 ### Safety
 
