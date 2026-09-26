@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import glob
 import os
 import shutil
@@ -10,7 +11,7 @@ from datetime import datetime
 
 import yaml
 
-from .config import Config, parse_config
+from .config import Config, ConfigError, parse_config
 
 KEEP_BACKUPS = 10
 HEADER = "# Written by PowerEngine's config page. Edit there rather than by hand.\n"
@@ -44,3 +45,14 @@ def save_config(path: str, data: dict, now: datetime | None = None) -> tuple[Con
         if os.path.exists(tmp):
             os.remove(tmp)
     return cfg, backup
+
+
+def with_operation(raw: dict | None, mode: str) -> dict:
+    """A copy of the saved config with operation.mode set (the Predbat/PowerEngine switch). Raises ConfigError."""
+    if mode not in ("active", "passive"):
+        raise ConfigError(f"operation must be 'active' or 'passive', not {mode!r}")
+    new = copy.deepcopy(raw or {})
+    op = new.get("operation")
+    new["operation"] = dict(op) if isinstance(op, dict) else {}
+    new["operation"]["mode"] = mode
+    return new

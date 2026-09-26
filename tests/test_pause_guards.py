@@ -294,3 +294,35 @@ def test_clock_never_synced_in_passive(app):
     _clock_app(app, False, 3600, 30)
     app._clock_step({})
     assert not app.calls and app.published[-1][2]["sync_due"] == "drift"
+
+
+# --- the Predbat/PowerEngine switch (0.7.4) ----------------------------------------------
+
+def test_with_operation_sets_mode_and_leaves_the_rest():
+    from pe_core.config import ConfigError
+    from pe_core.store import with_operation
+    raw = {"operation": {"mode": "passive", "x": 1}, "inputs": {"a": {"entity": "sensor.a"}}}
+    new = with_operation(raw, "active")
+    assert new["operation"] == {"mode": "active", "x": 1} and new["inputs"] == raw["inputs"]
+    assert raw["operation"]["mode"] == "passive"
+    assert with_operation(None, "passive") == {"operation": {"mode": "passive"}}
+    with pytest.raises(ConfigError):
+        with_operation(raw, "on")
+
+
+def test_switch_event_saves_active_and_reloads(app, tmp_path):
+    saved = []
+    app._save_path = lambda: str(tmp_path / "config.yaml")
+    app._reload = lambda: saved.append("reload")
+    app._on_set_control("pe_set_control", {"operation": "active"}, {})
+    text = (tmp_path / "config.yaml").read_text()
+    assert "mode: active" in text and saved == ["reload"]
+
+
+def test_switch_event_rejects_nonsense(app, tmp_path):
+    notes = []
+    app._save_path = lambda: str(tmp_path / "config.yaml")
+    app._reload = lambda: notes.append("reload")
+    app._notify = lambda ev, msg: notes.append(msg[1])
+    app._on_set_control("pe_set_control", {"operation": "boost"}, {})
+    assert notes == ["PowerEngine: switch failed"] and not (tmp_path / "config.yaml").exists()
