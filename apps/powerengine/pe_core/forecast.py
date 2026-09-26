@@ -40,6 +40,7 @@ class Slot:
     slot_price: float | None = None     # smart slot: the published slot price, before weighting by certainty
     overnight: bool = False             # in the tariff's fixed overnight window (cheap every day)
     charge_factor: float = 1.0          # cold-battery caution: fraction of the normal charge rate expected
+    car_expected: bool = True           # smart slot: the car will charge (False once it has stopped or unplugged)
 
     @property
     def end(self) -> datetime:
@@ -193,6 +194,18 @@ def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | No
                 return w.value, True
         return r.import_rate, True
 
+    def _car_expected(r, s: datetime) -> bool:
+        """Will the car draw power in this smart slot? Not if it's unplugged, nor for the rest of a dispatch that's
+        already running while the car isn't charging (it has finished or stopped; the slot is still cheap)."""
+        state = r.ev_state()
+        if state == "unplugged":
+            return False
+        if state == "plugged_in":
+            win = next((w for w in r.dispatches if w.start <= s < w.end), None)
+            if win is not None and win.start <= r.now:
+                return False
+        return True
+
     slots, s = [], start
     while s < end:
         price, est = price_at(s)
@@ -200,6 +213,8 @@ def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | No
         slot = Slot(start=s, price=price, export=r.export_rate, solar_kwh=solar_by_slot.get(s, 0.0),
                     load_kwh=load_w / 1000 * 0.5, price_estimated=est, smart_slot=_in(r.dispatches, s),
                     axle=_in(axle, s), free=_in(free, s), overnight=tod(s, tz) in (overnight or set()))
+        if slot.smart_slot and not _car_expected(r, s):
+            slot.car_expected, slot.car_kw = False, 0.0
         if slot.smart_slot and certainty is not None and s > start and price is not None:
             rng = day_range(s)
             std = rng[1] if rng else price

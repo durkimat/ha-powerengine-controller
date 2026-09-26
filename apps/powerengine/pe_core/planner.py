@@ -133,10 +133,16 @@ def _when(t: datetime, now: datetime | None, tz) -> str:
 
 # --- battery physics for one slot ----------------------------------------------------
 
+def car_slot(s: Slot, p: Params) -> bool:
+    """A smart slot the car is expected to charge in, with the car inside the house load: the battery mustn't feed
+    it. A smart slot the car has finished with is just cheap time (charging, holding and selling all allowed)."""
+    return p.hold_for_car and s.smart_slot and s.car_expected
+
+
 def car_kw(s: Slot, p: Params) -> float:
     if s.car_kw is not None:
         return max(0.0, s.car_kw)
-    return p.ev_charger_kw if s.smart_slot else 0.0
+    return p.ev_charger_kw if s.smart_slot and s.car_expected else 0.0
 
 
 def charge_limit_kw(s: Slot, p: Params, soc: float | None = None) -> float:
@@ -243,7 +249,7 @@ def _default(s: Slot, p: Params, tz) -> PlanSlot:
         why = (f"cheap import ({_p(_tariff_price(s))}): top up to {p.buffer_target:.0f}% as a buffer in case the "
                "forecast is wrong")
         return PlanSlot(s, GRID_CHARGE, why, target_soc=p.buffer_target)
-    if p.hold_for_car and s.smart_slot:
+    if car_slot(s, p):
         return PlanSlot(s, HOLD, f"car smart-charge slot ({_slot_p(s)}): the battery mustn't feed the car")
     if cheap:
         why = f"cheap import ({_p(_tariff_price(s))}): the grid covers the house, the battery is saved for later"
@@ -286,7 +292,7 @@ def _add_arbitrage(plan: list[PlanSlot], soc: float, p: Params, now: datetime, t
         keep = p.min_reserve_soc + p.arbitrage_keep_soc          # hard: the house must still be covered
         for j in range(i - 1, -1, -1):
             c = plan[j]
-            if c.action != SELF_USE or c.slot.axle or c.slot.free or c.slot.smart_slot or c.slot.export is None:
+            if c.action != SELF_USE or c.slot.axle or c.slot.free or car_slot(c.slot, p) or c.slot.export is None:
                 break
             margin_p = (c.slot.export - buy / rte) * 100 - p.wear_p
             if margin_p < p.min_margin_p:
@@ -357,8 +363,9 @@ def _overlay(rules: Plan, opt: dict, soc: float, p: Params, now: datetime, tz) -
 
 def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool], p: Params, now, tz) -> str:
     s = src[i].slot
-    if a == GRID_CHARGE and p.hold_for_car and s.smart_slot and cheap[i] and p.fill_when_cheap:
-        return f"car smart-charge slot ({_slot_p(s)}): charge the battery too, up to {p.buffer_target:.0f}%"
+    if a == GRID_CHARGE and car_slot(s, p) and p.fill_when_cheap and (_tariff_price(s) or 1) * 100 <= p.cheap_cap_p:
+        top = 100 if s.overnight else p.buffer_target
+        return f"car smart-charge slot ({_slot_p(s)}): charge the battery too, up to {top:.0f}%"
     if a == GRID_CHARGE:
         for j in range(i + 1, len(src)):
             if acts[j] == EXPORT and src[j].slot.export is not None:
@@ -376,7 +383,7 @@ def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool]
                         f"{_when(src[j].slot.start, now, tz)}")
         return f"sell at {_p(s.export)}: stored energy is worth more sold than used"
     if a == HOLD:
-        if p.hold_for_car and s.smart_slot:
+        if car_slot(s, p):
             return f"car smart-charge slot ({_slot_p(s)}): the battery mustn't feed the car"
         if cheap[i]:
             return f"cheap import ({_p(_tariff_price(s))}): the grid covers the house, the battery is saved for later"

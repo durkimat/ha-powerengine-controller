@@ -780,7 +780,7 @@ class PowerEngine(hass.Hass):
         sig = (len(r.rates), r.rates[0].start if r.rates else None,
                tuple((w.start, w.end) for w in r.dispatches), r.axle_start, r.axle_end, r.free_start, r.free_end,
                self.profile.days if self.profile else None, json.dumps(self.cfg.safety, sort_keys=True),
-               json.dumps(self.cfg.features, sort_keys=True))
+               json.dumps(self.cfg.features, sort_keys=True), r.ev_state())          # car starts/stops: re-plan
         due = self._plan_time is None or (r.now - self._plan_time).total_seconds() >= REPLAN_SECONDS
         if sig == self._plan_sig and not due or r.battery_soc is None:
             return
