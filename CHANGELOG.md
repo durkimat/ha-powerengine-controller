@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.7.6 (beta)
+
+### Behaviour changes
+- None. Dashboard only.
+
+### Dashboard
+- **Charts on phones** (screens under 600 px wide): each chart has a phone version with only its main axis
+  (the others still scale the lines; tap the chart for exact values), no sideways axis titles, smaller labels, the
+  legend on top and a shorter span: *Next 18 hours* instead of 36, 5 days of daily costs instead of 8, 14 days of
+  losses instead of 30. Desktop and tablet views are unchanged apart from the names below.
+- Shorter series names everywhere (Battery, Alt plan, Price, Solar, Load, Charge, Export, Solar export, …), and
+  every series now carries its unit (%, p/kWh, kWh), shown in the tooltip.
+
 ## 0.7.5 (beta)
 
 ### Behaviour changes
