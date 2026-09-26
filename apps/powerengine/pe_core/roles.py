@@ -78,6 +78,8 @@ ROLES: tuple[Role, ...] = (
          "power", required="no", suggest=(r"^sensor\.solis_battery_output_energy$",)),
     Role("battery_capacity", "battery", "Usable battery capacity", "Energy the battery can actually deliver.",
          "static", static_ok=True, static_unit="kWh", suggest_static=18.0, measurable=True),
+    Role("battery_round_trip", "battery", "Battery round-trip efficiency", "Energy out ÷ energy in, all losses included.",
+         "static", required="no", static_ok=True, static_unit="%", suggest_static=90.0, measurable=True),
     Role("battery_max_charge_power", "battery", "Max charge power", "Fastest safe charge rate.",
          "static", static_ok=True, static_unit="W", suggest_static=4800),
     Role("battery_max_discharge_power", "battery", "Max discharge power", "Fastest safe discharge rate.",

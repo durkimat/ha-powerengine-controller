@@ -297,7 +297,7 @@ class PowerEngine(hass.Hass):
         """Planner/simulation parameters, with the measured battery efficiency once there is enough data."""
         p = params_from(self.cfg, readings)
         m = getattr(self, "measured", None)
-        if m and m.get("measured") and m.get("efficiency"):
+        if m and m.get("measured") and m.get("efficiency") and use_measured(self.cfg, "battery_round_trip"):
             p = dataclasses.replace(p, efficiency=m["efficiency"])
         if m and m.get("capacity_measured") and m.get("capacity_kwh") and use_measured(self.cfg, "battery_capacity"):
             p = dataclasses.replace(p, capacity_kwh=m["capacity_kwh"])
@@ -315,9 +315,11 @@ class PowerEngine(hass.Hass):
             self.measured = self.costbook.measure(self._today(), params_from(self.cfg).capacity_kwh)
             m = self.measured
             configured = params_from(self.cfg).efficiency
-            eff = m["efficiency"] if m["measured"] else configured
+            eff = m["efficiency"] if m["measured"] and use_measured(self.cfg, "battery_round_trip") else configured
             self._publish_state("diag_battery_efficiency", round(eff * eff * 100, 1), {
                 "measured": m["measured"], "one_way": round(eff, 4), "configured_one_way": configured,
+                "measured_round_trip": round(m["rte"] * 100, 1) if m["measured"] else None,
+                "use_measured": use_measured(self.cfg, "battery_round_trip"),
                 "days": m["days"], "battery_in_kwh": m["battery_in"], "battery_out_kwh": m["battery_out"],
                 "note": "measured over the last 30 days" if m["measured"]
                 else f"estimated (configured figure) until {MIN_MEASURE_DAYS} full days are recorded"})
@@ -335,7 +337,8 @@ class PowerEngine(hass.Hass):
                 "max_discharge_kw": m.get("max_discharge_kw"), "min_soc_seen": m.get("min_soc")})
             cap_now = m.get("capacity_kwh") if m.get("capacity_measured") and use_measured(
                 self.cfg, "battery_capacity") else None
-            eff_moved = m["measured"] and (before is None or abs(m["efficiency"] - before) > 0.002)
+            eff_moved = m["measured"] and use_measured(self.cfg, "battery_round_trip") and (
+                before is None or abs(m["efficiency"] - before) > 0.002)
             cap_moved = cap_now is not None and (cap_before is None or abs(cap_now - cap_before) > 0.2)
             if revalue and (eff_moved or cap_moved):
                 n = self.costbook.revalue(**self._cost_params())
@@ -1076,7 +1079,7 @@ class PowerEngine(hass.Hass):
 
     def _reload(self):
         """Re-read config.yaml in place and republish status (no app restart)."""
-        cap_before = self._params().capacity_kwh if self.cfg is not None else None
+        p_before = self._params() if self.cfg is not None else None
         self.cfg_error = None
         try:
             self.cfg, self.cfg_path = load_config(self.paths)
@@ -1091,10 +1094,12 @@ class PowerEngine(hass.Hass):
                 self.log("Cost inputs changed; recent days will be rebuilt from HA history")
                 self.run_in(self._backfill, 30)
             else:
-                cap_after = self._params().capacity_kwh
-                if cap_before is not None and abs(cap_after - cap_before) > 0.05:   # e.g. 'use measured' toggled
-                    n = self.costbook.revalue(**self._cost_params())
-                    self.log(f"Battery capacity now {cap_after:.2f} kWh; costs re-valued ({n} half-hours)")
+                p_after = self._params()
+                if p_before is not None and (abs(p_after.capacity_kwh - p_before.capacity_kwh) > 0.05
+                                             or abs(p_after.efficiency - p_before.efficiency) > 0.001):
+                    n = self.costbook.revalue(**self._cost_params())      # e.g. 'use measured' toggled
+                    self.log(f"Battery now {p_after.capacity_kwh:.2f} kWh, {p_after.efficiency ** 2 * 100:.1f}% "
+                             f"round trip; costs re-valued ({n} half-hours)")
                     self._refresh_months()
             self._measure(revalue=False)                   # republish which capacity is in use
         self._last_checks = None

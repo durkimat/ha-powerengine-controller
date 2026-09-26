@@ -185,9 +185,11 @@ def _check_role(role_key: str, spec: dict) -> None:
         if not role.static_ok:
             raise ConfigError(f"input '{role_key}' must be an entity, not a fixed value")
         try:
-            float(spec["value"])
+            value = float(spec["value"])
         except (TypeError, ValueError):
             raise ConfigError(f"input '{role_key}': fixed value must be a number") from None
+        if role_key == "battery_round_trip" and not 50 <= value <= 100:
+            raise ConfigError("input 'battery_round_trip' must be 50 to 100 (%)")
     else:
         domain = str(spec["entity"]).split(".", 1)[0]
         if domain not in role.domains:
