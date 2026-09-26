@@ -61,6 +61,7 @@ from pe_core.planner import make_plan, params_from, plan_entity_states, slot_cer
 from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue, is_forbidden_control
+from pe_core.schedule import desired_state, periods, slot_entities, writes_for
 from pe_core.simhistory import History, months_wanted, parse_upload
 from pe_core.simjob import SimContext, SimStore
 from pe_core.simjob import run as sim_run
@@ -69,6 +70,7 @@ from pe_core.slots import SlotTracker
 from pe_core.smartcharge import SmartCharger, worth_asking
 from pe_core.status import entity_states
 from pe_core.store import save_config
+from pe_core.tariff import overnight_window
 from pe_core.weather import Weather
 
 HEARTBEAT_SECONDS = 60
@@ -574,12 +576,15 @@ class PowerEngine(hass.Hass):
         if sig == self._plan_sig and not due or r.battery_soc is None:
             return
         cert = Certainty(self.slots.slots, self.tz)
+        window = overnight_window(self.costbook.cheap_history) if self.costbook is not None else set()
         slots = build_slots(r, self._solar_forecast(), self.profile, self.tz, certainty=cert,
-                            first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()})
+                            first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
+                            overnight=window)
         strategy = "optimiser" if self.cfg.features.get("optimised_plan", True) else "rules"
         self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz,
                               auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)),
-                              wear_p=self.cfg.safety.get("battery_wear_p", 2.0), strategy=strategy)
+                              wear_p=self.cfg.safety.get("battery_wear_p", 2.0), strategy=strategy,
+                              prev_action=self._decision.action if getattr(self, "_decision", None) else None)
         self._plan_sig, self._plan_time = sig, r.now
         self._snapshot_plan(r.now)
         extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0,
@@ -717,6 +722,21 @@ class PowerEngine(hass.Hass):
             events = self.block_model.step(r.now, decision, p.max_charge_kw * 1000, p.max_discharge_kw * 1000,
                                            block_end, self.tz)
             self.writes.would(self._today(), len(events), "would_block")
+            slots = self._slot_map()
+            if slots and self.plan is not None:                 # the three-slot strategy on a virtual inverter
+                now_local = r.now.astimezone(self.tz) if self.tz else r.now
+                virt = getattr(self, "_virtual", None)
+                if virt is None:
+                    virt = self._virtual = {k: self.get_state(e) for k, e in self._slot_keys(slots).items()
+                                            if "update_button" not in k}
+                want = desired_state(periods(self.plan.slots, now_local, self.tz, decision.action), virt, now_local,
+                                     decision.action, decision.power_w, BATTERY_VOLTS, p.max_charge_kw * 1000,
+                                     p.max_discharge_kw * 1000)
+                ws = writes_for(want, virt)
+                for w in ws:
+                    if w.kind != "button":
+                        virt[w.role] = w.value
+                self.writes.would(self._today(), len(ws), "would_slots")
             if r.now.minute % 10 == 0 and r.now.second < CYCLE_SECONDS:     # save every 10 minutes
                 self._publish_writes()
         except Exception as err:
@@ -724,7 +744,35 @@ class PowerEngine(hass.Hass):
 
     # --- inverter control (Active mode; previewed in Passive) --------------------------------
 
+    TIME_ROLES_1 = ("timed_charge_start_hour", "timed_charge_start_minute", "timed_charge_end_hour",
+                    "timed_charge_end_minute", "timed_discharge_start_hour", "timed_discharge_start_minute",
+                    "timed_discharge_end_hour", "timed_discharge_end_minute", "timed_update_button")
+
+    def _slot_map(self):
+        """{slot n: {role: entity}} when all three inverter slots exist (SolaX '_2'/'_3' names), else None."""
+        if self.cfg is None:
+            return None
+        first = {role: self._role_entity(role) for role in self.TIME_ROLES_1}
+        if not all(first.values()):
+            return None
+        key = tuple(sorted(first.items()))
+        cached = getattr(self, "_slot_cache", None)
+        if cached and cached[0] == key:
+            return cached[1]
+        m = slot_entities(first, lambda e: self.get_state(e) is not None)
+        self._slot_cache = (key, m)
+        return m
+
+    def _slot_keys(self, slots):
+        keys = {f"{role}#{n}": eid for n, m in slots.items() for role, eid in m.items()}
+        for role in ("timed_charge_current", "timed_discharge_current", "storage_mode"):
+            keys[role] = self._role_entity(role)
+        return keys
+
     def _control(self, r, decision):
+        slots = self._slot_map()
+        if slots:
+            return self._control_slots(r, decision, slots)
         try:
             p = self._params(r)
             now_local = r.now.astimezone(self.tz) if self.tz else r.now
@@ -755,6 +803,38 @@ class PowerEngine(hass.Hass):
                 self._execute(writes, entities)
                 ctl["last_write"] = r.now
             ctl["kind"], ctl["end"] = kind, end
+            self._ctl = ctl
+        except Exception as err:
+            self.log(f"Control step failed: {err!r}", level="WARNING")
+
+    def _control_slots(self, r, decision, slots):
+        """The three-slot strategy: program the plan's next charge and discharge periods into the inverter."""
+        try:
+            p = self._params(r)
+            now_local = r.now.astimezone(self.tz) if self.tz else r.now
+            ctl = getattr(self, "_ctl", {"kind": None, "end": None, "last_write": None})
+            entities = self._slot_keys(slots)
+            missing = sorted(k for k, e in entities.items() if not e)
+            have = {k: self.get_state(e) for k, e in entities.items() if e and "update_button" not in k}
+            pers = periods(self.plan.slots if self.plan else [], now_local, self.tz, decision.action)
+            want = desired_state(pers, have, now_local, decision.action, decision.power_w, BATTERY_VOLTS,
+                                 p.max_charge_kw * 1000, p.max_discharge_kw * 1000)
+            writes = writes_for(want, have)
+            state = "not mapped" if missing else (f"{len(writes)} write{'s' if len(writes) != 1 else ''}"
+                                                   if writes else "no change")
+            sched = {k: [f"{want[f'timed_{k}_start_hour#{n}']:02d}:{want[f'timed_{k}_start_minute#{n}']:02d}-"
+                         f"{want[f'timed_{k}_end_hour#{n}']:02d}:{want[f'timed_{k}_end_minute#{n}']:02d}"
+                         for n in (1, 2, 3)] for k in ("charge", "discharge")}
+            attrs = {"decision": decision.action, "strategy": "slots", "missing": missing, "windows": sched,
+                     "charge_current": want.get("timed_charge_current"),
+                     "discharge_current": want.get("timed_discharge_current"),
+                     "writes": [w.as_dict() for w in writes]}
+            self._publish_if_changed("diag_control", state, attrs)
+            recent = ctl["last_write"] is not None and (r.now - ctl["last_write"]).total_seconds() < 60
+            if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
+                    and not self._test_running() and not recent and self._within_write_limit(len(writes))):
+                self._execute(writes, entities)
+                ctl["last_write"] = r.now
             self._ctl = ctl
         except Exception as err:
             self.log(f"Control step failed: {err!r}", level="WARNING")
@@ -841,6 +921,19 @@ class PowerEngine(hass.Hass):
         self._release()
 
     def _release(self):
+        slots = self._slot_map()
+        if slots:
+            try:
+                entities = self._slot_keys(slots)
+                have = {k: self.get_state(e) for k, e in entities.items() if e and "update_button" not in k}
+                want = {k: 0 for k in entities if "#" in k and "update_button" not in k}
+                want["storage_mode"] = "Self-Use"
+                writes = writes_for(want, have)
+                if writes:
+                    self._execute(writes, entities)
+            except Exception as err:
+                self.log(f"Could not return the inverter to Self-Use: {err!r}", level="WARNING")
+            return
         try:
             want = release()
             entities, missing = self._control_entities(want)

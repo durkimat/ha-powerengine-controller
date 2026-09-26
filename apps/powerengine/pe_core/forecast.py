@@ -38,6 +38,7 @@ class Slot:
     car_kw: float | None = None         # known car draw (live); None = assume the charger rating in smart slots
     certainty: float | None = None      # smart slot: how likely it really happens (price is then the expected one)
     slot_price: float | None = None     # smart slot: the published slot price, before weighting by certainty
+    overnight: bool = False             # in the tariff's fixed overnight window (cheap every day)
 
     @property
     def end(self) -> datetime:
@@ -146,7 +147,7 @@ def _in(windows: list[Window], s: datetime) -> bool:
 
 def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | None, tz,
                 horizon_h: float = 48, min_h: float = 36, certainty=None,
-                first_seen: dict[str, str] | None = None) -> list[Slot]:
+                first_seen: dict[str, str] | None = None, overnight: set[int] | None = None) -> list[Slot]:
     """Half-hour slots from the current half-hour to the end of known prices (24-48 h).
 
     `certainty` (a certainty.Certainty) turns each future smart slot's price into an expected price, using when
@@ -197,7 +198,7 @@ def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | No
         load_w = profile.expected_w(s, tz) if profile and profile.watts else DEFAULT_LOAD_W
         slot = Slot(start=s, price=price, export=r.export_rate, solar_kwh=solar_by_slot.get(s, 0.0),
                     load_kwh=load_w / 1000 * 0.5, price_estimated=est, smart_slot=_in(r.dispatches, s),
-                    axle=_in(axle, s), free=_in(free, s))
+                    axle=_in(axle, s), free=_in(free, s), overnight=tod(s, tz) in (overnight or set()))
         if slot.smart_slot and certainty is not None and s > start and price is not None:
             rng = day_range(s)
             std = rng[1] if rng else price

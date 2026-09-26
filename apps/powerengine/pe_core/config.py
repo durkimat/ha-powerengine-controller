@@ -63,6 +63,7 @@ SAFETY = {
     "arbitrage_max_soc": (90, 20, 100),       # with arbitrage on, cheap top-ups stop here (%)
     "arbitrage_band_penalty_p": (2.0, 0, 50), # extra p/kWh counted when arbitrage goes outside the band
     "max_writes_per_day": (150, 20, 2000),    # Active: pause control if PowerEngine's own writes reach this
+    "window_switch_cost_p": (5.0, 0, 100),    # optimiser: cost counted per change of the inverter's timed windows
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True}
 
@@ -113,6 +114,10 @@ SETTING_TEXT = {
     "arbitrage_band_penalty_p": ("Arbitrage outside-band cost", "p/kWh",
                                  "Extra cost counted for each kWh arbitrage moves outside the band. Higher keeps "
                                  "cycles inside it more strictly; 0 ignores the band."),
+    "window_switch_cost_p": ("Window change cost", "p",
+                             "Counted by the optimiser each time the plan switches between self-use, charging and "
+                             "selling (each switch rewrites the inverter's timed windows, which wears its memory). "
+                             "Higher means fewer, longer charge and sell periods; 0 ignores it."),
     "max_writes_per_day": ("Daily write limit", "writes",
                            "Safety stop for inverter EEPROM wear: if PowerEngine's own writes today reach this, it "
                            "pauses control (inverter back to Self-Use) and notifies you. Resuming allows this many "
@@ -131,7 +136,7 @@ SETTING_SECTIONS = (
     ("axle", "Axle events", ("pre_axle_lookahead_h", "axle_margin_soc")),
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p")),
-    ("control", "Inverter control", ("max_writes_per_day",)),
+    ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p")),
 )
 
 

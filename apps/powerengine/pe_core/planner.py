@@ -53,6 +53,7 @@ class Params:
     arbitrage_max_soc: float = 90.0   # ...and routine cheap top-ups stop here with arbitrage on (%)
     arbitrage_band_penalty_p: float = 2.0   # extra p/kWh counted when arbitrage goes outside the band
     arbitrage_keep_soc: float = 10.0  # hard: reach the refill with at least the reserve plus this (%)
+    switch_cost_p: float = 5.0        # optimiser: cost of changing the inverter's timed windows (EEPROM wear), p
 
     @property
     def buffer_target(self) -> float:
@@ -288,7 +289,7 @@ def _add_arbitrage(plan: list[PlanSlot], soc: float, p: Params, now: datetime, t
 
 
 def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None, auto_cheap: bool = False,
-              wear_p: float = 2.0, strategy: str = "rules") -> Plan:
+              wear_p: float = 2.0, strategy: str = "rules", prev_action: str | None = None) -> Plan:
     """The plan. strategy "optimiser": the optimiser chooses each half-hour's action (lowest cost, arbitrage band
     and safety rules included) and the rule-based plan supplies the explanations where they agree."""
     rules = _rules_plan(slots, soc, p, now, tz, auto_cheap, wear_p)
@@ -296,7 +297,7 @@ def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None, 
         return rules
     from .optimiser import optimise
     p_used = replace(p, cheap_cap_p=rules.cheap_p) if rules.cheap_p is not None else p
-    opt = optimise(slots, soc, p_used, wear=p.wear_p / 100)
+    opt = optimise(slots, soc, p_used, wear=p.wear_p / 100, prev_action=prev_action)
     if not opt:
         return rules
     plan = _overlay(rules, opt, soc, p_used, now, tz)
@@ -518,6 +519,7 @@ def params_from(cfg, readings=None) -> Params:
         arbitrage_min_soc=s.get("arbitrage_min_soc", 75),
         arbitrage_max_soc=s.get("arbitrage_max_soc", 90),
         arbitrage_band_penalty_p=s.get("arbitrage_band_penalty_p", 2.0),
+        switch_cost_p=s.get("window_switch_cost_p", 5.0),
         export_limit_kw=s.get("export_limit_kw", 6.0),
         wear_p=s.get("battery_wear_p", 2.0),
         min_margin_p=s.get("arbitrage_min_margin_p", 1.0),
