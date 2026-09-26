@@ -163,6 +163,7 @@ class PowerEngine(hass.Hass):
         self.costbook, self._months, self.measured = None, [], None
         try:
             self.costbook = CostBook(os.path.join(os.path.dirname(self._save_path()), "costs"), self.tz)
+            self.costbook.export_fallback = self._current_export_rate()
             if self.cfg is not None:
                 self.costbook.flow_id = flow_id(self.cfg)
             self._measure(revalue=False)
@@ -294,9 +295,18 @@ class PowerEngine(hass.Hass):
     def _today(self):
         return datetime.now(self.tz or timezone.utc).date()
 
+    def _current_export_rate(self):
+        spec = (self.cfg.inputs.get("export_rate") if self.cfg else None) or {}
+        try:
+            return float(spec["value"]) if "value" in spec else float(self.get_state(spec.get("entity")))
+        except (TypeError, ValueError, KeyError):
+            return None
+
     def _record_costs(self, r):
         if self.costbook is None:
             return
+        if r.export_rate:
+            self.costbook.export_fallback = r.export_rate
         hh = self.recorder.add(r)
         if hh is None:
             return

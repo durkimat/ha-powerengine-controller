@@ -256,3 +256,12 @@ def test_summary_ranks_and_compares():
     assert [r["id"] for r in s["ranking"]] == ["x", "current"]
     assert s["ranking"][0]["vs_current_month"] == pytest.approx(-30.44)
     assert s["actual_total"] == 7.5
+
+
+def test_rebuilt_half_hours_use_the_valued_rates():
+    recs = day_records(DAYS[0])
+    for r in recs:
+        r["export_rate"] = None
+        r["grid_export"] = 1.0
+        r["v"] = {"act": r["import_rate"], "exp": 0.15}
+    assert actual_cost(recs)["export_income"] == pytest.approx(48 * 0.15)

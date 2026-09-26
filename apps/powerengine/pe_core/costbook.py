@@ -52,6 +52,7 @@ class CostBook:
         self.last_event: dict | None = st.get("last_event")
         self.flow_id: str = str(FLOW_VERSION)          # set by the app from the current input mapping
         # records valued by an older method are re-valued on start-up
+        self.export_fallback: float | None = None      # your current export rate, for half-hours without one
         self.needs_revalue = bool(st) and st.get("method") != METHOD_VERSION
 
     # --- files ------------------------------------------------------------------------
@@ -100,7 +101,8 @@ class CostBook:
         """
         self.learn_rates(r)
         window = overnight_window(self.cheap_history)
-        export = hh.export_rate if hh.export_rate is not None else (r.export_rate or 0.0)
+        export = hh.export_rate if hh.export_rate is not None else (
+            r.export_rate if r.export_rate is not None else (self.export_fallback or 0.0))
         rt = rates_at(hh.start, r.rates, window, export, hh.import_rate, self.tz)
         if rt is None or hh.seconds < 60:
             return None
@@ -150,6 +152,8 @@ class CostBook:
                 if "act" not in v:
                     continue
                 start = datetime.fromisoformat(rec["start"])
+                if rec.get("export_rate") is None and not v.get("exp") and self.export_fallback:
+                    v = {**v, "exp": self.export_fallback}     # rebuilt before the export rate had any history
                 rt = reclassify(start, v, window, self.tz)
                 rec["v"] = process(rec, rt, self.ledger, self.sim, capacity=capacity, eff=eff, floor_soc=floor_soc,
                                    max_kw=max_kw, includes_ev=includes_ev, axle_value=axle_value)

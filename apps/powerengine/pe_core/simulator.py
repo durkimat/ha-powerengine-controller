@@ -28,6 +28,7 @@ NOTIFY_MIN_GBP_MONTH = 5.0        # a scenario is worth a look if it saves at le
 NOTIFY_MIN_SHARE = 0.05           # ...and at least this share of the baseline
 MIN_DAYS_TO_COMPARE = 14
 MONTH_DAYS = 30.44
+METHOD = 2                        # bump to recompute every cached result (2: export rates missing from rebuilt days)
 
 NOTES = (("INTELLI", "needs a compatible car or charger"), ("IOG", "needs a compatible car or charger"),
          ("COSY", "for homes with a heat pump"), ("HEAT_PUMP", "for homes with a heat pump"),
@@ -94,9 +95,21 @@ def complete(records: list[dict]) -> bool:
     return len(records) >= 46 and sum(r.get("seconds") or 0 for r in records) >= MIN_DAY_SECONDS
 
 
+def rec_import_rate(r: dict) -> float | None:
+    """The import rate of a recorded half-hour. Half-hours rebuilt from HA history may leave the top-level field
+    empty; the valued rates ("v") always have it."""
+    v = r.get("import_rate")
+    return v if v is not None else (r.get("v") or {}).get("act")
+
+
+def rec_export_rate(r: dict) -> float | None:
+    v = r.get("export_rate")
+    return v if v is not None else (r.get("v") or {}).get("exp")
+
+
 def actual_cost(records: list[dict]) -> dict:
-    imp = sum((r.get("grid_import") or 0) * (r.get("import_rate") or 0) for r in records)
-    exp = sum((r.get("grid_export") or 0) * (r.get("export_rate") or 0) for r in records)
+    imp = sum((r.get("grid_import") or 0) * (rec_import_rate(r) or 0) for r in records)
+    exp = sum((r.get("grid_export") or 0) * (rec_export_rate(r) or 0) for r in records)
     standing = next((r.get("standing") for r in records if r.get("standing") is not None), 0.0) or 0.0
     return {"cost": round(imp - exp + standing, 4), "import_cost": round(imp, 4), "export_income": round(exp, 4),
             "standing": round(standing, 4),
@@ -122,7 +135,7 @@ def price_fn(scn: dict, tables: dict, tz):
     kraken.RateTable. Dates before a tariff's first published rate use its time-of-day pattern (estimated)."""
     imp, exp = scn.get("import"), scn.get("export")
     if imp is None:
-        return lambda t, r: (r.get("import_rate"), r.get("export_rate"), False)
+        return lambda t, r: (rec_import_rate(r), rec_export_rate(r), False)
     it = tables.get(rate_key(imp, "standard-unit-rates"))
     et = tables.get(rate_key(exp, "standard-unit-rates")) if exp else None
 
@@ -136,7 +149,7 @@ def price_fn(scn: dict, tables: dict, tz):
     def f(t, r):
         i, est = look(it, t)
         if exp is None:
-            e, est_e = r.get("export_rate"), False
+            e, est_e = rec_export_rate(r), False
         else:
             e, est_e = look(et, t)
         return i, e, est or est_e
@@ -206,9 +219,10 @@ def run_day(slots: list[Slot], lookahead: list[Slot], soc: float, p: Params, sta
 
 
 def signature(p: Params) -> str:
-    keys = ("capacity_kwh", "max_charge_kw", "max_discharge_kw", "efficiency", "min_reserve_soc", "export_limit_kw",
-            "fuse_kw", "arbitrage", "wear_p")
-    blob = json.dumps({k: getattr(p, k) for k in keys}, sort_keys=True)
+    keys = ("method", "capacity_kwh", "max_charge_kw", "max_discharge_kw", "efficiency", "min_reserve_soc",
+            "export_limit_kw", "fuse_kw", "arbitrage", "wear_p")
+    values = {k: (METHOD if k == "method" else getattr(p, k)) for k in keys}
+    blob = json.dumps(values, sort_keys=True)
     return hashlib.sha1(blob.encode()).hexdigest()[:10]
 
 
