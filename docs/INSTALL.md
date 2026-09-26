@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.7.3 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.7.4 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.7.3 starting
+PowerEngine 0.7.4 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -320,66 +320,90 @@ and only rewritten when they change, so a repeating night costs next to no write
 current (0 A to hold). With only one window it falls back to a single window at most 35 minutes ahead. And, if *Smart-charge optimisation* is on, sets EDF's ready-by time to ask for
 slots. It never uses Backup or Off-Grid mode and never writes bump/boost entities.
 
-### Before switching
+### How switching works
 
-1. Map on the Config tab: all *Control outputs*, *Inverter clock* (`sensor.solis_rtc`) and *Sync inverter clock*
-   (`button.solis_sync_rtc`), and the *Handover guards* (`switch.predbat_set_read_only` must be on;
-   `automation.charge_house_battery_on` and `automation.house_battery_start_charging` must be off).
-2. Check **Daily write limit** (*Inverter control* settings, default 150): control pauses if PowerEngine's own
-   writes reach it in a day.
-3. Install (or update) the handover package: copy `docs/ha/powerengine_handover.yaml` into `/config/packages/`,
-   check the config and restart HA. It adds `input_select.battery_controller` (**Predbat / PowerEngine**), the two
-   handover scripts and the watchdog. The **Battery controller** panel at the top of the Config tab switches between
-   them and shows what each related entity should be. The legacy automations are no longer an option: both
-   handovers keep them off.
-4. Run the supervised tests (below) with control handed over.
+There is one switch: the **Battery controller** panel at the top of the Config tab, **Predbat | PowerEngine**.
+Whichever you choose is **fully live** when the switch finishes; there is nothing else to turn on.
 
-### Switching
+| You choose | What the switch does, in order | Result |
+| --- | --- | --- |
+| **PowerEngine** | Legacy automations off → Predbat read-only **on** → wait 10 s → PowerEngine un-paused and *Operation* set to **Active** (saved) → waits for PowerEngine to report *active* | PowerEngine is driving the battery. A notification says **PowerEngine is live**, or **did NOT go live** with the reason (the inverter then stays on Self-Use). |
+| **Predbat** | PowerEngine *Operation* set to **Passive** → it closes its windows (Self-Use) → wait 20 s → pause off → legacy automations off → Predbat read-only **off** | Predbat is driving the battery from its next update. PowerEngine keeps planning and costing, but writes nothing. |
 
-1. Hand over: Config tab, **Battery controller** panel → *PowerEngine* → *Switch to PowerEngine*. Predbat goes
-   read-only, the legacy automations stay off, and PowerEngine resumes. Every row in the panel should show ✓ except
-   *PowerEngine mode* until step 2.
-2. Config tab: *Operation* → **Active**, save.
-3. Check: the panel's *PowerEngine mode* row shows ✓ **active**, *Mode* on the Monitoring tab shows **active** (if it shows *passive*, the reason names the unsafe guard),
-   and within a minute *Inverter control preview* on the Health tab shows the settings in place.
+The panel then shows a status line (**PowerEngine is live** / **Predbat is live** / **paused for testing** /
+**not fully live**) and a table of what each related entity should be against what it is. If anything shows ✗
+(changed by hand, or a switch that didn't finish), **Re-apply** runs the handover again. The legacy automations are
+no longer an option; both directions keep them off.
 
-### Switching back to Predbat
+The *Operation* setting further down the Config tab is what the switch sets; you don't need to touch it.
 
-Config tab, **Battery controller** panel → *Predbat* → *Switch to Predbat*. PowerEngine pauses and closes its
-inverter windows (Self-Use), then about 30 seconds later Predbat leaves read-only and takes over at its next update.
-Operation stays Active, so switching back to PowerEngine later needs only the panel. If a row shows ✗ (something was
-changed by hand, or a handover didn't finish), *Re-apply* runs the chosen controller's handover again.
+### One-off setup (before the first switch)
+
+1. **Map on the Config tab** and save:
+   - all *Control outputs* (found automatically; check none show a problem);
+   - *Inverter clock* = `sensor.solis_rtc`, *Sync inverter clock* = `button.solis_sync_rtc`;
+   - *Handover guards*: *Other controller read-only* = `switch.predbat_set_read_only`,
+     *Other control off (1)* = `automation.charge_house_battery_on`,
+     *Other control off (2)* = `automation.house_battery_start_charging`.
+     (You only map them. The switch puts them in the right state: read-only **on**, both automations **off**.)
+2. Check the **Daily write limit** (*Inverter control* settings, default 150).
+3. **Install the handover package**: copy `docs/ha/powerengine_handover.yaml` to `/config/packages/`, check the
+   config, restart HA. The panel says so if it's missing.
+
+### Testing (switch out of live)
+
+Testing needs PowerEngine to be the controller but **paused**: Predbat stays read-only, nothing drives the battery
+and the inverter is on Self-Use.
+
+1. Panel → **PowerEngine** → *Switch to PowerEngine* (skip if already selected).
+2. Panel → **Pause for testing** (or the *Pause control* toggle top right of the Monitoring tab). Status line:
+   *PowerEngine is paused for testing*.
+3. Run the supervised tests (below). They're refused unless PowerEngine is paused (or Passive) and the guards are safe.
+4. When done, either **Resume PowerEngine (go live)** on the panel, or switch to **Predbat**.
+
+While paused, remember nobody is optimising the battery: don't leave it paused overnight unless you mean to.
+
+### Going live for the first time
+
+1. Do the one-off setup above.
+2. Pause-for-testing and run the supervised tests: *Hold*, *Grid charge* (3000 W), *Force discharge* (3000 W),
+   *Self-Use*, each for 2–3 minutes; each should end **passed** and the battery power should follow.
+3. Panel → **Resume PowerEngine (go live)** (or, from Predbat, **PowerEngine** → *Switch*). Wait for the
+   **PowerEngine is live** notification.
+4. Check within a few minutes: status line *PowerEngine is live*, all rows ✓; Health tab *Inverter control preview*
+   shows the windows in place; the inverter's timed windows (including the `_2`/`_3` ones) match.
+5. First night: the battery reaches the planned level by 06:00.
+6. Rollback drill (daytime): panel → **Predbat** → *Switch*, check *Predbat is live*; then back to **PowerEngine**.
+
+### Switching back to Predbat at any time
+
+Panel → **Predbat** → *Switch to Predbat*. About 30 seconds later Predbat is live. Switching to PowerEngine again
+later is the same one step.
 
 ### Safety
 
-- **Handover guards:** if a guard becomes unsafe while in control (e.g. Predbat turned back on), PowerEngine stops
-  writing at once and notifies you; it writes nothing more, since something else has taken over.
-- **Pause control** (Monitoring tab, top right): returns the inverter to Self-Use once, then no changes until you
-  resume. Choosing Passive does the same.
+- **Handover guards:** if a guard becomes unsafe while PowerEngine is in control (e.g. Predbat taken out of
+  read-only by hand), PowerEngine stops writing at once and notifies you; it writes nothing more, since something
+  else has taken over. The panel shows ✗; use the switch or *Re-apply* to put things straight.
+- **Pause:** returns the inverter to Self-Use once, then no changes until you resume.
 - **Inputs failing:** if a required input stops working, PowerEngine returns the inverter to Self-Use, notifies
   you, and takes control again when the inputs recover.
-- **Stopped app:** windows set ahead keep running as planned. The watchdog automation in
-  `docs/ha/powerengine_handover.yaml` closes every window (Self-Use) if PowerEngine's heartbeat stops for 15 minutes
-  while it's the battery controller; install or update that package before going Active.
+- **Stopped app:** windows set ahead keep running as planned. The watchdog automation in the handover package closes
+  every window (Self-Use) if PowerEngine's heartbeat stops for 15 minutes while it's the battery controller.
 - **Read-back:** every write is read back after 6 seconds and retried once; if it still doesn't match, control
   stops until AppDaemon restarts and you're notified.
-- **Daily write limit:** see above. Resuming allows the limit again.
-- **Inverter clock:** checked every 10 minutes. In Active mode it's synced weekly, and within 10 minutes if it's a
+- **Daily write limit:** control pauses if PowerEngine's own writes reach it in a day. Resuming allows the limit
+  again.
+- **Inverter clock:** checked every 10 minutes. While live it's synced weekly, and within 10 minutes if it's a
   minute or more out (including when the clocks change, since the inverter doesn't adjust for daylight saving).
 
 ### Supervised inverter test
 
-Config tab, below the config card, admins only. **This writes to the inverter** when you start it, in any mode.
-Hand control over first, pick Hold, Grid charge, Force discharge or Self-Use for 1 to 10 minutes, tick the box and
-start. It writes the settings, reads them back after 10 seconds, records battery power and SoC each minute, then
-returns the inverter to Self-Use and reads that back. *Stop and revert* ends it early. The window it sets ends two
-minutes after the test, so a restart can't leave it running. Result: `sensor.pe_diag_test_write`. Refused while
-PowerEngine is in control (pause it first).
-
-### Going back
-
-Select *Predbat* or *Legacy automations* on the selector (PowerEngine pauses first), or pause PowerEngine and
-set *Operation* back to Passive.
+Config tab, below the config card, admins only. **This writes to the inverter** when you start it. Pause for testing
+first (above), pick Hold, Grid charge, Force discharge or Self-Use for 1 to 10 minutes, tick the box and start. It
+writes the settings, reads them back after 10 seconds, records battery power and SoC each minute, then returns the
+inverter to Self-Use and reads that back. *Stop and revert* ends it early. The window it sets ends two minutes after
+the test, so a restart can't leave it running. Result: `sensor.pe_diag_test_write`.
 
 ---
 
@@ -387,7 +411,7 @@ set *Operation* back to Passive.
 
 The dashboard updates itself with the app; refresh the browser after updating.
 
-1. HACS shows updates under *Settings → Updates* (betas only if pre-releases are on).
+1. HACS shows updates under *Settings → Updates*, with the version number.
 2. Update **both** repos to the **same** version. The card warns if they differ.
 3. Restart AppDaemon, then reload the browser.
 4. Read the release notes' **Behaviour changes** first: they list anything that changes what PowerEngine does.

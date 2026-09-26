@@ -69,7 +69,7 @@ from pe_core.simulate import SimBattery
 from pe_core.slots import SlotTracker
 from pe_core.smartcharge import SmartCharger, worth_asking
 from pe_core.status import entity_states
-from pe_core.store import save_config
+from pe_core.store import save_config, with_operation
 from pe_core.tariff import overnight_window
 from pe_core.weather import Weather
 
@@ -85,6 +85,7 @@ BACKFILL_DAYS = 14
 RECHECK_SECONDS = 300
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
+CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
 PAUSE_ENTITY = "switch.pe_ctl_pause"
 
@@ -181,6 +182,7 @@ class PowerEngine(hass.Hass):
 
         self.listen_event(self._on_save, SAVE_EVENT)
         self.listen_event(self._on_test, TEST_EVENT)
+        self.listen_event(self._on_set_control, CONTROL_EVENT)
         self.listen_event(self._on_sim_history, "pe_sim_history")
         self.listen_event(self._on_sim_settings, "pe_sim_settings")
         self._beat({})
@@ -1411,6 +1413,27 @@ class PowerEngine(hass.Hass):
         self._logbook(f"configuration saved by {user}: {changed}")
         self._reload()
         self.fire_event(RESULT_EVENT, ok=True, message=f"Saved. {changed}.")
+
+    def _on_set_control(self, event_name, data, kwargs):
+        """The Battery controller switch: Active when handed to PowerEngine, Passive when handed to Predbat.
+        Saved like any config change (with a backup), so it survives restarts."""
+        mode = (data or {}).get("operation")
+        try:
+            if self.cfg is None:
+                raise ConfigError(self.cfg_error or "no configuration yet")
+            if self.cfg.raw.get("operation", {}).get("mode") == mode:
+                self.log(f"Controller switch: already {mode}")
+                self._reload()                             # re-evaluate (pause may just have changed)
+                return
+            new = with_operation(self.cfg.raw, mode)
+            _, backup = save_config(self._save_path(), new)
+        except (ConfigError, OSError) as err:
+            self.log(f"Controller switch to {mode!r} refused: {err}", level="WARNING")
+            self._notify("health", ("control:switch", "PowerEngine: switch failed", str(err)))
+            return
+        self.log(f"Controller switch: operation set to {mode}; backup: {backup or 'none'}")
+        self._logbook(f"operation set to {mode} by the battery controller switch")
+        self._reload()
 
     def _reload(self):
         """Re-read config.yaml in place and republish status (no app restart)."""

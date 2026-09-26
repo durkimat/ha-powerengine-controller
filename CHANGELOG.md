@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.7.4 (beta)
+
+### Behaviour changes
+- **The Battery controller switch now leaves the chosen controller fully live.** Choosing *PowerEngine* sets
+  *Operation* to **Active** (saved in the config, with a backup) and un-pauses it; choosing *Predbat* sets it to
+  **Passive** (which closes PowerEngine's windows) before Predbat leaves read-only. Done through a new event,
+  `pe_set_control` (`operation: active|passive`), fired by the handover package's scripts. The PowerEngine handover
+  waits for *active* and notifies **PowerEngine is live** or **did NOT go live** with the reason.
+- Handover package: the old `battery_pause_powerengine` script is gone (nothing uses it).
+
+### New
+- Battery controller panel: a status line (live / paused for testing / not fully live), **Pause for testing** and
+  **Resume (go live)** buttons while PowerEngine is selected. Pausing is no longer shown as a fault.
+- INSTALL.md: *Active mode* rewritten around the switch: how it works, one-off setup, testing, first go-live.
+
 ## 0.7.3 (beta)
 
 ### Behaviour changes
