@@ -80,6 +80,21 @@ class HalfHour:
     import_rate: float | None = None   # last rate seen (fallback when the rate list is missing)
     export_rate: float | None = None
     standing: float | None = None      # GBP/day
+    cmd: str | None = None             # Active: the action PowerEngine held all half-hour ("mixed" if it changed)
+    cmd_kw: float | None = None        # ...and the power it asked for (kW; the lowest if it varied)
+    temp_c: float | None = None        # outside temperature (Open-Meteo), for learning
+    tb_c: float | None = None          # estimated battery temperature
+    noted: bool = False
+
+    def note(self, action: str | None, kw: float | None) -> None:
+        """What PowerEngine asked the inverter to do during this half-hour (None: not in control)."""
+        if not self.noted:
+            self.cmd, self.cmd_kw = action, kw
+        elif self.cmd != action:
+            self.cmd, self.cmd_kw = "mixed", None
+        elif kw is not None and self.cmd_kw is not None:
+            self.cmd_kw = min(self.cmd_kw, kw)
+        self.noted = True
 
     def add(self, r: Readings, dt_s: float) -> None:
         if self.soc_start is None:
@@ -119,7 +134,8 @@ class HalfHour:
             "battery_out": self.battery_out, "unallocated_src": self.unallocated_src,
             "unallocated_sink": self.unallocated_sink, "seconds": self.seconds, "soc_start": self.soc_start,
             "soc_end": self.soc_end, "axle": self.axle, "free": self.free, "import_rate": self.import_rate,
-            "export_rate": self.export_rate, "standing": self.standing}.items()})
+            "export_rate": self.export_rate, "standing": self.standing, "cmd": self.cmd, "cmd_kw": self.cmd_kw,
+            "temp_c": self.temp_c, "tb_c": self.tb_c}.items()})
         d["fv"] = str(FLOW_VERSION)            # replaced by the cost book's full flow id
         return d
 
@@ -149,3 +165,7 @@ class Recorder:
         self.current.add(r, dt if dt <= MAX_GAP_S else 0.0)
         self.last = r.now
         return done
+
+    def note(self, action: str | None, kw: float | None) -> None:
+        if self.current is not None:
+            self.current.note(action, kw)

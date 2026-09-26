@@ -39,6 +39,7 @@ class Slot:
     certainty: float | None = None      # smart slot: how likely it really happens (price is then the expected one)
     slot_price: float | None = None     # smart slot: the published slot price, before weighting by certainty
     overnight: bool = False             # in the tariff's fixed overnight window (cheap every day)
+    charge_factor: float = 1.0          # cold-battery caution: fraction of the normal charge rate expected
 
     @property
     def end(self) -> datetime:

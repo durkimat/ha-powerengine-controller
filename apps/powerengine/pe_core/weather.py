@@ -1,4 +1,5 @@
-"""Hourly outside temperatures for the Simulator's heat pump, from Open-Meteo (free for personal use, no key).
+"""Hourly outside temperatures from Open-Meteo (free for personal use, no key): the Simulator's heat pump, and the
+cold-battery caution (the last 3 days and the next 3).
 
 Older days come from the historical archive (ERA5, a few days behind); the last few days from the forecast API's
 recent past. Cached by UTC hour in one file, so each hour is fetched once.
@@ -17,9 +18,9 @@ ARCHIVE_LAG_DAYS = 6
 TIMEOUT_S = 30
 
 
-def _get(url: str) -> dict:
+def _get(url: str, timeout: float = TIMEOUT_S) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": "PowerEngine (Home Assistant; tariff simulator)"})
-    with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:          # noqa: S310 (fixed https hosts)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:            # noqa: S310 (fixed https hosts)
         return json.loads(resp.read().decode("utf-8"))
 
 
@@ -76,6 +77,24 @@ class Weather:
                    "&forecast_days=1&timezone=UTC")
             added += _merge(self.hours, get(url))
         return added
+
+    def refresh_recent(self, get=None) -> int:
+        """The last 3 days and the next 3 (forecast), replacing earlier forecasts. Returns hours merged.
+        Short timeout: this runs in the control cycle once an hour."""
+        url = (f"{RECENT}?latitude={self.lat}&longitude={self.lon}&hourly=temperature_2m&past_days=3"
+               "&forecast_days=3&timezone=UTC")
+        return _merge(self.hours, get(url) if get else _get(url, timeout=8))
+
+    def series(self, start: datetime, end: datetime) -> dict[datetime, float]:
+        """Hourly temperatures (UTC hour starts) from start to end, where known."""
+        out: dict[datetime, float] = {}
+        t = start.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        while t <= end:
+            v = self.hours.get(t.strftime("%Y-%m-%dT%H"))
+            if v is not None:
+                out[t] = v
+            t += timedelta(hours=1)
+        return out
 
     def at(self, t: datetime) -> float | None:
         return self.hours.get(t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H"))

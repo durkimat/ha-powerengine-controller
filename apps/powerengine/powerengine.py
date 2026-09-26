@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 import appdaemon.plugins.hass.hassapi as hass
 
 from pe_core import __version__, clock, testwrite
+from pe_core import learn as learning
 from pe_core.activity import ActivityLog
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, check, summarise
@@ -271,8 +272,10 @@ class PowerEngine(hass.Hass):
                 self._watch_events(readings)
                 self._track_slots(readings)
                 self._smart_step(readings)
+                self._refresh_temps(readings.now)
                 self._maybe_replan(readings)
                 decision = decide(readings, self.cfg, self._decision, self.tz, plan=self.plan)
+                self._note_command(decision)
                 sim = self.sim.update(decision, readings, self._params(), self.tz)
                 if sim is not None:
                     self._publish_if_changed("state_sim_soc", round(sim, 1),
@@ -306,6 +309,18 @@ class PowerEngine(hass.Hass):
         except (TypeError, ValueError, KeyError):
             return None
 
+    def _note_command(self, decision):
+        """Record what PowerEngine is asking the inverter for this half-hour (only when it's in control)."""
+        if self.mode.effective != "active" or decision is None:
+            self.recorder.note(None, None)
+            return
+        kw = None
+        if decision.action in ("grid_charge", "export"):
+            rated = self._control_params()
+            kw = decision.power_w / 1000 if decision.power_w else (
+                rated.max_charge_kw if decision.action == "grid_charge" else rated.max_discharge_kw)
+        self.recorder.note(decision.action, kw)
+
     def _record_costs(self, r):
         if self.costbook is None:
             return
@@ -314,6 +329,10 @@ class PowerEngine(hass.Hass):
         hh = self.recorder.add(r)
         if hh is None:
             return
+        w = getattr(self, "_wlive", None)
+        if w is not None:                              # for learning: outside and estimated battery temperature
+            hh.temp_c = w.at(hh.start + timedelta(minutes=15))
+            hh.tb_c = (getattr(self, "_tb", None) or {}).get(learning.hour_of(hh.start))
         try:
             rec = self.costbook.add(hh, r, **self._cost_params())
             if rec is None:
@@ -332,7 +351,145 @@ class PowerEngine(hass.Hass):
             p = dataclasses.replace(p, efficiency=m["efficiency"])
         if m and m.get("capacity_measured") and m.get("capacity_kwh") and use_measured(self.cfg, "battery_capacity"):
             p = dataclasses.replace(p, capacity_kwh=m["capacity_kwh"])
-        return p
+        return dataclasses.replace(p, **self._learned_overrides(p))
+
+    def _control_params(self, readings=None):
+        """What the inverter is asked for: the configured rates (the learned ones only shape the plan, so the
+        controller keeps asking for the full rate and the learning can see if it's reached)."""
+        return params_from(self.cfg, readings)
+
+    def _learned_overrides(self, p) -> dict:
+        """Planner parameters replaced by what PowerEngine has learned, where chosen and plausible."""
+        lr = getattr(self, "learned", None)
+        if lr is None or self.cfg is None:
+            return {}
+        out: dict = {}
+        if lr.max_charge_kw and use_measured(self.cfg, "battery_max_charge_power") \
+                and 0.5 * p.max_charge_kw <= lr.max_charge_kw <= 1.2 * p.max_charge_kw:
+            out["max_charge_kw"] = lr.max_charge_kw
+        if lr.max_discharge_kw and use_measured(self.cfg, "battery_max_discharge_power") \
+                and 0.5 * p.max_discharge_kw <= lr.max_discharge_kw <= 1.2 * p.max_discharge_kw:
+            out["max_discharge_kw"] = lr.max_discharge_kw
+        if self.cfg.features.get("use_learned", True):
+            if lr.taper:
+                out["taper"] = lr.taper
+            if lr.reserve_soc is not None and p.min_reserve_soc < lr.reserve_soc <= p.min_reserve_soc + 15:
+                out["min_reserve_soc"] = lr.reserve_soc            # only ever raises the floor
+            if lr.export_kw is not None and lr.export_kw < p.export_limit_kw:
+                out["export_limit_kw"] = lr.export_kw
+            if lr.car_kw is not None and 1.0 <= lr.car_kw <= 22:
+                out["ev_charger_kw"] = lr.car_kw
+        return out
+
+    # --- cold-battery caution --------------------------------------------------------------------------
+
+    def _cold_settings(self) -> learning.ColdSettings:
+        s = self.cfg.safety
+        return learning.ColdSettings(threshold_c=s.get("cold_caution_temp_c", 4.0),
+                                     factor=s.get("cold_charge_pct", 50) / 100,
+                                     release_c=s.get("cold_release_c", 3.0), lag_h=s.get("battery_temp_lag_h", 24.0))
+
+    def _cold_in_use(self):
+        """(threshold, factor, learned?) the caution uses now."""
+        c = self._cold_settings()
+        lr = getattr(self, "learned", None)
+        if self.cfg.features.get("cold_learning", True) and lr is not None:
+            thr = lr.cold_threshold_c if lr.cold_threshold_c is not None else c.threshold_c
+            fac = lr.cold_factor if lr.cold_factor is not None else c.factor
+            return thr, fac, lr.cold_threshold_c is not None or lr.cold_factor is not None
+        return c.threshold_c, c.factor, False
+
+    def _refresh_temps(self, now):
+        """Hourly: the last 3 days and next 3 of outside temperature (Open-Meteo), and the battery estimate."""
+        f = self.cfg.features
+        if not (f.get("cold_caution", True) or f.get("cold_learning", True)):
+            self._tb, self._caution = {}, {}
+            return
+        last = getattr(self, "_temps_at", None)
+        if last is not None and (now - last).total_seconds() < 3600:
+            return
+        self._temps_at = now
+        w = getattr(self, "_wlive", None)
+        if w is None:
+            try:
+                lat = float(self.get_state("zone.home", attribute="latitude"))
+                lon = float(self.get_state("zone.home", attribute="longitude"))
+            except (TypeError, ValueError):
+                return
+            w = self._wlive = Weather(os.path.join(self._sim_folder(), "weather_live.json"), lat, lon)
+        try:
+            w.refresh_recent()
+            w.save()
+        except Exception as err:
+            self.log(f"Outside temperature not available (Open-Meteo): {err!r}", level="WARNING")
+        self._cold_model(now)
+
+    def _cold_model(self, now):
+        w = getattr(self, "_wlive", None)
+        if w is None:
+            return
+        c = self._cold_settings()
+        outside = w.series(now - timedelta(days=4), now + timedelta(days=3))
+        self._tb = learning.battery_temps(outside, c.lag_h)
+        thr, _, _ = self._cold_in_use()
+        self._caution = learning.caution_by_hour(self._tb, thr, c.release_c)
+        tb_now = self._tb.get(learning.hour_of(now))
+        self._publish_if_changed("diag_battery_temperature", tb_now if tb_now is not None else "unknown", {
+            "outside_c": outside.get(learning.hour_of(now)), "caution_now": bool(self._caution.get(
+                learning.hour_of(now))), "threshold_c": thr, "lag_h": c.lag_h,
+            "note": "estimated from the outside temperature (Open-Meteo); it lags behind it"})
+        self._plan_sig = None                                          # re-plan with the new temperatures
+
+    def _apply_cold(self, slots, now):
+        """Slow the planned charge rate in slots where the battery is expected to be cold."""
+        if not self.cfg.features.get("cold_caution", True) or not getattr(self, "_caution", None):
+            return slots, None
+        thr, fac, was_learned = self._cold_in_use()
+        starts = [s.start for s in slots]
+        factors = learning.slot_factors(starts, self._caution, fac)
+        slots = [dataclasses.replace(s, charge_factor=f) if f != 1.0 else s for s, f in zip(slots, factors,
+                                                                                           strict=True)]
+        return slots, learning.cold_summary(starts, factors, self._tb, now, thr, fac, was_learned, self.tz)
+
+    def _learn(self):
+        """Re-learn limits from the recorded half-hours (daily, and at start-up)."""
+        if self.costbook is None or self.cfg is None:
+            return
+        try:
+            p = params_from(self.cfg)
+            halves = self.costbook.halves(self._today())
+            self.learned = learning.learn(halves, p.max_charge_kw, p.max_discharge_kw, p.min_reserve_soc,
+                                          p.export_limit_kw, self._cold_settings())
+            lr, used = self.learned, self._params()
+            thr, fac, cold_learned = self._cold_in_use()
+            rows = [
+                ("Max charge rate", f"{p.max_charge_kw:.2f} kW", lr.max_charge_kw, "kW", lr.charge_samples,
+                 f"{used.max_charge_kw:.2f} kW"),
+                ("Max discharge rate", f"{p.max_discharge_kw:.2f} kW", lr.max_discharge_kw, "kW",
+                 lr.discharge_samples, f"{used.max_discharge_kw:.2f} kW"),
+                ("Charge taper near full", "none", ", ".join(f"{int(a)}%+: {b:.0%}" for a, b in lr.taper) or None,
+                 "", lr.taper_samples, ", ".join(f"{int(a)}%+: {b:.0%}" for a, b in used.taper) or "none"),
+                ("Reserve (where discharge stops)", f"{p.min_reserve_soc:g}%", lr.reserve_soc, "%",
+                 lr.reserve_samples, f"{used.min_reserve_soc:g}%"),
+                ("Export limit", f"{p.export_limit_kw:g} kW", lr.export_kw, "kW", lr.export_samples,
+                 f"{used.export_limit_kw:g} kW"),
+                ("Car charge rate", f"{p.ev_charger_kw:g} kW", lr.car_kw, "kW", lr.car_samples,
+                 f"{used.ev_charger_kw:g} kW"),
+                ("Cold caution below", f"{self._cold_settings().threshold_c:g} °C", lr.cold_threshold_c, "°C",
+                 lr.cold_slow + lr.cold_fast, f"{thr:g} °C"),
+                ("Cold charge rate", f"{self._cold_settings().factor:.0%}",
+                 f"{lr.cold_factor:.0%}" if lr.cold_factor is not None else None, "", lr.cold_slow, f"{fac:.0%}"),
+            ]
+            table = [{"what": a, "configured": b, "learned": (f"{c:g} {u}".strip() if isinstance(c, float) else c)
+                      if c is not None else "not yet", "samples": n, "in_use": e} for a, b, c, u, n, e in rows]
+            n = sum(1 for r in table if r["learned"] != "not yet")
+            self._publish_state("diag_learned", f"{n} learned", {"rows": table, "raw": lr.as_dict(),
+                                                                  "cold_learned": cold_learned,
+                                                                  "days": len({h["start"][:10] for h in halves})})
+            if getattr(self, "_wlive", None) is not None:
+                self._cold_model(datetime.now(timezone.utc))      # the learned threshold may have moved
+        except Exception as err:
+            self.log(f"Could not learn from recorded use: {err!r}", level="WARNING")
 
     def _measure(self, revalue=True):
         """Measure battery efficiency and system losses; publish them; re-value costs if the efficiency moved."""
@@ -371,6 +528,7 @@ class PowerEngine(hass.Hass):
             eff_moved = m["measured"] and use_measured(self.cfg, "battery_round_trip") and (
                 before is None or abs(m["efficiency"] - before) > 0.002)
             cap_moved = cap_now is not None and (cap_before is None or abs(cap_now - cap_before) > 0.2)
+            self._learn()
             if revalue and (eff_moved or cap_moved):
                 n = self.costbook.revalue(**self._cost_params())
                 self.log(f"Costs re-valued ({n} half-hours) with the measured battery efficiency/capacity")
@@ -582,6 +740,7 @@ class PowerEngine(hass.Hass):
         slots = build_slots(r, self._solar_forecast(), self.profile, self.tz, certainty=cert,
                             first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
                             overnight=window)
+        slots, cold = self._apply_cold(slots, r.now)
         strategy = "optimiser" if self.cfg.features.get("optimised_plan", True) else "rules"
         self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz,
                               auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)),
@@ -590,7 +749,7 @@ class PowerEngine(hass.Hass):
         self._plan_sig, self._plan_time = sig, r.now
         self._snapshot_plan(r.now)
         extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0,
-                 "slot_certainty": slot_certainty_rows(slots, self.tz), "certainty": cert.summary()}
+                 "slot_certainty": slot_certainty_rows(slots, self.tz), "certainty": cert.summary(), "cold": cold}
         if self.plan.strategy != "optimiser":
             try:                                          # the optimiser, for comparison only
                 p = self._params(r)
@@ -715,7 +874,7 @@ class PowerEngine(hass.Hass):
 
     def _count_would_writes(self, r, decision):
         try:
-            p = self._params(r)
+            p = self._control_params(r)
             events = self.write_model.step(r.now, decision, p.max_charge_kw * 1000, p.max_discharge_kw * 1000)
             self.writes.would(self._today(), len(events))
             block_end = None
@@ -776,7 +935,7 @@ class PowerEngine(hass.Hass):
         if slots:
             return self._control_slots(r, decision, slots)
         try:
-            p = self._params(r)
+            p = self._control_params(r)
             now_local = r.now.astimezone(self.tz) if self.tz else r.now
             kind = KINDS.get(decision.action)
             ctl = getattr(self, "_ctl", {"kind": None, "end": None, "last_write": None})
@@ -812,7 +971,7 @@ class PowerEngine(hass.Hass):
     def _control_slots(self, r, decision, slots):
         """The three-slot strategy: program the plan's next charge and discharge periods into the inverter."""
         try:
-            p = self._params(r)
+            p = self._control_params(r)
             now_local = r.now.astimezone(self.tz) if self.tz else r.now
             ctl = getattr(self, "_ctl", {"kind": None, "end": None, "last_write": None})
             entities = self._slot_keys(slots)
@@ -1028,7 +1187,7 @@ class PowerEngine(hass.Hass):
             self.fire_event("pe_test_result", ok=False, message=f"Refused: {err}")
             return
         run = self._test = testwrite.TestRun(req, now)
-        p = self._params(self._last_readings) if getattr(self, "_last_readings", None) else None
+        p = self._control_params(self._last_readings) if getattr(self, "_last_readings", None) else None
         max_c, max_d = (p.max_charge_kw * 1000, p.max_discharge_kw * 1000) if p else (4800, 4800)
         now_local = now.astimezone(self.tz) if self.tz else now
         want = desired(testwrite.decision(req), now_local, testwrite.end_time(now_local, req["minutes"]),
@@ -1437,6 +1596,7 @@ class PowerEngine(hass.Hass):
 
     def _reload(self):
         """Re-read config.yaml in place and republish status (no app restart)."""
+        self._temps_at = None                              # cold settings may have changed: recompute soon
         p_before = self._params() if self.cfg is not None else None
         self.cfg_error = None
         try:

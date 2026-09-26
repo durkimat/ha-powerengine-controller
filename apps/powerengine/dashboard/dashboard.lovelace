@@ -197,6 +197,8 @@ views:
               · the plan ends with {{ '%.1f' | format(extra | abs) }} kWh {{ 'more' if extra > 0 else 'less' }} in the battery than plain self-use (worth £{{ '%.2f' | format(state_attr('sensor.pe_plan', 'extra_value') | float(0) | abs) }} at the cheapest price), counted in the saving{% endif %}
               {%- for c in state_attr('sensor.pe_plan', 'slot_certainty') or [] %}
               · EDF slot {{ c.day }} {{ c.from }}–{{ c.to }}: {{ c.certainty }}% likely to happen, so planned at {{ c.expected_p }}p (slot price {{ c.slot_p }}p){% endfor %}
+              {%- set cold = state_attr('sensor.pe_plan', 'cold') %}{% if cold and cold.periods %}
+              · cold battery ({{ cold.battery_c_now }}°C estimated now; caution below {{ cold.threshold_c }}°C{{ ', learned' if cold.learned else '' }}): charging planned at {{ (cold.factor * 100) | round | int }}% of the normal rate {% for p in cold.periods %}{{ p.from }}–{{ p.to }}{{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}
               {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}
               · prices after {{ as_timestamp(state_attr('sensor.pe_plan', 'estimated_prices_from')) | timestamp_custom('%a %H:%M') }} are estimated (not yet published){% endif %}
           # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
@@ -995,6 +997,32 @@ views:
               apex_config: {"chart": {"height": 240}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "dataLabels": {"offsetY": -6, "style": {"fontSize": "10px"}, "background": {"enabled": false}, "formatter": "EVAL:function(val) { return val === null || val === undefined ? \"\" : val + \"%\"; }\n"}, "xaxis": {"labels": {"style": {"fontSize": "10px"}}, "tickAmount": 6}, "grid": {"padding": {"left": 0, "right": 4}}}
               yaxis: [{"id": "kwh", "decimals": 1, "min": 0, "apex_config": {"labels": {"style": {"colors": "#ef6c00", "fontSize": "10px"}}}}, {"id": "pct", "opposite": true, "decimals": 0, "min": 0, "apex_config": {"labels": {"style": {"colors": "#6a1b9a", "fontSize": "10px"}}}, "show": false}]
               series: *chart_losses_series
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Learned from use
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set l = states.sensor.pe_diag_learned %}
+              {%- if l and l.attributes.rows %}
+              Figures PowerEngine has worked out from the last {{ l.attributes.days }} recorded days. Rates count only half-hours where it asked the inverter for the full rate; *in use* is what the plan uses (a learned figure needs its *Use measured* box, or *Use learned limits* in Features).
+
+              | | Configured | Learned | Half-hours | In use |
+              |---|---|---|---|---|
+              {%- for r in l.attributes.rows %}
+              | {{ r.what }} | {{ r.configured }} | {{ r.learned }} | {{ r.samples }} | {{ r.in_use }} |
+              {%- endfor %}
+              {%- else %}
+              Nothing learned yet: this fills in after the first full day of recording.
+              {%- endif %}
+
+              {%- set t = states.sensor.pe_diag_battery_temperature %}
+              {%- if t and t.state not in ['unknown', 'unavailable'] %}
+
+              **Battery temperature (estimated): {{ t.state }}°C** · outside {{ t.attributes.outside_c }}°C · cold caution {{ 'ON' if t.attributes.caution_now else 'off' }} (below {{ t.attributes.threshold_c }}°C). Estimated from the outside temperature, following it over about {{ t.attributes.lag_h | int }} hours.
+              {%- endif %}
       - type: grid
         column_span: 3
         cards:

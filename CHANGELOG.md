@@ -2,6 +2,26 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.0 (beta)
+
+### Behaviour changes
+- **Cold-battery caution** (new feature, on by default): the plan expects charging at 50% of the normal rate while
+  the battery is estimated to be below 4 °C, so it starts overnight charging earlier. The battery temperature is
+  estimated from Open-Meteo's outside temperature (last 3 days and next 3, fetched hourly for your home zone's
+  location), lagging it by the *Battery warm-up time* (24 h). Caution lasts until the battery is 3 °C above the
+  threshold. New *Cold battery* settings: threshold, rate, release margin, warm-up time.
+- **Learned limits** used for planning once there's enough data (Health tab, *Learned from use*): charge and
+  discharge rates (*Use measured* on *Max charge/discharge power*, ticked by default), charge taper near full,
+  reserve where discharging stops (only raises it), export ceiling and car charge rate (*Use learned limits*
+  feature, on by default), cold threshold and rate (*Learn cold behaviour*, on by default).
+- The inverter is still asked for the configured charge and discharge rates; learned figures only shape the plan.
+- Each recorded half-hour now also stores what PowerEngine asked the inverter for, the outside temperature and the
+  estimated battery temperature (the data the learning uses).
+
+### New
+- Entities: `sensor.pe_diag_learned` (the table) and `sensor.pe_diag_battery_temperature`.
+- Plan tab: a note listing cold-caution periods. Health tab: *Learned from use* table and battery temperature.
+
 ## 0.7.7 (beta)
 
 ### Behaviour changes
