@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.1 (beta)
+
+### Behaviour changes
+- None by default. The choices behind 0.8.0 are now settings:
+  - **Learn features, one per figure:** *Learn: charge slow-down near full*, *where discharging stops*, *export
+    ceiling*, *car charge rate* (all on). They replace 0.8.0's single *Use learned limits* (ignored if saved).
+  - **Battery location** (*Cold battery* settings): garage or outbuilding (24 h, the default), outside (6 h),
+    inside (72 h) or custom (*Battery warm-up time*).
+  - **Temperature source:** new optional inputs *Outside temperature* (your own sensor wins over the forecast for
+    the hours it has seen) and *Battery temperature* (the battery's own sensor: the estimate ahead starts from it
+    and the cold learning uses it). Unmapped: Open-Meteo forecast only, as in 0.8.0.
+- The role catalogue leaves out `required` when it is "yes" (the card fills it in), to stay under HA's 16 KB
+  attribute limit.
+
 ## 0.8.0 (beta)
 
 ### Behaviour changes

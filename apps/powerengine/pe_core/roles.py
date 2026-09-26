@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 # kind -> what the value is; drives unit checks and how the card shows it
-KINDS = ("power", "energy", "percent", "rate", "money", "text", "binary", "timestamp", "list", "static", "control")
+KINDS = ("power", "energy", "percent", "rate", "money", "text", "binary", "timestamp", "list", "static", "control", "temperature")
 
 UNITS = {
     "power": ("W", "kW"),
@@ -17,6 +17,7 @@ UNITS = {
     "percent": ("%",),
     "rate": ("GBP/kWh", "£/kWh", "p/kWh"),
     "money": ("GBP", "GBP/day", "£"),
+    "temperature": ("°C",),
 }
 
 # Entities PowerEngine must never write to, whatever the config says.
@@ -47,6 +48,8 @@ class Role:
         d = asdict(self)
         if self.domains == ("sensor",):          # the card's default; left out to keep the catalogue small
             d.pop("domains")
+        if self.required == "yes":               # likewise: the card treats a missing "required" as "yes"
+            d.pop("required")
         return {k: v for k, v in d.items() if v not in ("", (), None, False) or k in ("key", "required")}
 
 
@@ -70,7 +73,7 @@ ROLES: tuple[Role, ...] = (
     # --- battery ---
     Role("battery_soc", "battery", "Battery state of charge", "How full the battery is. Used by every decision.",
          "percent", suggest=(r"^sensor\.solis_battery_soc$",)),
-    Role("battery_power", "battery", "Battery power", "Live charge/discharge power. Not used if the two sensors below are mapped.",
+    Role("battery_power", "battery", "Battery power", "Live charge/discharge power (unless the pair below is mapped).",
          "power", signed=True, sign_note="+ discharging, - charging", suggest=(r"^sensor\.solis_battery_power$",)),
     Role("battery_charge_power", "battery", "Battery charging power", "If Battery power has no sign: power in.",
          "power", required="no", suggest=(r"^sensor\.solis_battery_input_energy$",)),
@@ -90,6 +93,11 @@ ROLES: tuple[Role, ...] = (
          "energy", suggest=(r"^sensor\.solis_battery_discharge_today$",)),
     Role("battery_soh", "battery", "Battery health", "State of health, shown on the Health view.",
          "percent", required="no", suggest=(r"^sensor\.solis_battery_soh$",)),
+    Role("outside_temperature", "battery", "Outside temperature", "Local sensor, used now instead of the forecast.",
+         "temperature", required="no"),
+    Role("battery_temperature", "battery", "Battery temperature", "The battery's own sensor, instead of the estimate.",
+         "temperature", required="no",
+         suggest=(r"^sensor\.solis_battery_temperature$",)),
     Role("inverter_clock", "battery", "Inverter clock", "The inverter's own time, to check for drift.",
          "text", required="no", suggest=(r"^sensor\.solis_rtc$",)),
     Role("inverter_min_soc", "battery", "Inverter minimum SoC", "The inverter's own floor, as a safety cross-check.",
@@ -106,9 +114,9 @@ ROLES: tuple[Role, ...] = (
     Role("house_load_today", "grid", "House load today", "Household energy used today, for costs and losses.",
          "energy", suggest=(r"^sensor\.solis_house_load_today$",)),
     # --- solar forecast ---
-    Role("solar_forecast_today", "solar", "Solar forecast today", "Half-hourly solar forecast for today, for planning.",
+    Role("solar_forecast_today", "solar", "Solar forecast today", "Half-hourly solar forecast for today.",
          "list", attribute="detailedForecast", suggest=(r"^sensor\.solcast_pv_forecast_forecast_today$",)),
-    Role("solar_forecast_tomorrow", "solar", "Solar forecast tomorrow", "Half-hourly solar forecast for tomorrow, for planning.",
+    Role("solar_forecast_tomorrow", "solar", "Solar forecast tomorrow", "Half-hourly solar forecast for tomorrow.",
          "list", attribute="detailedForecast", suggest=(r"^sensor\.solcast_pv_forecast_forecast_tomorrow$",)),
     Role("solar_forecast_day3", "solar", "Solar forecast day 3", "Extends planning beyond tomorrow.",
          "list", required="no", attribute="detailedForecast", suggest=(r"^sensor\.solcast_pv_forecast_forecast_day_3$",)),
@@ -118,7 +126,7 @@ ROLES: tuple[Role, ...] = (
     Role("import_rates_today", "tariff", "Import rates today", "Today's half-hourly import rates (slots included).",
          "list", domains=("event", "sensor"), attribute="rates",
          suggest=(r"^event\.edf_energy_electricity_.*_current_day_rates$",), suggest_not=(r"export",)),
-    Role("import_rates_tomorrow", "tariff", "Import rates tomorrow", "Tomorrow's half-hourly import rates, for planning.",
+    Role("import_rates_tomorrow", "tariff", "Import rates tomorrow", "Tomorrow's half-hourly import rates.",
          "list", domains=("event", "sensor"), attribute="rates",
          suggest=(r"^event\.edf_energy_electricity_.*_next_day_rates$",), suggest_not=(r"export",)),
     Role("export_rate", "tariff", "Export rate", "What you're paid per kWh exported.",
@@ -126,11 +134,11 @@ ROLES: tuple[Role, ...] = (
     Role("standing_charge", "tariff", "Standing charge", "Daily fixed charge, for costs.",
          "money", static_ok=True, static_unit="GBP/day",
          suggest=(_E + r".*_current_standing_charge$",), suggest_not=(r"export",)),
-    Role("offpeak_now", "tariff", "Off-peak now", "On in the normal off-peak window, to find the standard rate.",
+    Role("offpeak_now", "tariff", "Off-peak now", "On in the normal off-peak window.",
          "binary", domains=("binary_sensor",),
          suggest=(r"^binary_sensor\.edf_energy_electricity_.*_off_peak$",), suggest_not=(r"export",)),
     # --- EV ---
-    Role("ev_plug_status", "ev", "Car plug status", "'Charging' while the car draws power: how PowerEngine knows it's charging.",
+    Role("ev_plug_status", "ev", "Car plug status", "'Charging' while the car draws power.",
          "text", suggest=(r"^sensor\.myenergi_zappi_.*_plug_status$",)),
     Role("ev_charger_status", "ev", "Charger status", "What the charger is doing, for the status view.",
          "text", suggest=(r"^sensor\.myenergi_zappi_[0-9]+_status$",)),

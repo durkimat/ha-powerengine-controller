@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.8.0 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.8.1 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.8.0 starting
+PowerEngine 0.8.1 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -318,18 +318,25 @@ PowerEngine learns from the half-hours it records (Health tab, *Learned from use
 | Figure | How it's learned | Used when |
 | --- | --- | --- |
 | Charge / discharge rate | Median power reached when it asked for the full rate (below 90%, battery not cold) | *Use measured* ticked on *Max charge/discharge power* (default) |
-| Charge taper | Share of that rate reached from 90% and from 95% | *Use learned limits* feature (default on) |
-| Reserve | Charge level where the battery stops supplying the house | same; only ever raises the reserve |
-| Export limit | Selling tops out below the battery's own rate | same |
-| Car charge rate | Typical kW of a half-hour the car charged throughout | same |
-| Cold threshold and rate | Charges that slowed, or didn't, at a given battery temperature | *Learn cold behaviour* feature (default on) |
+| Charge taper | Share of that rate reached from 90% and from 95% | *Learn: charge slow-down near full* feature |
+| Reserve | Charge level where the battery stops supplying the house | *Learn: where discharging stops* (only ever raises the reserve) |
+| Export limit | Selling tops out below the battery's own rate | *Learn: export ceiling* |
+| Car charge rate | Typical kW of a half-hour the car charged throughout | *Learn: car charge rate* |
+| Cold threshold and rate | Charges that slowed, or didn't, at a given battery temperature | *Learn cold behaviour* |
+
+All the *Learn* features are on by default and can be switched off one by one in Features.
 
 The rates only learn from half-hours where PowerEngine was in control and asked for the full rate, so they build up
 once it's live. The inverter is always asked for the configured rate; learned figures only shape the plan.
 
 **Cold-battery caution** (feature on by default; settings under *Cold battery*): the battery's temperature is
-estimated from the outside temperature (Open-Meteo forecast for your home's location, the last 3 days and the next
-3, fetched hourly), following it over the *Battery warm-up time* (24 h, suited to a garage). Below *Cold caution
+estimated from the outside temperature, following it over a time set by **Battery location** (garage or outbuilding
+24 h, outside 6 h, inside 72 h, or *Custom* with *Battery warm-up time*). The outside temperature comes from
+Open-Meteo's forecast for your home's location (the last 3 days and the next 3, fetched hourly). Two optional inputs
+under *Battery and inverter* improve it: **Outside temperature** (your own sensor, used for the hours it has seen
+instead of the forecast) and **Battery temperature** (the battery's own sensor: the estimate ahead starts from it,
+and the learning uses it). Leave both unmapped for forecast only.
+Below *Cold caution
 below* (4 °C) the plan expects charging at *Cold charge rate* (50%), and stays cautious until the battery is
 *Cold caution release* (3 °C) warmer, so a single milder afternoon doesn't end it. With learning on, a charge that
 slows at 5 °C raises the threshold to about 5.5 °C, and normal charging seen at 3 °C lowers it to 3 °C. The Plan
