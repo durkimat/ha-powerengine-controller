@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.15 (beta)
+
+### Behaviour changes
+- None. Dashboard: phones in landscape now get the phone charts too (the phone version is used below 600 px wide
+  **or** below 500 px tall; a landscape phone is wide but short), and the phone charts have more room on the right
+  so the last time label and the Now marker aren't clipped.
+
 ## 0.8.14 (beta)
 
 ### Behaviour changes
