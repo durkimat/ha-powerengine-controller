@@ -2,6 +2,11 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.7.7 (beta)
+
+### Behaviour changes
+- None. Dashboard: the Simulator tab moves to just before Config.
+
 ## 0.7.6 (beta)
 
 ### Behaviour changes
