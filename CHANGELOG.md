@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.6 (beta)
+
+### Behaviour changes
+- **Guards checked with Home Assistant when AppDaemon has lost track of them.** AppDaemon keeps its own copy of
+  HA's states and can miss an entity that was re-created after it started (Predbat restarting does this), which
+  showed as *switch.predbat_set_read_only is None* while the switch was really on. When AppDaemon has no state for a
+  guard, PowerEngine now asks HA directly (a template render) and rechecks every 30 s. Only if HA also has no such
+  entity does it count as absent (safe, as in 0.8.5); if HA can't be asked, the guard is *unverified* and never
+  counts as safe. This closes a gap in 0.8.5, where a re-created Predbat switch AppDaemon couldn't see would have
+  counted as absent even if it was off.
+
 ## 0.8.5 (beta)
 
 ### Behaviour changes

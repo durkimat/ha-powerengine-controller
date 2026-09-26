@@ -356,3 +356,24 @@ def test_unconfigured_rechecks_every_cycle(app):
     finally:
         powerengine.read = orig
     assert calls == [1]
+
+
+def test_guard_missing_from_appdaemon_is_checked_with_ha(app):
+    app.states.pop("switch.predbat_set_read_only")
+    app.render_template = lambda t: "on"
+    assert app._guard_state("switch.predbat_set_read_only") == "on" and app._guard_live
+    app.render_template = lambda t: "off"
+    assert guard_problems(app.cfg, app._guard_state)                            # really off: not safe
+    app.render_template = lambda t: "unknown"
+    from pe_core.modes import guard_status
+    assert guard_status(app.cfg, app._guard_state) == ([], ["switch.predbat_set_read_only"])
+
+
+def test_guard_that_cannot_be_checked_is_never_safe(app):
+    app.states.pop("switch.predbat_set_read_only")
+
+    def boom(t):
+        raise RuntimeError("no REST")
+    app.render_template = boom
+    probs = guard_problems(app.cfg, app._guard_state)
+    assert probs and "unverified" in probs[0]
