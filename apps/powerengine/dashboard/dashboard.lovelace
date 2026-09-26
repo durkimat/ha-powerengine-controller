@@ -193,6 +193,8 @@ views:
               · this plan {{ money(state_attr('sensor.pe_plan', 'cost')) }} over the period; plain self-use {{ money(state_attr('sensor.pe_plan', 'baseline_cost')) }}
               {%- set extra = state_attr('sensor.pe_plan', 'extra_kwh') | float(0) %}{% if extra | abs >= 0.5 %}
               · the plan ends with {{ '%.1f' | format(extra | abs) }} kWh {{ 'more' if extra > 0 else 'less' }} in the battery than plain self-use (worth £{{ '%.2f' | format(state_attr('sensor.pe_plan', 'extra_value') | float(0) | abs) }} at the cheapest price), counted in the saving{% endif %}
+              {%- for c in state_attr('sensor.pe_plan', 'slot_certainty') or [] %}
+              · EDF slot {{ c.day }} {{ c.from }}–{{ c.to }}: {{ c.certainty }}% likely to happen, so planned at {{ c.expected_p }}p (slot price {{ c.slot_p }}p){% endfor %}
               {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}
               · prices after {{ as_timestamp(state_attr('sensor.pe_plan', 'estimated_prices_from')) | timestamp_custom('%a %H:%M') }} are estimated (not yet published){% endif %}
           - type: custom:apexcharts-card
@@ -350,6 +352,248 @@ views:
               {%- for w in state_attr('sensor.pe_plan', 'windows') or [] %}
               | {{ (w.day ~ ' ') if w.day }}{{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}** | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
               {%- endfor %}
+  - title: Plan history
+    path: history
+    icon: mdi:history
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          - type: tile
+            entity: select.pe_ui_history_day
+            name: Day
+            grid_options: {columns: 6}
+            features:
+              - type: select-options
+          - type: tile
+            entity: select.pe_ui_history_plan
+            name: Plan made at
+            grid_options: {columns: 6}
+            features:
+              - type: select-options
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set h = states.sensor.pe_plan_history %}
+              {%- if h and h.attributes.date is defined %}{% set a = h.attributes %}{% set s = a.summary %}
+              **{{ a.label }}**{{ (' · plan: ' ~ a.plan ~ (' (made ' ~ (as_timestamp(a.plan_made_at) | timestamp_custom('%H:%M')) ~ ')' if a.plan_made_at else '')) if a.plan else ' · no stored plan for this day' }}
+              {%- if a.plan and states('select.pe_ui_history_plan') not in [a.plan, 'unknown'] %} (no plan stored for {{ states('select.pe_ui_history_plan') }}; showing the latest before it){% endif %}
+
+              {%- if s %}
+              Over the {{ s.half_hours }} half-hours the plan covered: the plan expected import/export to cost **£{{ '%.2f' | format(s.plan_cost) }}**, it actually cost **£{{ '%.2f' | format(s.actual_cost) }}** ({{ ('£%.2f more' | format(s.actual_cost - s.plan_cost)) if s.actual_cost > s.plan_cost else ('£%.2f less' | format(s.plan_cost - s.actual_cost)) }}). House load {{ s.plan_load }} kWh forecast, {{ s.actual_load }} kWh actual; solar {{ s.plan_solar }} kWh forecast, {{ s.actual_solar }} kWh actual; battery {{ s.soc_gap }}% from the plan on average.
+              {%- elif a.recorded_half_hours %}
+              Nothing to compare: no stored plan covers this day's recorded half-hours.
+              {%- endif %}
+              {%- if a.day_import_export_cost is not none %}
+              Whole day, import minus export (no standing charge): £{{ '%.2f' | format(a.day_import_export_cost) }} from {{ a.recorded_half_hours }} recorded half-hours.
+              {%- endif %}
+              {%- if a.available_plans %}
+              Plans stored for this day: {{ a.available_plans | join(', ') }}. PowerEngine keeps the first plan of each hour for 60 days (from 0.5.18) and the start-of-day plan for 400.
+              {%- endif %}
+              {%- else %}
+              Choose a day above. The history builds up from 0.5.18: each hour's first plan is kept from now on.
+              {%- endif %}
+          - type: custom:apexcharts-card
+            grid_options: {columns: full, rows: auto}
+            graph_span: 24h
+            span:
+              start: day
+            header:
+              show: true
+              title: Battery, prices and grid use (plan dashed, actual solid)
+              show_states: false
+            apex_config:
+              chart: {height: 380}
+              legend: {show: true}
+              tooltip: {shared: true, x: {format: "HH:mm"}}
+              xaxis: {labels: {datetimeFormatter: {day: "HH:mm", hour: "HH:mm"}}}
+            yaxis:
+              - id: soc
+                min: 0
+                max: 100
+                decimals: 0
+                apex_config:
+                  title: {text: "Battery %", style: {color: "#43a047"}}
+                  labels: {style: {colors: "#43a047"}}
+                  axisBorder: {show: true, color: "#43a047", width: 3}
+              - id: price
+                opposite: true
+                min: 0
+                decimals: 0
+                apex_config:
+                  title: {text: "Import price p/kWh", style: {color: "#fb8c00"}}
+                  labels: {style: {colors: "#fb8c00"}}
+                  axisBorder: {show: true, color: "#fb8c00", width: 3}
+              - id: kwh
+                opposite: true
+                min: 0
+                decimals: 1
+                apex_config:
+                  title: {text: "kWh per half-hour", style: {color: "#1e88e5"}}
+                  labels: {style: {colors: "#1e88e5"}}
+                  axisBorder: {show: true, color: "#1e88e5", width: 3}
+            series:
+              - entity: sensor.pe_plan_history
+                name: Battery (actual)
+                yaxis_id: soc
+                type: line
+                color: "#2e7d32"
+                stroke_width: 3
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {x: []};
+                  return s.x.map((x, i) => [x + 1800000, s.actual_soc[i]]).filter(p => p[1] !== null);
+              - entity: sensor.pe_plan_history
+                name: Battery (plan)
+                yaxis_id: soc
+                type: line
+                color: "#66bb6a"
+                stroke_width: 2
+                stroke_dash: 5
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {x: []};
+                  return s.x.map((x, i) => [x + 1800000, s.plan_soc[i]]).filter(p => p[1] !== null);
+              - entity: sensor.pe_plan_history
+                name: Import price
+                yaxis_id: price
+                type: line
+                curve: stepline
+                color: "#fb8c00"
+                stroke_width: 2
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {x: []};
+                  return s.x.map((x, i) => [x, s.price_p[i]]).filter(p => p[1] !== null);
+              - entity: sensor.pe_plan_history
+                name: Grid charge (actual)
+                yaxis_id: kwh
+                type: area
+                curve: stepline
+                opacity: 0.5
+                stroke_width: 1
+                color: "#1e88e5"
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {x: []};
+                  const pts = s.x.map((x, i) => [x, s.actual_charge[i]]).filter(p => p[1] !== null);
+                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                  return pts;
+              - entity: sensor.pe_plan_history
+                name: Grid charge (plan)
+                yaxis_id: kwh
+                type: line
+                curve: stepline
+                stroke_width: 2
+                stroke_dash: 5
+                color: "#0d47a1"
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {x: []};
+                  const pts = s.x.map((x, i) => [x, s.plan_charge[i]]).filter(p => p[1] !== null);
+                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                  return pts;
+              - entity: sensor.pe_plan_history
+                name: Battery export (actual)
+                yaxis_id: kwh
+                type: area
+                curve: stepline
+                opacity: 0.6
+                stroke_width: 1
+                color: "#e53935"
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {x: []};
+                  const pts = s.x.map((x, i) => [x, s.actual_bat_export[i]]).filter(p => p[1] !== null);
+                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                  return pts;
+              - entity: sensor.pe_plan_history
+                name: Solar export (actual)
+                yaxis_id: kwh
+                type: area
+                curve: stepline
+                opacity: 0.75
+                stroke_width: 1
+                color: "#f9a825"
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {x: []};
+                  const pts = s.x.map((x, i) => [x, s.actual_solar_export[i]]).filter(p => p[1] !== null);
+                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                  return pts;
+          - type: custom:apexcharts-card
+            grid_options: {columns: full, rows: auto}
+            graph_span: 24h
+            span:
+              start: day
+            header:
+              show: true
+              title: House load and solar (forecast dashed, actual solid)
+              show_states: false
+            apex_config:
+              chart: {height: 240}
+              legend: {show: true}
+              tooltip: {shared: true, x: {format: "HH:mm"}}
+            yaxis:
+              - min: 0
+                decimals: 1
+                apex_config: {title: {text: "kWh per half-hour"}}
+            series:
+              - entity: sensor.pe_plan_history
+                name: House (actual)
+                type: line
+                color: "#616161"
+                stroke_width: 2
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {x: []};
+                  return s.x.map((x, i) => [x, s.actual_load[i]]).filter(p => p[1] !== null);
+              - entity: sensor.pe_plan_history
+                name: House (forecast)
+                type: line
+                color: "#9e9e9e"
+                stroke_width: 2
+                stroke_dash: 5
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {x: []};
+                  return s.x.map((x, i) => [x, s.plan_load[i]]).filter(p => p[1] !== null);
+              - entity: sensor.pe_plan_history
+                name: Solar (actual)
+                type: area
+                color: "#fdd835"
+                opacity: 0.3
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {x: []};
+                  return s.x.map((x, i) => [x, s.actual_solar[i]]).filter(p => p[1] !== null);
+              - entity: sensor.pe_plan_history
+                name: Solar (forecast)
+                type: line
+                color: "#f9a825"
+                stroke_width: 2
+                stroke_dash: 5
+                extend_to: false
+                data_generator: |
+                  const s = entity.attributes.series || {x: []};
+                  return s.x.map((x, i) => [x, s.plan_solar[i]]).filter(p => p[1] !== null);
+          - type: heading
+            heading: The plan's actions for the day
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set w = state_attr('sensor.pe_plan_history', 'windows') or [] %}
+              {%- if w %}
+              | Time | Action | Target | Battery | Why |
+              |---|---|---|---|---|
+              {%- for x in w %}
+              | {{ x.from }}–{{ x.to }} | **{{ x.action | replace('_', '-') }}** | {{ (x.target_soc | int | string ~ '%') if x.target_soc else '–' }} | {{ x.soc_start }}% → {{ x.soc_end }}% | {{ x.reason }} |
+              {%- endfor %}
+              {%- else %}
+              No actions stored for this plan (plans saved before 0.5.18 kept only the battery level).
+              {%- endif %}
   - title: Costs
     path: costs
     icon: mdi:cash-multiple
@@ -679,7 +923,9 @@ views:
               | {{ r.day }} | {{ r.time }} | {{ {'planned': 'upcoming', 'done': 'ran' ~ (' (confirmed)' if r.confirmed else ''), 'cancelled': 'cancelled', 'cut_short': 'cut short'}[r.status] }} | {{ r.planned_kwh if r.planned_kwh is not none else '–' }} kWh | {{ r.car_kwh }} kWh | {{ r.charging_min | round(0) | int }} min |
               {%- endfor %}
 
-              This record builds the history for scoring how reliable EDF's slots are.
+              {%- set c = state_attr('sensor.pe_plan', 'certainty') %}{% if c %}
+              **Slot certainty: {{ (c.overall * 100) | round(0) | int }}%** overall from {{ c.slots }} finished slot{{ '' if c.slots == 1 else 's' }} (starts at 70% and learns as slots finish).{% for g in c.groups %} {{ g.when | capitalize }}, {{ g.notice }}: {{ (g.certainty * 100) | round(0) | int }}% ({{ g.slots }}).{% endfor %} The plan prices each upcoming slot as certainty × slot price + the rest at the normal price, so it only leans on slots that usually happen.
+              {%- endif %}
               {%- else %}
               No smart-charge slots seen yet. PowerEngine records each one EDF plans (and what the car actually drew) from now on.
               {%- endif %}

@@ -10,7 +10,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
+from .certainty import expected_price
 from .readings import Readings, Window, parse_time
+from .tariff import cheap_tods, overnight_window, tod
 
 SLOT = timedelta(minutes=30)
 DEFAULT_LOAD_W = 500.0          # steady assumption until a load profile exists
@@ -34,6 +36,8 @@ class Slot:
     axle: bool = False                  # Axle event in this slot
     free: bool = False                  # free-electricity session
     car_kw: float | None = None         # known car draw (live); None = assume the charger rating in smart slots
+    certainty: float | None = None      # smart slot: how likely it really happens (price is then the expected one)
+    slot_price: float | None = None     # smart slot: the published slot price, before weighting by certainty
 
     @property
     def end(self) -> datetime:
@@ -141,8 +145,12 @@ def _in(windows: list[Window], s: datetime) -> bool:
 
 
 def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | None, tz,
-                horizon_h: float = 48, min_h: float = 36) -> list[Slot]:
-    """Half-hour slots from the current half-hour to the end of known prices (24-48 h)."""
+                horizon_h: float = 48, min_h: float = 36, certainty=None,
+                first_seen: dict[str, str] | None = None) -> list[Slot]:
+    """Half-hour slots from the current half-hour to the end of known prices (24-48 h).
+
+    `certainty` (a certainty.Certainty) turns each future smart slot's price into an expected price, using when
+    the slot was first announced (`first_seen`: slot start iso -> iso) for its group."""
     start = slot_start(r.now)
     rates = sorted(r.rates, key=lambda w: w.start)
     last_known = max((w.end for w in rates), default=start)
@@ -161,12 +169,25 @@ def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | No
     axle = [Window(r.axle_start, r.axle_end)] if r.axle_start and r.axle_end else []
     free = [Window(r.free_start, r.free_end)] if r.free_start and r.free_end else []
 
+    window = overnight_window(cheap_tods(rates, tz))
+
+    def day_range(t: datetime) -> tuple[float, float] | None:
+        d = (t.astimezone(tz) if tz else t).date()
+        vals = [w.value for w in rates
+                if w.value is not None and (w.start.astimezone(tz) if tz else w.start).date() == d]
+        return (min(vals), max(vals)) if vals else None
+
     def price_at(s: datetime) -> tuple[float | None, bool]:
         for w in rates:
             if w.start <= s < w.end:
                 return w.value, False
-        for w in rates:                     # beyond published prices: same time yesterday
-            if w.start <= s - timedelta(days=1) < w.end:
+        y = s - timedelta(days=1)
+        for w in rates:                     # beyond published prices: same time yesterday...
+            if w.start <= y < w.end:
+                rng = day_range(y)
+                if (w.value is not None and rng and window and tod(y, tz) not in window
+                        and w.value <= rng[0] + 1e-6 < rng[1]):
+                    return rng[1], True     # ...but not a smart slot's cheap price: those move from day to day
                 return w.value, True
         return r.import_rate, True
 
@@ -174,8 +195,17 @@ def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | No
     while s < end:
         price, est = price_at(s)
         load_w = profile.expected_w(s, tz) if profile and profile.watts else DEFAULT_LOAD_W
-        slots.append(Slot(start=s, price=price, export=r.export_rate, solar_kwh=solar_by_slot.get(s, 0.0),
-                          load_kwh=load_w / 1000 * 0.5, price_estimated=est, smart_slot=_in(r.dispatches, s),
-                          axle=_in(axle, s), free=_in(free, s)))
+        slot = Slot(start=s, price=price, export=r.export_rate, solar_kwh=solar_by_slot.get(s, 0.0),
+                    load_kwh=load_w / 1000 * 0.5, price_estimated=est, smart_slot=_in(r.dispatches, s),
+                    axle=_in(axle, s), free=_in(free, s))
+        if slot.smart_slot and certainty is not None and s > start and price is not None:
+            rng = day_range(s)
+            std = rng[1] if rng else price
+            win = next((w for w in r.dispatches if w.start <= s < w.end), None)
+            seen = (first_seen or {}).get(win.start.isoformat()) if win else None
+            c = certainty.score(win.start if win else s, datetime.fromisoformat(seen) if seen else r.now)
+            slot.certainty, slot.slot_price = c, price
+            slot.price = expected_price(price, std, c)
+        slots.append(slot)
         s += SLOT
     return slots

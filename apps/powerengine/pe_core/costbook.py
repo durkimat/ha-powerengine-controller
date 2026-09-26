@@ -19,6 +19,7 @@ from .readings import Readings
 from .tariff import cheap_tods, overnight_window, rates_at, reclassify
 
 KEEP_DAYS = 400
+HISTORY_KEEP_DAYS = 60     # hourly plan snapshots (Plan history tab)
 WINDOW_DAYS = 14
 SHOW_DAYS = 14
 MEASURE_DAYS = 30
@@ -70,9 +71,13 @@ class CostBook:
 
     def prune(self, today: date) -> None:
         cutoff = (today - timedelta(days=KEEP_DAYS)).isoformat()
+        history_cutoff = (today - timedelta(days=HISTORY_KEEP_DAYS)).isoformat()
         for name in os.listdir(self.folder):
-            day = name[5:15] if name.startswith("plan-") else name[:10]
-            if day < cutoff and name.endswith(".json") and day[:4].isdigit():
+            if name.startswith("plans-"):
+                day, limit = name[6:16], history_cutoff
+            else:
+                day, limit = (name[5:15] if name.startswith("plan-") else name[:10]), cutoff
+            if day < limit and name.endswith(".json") and day[:4].isdigit():
                 os.remove(os.path.join(self.folder, name))
 
     # --- recording ----------------------------------------------------------------------
@@ -165,6 +170,15 @@ class CostBook:
 
     def plan_snapshot(self, day: date) -> dict | None:
         return _read_json(os.path.join(self.folder, f"plan-{day.isoformat()}.json"), None)
+
+    def plan_history(self, day: date) -> dict:
+        """{"HH:00": snapshot} of the first plan made in each hour of that day (Plan history tab)."""
+        return _read_json(os.path.join(self.folder, f"plans-{day.isoformat()}.json"), {}) or {}
+
+    def save_plan_history(self, day: date, hour: str, snapshot: dict) -> None:
+        plans = self.plan_history(day)
+        plans[hour] = snapshot
+        _write_json(os.path.join(self.folder, f"plans-{day.isoformat()}.json"), plans)
 
     def health(self, today: date, checks: dict | None, days: int = SHOW_DAYS) -> dict:
         """Findings (inputs + yesterday's data) and plan-vs-actual accuracy for recent days."""

@@ -17,6 +17,7 @@ import appdaemon.plugins.hass.hassapi as hass
 
 from pe_core import __version__, clock, testwrite
 from pe_core.activity import ActivityLog
+from pe_core.certainty import Certainty
 from pe_core.checks import OK, check, summarise
 from pe_core.config import (
     DEFAULT_PATHS,
@@ -38,6 +39,8 @@ from pe_core.entities import (
     AVAILABILITY_TOPIC,
     BASE_TOPIC,
     ENTITIES,
+    HISTORY_DAY_TOPIC,
+    HISTORY_PLAN_TOPIC,
     OFFLINE,
     ONLINE,
     PAUSE_TOPIC,
@@ -47,11 +50,12 @@ from pe_core.entities import (
 )
 from pe_core.forecast import LoadProfile, build_slots, house_only_means, parse_history, profile_from_means
 from pe_core.health import overall, plan_snapshot
+from pe_core.history import chosen_day, chosen_plan, day_view
 from pe_core.loadstore import LoadStore
 from pe_core.modes import GUARDS, effective_mode, guard_problems
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
 from pe_core.optimiser import compare, optimise
-from pe_core.planner import make_plan, params_from, plan_entity_states
+from pe_core.planner import make_plan, params_from, plan_entity_states, slot_certainty_rows
 from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue, is_forbidden_control
@@ -175,6 +179,7 @@ class PowerEngine(hass.Hass):
         self.run_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
         self.run_daily(self._daily_summary, "08:00:00")
         self.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
+        self.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
@@ -546,13 +551,16 @@ class PowerEngine(hass.Hass):
         due = self._plan_time is None or (r.now - self._plan_time).total_seconds() >= REPLAN_SECONDS
         if sig == self._plan_sig and not due or r.battery_soc is None:
             return
-        slots = build_slots(r, self._solar_forecast(), self.profile, self.tz)
+        cert = Certainty(self.slots.slots, self.tz)
+        slots = build_slots(r, self._solar_forecast(), self.profile, self.tz, certainty=cert,
+                            first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()})
         self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz,
                               auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)),
                               wear_p=self.cfg.safety.get("battery_wear_p", 2.0))
         self._plan_sig, self._plan_time = sig, r.now
         self._snapshot_plan(r.now)
-        extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0}
+        extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0,
+                 "slot_certainty": slot_certainty_rows(slots, self.tz), "certainty": cert.summary()}
         try:                                          # the optimiser, for comparison only
             p = self._params(r)
             extra["optimiser"] = compare(self.plan, optimise(slots, r.battery_soc, p), p)
@@ -562,20 +570,43 @@ class PowerEngine(hass.Hass):
             self._publish_if_changed(key, state, attrs)
 
     def _snapshot_plan(self, now):
-        """Keep the first plan of each local day, to compare with what actually happened (Health tab)."""
+        """Keep the first plan of each local day (Health tab accuracy), and the first plan of each hour (Plan
+        history tab)."""
         if self.costbook is None or self.plan is None:
             return
         tz = self.tz or timezone.utc
-        day = now.astimezone(tz).date()
-        if getattr(self, "_snap_day", None) == day:
+        local = now.astimezone(tz)
+        day, hour = local.date(), f"{local.hour:02d}:00"
+        if getattr(self, "_snap_hour", None) == (day, hour):
             return
-        self._snap_day = day
+        self._snap_hour = (day, hour)
         try:
+            start = datetime(day.year, day.month, day.day, tzinfo=tz)
+            end = datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=tz)
+            snap = plan_snapshot(self.plan, start, end)
             if self.costbook.plan_snapshot(day) is None:
-                start = datetime(day.year, day.month, day.day, tzinfo=tz)
-                self.costbook.save_plan_snapshot(day, plan_snapshot(self.plan, start, start + timedelta(days=1)))
+                self.costbook.save_plan_snapshot(day, snap)
+            if hour not in self.costbook.plan_history(day):
+                self.costbook.save_plan_history(day, hour, snap)
         except Exception as err:
             self.log(f"Could not save the plan snapshot: {err!r}", level="WARNING")
+
+    def _publish_history(self, *args, **kwargs):
+        """The Plan history tab: the chosen day and plan against what happened."""
+        if self.costbook is None or getattr(self, "mqtt", None) is None:
+            return
+        try:
+            tz = self.tz or timezone.utc
+            now = datetime.now(timezone.utc)
+            day = chosen_day(self.get_state("select.pe_ui_history_day"), now.astimezone(tz).date())
+            hourly = self.costbook.plan_history(day)
+            label, snap = chosen_plan(self.get_state("select.pe_ui_history_plan"),
+                                      self.costbook.plan_snapshot(day), hourly)
+            available = (["Start of day"] if self.costbook.plan_snapshot(day) else []) + sorted(hourly)
+            view = day_view(day, self.costbook.day_records(day), snap, label, tz, now, available)
+            self._publish_state("plan_history", day.isoformat(), view)
+        except Exception as err:
+            self.log(f"Could not build the plan history: {err!r}", level="WARNING")
 
     # --- notifications (HA companion app) ------------------------------------------------
 
@@ -639,6 +670,8 @@ class PowerEngine(hass.Hass):
         for eid in [self._role_entity(key) for key, _ in GUARDS] + [PAUSE_ENTITY]:
             if eid:                                   # re-check the mode as soon as a guard or pause changes
                 self._write_listeners.append(self.listen_state(self._on_guard_change, eid))
+        for eid in ("select.pe_ui_history_day", "select.pe_ui_history_plan"):
+            self._write_listeners.append(self.listen_state(self._publish_history, eid))
 
     def _on_guard_change(self, entity, attribute, old, new, kwargs):
         if old != new:
@@ -1142,6 +1175,10 @@ class PowerEngine(hass.Hass):
         if not done.get("right_align"):
             self._publish(f"{BASE_TOPIC}/ui_right_align/set", "ON")      # right-aligned numbers by default
             done["right_align"] = True
+        if not done.get("history"):
+            self._publish(HISTORY_DAY_TOPIC, "Yesterday")
+            self._publish(HISTORY_PLAN_TOPIC, "Start of day")
+            done["history"] = True
             try:
                 with open(path, "w", encoding="utf-8") as fh:
                     json.dump(done, fh)

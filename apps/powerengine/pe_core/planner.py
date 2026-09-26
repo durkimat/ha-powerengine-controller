@@ -425,6 +425,25 @@ def params_from(cfg, readings=None) -> Params:
     )
 
 
+def slot_certainty_rows(slots: list[Slot], tz=None) -> list[dict]:
+    """Planned smart slots merged into windows, with their certainty and the price the plan used."""
+    out: list[dict] = []
+    for s in slots:
+        if not s.smart_slot or s.certainty is None:
+            continue
+        if out and out[-1]["_end"] == s.start and out[-1]["certainty"] == round(s.certainty * 100):
+            out[-1]["_end"] = s.end
+            out[-1]["to"] = _hhmm(s.end, tz)
+            continue
+        local = s.start.astimezone(tz) if tz else s.start
+        out.append({"_end": s.end, "day": local.strftime("%a"), "from": _hhmm(s.start, tz), "to": _hhmm(s.end, tz),
+                    "certainty": round(s.certainty * 100), "slot_p": round((s.slot_price or 0) * 100, 2),
+                    "expected_p": round((s.price or 0) * 100, 2)})
+    for row in out:
+        row.pop("_end")
+    return out
+
+
 def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
     """key -> (state, attributes) for the plan_* entities."""
     if plan is None:

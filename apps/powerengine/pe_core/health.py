@@ -96,10 +96,21 @@ def overall(findings: list[dict]) -> str:
 
 
 def plan_snapshot(plan, day_start: datetime, day_end: datetime) -> dict:
-    """The plan's predictions for one local day (half-hours from day_start to day_end)."""
+    """The plan's predictions for one local day (half-hours from day_start to day_end), for the accuracy check
+    (Health tab) and the Plan history tab."""
     slots = []
     for ps in plan.slots:
         if day_start <= ps.slot.start < day_end:
             slots.append({"start": ps.slot.start.isoformat(), "soc": round(ps.soc_end, 1), "action": ps.action,
-                          "load_kwh": round(ps.slot.load_kwh, 3), "solar_kwh": round(ps.slot.solar_kwh, 3)})
-    return {"made_at": plan.made_at.isoformat(timespec="seconds"), "slots": slots}
+                          "load_kwh": round(ps.slot.load_kwh, 3), "solar_kwh": round(ps.slot.solar_kwh, 3),
+                          "price_p": None if ps.slot.price is None else round(ps.slot.price * 100, 2),
+                          "charge_kwh": round(ps.grid_to_battery, 3),
+                          "bat_export_kwh": round(ps.battery_export, 3),
+                          "solar_export_kwh": round(max(0.0, ps.grid_export - ps.battery_export), 3),
+                          "import_kwh": round(ps.grid_import, 3), "cost": round(ps.cost, 4)})
+    keep = ("start", "end", "from", "to", "action", "target_soc", "reason", "soc_start", "soc_end")
+    windows = [{k: w[k] for k in keep if k in w}
+               for w in getattr(plan, "windows", []) or []
+               if w.get("start") and w.get("end") and datetime.fromisoformat(w["start"]) < day_end
+               and datetime.fromisoformat(w["end"]) > day_start]
+    return {"made_at": plan.made_at.isoformat(timespec="seconds"), "slots": slots, "windows": windows}
