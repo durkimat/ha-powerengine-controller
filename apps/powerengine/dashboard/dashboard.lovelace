@@ -204,7 +204,7 @@ views:
           # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
           - type: conditional
             grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(min-width: 600px)"}]
+            conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
             card:
               type: custom:apexcharts-card
               grid_options: {columns: full, rows: auto}
@@ -358,7 +358,7 @@ views:
                     return pts;
           - type: conditional
             grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(max-width: 599px)"}]
+            conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
             card:
               type: "custom:apexcharts-card"
               grid_options: {"columns": "full", "rows": "auto"}
@@ -366,7 +366,7 @@ views:
               span: {"start": "minute"}
               now: {"show": true, "label": "Now"}
               header: {"show": true, "title": "Next 18 hours", "show_states": false}
-              apex_config: {"chart": {"height": 420}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true}, "xaxis": {"labels": {"style": {"fontSize": "10px"}}, "tickAmount": 6}, "grid": {"padding": {"left": 0, "right": 4}}}
+              apex_config: {"chart": {"height": 420, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
               yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#43a047", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#1e88e5", "fontSize": "10px"}}}, "show": false}]
               series: *chart_plan_series
       - type: grid
@@ -428,7 +428,7 @@ views:
           # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
           - type: conditional
             grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(min-width: 600px)"}]
+            conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
             card:
               type: custom:apexcharts-card
               grid_options: {columns: full, rows: auto}
@@ -567,20 +567,20 @@ views:
                     return pts;
           - type: conditional
             grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(max-width: 599px)"}]
+            conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
             card:
               type: "custom:apexcharts-card"
               grid_options: {"columns": "full", "rows": "auto"}
               graph_span: "24h"
               span: {"start": "day"}
               header: {"show": true, "title": "Battery, prices and grid use (plan dashed, actual solid)", "show_states": false}
-              apex_config: {"chart": {"height": 420}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"datetimeFormatter": {"day": "HH:mm", "hour": "HH:mm"}, "style": {"fontSize": "10px"}}, "tickAmount": 6}, "grid": {"padding": {"left": 0, "right": 4}}}
+              apex_config: {"chart": {"height": 420, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"datetimeFormatter": {"day": "HH:mm", "hour": "HH:mm"}, "style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
               yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#43a047", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#1e88e5", "fontSize": "10px"}}}, "show": false}]
               series: *chart_day_series
           # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
           - type: conditional
             grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(min-width: 600px)"}]
+            conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
             card:
               type: custom:apexcharts-card
               grid_options: {columns: full, rows: auto}
@@ -644,14 +644,14 @@ views:
                     return s.x.map((x, i) => [x, s.plan_solar[i]]).filter(p => p[1] !== null);
           - type: conditional
             grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(max-width: 599px)"}]
+            conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
             card:
               type: "custom:apexcharts-card"
               grid_options: {"columns": "full", "rows": "auto"}
               graph_span: "24h"
               span: {"start": "day"}
               header: {"show": true, "title": "House load and solar (forecast dashed, actual solid)", "show_states": false}
-              apex_config: {"chart": {"height": 240}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"style": {"fontSize": "10px"}}, "tickAmount": 6}, "grid": {"padding": {"left": 0, "right": 4}}}
+              apex_config: {"chart": {"height": 240, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
               yaxis: [{"min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"fontSize": "10px"}}}}]
               series: *chart_load_series
           - type: heading
@@ -707,7 +707,7 @@ views:
           # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
           - type: conditional
             grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(min-width: 600px)"}]
+            conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
             card:
               type: custom:apexcharts-card
               grid_options: {columns: full, rows: auto}
@@ -793,14 +793,14 @@ views:
                     return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[7][1]]).filter(p => p[0] >= from);
           - type: conditional
             grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(max-width: 599px)"}]
+            conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
             card:
               type: "custom:apexcharts-card"
               grid_options: {"columns": "full", "rows": "auto"}
               graph_span: "5d"
               span: {"end": "day", "offset": "-12h"}
               header: {"show": true, "title": "Daily cost, step by step", "show_states": false}
-              apex_config: {"chart": {"height": 380}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true}, "xaxis": {"labels": {"format": "ddd dd", "style": {"fontSize": "10px"}}, "tickAmount": 6}, "grid": {"padding": {"left": 0, "right": 4}}}
+              apex_config: {"chart": {"height": 380, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true}, "xaxis": {"labels": {"format": "ddd dd", "style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
               yaxis: [{"decimals": 2, "apex_config": {"labels": {"style": {"fontSize": "10px"}}}}]
               series: *chart_costs_series
       - type: grid
@@ -924,7 +924,7 @@ views:
           # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
           - type: conditional
             grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(min-width: 600px)"}]
+            conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
             card:
               type: custom:apexcharts-card
               grid_options: {columns: full, rows: auto}
@@ -987,14 +987,14 @@ views:
                                .map(d => [new Date(d[0] + "T12:00:00").getTime(), d[2]]);
           - type: conditional
             grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(max-width: 599px)"}]
+            conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
             card:
               type: "custom:apexcharts-card"
               grid_options: {"columns": "full", "rows": "auto"}
               graph_span: "14d"
               span: {"end": "day"}
               header: {"show": true, "title": "System losses by day", "show_states": false}
-              apex_config: {"chart": {"height": 240}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "dataLabels": {"offsetY": -6, "style": {"fontSize": "10px"}, "background": {"enabled": false}, "formatter": "EVAL:function(val) { return val === null || val === undefined ? \"\" : val + \"%\"; }\n"}, "xaxis": {"labels": {"style": {"fontSize": "10px"}}, "tickAmount": 6}, "grid": {"padding": {"left": 0, "right": 4}}}
+              apex_config: {"chart": {"height": 240, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "dataLabels": {"offsetY": -6, "style": {"fontSize": "10px"}, "background": {"enabled": false}, "formatter": "EVAL:function(val) { return val === null || val === undefined ? \"\" : val + \"%\"; }\n"}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
               yaxis: [{"id": "kwh", "decimals": 1, "min": 0, "apex_config": {"labels": {"style": {"colors": "#ef6c00", "fontSize": "10px"}}}}, {"id": "pct", "opposite": true, "decimals": 0, "min": 0, "apex_config": {"labels": {"style": {"colors": "#6a1b9a", "fontSize": "10px"}}}, "show": false}]
               series: *chart_losses_series
       - type: grid
