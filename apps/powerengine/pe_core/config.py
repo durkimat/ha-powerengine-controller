@@ -42,10 +42,11 @@ KNOWN_KEYS = frozenset(
 MODES = ("passive", "active")
 FORECAST_SOURCES = ("none", "solcast_site", "scaled")
 FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
-            "free_power_days", "tariff_simulator", "optimised_plan")
+            "free_power_days", "tariff_simulator", "optimised_plan", "use_learned", "cold_caution", "cold_learning")
 FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
                     "arbitrage": False, "axle": True,
-                    "free_power_days": True, "tariff_simulator": True, "optimised_plan": True}
+                    "free_power_days": True, "tariff_simulator": True, "optimised_plan": True,
+                    "use_learned": True, "cold_caution": True, "cold_learning": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 SAFETY = {
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
@@ -64,6 +65,10 @@ SAFETY = {
     "arbitrage_band_penalty_p": (2.0, 0, 50), # extra p/kWh counted when arbitrage goes outside the band
     "max_writes_per_day": (150, 20, 2000),    # Active: pause control if PowerEngine's own writes reach this
     "window_switch_cost_p": (5.0, 0, 100),    # optimiser: cost counted per change of the inverter's timed windows
+    "cold_caution_temp_c": (4.0, -20, 20),    # cold battery: plan a slower charge below this battery temperature
+    "cold_charge_pct": (50, 10, 100),         # ...at this share of the normal charge rate (%)
+    "cold_release_c": (3.0, 0, 15),           # ...until the battery is this much warmer than the threshold
+    "battery_temp_lag_h": (24.0, 1, 96),      # how long the battery takes to follow the outside temperature (h)
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True}
 
@@ -122,6 +127,18 @@ SETTING_TEXT = {
                            "Safety stop for inverter EEPROM wear: if PowerEngine's own writes today reach this, it "
                            "pauses control (inverter back to Self-Use) and notifies you. Resuming allows this many "
                            "more. Normal days need far fewer (Health tab)."),
+    "cold_caution_temp_c": ("Cold caution below", "°C",
+                            "Battery temperature (estimated from the outside temperature) below which charging is "
+                            "expected to be slower. With learning on, PowerEngine moves this to what it sees."),
+    "cold_charge_pct": ("Cold charge rate", "%",
+                        "Share of the normal charge rate the plan expects while cautious. With learning on, "
+                        "replaced by the rate actually seen once slowed charges have been recorded."),
+    "cold_release_c": ("Cold caution release", "°C",
+                       "Once cautious, stay so until the battery is this much warmer than the threshold, so one "
+                       "milder afternoon doesn't end it."),
+    "battery_temp_lag_h": ("Battery warm-up time", "h",
+                           "How long the battery takes to follow the outside temperature: about 24 h in a garage "
+                           "or outbuilding, 6 h outside, 72 h indoors."),
     "house_load_includes_ev": ("House load includes the car charger", "",
                                "Tick if the car is inside the inverter's house load. PowerEngine then subtracts it and "
                                "stops the battery discharging into the car."),
@@ -137,6 +154,7 @@ SETTING_SECTIONS = (
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p")),
     ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p")),
+    ("cold", "Cold battery", ("cold_caution_temp_c", "cold_charge_pct", "cold_release_c", "battery_temp_lag_h")),
 )
 
 

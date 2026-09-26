@@ -54,6 +54,7 @@ class Params:
     arbitrage_band_penalty_p: float = 2.0   # extra p/kWh counted when arbitrage goes outside the band
     arbitrage_keep_soc: float = 10.0  # hard: reach the refill with at least the reserve plus this (%)
     switch_cost_p: float = 5.0        # optimiser: cost of changing the inverter's timed windows (EEPROM wear), p
+    taper: tuple = ()                 # learned: ((soc_from, fraction of the charge rate), ...) near full
 
     @property
     def buffer_target(self) -> float:
@@ -131,14 +132,26 @@ def car_kw(s: Slot, p: Params) -> float:
     return p.ev_charger_kw if s.smart_slot else 0.0
 
 
-def grid_charge_kw(s: Slot, p: Params, dt_h: float = DT_H) -> float:
-    """Battery grid-charge power allowed in this slot: the inverter limit, reduced to keep total import under the fuse.
+def charge_limit_kw(s: Slot, p: Params, soc: float | None = None) -> float:
+    """The battery's own charge rate for this slot: the inverter limit, slowed near full (learned taper) and when
+    the battery is cold (cold-battery caution)."""
+    kw = p.max_charge_kw * s.charge_factor
+    if soc is not None:
+        for soc_from, frac in p.taper:
+            if soc >= soc_from:
+                kw = min(kw, p.max_charge_kw * frac)
+    return kw
+
+
+def grid_charge_kw(s: Slot, p: Params, dt_h: float = DT_H, soc: float | None = None) -> float:
+    """Battery grid-charge power allowed in this slot: the battery's charge rate, reduced to keep total import under
+    the fuse.
 
     House (net of solar) and car come first; the battery gets what is left.
     """
     house_kw = max(0.0, (s.load_kwh - s.solar_kwh) / dt_h) if dt_h else 0.0
     headroom = p.fuse_kw - house_kw - car_kw(s, p)
-    return max(0.0, min(p.max_charge_kw, headroom))
+    return max(0.0, min(charge_limit_kw(s, p, soc), headroom))
 
 
 def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
@@ -156,14 +169,14 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
     def charge_from_surplus(surplus: float, limit_soc: float = 100.0) -> float:
         nonlocal stored
         room = max(0.0, limit_soc / 100 * cap - stored)
-        into = min(surplus, p.max_charge_kw * dt_h, room / p.efficiency)
+        into = min(surplus, charge_limit_kw(s, p, soc) * dt_h, room / p.efficiency)
         stored += into * p.efficiency
         return surplus - into
 
     if ps.action == GRID_CHARGE:
         target = ps.target_soc if ps.target_soc is not None else p.target_soc
         room = max(0.0, target / 100 * cap - stored)
-        into = min(grid_charge_kw(s, p, dt_h) * dt_h, room / p.efficiency)
+        into = min(grid_charge_kw(s, p, dt_h, soc) * dt_h, room / p.efficiency)
         stored += into * p.efficiency
         ps.grid_to_battery = into
         flow = net + into

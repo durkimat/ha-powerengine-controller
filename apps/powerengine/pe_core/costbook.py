@@ -204,6 +204,14 @@ class CostBook:
         return {"state": overall(findings), "findings": findings, "accuracy": acc}
 
     # --- measured losses ------------------------------------------------------------------
+    def halves(self, today: date, days: int = MEASURE_DAYS) -> list[dict]:
+        """Recorded half-hours of the last `days` complete days (oldest first), for learning."""
+        out: list[dict] = []
+        for i in range(days, 0, -1):
+            d = today - timedelta(days=i)
+            out += sorted((x for x in self.day_records(d) if x.get("fv") == self.flow_id), key=lambda x: x["start"])
+        return out
+
     def measure(self, today: date, capacity: float, days: int = MEASURE_DAYS) -> dict:
         """Battery round-trip efficiency and system losses from the recorded flows (complete days only).
 

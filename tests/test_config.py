@@ -123,7 +123,7 @@ def test_use_measured_only_on_measurable_inputs():
 
     from pe_core.config import ConfigError
     with pytest.raises(ConfigError, match="no measured figure"):
-        parse_config({"inputs": {"battery_max_charge_power": {"value": 4800, "use_measured": True}}})
+        parse_config({"inputs": {"battery_soh": {"value": 95, "use_measured": True}}})
     with pytest.raises(ConfigError, match="true or false"):
         parse_config({"inputs": {"battery_capacity": {"value": 18, "use_measured": "yes"}}})
 
