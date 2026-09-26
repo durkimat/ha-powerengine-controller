@@ -50,6 +50,7 @@ from pe_core.entities import (
 )
 from pe_core.forecast import LoadProfile, build_slots, house_only_means, parse_history, profile_from_means
 from pe_core.health import overall, plan_snapshot
+from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_day, chosen_plan, day_view
 from pe_core.loadstore import LoadStore
 from pe_core.modes import GUARDS, effective_mode, guard_problems
@@ -59,13 +60,15 @@ from pe_core.planner import make_plan, params_from, plan_entity_states, slot_cer
 from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue, is_forbidden_control
-from pe_core.simjob import SimStore
+from pe_core.simhistory import History, months_wanted, parse_upload
+from pe_core.simjob import SimContext, SimStore
 from pe_core.simjob import run as sim_run
 from pe_core.simulate import SimBattery
 from pe_core.slots import SlotTracker
 from pe_core.smartcharge import SmartCharger, worth_asking
 from pe_core.status import entity_states
 from pe_core.store import save_config
+from pe_core.weather import Weather
 
 HEARTBEAT_SECONDS = 60
 SIM_START = "01:30:00"            # after the midnight jobs (00:05-00:20), well before the morning
@@ -174,6 +177,8 @@ class PowerEngine(hass.Hass):
 
         self.listen_event(self._on_save, SAVE_EVENT)
         self.listen_event(self._on_test, TEST_EVENT)
+        self.listen_event(self._on_sim_history, "pe_sim_history")
+        self.listen_event(self._on_sim_settings, "pe_sim_settings")
         self._beat({})
         self.run_every(self._beat, "now+60", HEARTBEAT_SECONDS)
         self.run_every(lambda kwargs: self._evaluate(), f"now+{RECHECK_SECONDS}", RECHECK_SECONDS)
@@ -1068,12 +1073,16 @@ class PowerEngine(hass.Hass):
             return
         try:
             self._sim_store = SimStore(self._sim_folder())
+            ctx = self._sim_context()
+            region = (ctx.current or {}).get("region")
+            if region and self._sim_store.catalogue.get("region") != region:     # tariff codes are per region
+                self._sim_store.catalogue.update({"region": region, "products": [], "fetched": None})
             cb = self.costbook
             self._sim_job = sim_run(self._sim_store, cb.recorded_days(),
                                     lambda d: cb.day_records(datetime.fromisoformat(d).date()),
                                     self._params(), self.tz or timezone.utc, datetime.now(timezone.utc),
                                     float(self.cfg.safety.get("ev_charger_kw", 7.4)),
-                                    log=lambda m: self.log(m, level="WARNING"))
+                                    log=lambda m: self.log(m, level="WARNING"), ctx=ctx)
             self._sim_steps, self._sim_began = 0, datetime.now(timezone.utc)
             self.log("Simulator: overnight run started")
             self.run_in(self._sim_step, 1)
@@ -1106,19 +1115,100 @@ class PowerEngine(hass.Hass):
             return
         self.run_in(self._sim_step, 1)
 
+    def _sim_context(self) -> SimContext:
+        """Your tariff (from the rate sensor's 'tariff' attribute), history, heat pump, location."""
+        ctx = SimContext(history=History(os.path.join(self._sim_folder(), "history")),
+                         house_includes_car=bool(self.cfg.system.get("house_load_includes_ev", True)),
+                         hp=HeatPumpSettings.from_dict(self._sim_settings().get("heat_pump")))
+        eid = self._role_entity("import_rate_now")
+        code = str(self.get_state(eid, attribute="tariff") or "") if eid else ""
+        if code.startswith("E-1R-") and len(code) > 7:
+            supplier = "edf" if "edf_energy" in eid else "octopus"
+            ctx.current = {"supplier": supplier, "product": code[5:-2], "tariff": code, "region": code[-1],
+                           "name": "your tariff"}
+        spec = self.cfg.inputs.get("export_rate") or {}
+        try:
+            ctx.export_p = float(spec["value"]) if "value" in spec else float(self.get_state(spec.get("entity")))
+        except (TypeError, ValueError, KeyError):
+            ctx.export_p = None
+        try:
+            lat = float(self.get_state("zone.home", attribute="latitude"))
+            lon = float(self.get_state("zone.home", attribute="longitude"))
+            ctx.weather = Weather(os.path.join(self._sim_folder(), "weather.json"), lat, lon)
+        except (TypeError, ValueError):
+            ctx.weather = None
+        return ctx
+
+    def _sim_settings(self) -> dict:
+        try:
+            with open(os.path.join(self._sim_folder(), "settings.json"), encoding="utf-8") as fh:
+                return json.load(fh)
+        except (OSError, ValueError):
+            return {}
+
+    def _sim_history_request(self) -> dict:
+        """Months the Simulator card should read from HA's statistics, and which sensors."""
+        if self.cfg is None or self.costbook is None:
+            return {}
+        days = self.costbook.recorded_days()
+        first = datetime.fromisoformat(days[0]).date() if days else None
+        have = set(History(os.path.join(self._sim_folder(), "history")).months())
+        ent = {"house": [self._role_entity("house_load_today")], "car": [self._role_entity("ev_energy_today")],
+               "grid_import": [self._role_entity("grid_import_today")],
+               "grid_export": [self._role_entity("grid_export_today")],
+               "solar": [p.energy_today.get("entity") for p in self.cfg.solar_plants if p.enabled]}
+        ent = {k: [e for e in v if e] for k, v in ent.items()}
+        return {"months": [m for m in months_wanted(self._today(), first) if m not in have], "entities": ent,
+                "imported": sorted(have)}
+
+    def _on_sim_history(self, event_name, data, kwargs):
+        """A month of hourly statistics from the Simulator card (admin's browser)."""
+        month = str(data.get("month", ""))
+        req = self._sim_history_request()
+        if month not in months_wanted(self._today(), None) or not req:
+            self.log(f"Simulator: ignored history for '{month}'", level="WARNING")
+            return
+        hours = parse_upload(data.get("stats") or {}, req["entities"])
+        History(os.path.join(self._sim_folder(), "history")).save_month(month, hours, datetime.now(timezone.utc))
+        n = len(hours.get("house", {}))
+        self.log(f"Simulator: imported {month} from HA statistics ({n} hours of house load)")
+        self._sim_publish()
+
+    def _on_sim_settings(self, event_name, data, kwargs):
+        s = HeatPumpSettings.from_dict(data.get("heat_pump"))
+        problems = s.problems()
+        if problems:
+            self.fire_event("pe_sim_result", ok=False, message="Not saved: " + "; ".join(problems))
+            return
+        path = os.path.join(self._sim_folder(), "settings.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump({"heat_pump": s.as_dict()}, fh, indent=1)
+        self.log(f"Simulator: heat pump settings saved by {self._user_name(data)}")
+        self.fire_event("pe_sim_result", ok=True, message="Saved. Tonight's run includes them.")
+        self._sim_publish()
+
     def _sim_publish(self):
         store = getattr(self, "_sim_store", None) or SimStore(self._sim_folder())
-        s = store.summary
-        if not s:
-            self._publish_state("cost_simulator", "unknown", {"note": "Runs overnight at 01:30; first results the "
-                                                                      "morning after it's switched on."})
-            return
-        attrs = {k: v for k, v in s.items() if k != "ranking"}
-        attrs["ranking"] = [{k: v for k, v in r.items() if k not in ("import_kwh", "export_kwh")}
-                            for r in s.get("ranking", [])[:30]]
-        attrs["catalogue_updated"] = store.catalogue.get("fetched")
-        best = next((r for r in s.get("ranking", []) if r["id"] != "current"), None)
-        self._publish_state("cost_simulator", best["name"][:250] if best else "unknown", attrs)
+        s = store.summary or {}
+        meta = {"updated": s.get("updated"), "all_days": s.get("all_days"), "imported_days": s.get("imported_days"),
+                "new_products": s.get("new_products", []), "catalogue_updated": store.catalogue.get("fetched"),
+                "history_request": self._sim_history_request(), "settings": self._sim_settings(),
+                "running": getattr(self, "_sim_job", None) is not None}
+
+        def trim(win):
+            if not win:
+                return None
+            out = {k: v for k, v in win.items() if k != "ranking"}
+            out["ranking"] = [{k: v for k, v in r.items() if k not in ("import_kwh", "export_kwh")}
+                              for r in win.get("ranking", [])[:30]]
+            return out
+        short = trim((s.get("windows") or {}).get("30"))
+        best = next((r for r in (short or {}).get("ranking", []) if r["id"] != "current"), None)
+        self._publish_state("cost_simulator", best["name"][:250] if best else "unknown", {**meta, "window": short})
+        year = trim((s.get("windows") or {}).get("year"))
+        self._publish_state("cost_simulator_year", year["days"] if year else "unknown",
+                            {"window": year, "heat_pump": s.get("heat_pump")})
 
     def _sim_notify(self, out):
         month = self._today().strftime("%Y-%m")
@@ -1128,7 +1218,9 @@ class PowerEngine(hass.Hass):
             lines = [f"{o['name']}: about £{o['saving_month']:.0f} a month less" + (f" ({o['notes']})" if o.get("notes")
                                                                                     else "")
                      for o in top]
-            days = (getattr(self, "_sim_store", None).summary or {}).get("days")
+            wins = (getattr(self, "_sim_store", None).summary or {}).get("windows", {})
+            long = wins.get("year") or {}
+            days = (long if long.get("days", 0) >= 90 else wins.get("30") or {}).get("days")
             self._notify("simulator", (f"sim:{top[0]['id']}:{month}", "PowerEngine: a tariff worth a look",
                                        f"Over your last {days} days, with the battery run the same way: "
                                        + "; ".join(lines) + ". See the Simulator tab."))

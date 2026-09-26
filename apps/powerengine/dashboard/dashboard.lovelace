@@ -606,33 +606,57 @@ views:
           - type: markdown
             grid_options: {columns: full}
             content: |-
-              {%- set s = states.sensor.pe_cost_simulator %}
-              {%- if s and s.attributes.ranking is defined and s.attributes.days %}{% set a = s.attributes %}
-              {%- set cur = a.ranking | selectattr('id', 'eq', 'current') | first %}
-              **What your last {{ a.days }} days ({{ a.from }} to {{ a.to }}) would have cost on other tariffs**, with the battery run as well as possible on each. Costs are per month (30.4 days) and include standing charges and export income.
+              {%- set s = states.sensor.pe_cost_simulator %}{% set w = state_attr('sensor.pe_cost_simulator', 'window') %}
+              {%- if w and w.days %}
+              {%- set cur = w.ranking | selectattr('id', 'eq', 'current') | first %}
+              **What your last {{ w.days }} days ({{ w.from }} to {{ w.to }}) would have cost on other tariffs**, with the battery run as well as possible on each. Costs are per month (30.4 days), standing charges and export income included.
 
-              You actually paid **£{{ '%.2f' | format(a.actual_per_month) }}** a month{% if cur %}; on your tariff with the best battery strategy it would have been **£{{ '%.2f' | format(cur.per_month) }}**, the fair baseline for the comparison below{% endif %}.
-              {%- if a.new_products %}
+              You actually paid **£{{ '%.2f' | format(w.actual_per_month) }}** a month{{ ' (estimated for imported days)' if w.actual_estimated else '' }}{% if cur %}; on your tariff with the best battery strategy it would have been **£{{ '%.2f' | format(cur.per_month) }}**, the baseline below{% endif %}.
+              {%- set np = state_attr('sensor.pe_cost_simulator', 'new_products') %}{% if np %}
 
-              New tariffs since the last run: {{ a.new_products | map(attribute='name') | join(', ') }}.{% endif %}
+              New tariffs since the last run: {{ np | map(attribute='name') | join(', ') }}.{% endif %}
 
-              Updated {{ as_timestamp(a.updated) | timestamp_custom('%a %d %b %H:%M') }}. Runs each night at 01:30; results for a day you already have are kept, so the nightly run only adds new days and tariffs.
+              Updated {{ as_timestamp(s.attributes.updated) | timestamp_custom('%a %d %b %H:%M') }} from {{ s.attributes.all_days }} days ({{ s.attributes.imported_days or 0 }} imported from Home Assistant's statistics). Runs each night at 01:30.
               {%- else %}
               The Simulator runs each night at 01:30 (switch it on or off under Features on the Config tab). Results appear here the morning after the first run.
               {%- endif %}
           - type: markdown
             grid_options: {columns: full}
             content: |-
-              {%- set a = state_attr('sensor.pe_cost_simulator', 'ranking') or [] %}
-              {%- if a %}
+              {%- macro table(w) -%}
               | # | Tariff | Per month | vs your tariff | Export income | Standing | Notes |
               |---:|---|---:|---:|---:|---:|---|
-              {%- for r in a %}
-              | {{ loop.index }} | {{ ('**' ~ r.name ~ '**') if r.id == 'current' else r.name }} | £{{ '%.2f' | format(r.per_month) }} | {{ '–' if r.id == 'current' else (('−£%.2f' | format(-r.vs_current_month)) if r.vs_current_month < 0 else ('+£%.2f' | format(r.vs_current_month))) }} | £{{ '%.2f' | format(r.export_income) }} | £{{ '%.2f' | format(r.standing) }} | {{ r.notes }}{{ ('; ' if r.notes else '') ~ 'prices estimated for some days' if r.estimated else '' }} |
+              {%- for r in w.ranking %}
+              | {{ loop.index }} | {{ ('**' ~ r.name ~ '**') if r.id == 'current' else r.name }} | £{{ '%.2f' | format(r.per_month) }} | {{ '–' if r.id == 'current' else (('−£%.2f' | format(-r.vs_current_month)) if r.vs_current_month < 0 else ('+£%.2f' | format(r.vs_current_month))) }} | £{{ '%.2f' | format(r.export_income) }} | £{{ '%.2f' | format(r.standing) }} | {{ r.notes }}{{ ('; ' if r.notes else '') ~ 'some prices estimated' if r.estimated else '' }} |
               {%- endfor %}
-
-              *Export income* and *Standing* are totals for the period. **How it's worked out:** your recorded house load, car charging and solar for each day are replayed on each tariff's published rates for that date. The battery is run by PowerEngine's optimiser knowing the day in advance, so these are best-achievable figures. Selling from the battery counts only if Arbitrage is on. The car's charging is moved to each day's cheapest half-hours, except on your own tariff, where it stays where it was. A tariff launched after a date uses its current time-of-day prices for that date (*prices estimated*). EDF tariffs keep your current export rate; Octopus tariffs use Octopus's export tariff. Eligibility notes aren't checked.
+              {%- endmacro %}
+              {%- set w = state_attr('sensor.pe_cost_simulator', 'window') %}{% set y = state_attr('sensor.pe_cost_simulator_year', 'window') %}
+              {%- if y %}
+              ### Last {{ y.days }} days ({{ y.from }} to {{ y.to }})
+              {{ table(y) }}
               {%- endif %}
+              {%- if w %}
+              ### Last {{ w.days }} days
+              {{ table(w) }}
+
+              *Export income* and *Standing* are totals for the period. **How it's worked out:** each day's house load, car charging and solar are replayed on each tariff's published rates for that date, with PowerEngine's optimiser running the battery and knowing the day in advance (best achievable). Selling from the battery counts only if Arbitrage is on. The car's charging is moved to each day's cheapest half-hours, except on your own tariff. A tariff launched after a date uses its current prices by time of day (*some prices estimated*). Days imported from Home Assistant's statistics (hourly) are priced on your tariff at today's rates. EDF tariffs keep your export rate; Octopus ones use Octopus's export tariff. Eligibility notes aren't checked.
+              {%- endif %}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set h = state_attr('sensor.pe_cost_simulator_year', 'heat_pump') %}
+              {%- if h and h.rows %}
+              ### With a heat pump
+              Your house loses about **{{ h.hlc_w_per_k | int }} W per °C** (from the settings below), over {{ h.window_days }} days{{ '' if h.full_year else ', not yet a full year, so heating is under-represented until winter days are in' }}. *Saving* compares the heat pump on each tariff with the same tariff plus gas (gas standing charge included, as if the gas supply were removed).
+
+              | Tariff | With heat pump | Without + gas | Saving | Heat pump kWh | Seasonal COP | Payback |
+              |---|---:|---:|---:|---:|---:|---:|
+              {%- for r in h.rows %}
+              | {{ r.name }} | £{{ '%.2f' | format(r.with_hp_month) }}/mo | £{{ '%.2f' | format(r.without_month + r.gas_month) }}/mo | £{{ '%.2f' | format(r.saving_month) }}/mo | {{ r.hp_kwh | int }} | {{ r.scop }} | {{ (r.payback_years ~ ' yr') if r.payback_years else '–' }} |
+              {%- endfor %}
+              {%- endif %}
+          - type: custom:powerengine-sim-card
+            grid_options: {columns: full}
   - title: Costs
     path: costs
     icon: mdi:cash-multiple

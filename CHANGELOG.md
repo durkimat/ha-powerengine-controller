@@ -2,6 +2,25 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.6.1 (beta)
+
+### Behaviour changes
+- None to your devices.
+- **Simulator phase 2: a year of history** (#54). The new set-up card on the Simulator tab reads up to a year of
+  hourly energy (house, car, solar, grid) from Home Assistant's long-term statistics whenever an admin has the
+  page open, a month at a time, and hands it to the app (the app has no admin token, so it can't read them
+  itself). Imported days are priced on your tariff at today's rates (from the tariff code on your rate sensor)
+  and marked estimated. The tab then shows a year-long ranking alongside the last 30 days; notifications use the
+  year once there are 90 days or more.
+- **Simulator phase 3: heat pump.** Settings on the Simulator tab (gas used a year, boiler efficiency or a
+  heat-loss figure, hot water, COP at -3 and 12 C, pump size, pre-heating hours, gas prices, installed cost).
+  Overnight, hourly outside temperatures for your home location come from Open-Meteo (free, no key; cached).
+  Heat demand = the house's heat loss (from a year of gas use) x degrees below 15.5 C, plus hot water; hot water is
+  heated in the cheapest half-hours and heating may run up to the pre-heat hours early. Your tariff, heat-pump
+  tariffs and the five best others are each run with the heat pump and compared with the same tariff plus gas:
+  cost a month, heat-pump kWh, seasonal COP, and payback once there's a year of history.
+- Your region is now taken from your tariff code (was fixed at A).
+
 ## 0.6.0 (beta)
 
 ### Behaviour changes
