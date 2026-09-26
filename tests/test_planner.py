@@ -299,3 +299,27 @@ def test_config_arbitrage_band_validated():
     assert (p.arbitrage_min_soc, p.arbitrage_max_soc) == (75, 90)
     with pytest.raises(ConfigError, match="lowest charge"):
         parse_config({"safety": {"arbitrage_min_soc": 90, "arbitrage_max_soc": 80}})
+
+
+def test_optimised_plan_is_no_worse_and_explains_itself():
+    from pe_core.decide import EXPORT
+    p = Params(arbitrage=True)
+    rules = make_plan(day(), soc=60.0, p=p, now=T0)
+    opt = make_plan(day(), soc=60.0, p=p, now=T0, strategy="optimiser")
+    assert opt.strategy == "optimiser" and opt.alternative["costs_more_by"] >= -0.01
+    assert all(ps.reason for ps in opt.slots)
+    assert all(ps.target_soc is not None for ps in opt.slots if ps.action == GRID_CHARGE)
+    keep = p.min_reserve_soc + p.arbitrage_keep_soc
+    assert all(ps.soc_end >= keep - 1.0 for ps in opt.slots if ps.action == EXPORT)
+    assert opt.windows and rules.windows
+
+
+def test_optimiser_never_feeds_the_car_in_a_smart_slot():
+    p = Params(arbitrage=True, hold_for_car=True)
+    slots = day(smart_slot=set(range(30, 34)))
+    plan = make_plan(slots, soc=80.0, p=p, now=T0, strategy="optimiser")
+    assert all(plan.slots[i].action in (HOLD, GRID_CHARGE) for i in range(30, 34))
+
+
+def test_rules_strategy_unchanged_by_default():
+    assert make_plan(day(), soc=60.0, p=Params(), now=T0).strategy == "rules"

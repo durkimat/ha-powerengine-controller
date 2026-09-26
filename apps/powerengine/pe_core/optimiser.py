@@ -40,6 +40,8 @@ def _actions(s: Slot, p: Params) -> list[str]:
         return [FORCE_DISCHARGE]
     if p.free_enabled and s.free:
         return [GRID_CHARGE]
+    if p.hold_for_car and s.smart_slot:
+        return [HOLD, GRID_CHARGE]                 # the car is in the house load: the battery mustn't feed it
     acts = [SELF_USE, HOLD, GRID_CHARGE]
     if p.arbitrage:
         acts.append(EXPORT)
@@ -67,6 +69,8 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0) -> dic
             for a in acts:
                 ps = PlanSlot(s, a, "", target_soc=grid_target(p))
                 end = step(ps, float(lv), p)
+                if a == EXPORT and end < p.min_reserve_soc + p.arbitrage_keep_soc - 1e-6:
+                    continue                           # a sale never takes the battery near the reserve
                 total = ps.cost + nxt[min(LEVELS - 1, max(0, round(end)))]
                 if wear and end < lv:
                     total += (lv - end) / 100 * cap * wear

@@ -42,10 +42,10 @@ KNOWN_KEYS = frozenset(
 MODES = ("passive", "active")
 FORECAST_SOURCES = ("none", "solcast_site", "scaled")
 FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
-            "free_power_days", "tariff_simulator")
+            "free_power_days", "tariff_simulator", "optimised_plan")
 FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
                     "arbitrage": False, "axle": True,
-                    "free_power_days": True, "tariff_simulator": True}
+                    "free_power_days": True, "tariff_simulator": True, "optimised_plan": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 SAFETY = {
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)

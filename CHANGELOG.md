@@ -2,6 +2,22 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.7.0 (beta)
+
+### Behaviour changes
+- **The optimiser now plans the battery** (#67; new feature *Optimised planning*, on by default). Every re-plan, the
+  optimiser chooses each half-hour's action for the lowest cost over the plan (same forecasts, prices, battery
+  physics, fuse and export limits, battery wear, the arbitrage band and its outside-band cost). The rule-based plan
+  still runs alongside: its reasons are kept where both agree, and new plain-English reasons explain the rest
+  ("charge at 6.99p to sell at 15p from 13:00", "sell at 15p: refilled at 6.99p from 17:00", "keep the charge
+  for 16:00 (30.28p)"). Grid charging targets the level the optimiser plans for that half-hour.
+- Safety rules the optimiser always keeps: the battery never feeds the car in a smart-charge slot (hold or charge
+  only), a sale never takes the battery below the reserve plus 10%, Axle events force-discharge, free-power sessions
+  fill the battery, and the live overrides (car charging, reserve, Axle not yet started) still apply.
+- Plan tab: says which method planned, and how much more the rule-based plan would cost (thin green line).
+  Turning *Optimised planning* off goes back to the rule-based planner.
+- Simulator: the planner table now compares the rule-based planner with the optimiser.
+
 ## 0.6.5 (beta)
 
 ### Behaviour changes

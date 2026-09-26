@@ -576,18 +576,20 @@ class PowerEngine(hass.Hass):
         cert = Certainty(self.slots.slots, self.tz)
         slots = build_slots(r, self._solar_forecast(), self.profile, self.tz, certainty=cert,
                             first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()})
+        strategy = "optimiser" if self.cfg.features.get("optimised_plan", True) else "rules"
         self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz,
                               auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)),
-                              wear_p=self.cfg.safety.get("battery_wear_p", 2.0))
+                              wear_p=self.cfg.safety.get("battery_wear_p", 2.0), strategy=strategy)
         self._plan_sig, self._plan_time = sig, r.now
         self._snapshot_plan(r.now)
         extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0,
                  "slot_certainty": slot_certainty_rows(slots, self.tz), "certainty": cert.summary()}
-        try:                                          # the optimiser, for comparison only
-            p = self._params(r)
-            extra["optimiser"] = compare(self.plan, optimise(slots, r.battery_soc, p), p)
-        except Exception as err:
-            self.log(f"Optimiser comparison failed: {err!r}", level="WARNING")
+        if self.plan.strategy != "optimiser":
+            try:                                          # the optimiser, for comparison only
+                p = self._params(r)
+                extra["optimiser"] = compare(self.plan, optimise(slots, r.battery_soc, p, wear=p.wear_p / 100), p)
+            except Exception as err:
+                self.log(f"Optimiser comparison failed: {err!r}", level="WARNING")
         for key, (state, attrs) in plan_entity_states(self.plan, extra).items():
             self._publish_if_changed(key, state, attrs)
 

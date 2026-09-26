@@ -15,6 +15,7 @@ Every slot keeps a plain-English reason, so the plan can always say why.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
@@ -85,6 +86,8 @@ class Plan:
     cheap_p: float | None = None      # the cheap-import threshold used (p/kWh)
     extra_kwh: float = 0.0            # energy left in the battery at the end, compared with plain self-use
     extra_value: float = 0.0          # that energy valued at the cheapest import price in the period (GBP)
+    strategy: str = "rules"           # "rules" (the explainable heuristic) or "optimiser" (it chose the actions)
+    alternative: dict | None = None   # the other method's plan on the same terms, for comparison
 
     @property
     def saving(self) -> float:
@@ -285,7 +288,87 @@ def _add_arbitrage(plan: list[PlanSlot], soc: float, p: Params, now: datetime, t
 
 
 def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None, auto_cheap: bool = False,
-              wear_p: float = 2.0) -> Plan:
+              wear_p: float = 2.0, strategy: str = "rules") -> Plan:
+    """The plan. strategy "optimiser": the optimiser chooses each half-hour's action (lowest cost, arbitrage band
+    and safety rules included) and the rule-based plan supplies the explanations where they agree."""
+    rules = _rules_plan(slots, soc, p, now, tz, auto_cheap, wear_p)
+    if strategy != "optimiser" or not slots:
+        return rules
+    from .optimiser import optimise
+    p_used = replace(p, cheap_cap_p=rules.cheap_p) if rules.cheap_p is not None else p
+    opt = optimise(slots, soc, p_used, wear=p.wear_p / 100)
+    if not opt:
+        return rules
+    plan = _overlay(rules, opt, soc, p_used, now, tz)
+    end_value = opt["end_value_p"] / 100
+
+    def net(pl):
+        return pl.cost - pl.slots[-1].soc_end / 100 * p.capacity_kwh * end_value
+    plan.alternative = {"method": "rules", "soc": [round(ps.soc_end, 1) for ps in rules.slots],
+                        "costs_more_by": round(net(rules) - net(plan), 2),
+                        "half_hours_differ": sum(1 for a, b in zip(rules.slots, plan.slots, strict=True)
+                                                 if a.action != b.action)}
+    return plan
+
+
+def _overlay(rules: Plan, opt: dict, soc: float, p: Params, now: datetime, tz) -> Plan:
+    """The optimiser's actions with plain-English reasons (the rule-based reason where both agree)."""
+    src = rules.slots
+    acts, socs = opt["actions"], opt["soc"]
+    cheap = [ps.slot.price is not None and ps.slot.price * 100 <= p.cheap_cap_p for ps in src]
+    out: list[PlanSlot] = []
+    for i, ps in enumerate(src):
+        a = acts[i]
+        target = min(100.0, math.ceil(socs[i])) if a == GRID_CHARGE else None
+        # the rule-based reason where both agree (it's richer), except for charging, whose level now differs
+        reason = ps.reason if a == ps.action and a != GRID_CHARGE else _why(i, a, src, acts, cheap, p, now, tz)
+        out.append(replace(ps, action=a, reason=reason, target_soc=target))
+    simulate(out, soc, p)
+    plan = Plan(slots=out, made_at=now, cheap_p=rules.cheap_p, cost=sum(x.cost for x in out),
+                baseline_cost=rules.baseline_cost, strategy="optimiser")
+    base_end = rules.slots[-1].soc_end - rules.extra_kwh / p.capacity_kwh * 100 if rules.slots else 0.0
+    prices = [x.slot.price for x in out if x.slot.price is not None]
+    plan.extra_kwh = (out[-1].soc_end - base_end) / 100 * p.capacity_kwh if out else 0.0
+    plan.extra_value = plan.extra_kwh * min(prices) if prices else 0.0
+    plan.windows = windows(out, tz, now)
+    return plan
+
+
+def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool], p: Params, now, tz) -> str:
+    s = src[i].slot
+    if a == GRID_CHARGE:
+        for j in range(i + 1, len(src)):
+            if acts[j] == EXPORT and src[j].slot.export is not None:
+                return (f"charge at {_p(s.price)} to sell at {_p(src[j].slot.export)} from "
+                        f"{_when(src[j].slot.start, now, tz)}")
+            if acts[j] == SELF_USE and src[j].slot.price is not None and s.price is not None \
+                    and src[j].slot.price > s.price + 0.005:
+                return (f"charge at {_p(s.price)} to use instead of buying at {_p(src[j].slot.price)} from "
+                        f"{_when(src[j].slot.start, now, tz)}")
+        return f"cheap import ({_p(s.price)}): store it for later"
+    if a == EXPORT:
+        for j in range(i + 1, len(src)):
+            if acts[j] == GRID_CHARGE and cheap[j]:
+                return (f"sell at {_p(s.export)}: refilled at {_p(src[j].slot.price)} from "
+                        f"{_when(src[j].slot.start, now, tz)}")
+        return f"sell at {_p(s.export)}: stored energy is worth more sold than used"
+    if a == HOLD:
+        if p.hold_for_car and s.smart_slot:
+            return f"car smart-charge slot ({_p(s.price)}): the battery mustn't feed the car"
+        if cheap[i]:
+            return f"cheap import ({_p(s.price)}): the grid covers the house, the battery is saved for later"
+        for j in range(i + 1, len(src)):
+            if acts[j] in (SELF_USE, EXPORT) and src[j].slot.price is not None and s.price is not None \
+                    and src[j].slot.price > s.price + 0.005:
+                return f"keep the charge for {_when(src[j].slot.start, now, tz)} ({_p(src[j].slot.price)})"
+        return "keep the charge for later"
+    if a == SELF_USE:
+        return "the battery covers the house"
+    return src[i].reason
+
+
+def _rules_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None, auto_cheap: bool = False,
+                wear_p: float = 2.0) -> Plan:
     if auto_cheap:
         p = replace(p, cheap_cap_p=cheap_threshold([s.price for s in slots], p.cheap_cap_p, p.efficiency ** 2, wear_p))
     plan = [_default(s, p, tz) for s in slots]
@@ -480,7 +563,8 @@ def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
     text = headline(plan)
     est = next((ps.slot.start.isoformat() for ps in plan.slots if ps.slot.price_estimated), None)
     nxt = plan.windows[1] if len(plan.windows) > 1 else None
-    attrs = {"windows": plan.windows, "series": ser, "cost": round(plan.cost, 2),
+    attrs = {"windows": plan.windows, "series": ser, "cost": round(plan.cost, 2), "strategy": plan.strategy,
+             "alternative": plan.alternative,
              "baseline_cost": round(plan.baseline_cost, 2), "saving": round(plan.saving, 2),
              "extra_kwh": round(plan.extra_kwh, 1), "cheap_p": plan.cheap_p, "extra_value": round(plan.extra_value, 2),
              "horizon_end": plan.slots[-1].slot.end.isoformat() if plan.slots else None,
