@@ -575,15 +575,16 @@ views:
             grid_options: {columns: full}
             content: |-
               {%- set m = state_attr('sensor.pe_diag_battery_efficiency', 'measured') %}
-              **Battery round trip: {{ states('sensor.pe_diag_battery_efficiency') }}%** ({{ 'measured over the last 30 days: ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'battery_in_kwh') ~ ' kWh in, ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'battery_out_kwh') ~ ' kWh out' if m else state_attr('sensor.pe_diag_battery_efficiency', 'note') }}).
+              {%- set um = state_attr('sensor.pe_diag_battery_efficiency', 'use_measured') %}
+              **Battery round trip: {{ states('sensor.pe_diag_battery_efficiency') }}%** in use ({{ 'measured over the last 30 days: ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'battery_in_kwh') ~ ' kWh in, ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'battery_out_kwh') ~ ' kWh out' if m and um != false else ('configured figure; measured ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'measured_round_trip') ~ '% (Use measured is off)' if m else state_attr('sensor.pe_diag_battery_efficiency', 'note')) }}).
 
               {%- set c = states.sensor.pe_diag_battery_capacity %}
               {%- if c and c.state not in ['unknown', 'unavailable'] %}
-              **Usable capacity: {{ c.state }} kWh** ({{ 'measured, and used for planning' if c.attributes.measured else 'estimate from ' ~ c.attributes.samples ~ ' half-hours; the configured ' ~ c.attributes.configured_kwh ~ ' kWh is used until 14 full days and 100 samples agree within 30%' }}). Highest rates seen: charging {{ c.attributes.max_charge_kw or '–' }} kW, discharging {{ c.attributes.max_discharge_kw or '–' }} kW; lowest charge {{ c.attributes.min_soc_seen if c.attributes.min_soc_seen is not none else '–' }}%.
+              **Usable capacity: {{ c.state }} kWh** ({{ ('measured, and used for planning' if c.attributes.use_measured != false else 'measured; not used (Use measured is off), the configured ' ~ c.attributes.configured_kwh ~ ' kWh is used') if c.attributes.measured else 'estimate from ' ~ c.attributes.samples ~ ' half-hours; the configured ' ~ c.attributes.configured_kwh ~ ' kWh is used until 14 full days and 100 samples agree within 30%' }}). Highest rates seen: charging {{ c.attributes.max_charge_kw or '–' }} kW, discharging {{ c.attributes.max_discharge_kw or '–' }} kW; lowest charge {{ c.attributes.min_soc_seen if c.attributes.min_soc_seen is not none else '–' }}%.
               {%- endif %}
 
               {%- set lp = state_attr('sensor.pe_diag_system_losses', 'percent_yesterday') %}{% set la = state_attr('sensor.pe_diag_system_losses', 'average_percent') %}
-              **System losses yesterday: {{ states('sensor.pe_diag_system_losses') }} kWh{{ (' (' ~ lp ~ '% of the energy handled)') if lp is not none else '' }}** (average {{ state_attr('sensor.pe_diag_system_losses', 'average_kwh') or '–' }} kWh{{ (', ' ~ la ~ '%') if la is not none else '' }} a day): everything supplied (solar, grid, battery) minus everything used, i.e. inverter conversion, standby and heat. The % above each bar is that day's losses as a share of all the energy handled.
+              **System losses yesterday: {{ states('sensor.pe_diag_system_losses') }} kWh{{ (' (' ~ lp ~ '% of the energy handled)') if lp is not none else '' }}** (average {{ state_attr('sensor.pe_diag_system_losses', 'average_kwh') or '–' }} kWh{{ (', ' ~ la ~ '%') if la is not none else '' }} a day): everything supplied (solar, grid, battery) minus everything used, i.e. inverter conversion, standby and heat. The purple line is each day's losses as a share of all the energy handled: it should stay fairly steady, so a jump is the thing to look into.
           - type: custom:apexcharts-card
             grid_options: {columns: full, rows: auto}
             graph_span: 30d
@@ -594,35 +595,53 @@ views:
               title: System losses by day
               show_states: false
             apex_config:
-              chart: {height: 220}
-              legend: {show: false}
+              chart: {height: 240}
+              legend: {show: true}
+              # % labels on the line only (datalabels are switched on per series below)
               dataLabels:
-                enabled: true
-                offsetY: -18
-                style: {fontSize: "10px", colors: ["#616161"]}
+                offsetY: -6
+                style: {fontSize: "10px"}
+                background: {enabled: false}
                 formatter: |
-                  EVAL:function(val, opts) {
-                    const x = opts.w.globals.seriesX[opts.seriesIndex][opts.dataPointIndex];
-                    const pct = (window.powerEngineLossPct || {})[x];
-                    return pct === undefined || pct === null ? "" : pct + "%";
-                  }
-              plotOptions: {bar: {dataLabels: {position: "top"}}}
+                  EVAL:function(val) { return val === null || val === undefined ? "" : val + "%"; }
             yaxis:
-              - decimals: 1
+              - id: kwh
+                decimals: 1
                 min: 0
-                apex_config: {title: {text: "kWh"}}
+                apex_config:
+                  title: {text: "kWh", style: {color: "#ef6c00"}}
+                  labels: {style: {colors: "#ef6c00"}}
+              - id: pct
+                opposite: true
+                decimals: 0
+                min: 0
+                apex_config:
+                  title: {text: "% of energy handled", style: {color: "#6a1b9a"}}
+                  labels: {style: {colors: "#6a1b9a"}}
             series:
               - entity: sensor.pe_diag_system_losses
-                name: Losses
+                name: Losses (kWh)
+                yaxis_id: kwh
                 type: column
                 color: "#ef6c00"
                 extend_to: false
                 show: {legend_value: false}
                 data_generator: |
                   const days = entity.attributes.by_day || [];
-                  window.powerEngineLossPct = {};             // read by the data-label formatter above
-                  days.forEach(d => { window.powerEngineLossPct[new Date(d[0] + "T12:00:00").getTime()] = d[2]; });
                   return days.map(d => [new Date(d[0] + "T12:00:00").getTime(), d[1]]);
+              # steadier than the kWh: a jump here points at a sensor or inverter problem rather than a busy day
+              - entity: sensor.pe_diag_system_losses
+                name: Losses (% of energy handled)
+                yaxis_id: pct
+                type: line
+                color: "#6a1b9a"
+                stroke_width: 2
+                extend_to: false
+                show: {legend_value: false, datalabels: true}
+                data_generator: |
+                  const days = entity.attributes.by_day || [];
+                  return days.filter(d => d[2] !== null && d[2] !== undefined)
+                             .map(d => [new Date(d[0] + "T12:00:00").getTime(), d[2]]);
       - type: grid
         column_span: 3
         cards:

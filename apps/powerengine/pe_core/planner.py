@@ -402,7 +402,9 @@ def params_from(cfg, readings=None) -> Params:
             return default
     s, f = cfg.safety, cfg.features
     max_dis = static("battery_max_discharge_power", 4800) / 1000
+    rte = min(100.0, max(50.0, static("battery_round_trip", 90.25)))      # 90.25% = 95% each way
     return Params(
+        efficiency=round((rte / 100) ** 0.5, 4),
         capacity_kwh=static("battery_capacity", 18.0),
         max_charge_kw=static("battery_max_charge_power", 4800) / 1000,
         max_discharge_kw=max_dis,

@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.5.16 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.5.17 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.5.16 starting
+PowerEngine 0.5.17 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -291,8 +291,8 @@ lists the inputs still needing attention.
 | **Health** | Findings (if any), battery efficiency and losses, plan vs what happened (from the second day), smart-charge slots, requests to EDF, inverter writes. |
 
 After **14 full days**, the battery's round-trip efficiency and usable capacity are measured and replace the
-configured figures (Health tab says *measured*). Untick **Use measured** next to *Usable battery capacity* on the
-Config tab to keep the configured capacity instead.
+configured figures (Health tab says *measured*). Untick **Use measured** next to *Usable battery capacity* or *Battery round-trip
+efficiency* on the Config tab to keep the configured figure instead.
 
 ### What PowerEngine keeps
 

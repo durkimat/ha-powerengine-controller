@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.17 (beta)
+
+### Behaviour changes
+- **Battery round-trip efficiency is now an input** (*Battery and inverter*, default 90.25%, i.e. 95% each way as
+  before) with the same **Use measured** tick box as capacity. Ticked (default, as before), the measured figure is
+  used once there are 14 days of data; unticked, the configured figure is always used. Changing it re-values the
+  cost history.
+- **Health tab: losses as a % line.** The system losses chart now plots each day's losses as a % of the energy
+  handled (purple line, right axis, labelled) alongside the kWh bars. The % should be steadier than the kWh, so a
+  jump points at a sensor or inverter problem.
+
 ## 0.5.16 (beta)
 
 ### Behaviour changes

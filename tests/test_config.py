@@ -126,3 +126,13 @@ def test_use_measured_only_on_measurable_inputs():
         parse_config({"inputs": {"battery_max_charge_power": {"value": 4800, "use_measured": True}}})
     with pytest.raises(ConfigError, match="true or false"):
         parse_config({"inputs": {"battery_capacity": {"value": 18, "use_measured": "yes"}}})
+
+
+def test_round_trip_efficiency_input():
+    from pe_core.config import use_measured
+    from pe_core.planner import params_from
+    assert params_from(parse_config({})).efficiency == 0.95
+    cfg = parse_config({"inputs": {"battery_round_trip": {"value": 81, "use_measured": False}}})
+    assert params_from(cfg).efficiency == 0.9 and not use_measured(cfg, "battery_round_trip")
+    with pytest.raises(ConfigError, match="50 to 100"):
+        parse_config({"inputs": {"battery_round_trip": {"value": 0.9}}})
