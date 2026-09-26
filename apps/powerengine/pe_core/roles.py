@@ -202,7 +202,7 @@ ROLES: tuple[Role, ...] = (
          "control", required="no", domains=("select",), suggest=(r"^select\.solis_energy_storage_control_switch$",)),
     Role("inverter_clock_sync", "controls", "Sync inverter clock", "Button that sets the inverter's clock to HA's.",
          "control", required="no", domains=("button",), suggest=(r"^button\.solis_sync_rtc$",)),
-    Role("inverter_export_limit", "controls", "Export limit", "Export (backflow) power limit.",
+    Role("inverter_export_limit", "controls", "Inverter export limit (entity)", "Export (backflow) power limit.",
          "control", required="no", domains=("number",), suggest=(r"^number\.solis_backflow_power$",)),
     Role("smart_target_soc", "controls", "Smart-charge target", "Car charge target sent to EDF.",
          "control", required="no", domains=("number",),
