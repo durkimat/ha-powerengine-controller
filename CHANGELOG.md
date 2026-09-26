@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.7 (beta)
+
+### Behaviour changes
+- **The battery charges alongside the car at a cheap rate.** In a car smart-charge slot at a cheap price (with
+  *Top up when cheap* on), the plan now grid-charges the battery too, up to the top-up level (the arbitrage band's
+  top with arbitrage on, else the grid-charge target), instead of just holding. Live: if the car is charging at a
+  cheap rate the plan didn't expect, the battery charges too. The fuse limit still applies (house and car first).
+  At a peak rate the battery still holds.
+
 ## 0.8.6 (beta)
 
 ### Behaviour changes
