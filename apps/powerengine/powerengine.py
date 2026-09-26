@@ -825,10 +825,21 @@ class PowerEngine(hass.Hass):
             sched = {k: [f"{want[f'timed_{k}_start_hour#{n}']:02d}:{want[f'timed_{k}_start_minute#{n}']:02d}-"
                          f"{want[f'timed_{k}_end_hour#{n}']:02d}:{want[f'timed_{k}_end_minute#{n}']:02d}"
                          for n in (1, 2, 3)] for k in ("charge", "discharge")}
+            def hhmm(src, k, n):
+                try:
+                    v = [int(float(src.get(f"timed_{k}_{p}#{n}"))) for p in
+                         ("start_hour", "start_minute", "end_hour", "end_minute")]
+                except (TypeError, ValueError):
+                    return "?"
+                return "closed" if v == [0, 0, 0, 0] else f"{v[0]:02d}:{v[1]:02d}-{v[2]:02d}:{v[3]:02d}"
+            rows = [{"kind": k, "slot": n, "want": hhmm(want, k, n), "now": hhmm(have, k, n)}
+                    for k in ("charge", "discharge") for n in (1, 2, 3)]
+            rows += [{"kind": f"{k} current (A)", "slot": "", "want": want.get(f"timed_{k}_current", "unchanged"),
+                      "now": have.get(f"timed_{k}_current")} for k in ("charge", "discharge")]
+            rows.append({"kind": "storage mode", "slot": "", "want": want.get("storage_mode"),
+                         "now": have.get("storage_mode")})
             attrs = {"decision": decision.action, "strategy": "slots", "missing": missing, "windows": sched,
-                     "charge_current": want.get("timed_charge_current"),
-                     "discharge_current": want.get("timed_discharge_current"),
-                     "writes": [w.as_dict() for w in writes]}
+                     "rows": rows, "writes": [w.as_dict() for w in writes]}
             self._publish_if_changed("diag_control", state, attrs)
             recent = ctl["last_write"] is not None and (r.now - ctl["last_write"]).total_seconds() < 60
             if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)

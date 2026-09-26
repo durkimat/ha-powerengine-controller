@@ -1048,7 +1048,21 @@ views:
             grid_options: {columns: full}
             content: |-
               {%- set c = states.sensor.pe_diag_control %}
-              {%- if c and c.attributes.settings is defined %}
+              {%- if c and c.attributes.strategy == 'slots' and c.attributes.rows is defined %}
+              {%- if c.state == 'not mapped' %}
+              Map these control outputs on the Config tab to preview control: {{ c.attributes.missing | join(', ') }}.
+              {%- else %}
+              PowerEngine uses **all three** of the inverter's charge windows and discharge windows, set from the plan (current decision: **{{ c.attributes.decision | replace('_', '-') }}**). Active mode would need **{{ c.state }}** now. Nothing is written in Passive mode.
+
+              | Window | PowerEngine wants | Inverter now |
+              |---|---|---|
+              {%- for r in c.attributes.rows %}
+              | {{ r.kind }} {{ r.slot }} | {{ r.want }} | {{ r.now }}{{ ' ✱' if (r.want | string) != (r.now | string) and r.want != 'unchanged' else '' }} |
+              {%- endfor %}
+
+              ✱ would be written (each changed window's update button is pressed once). While Predbat is in control the columns will differ; this is for checking the mapping and what PowerEngine would set.
+              {%- endif %}
+              {%- elif c and c.attributes.settings is defined %}
               {%- if c.state == 'not mapped' %}
               Map these control outputs on the Config tab to preview control: {{ c.attributes.missing | join(', ') }}.
               {%- else %}

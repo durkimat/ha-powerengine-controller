@@ -47,3 +47,14 @@ def test_pause_closes_all_three_slots(app):  # noqa: F811
     a._release()
     assert a.states["number.timed_charge_start_hour_3"] == 0
     assert ("button/press", {"entity_id": "button.timed_update_button_3"}) in a.calls
+
+
+def test_preview_lists_all_six_windows(app):  # noqa: F811
+    a = _with_slots(app)
+    a.mode = effective_mode(parse_config({}))                      # Passive: preview only
+    now = datetime(2026, 9, 24, 22, 0, tzinfo=UTC)
+    a.plan = Plan(slots=plan_of([EXPORT] * 2 + [GRID_CHARGE] * 4, now), made_at=now)
+    a._params = lambda readings=None: __import__("pe_core.planner", fromlist=["Params"]).Params()
+    a._control(type("R", (), {"now": now})(), Decision(EXPORT, "plan", "sell"))
+    rows = a.published[-1][2]["rows"]
+    assert len([r for r in rows if r["slot"] in (1, 2, 3)]) == 6 and not a.calls

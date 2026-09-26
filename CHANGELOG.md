@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.7.2 (beta)
+
+### Behaviour changes
+- None. Health tab: the *Inverter control preview* now shows the three-window design: each charge and discharge
+  window PowerEngine wants against what the inverter holds now, both currents and the storage mode (0.7.1 showed
+  only "The preview appears once PowerEngine has made a decision").
+
 ## 0.7.1 (beta)
 
 ### Behaviour changes
