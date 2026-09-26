@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.5.18 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.6.0 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.5.18 starting
+PowerEngine 0.6.0 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -288,6 +288,7 @@ lists the inputs still needing attention.
 | **Monitoring** | A status line saying what PowerEngine *would* do and why ("PASSIVE. Would self-use: …"), the energy flow, and an activity list that fills as decisions change. |
 | **Plan** | A headline, a 36-hour chart (planned battery %, prices, solar and house-load forecasts, grid charging) and the actions table. The house-load forecast is learned from the last 14 days of history within a few minutes. |
 | **Plan history** | Pick a day and a plan to compare with what happened. Fills in from the first day: each hour's first plan is kept for 60 days. |
+| **Simulator** | Empty until the first overnight run (01:30). Then a ranking of current Octopus and EDF tariffs on your recorded days. Needs internet access from Home Assistant to api.octopus.energy and api.edfgb-kraken.energy. |
 | **Costs** | About 14 days filled from HA history within a few minutes of starting (the log shows `Cost backfill: …` lines), then counted live every half-hour. The *Unexplained* column should be small (tens of pence a day); if it's pounds, check the sensors (see Troubleshooting). |
 | **Health** | Findings (if any), battery efficiency and losses, plan vs what happened (from the second day), smart-charge slots, requests to EDF, inverter writes. |
 
@@ -306,6 +307,7 @@ All in `/homeassistant/powerengine/` (outside the app folder, so updates never t
 | `costs/` | Half-hour energy and cost records (about 20 KB a day, 400 days), plan snapshots (hourly ones for 60 days), smart-charge slot and request history |
 | `load_history.json` | PowerEngine's own house-load record |
 | `inverter_writes.json`, `notifications.json`, `ui.json` | Write counts, sent notifications, dashboard defaults |
+| `simulator/` | Tariff list, cached tariff rates and per-day Simulator results (a few MB after a year) |
 
 ---
 

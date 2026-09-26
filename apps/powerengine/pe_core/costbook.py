@@ -61,6 +61,10 @@ class CostBook:
     def _local_day(self, t: datetime) -> date:
         return (t.astimezone(self.tz) if self.tz else t).date()
 
+    def recorded_days(self) -> list[str]:
+        """ISO dates with a half-hour record file, oldest first."""
+        return sorted(x[:10] for x in os.listdir(self.folder) if x[:4].isdigit() and x.endswith(".json"))
+
     def day_records(self, day: date) -> list[dict]:
         return _read_json(self._day_path(day), [])
 

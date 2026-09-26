@@ -2,6 +2,25 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.6.0 (beta)
+
+### Behaviour changes
+- None to your devices. The Simulator only reads your records and public tariff lists.
+- **Tariff Simulator, phase 1** (#54). Each night at 01:30 (spread over short slices so AppDaemon stays
+  responsive) PowerEngine:
+  - reads the current household tariffs from the Octopus and EDF public tariff APIs (region A), once a day;
+  - fetches each tariff's historical half-hour rates and standing charges for your recorded days (cached, so
+    later nights only fetch the new day);
+  - replays each recorded day on each tariff with the optimiser running the battery, carrying the charge from day
+    to day (your tariff with the prices you paid is the baseline; other tariffs have the car's charging moved to
+    the cheapest half-hours; selling from the battery only if Arbitrage is on; battery wear counted in choices);
+  - ranks them on the new **Simulator** tab (last 30 recorded days, per month, against your tariff and what you
+    actually paid).
+  - **Notifications** (new *Tariff opportunities* type, on by default): when a tariff would have saved at least
+    £5 and 5% a month over at least 14 days (at most once a month per tariff), and when new tariffs are published.
+  - Switch it off with the new *Tariff simulator* feature. Data is kept in `/homeassistant/powerengine/simulator/`.
+- The optimiser can count battery wear in its choices (used by the Simulator; the Plan tab comparison is unchanged).
+
 ## 0.5.18 (beta)
 
 ### Behaviour changes

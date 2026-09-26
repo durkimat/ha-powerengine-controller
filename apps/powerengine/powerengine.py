@@ -59,6 +59,8 @@ from pe_core.planner import make_plan, params_from, plan_entity_states, slot_cer
 from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue, is_forbidden_control
+from pe_core.simjob import SimStore
+from pe_core.simjob import run as sim_run
 from pe_core.simulate import SimBattery
 from pe_core.slots import SlotTracker
 from pe_core.smartcharge import SmartCharger, worth_asking
@@ -66,6 +68,8 @@ from pe_core.status import entity_states
 from pe_core.store import save_config
 
 HEARTBEAT_SECONDS = 60
+SIM_START = "01:30:00"            # after the midnight jobs (00:05-00:20), well before the morning
+SIM_SLICE_SECONDS = 2.0           # work per callback, then hand AppDaemon back for a second
 CONTROL_STRATEGY = "rolling"      # "rolling" | "block": decided by #44 (EEPROM writes) before Active ships
 BATTERY_VOLTS = 52.0              # nominal, for converting power to the inverter's current settings
 CYCLE_SECONDS = 30
@@ -178,6 +182,8 @@ class PowerEngine(hass.Hass):
         self.run_daily(self._learn_load, "00:10:00")
         self.run_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
         self.run_daily(self._daily_summary, "08:00:00")
+        self.run_daily(self._sim_start, SIM_START)                  # tariff Simulator: heavy work, overnight only
+        self.run_in(lambda kwargs: self._sim_publish(), 20)
         self.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
         self.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
@@ -1049,6 +1055,89 @@ class PowerEngine(hass.Hass):
             except OSError as err:
                 self.log(f"Could not save the slot record: {err}", level="WARNING")
             self._health()
+
+    # --- tariff Simulator (#54), overnight ---------------------------------------------------
+
+    def _sim_folder(self):
+        return os.path.join(os.path.dirname(self._save_path()), "simulator")
+
+    def _sim_start(self, kwargs):
+        if self.cfg is None or self.costbook is None or not self.cfg.features.get("tariff_simulator", True):
+            return
+        if getattr(self, "_sim_job", None) is not None:
+            return
+        try:
+            self._sim_store = SimStore(self._sim_folder())
+            cb = self.costbook
+            self._sim_job = sim_run(self._sim_store, cb.recorded_days(),
+                                    lambda d: cb.day_records(datetime.fromisoformat(d).date()),
+                                    self._params(), self.tz or timezone.utc, datetime.now(timezone.utc),
+                                    float(self.cfg.safety.get("ev_charger_kw", 7.4)),
+                                    log=lambda m: self.log(m, level="WARNING"))
+            self._sim_steps, self._sim_began = 0, datetime.now(timezone.utc)
+            self.log("Simulator: overnight run started")
+            self.run_in(self._sim_step, 1)
+        except Exception as err:
+            self._sim_job = None
+            self.log(f"Simulator could not start: {err!r}", level="WARNING")
+
+    def _sim_step(self, kwargs):
+        job = getattr(self, "_sim_job", None)
+        if job is None:
+            return
+        started = datetime.now(timezone.utc)
+        try:
+            while (datetime.now(timezone.utc) - started).total_seconds() < SIM_SLICE_SECONDS:
+                out = next(job)
+                self._sim_steps += 1
+                if out.get("done"):
+                    self._sim_job = None
+                    took = (datetime.now(timezone.utc) - self._sim_began).total_seconds()
+                    self.log(f"Simulator: done in {took:.0f} s ({self._sim_steps} steps)")
+                    self._sim_publish()
+                    self._sim_notify(out)
+                    return
+        except StopIteration:
+            self._sim_job = None
+            return
+        except Exception as err:
+            self._sim_job = None
+            self.log(f"Simulator run failed: {err!r}", level="WARNING")
+            return
+        self.run_in(self._sim_step, 1)
+
+    def _sim_publish(self):
+        store = getattr(self, "_sim_store", None) or SimStore(self._sim_folder())
+        s = store.summary
+        if not s:
+            self._publish_state("cost_simulator", "unknown", {"note": "Runs overnight at 01:30; first results the "
+                                                                      "morning after it's switched on."})
+            return
+        attrs = {k: v for k, v in s.items() if k != "ranking"}
+        attrs["ranking"] = [{k: v for k, v in r.items() if k not in ("import_kwh", "export_kwh")}
+                            for r in s.get("ranking", [])[:30]]
+        attrs["catalogue_updated"] = store.catalogue.get("fetched")
+        best = next((r for r in s.get("ranking", []) if r["id"] != "current"), None)
+        self._publish_state("cost_simulator", best["name"][:250] if best else "unknown", attrs)
+
+    def _sim_notify(self, out):
+        month = self._today().strftime("%Y-%m")
+        opps = out.get("opportunities") or []
+        if opps:
+            top = opps[:3]
+            lines = [f"{o['name']}: about £{o['saving_month']:.0f} a month less" + (f" ({o['notes']})" if o.get("notes")
+                                                                                    else "")
+                     for o in top]
+            days = (getattr(self, "_sim_store", None).summary or {}).get("days")
+            self._notify("simulator", (f"sim:{top[0]['id']}:{month}", "PowerEngine: a tariff worth a look",
+                                       f"Over your last {days} days, with the battery run the same way: "
+                                       + "; ".join(lines) + ". See the Simulator tab."))
+        new = out.get("new_products") or []
+        if new:
+            names = ", ".join(sorted({p["name"] for p in new}))[:300]
+            self._notify("simulator", ("sim:new:" + ",".join(sorted(p["code"] for p in new))[:120],
+                                       "PowerEngine: new tariffs", f"New tariffs published: {names}. They're in "
+                                       "tonight's Simulator comparison."))
 
     def _daily_summary(self, kwargs):
         if self.costbook is None:
