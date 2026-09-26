@@ -41,6 +41,7 @@ class Role:
     suggest_not: tuple[str, ...] = ()
     suggest_static: float | None = None
     unknown_ok: bool = False       # 'unknown' is a normal idle state (e.g. no event scheduled)
+    measurable: bool = False       # PowerEngine measures it; the config can choose the measured figure instead
 
     def as_dict(self) -> dict:
         d = asdict(self)
@@ -76,7 +77,7 @@ ROLES: tuple[Role, ...] = (
     Role("battery_discharge_power", "battery", "Battery discharging power", "If Battery power has no sign: power out.",
          "power", required="no", suggest=(r"^sensor\.solis_battery_output_energy$",)),
     Role("battery_capacity", "battery", "Usable battery capacity", "Energy the battery can actually deliver.",
-         "static", static_ok=True, static_unit="kWh", suggest_static=18.0),
+         "static", static_ok=True, static_unit="kWh", suggest_static=18.0, measurable=True),
     Role("battery_max_charge_power", "battery", "Max charge power", "Fastest safe charge rate.",
          "static", static_ok=True, static_unit="W", suggest_static=4800),
     Role("battery_max_discharge_power", "battery", "Max discharge power", "Fastest safe discharge rate.",

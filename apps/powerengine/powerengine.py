@@ -24,6 +24,7 @@ from pe_core.config import (
     load_config,
     required_roles,
     settings_catalogue,
+    use_measured,
     uses_battery_pair,
 )
 from pe_core.control import KINDS, Write, desired, readback_mismatches, release, window_end, writes_needed
@@ -298,7 +299,7 @@ class PowerEngine(hass.Hass):
         m = getattr(self, "measured", None)
         if m and m.get("measured") and m.get("efficiency"):
             p = dataclasses.replace(p, efficiency=m["efficiency"])
-        if m and m.get("capacity_measured") and m.get("capacity_kwh"):
+        if m and m.get("capacity_measured") and m.get("capacity_kwh") and use_measured(self.cfg, "battery_capacity"):
             p = dataclasses.replace(p, capacity_kwh=m["capacity_kwh"])
         return p
 
@@ -309,7 +310,8 @@ class PowerEngine(hass.Hass):
         try:
             old = self.measured or {}
             before = old.get("efficiency")
-            cap_before = old.get("capacity_kwh") if old.get("capacity_measured") else None
+            cap_before = old.get("capacity_kwh") if old.get("capacity_measured") and use_measured(
+                self.cfg, "battery_capacity") else None
             self.measured = self.costbook.measure(self._today(), params_from(self.cfg).capacity_kwh)
             m = self.measured
             configured = params_from(self.cfg).efficiency
@@ -327,9 +329,12 @@ class PowerEngine(hass.Hass):
                 self.log(f"Battery round trip measured at {m['rte'] * 100:.1f}% over {m['days']} days")
             self._publish_state("diag_battery_capacity", m["capacity_kwh"] if m.get("capacity_kwh") else "unknown", {
                 "measured": m.get("capacity_measured"), "configured_kwh": params_from(self.cfg).capacity_kwh,
+                "use_measured": use_measured(self.cfg, "battery_capacity"),
+                "in_use_kwh": self._params().capacity_kwh,
                 "samples": m.get("capacity_samples"), "max_charge_kw": m.get("max_charge_kw"),
                 "max_discharge_kw": m.get("max_discharge_kw"), "min_soc_seen": m.get("min_soc")})
-            cap_now = m.get("capacity_kwh") if m.get("capacity_measured") else None
+            cap_now = m.get("capacity_kwh") if m.get("capacity_measured") and use_measured(
+                self.cfg, "battery_capacity") else None
             eff_moved = m["measured"] and (before is None or abs(m["efficiency"] - before) > 0.002)
             cap_moved = cap_now is not None and (cap_before is None or abs(cap_now - cap_before) > 0.2)
             if revalue and (eff_moved or cap_moved):
@@ -1071,6 +1076,7 @@ class PowerEngine(hass.Hass):
 
     def _reload(self):
         """Re-read config.yaml in place and republish status (no app restart)."""
+        cap_before = self._params().capacity_kwh if self.cfg is not None else None
         self.cfg_error = None
         try:
             self.cfg, self.cfg_path = load_config(self.paths)
@@ -1084,6 +1090,13 @@ class PowerEngine(hass.Hass):
                 self.costbook.flow_id = fid
                 self.log("Cost inputs changed; recent days will be rebuilt from HA history")
                 self.run_in(self._backfill, 30)
+            else:
+                cap_after = self._params().capacity_kwh
+                if cap_before is not None and abs(cap_after - cap_before) > 0.05:   # e.g. 'use measured' toggled
+                    n = self.costbook.revalue(**self._cost_params())
+                    self.log(f"Battery capacity now {cap_after:.2f} kWh; costs re-valued ({n} half-hours)")
+                    self._refresh_months()
+            self._measure(revalue=False)                   # republish which capacity is in use
         self._last_checks = None
         self._evaluate()
         self._cycle({})

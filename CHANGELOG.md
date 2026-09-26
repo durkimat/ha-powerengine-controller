@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.16 (beta)
+
+### Behaviour changes
+- **"Use measured" for battery capacity.** A tick box next to *Usable battery capacity* on the config card, showing
+  the measured figure once there is one. Ticked (the default, and what earlier versions did automatically), the
+  measured capacity replaces the configured one for planning, simulation and costs once it's measured; unticked,
+  the configured figure is always used. Changing it re-values the cost history with the capacity now in use.
+- `sensor.pe_diag_battery_capacity` shows `use_measured` and `in_use_kwh`.
+
 ## 0.5.15 (beta)
 
 ### Behaviour changes
