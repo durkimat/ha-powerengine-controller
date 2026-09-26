@@ -246,15 +246,30 @@ automation:
             AppDaemon log.
 
   # Predbat (add-on) gives up if Home Assistant isn't ready when it starts, and then never creates its entities,
-  # including the read-only switch PowerEngine's handover guard needs. Restart it if that switch is missing.
+  # including the read-only switch. Restart it if that switch is missing: 5 minutes after HA starts, or if it goes
+  # missing for 10 minutes while running. At most once an hour, so a real Predbat fault doesn't cause a restart loop.
+  # (PowerEngine carries on meanwhile: a missing switch means Predbat can't be controlling the inverter.)
   - alias: PowerEngine - Restart Predbat if it didn't connect
     id: powerengine_restart_predbat
     mode: single
     triggers:
       - trigger: homeassistant
         event: start
+        id: start
+      - trigger: template
+        value_template: "{{ states('switch.predbat_set_read_only') in ['unknown', 'unavailable'] }}"
+        for: "00:10:00"
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ this.attributes.last_triggered is none
+             or (now() - this.attributes.last_triggered).total_seconds() > 3600 }}
     actions:
-      - delay: "00:05:00"
+      - if:
+          - condition: trigger
+            id: start
+        then:
+          - delay: "00:05:00"
       - if:
           - condition: template
             value_template: "{{ states('switch.predbat_set_read_only') in ['unknown', 'unavailable'] }}"
@@ -267,5 +282,5 @@ automation:
               notification_id: powerengine_predbat_restart
               title: Predbat restarted
               message: >-
-                Predbat hadn't connected 5 minutes after Home Assistant started (its read-only switch was missing),
-                so its add-on was restarted.
+                Predbat wasn't connected to Home Assistant (its read-only switch was missing), so its add-on was
+                restarted.

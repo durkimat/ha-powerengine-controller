@@ -33,8 +33,13 @@ def test_predbat_not_read_only_or_legacy_on_is_reported():
     assert len(probs) == 2 and "must be on" in probs[0] and "must be off" in probs[1]
 
 
-def test_unavailable_guard_is_unsafe():
-    states = dict(SAFE, **{"switch.predbat_set_read_only": "unavailable"})
+def test_absent_guard_counts_as_safe_but_is_reported():
+    from pe_core.modes import guard_status
+    for gone in ("unavailable", "unknown", None):
+        states = dict(SAFE, **{"switch.predbat_set_read_only": gone})
+        assert guard_problems(parse_config(GUARDED), states.get) == []
+        assert guard_status(parse_config(GUARDED), states.get)[1] == ["switch.predbat_set_read_only"]
+    states = dict(SAFE, **{"switch.predbat_set_read_only": "off"})           # present and off: not safe
     assert guard_problems(parse_config(GUARDED), states.get)
 
 

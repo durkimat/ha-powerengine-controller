@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.5 (beta)
+
+### Behaviour changes
+- **A handover guard that doesn't exist counts as safe.** If a guard entity is missing, unknown or unavailable
+  (e.g. Predbat's read-only switch while Predbat isn't connected to Home Assistant), PowerEngine no longer refuses
+  Active: something that isn't in Home Assistant can't be controlling the inverter. It logs it, notifies you once
+  (*handover guard not available*) and lists it in the Operation mode's `guards_absent` attribute. A guard that
+  exists and is in the wrong state still stops control, as before.
+- **Handover package:** *Restart Predbat if it didn't connect* also runs if the switch goes missing for 10 minutes
+  while HA is running (not only after an HA restart), at most once an hour.
+
 ## 0.8.4 (beta)
 
 ### Behaviour changes

@@ -56,7 +56,7 @@ from pe_core.health import overall, plan_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_day, chosen_plan, day_view
 from pe_core.loadstore import LoadStore
-from pe_core.modes import GUARDS, effective_mode, guard_problems
+from pe_core.modes import GUARDS, effective_mode, guard_problems, guard_status
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
 from pe_core.optimiser import compare, optimise
 from pe_core.planner import make_plan, params_from, plan_entity_states, slot_certainty_rows
@@ -225,7 +225,8 @@ class PowerEngine(hass.Hass):
                 checks["battery_power"] = (OK, "Not used: the charging and discharging sensors are mapped")
         missing = [k for k in required if checks.get(k, ("unmapped", ""))[0] != OK]
         self._watch_inputs(checks, required)
-        guards = guard_problems(self.cfg, self.get_state) if self.cfg is not None else []
+        guards, absent = guard_status(self.cfg, self.get_state) if self.cfg is not None else ([], [])
+        self._note_absent_guards(absent)
         paused = self.get_state(PAUSE_ENTITY) == "on"
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused)
         self._leave_active(getattr(self, "mode", None), mode, guards)
@@ -251,7 +252,8 @@ class PowerEngine(hass.Hass):
                             {"reason": self.cfg_error or overall, "file": self.cfg_path})
         self._publish_state("cfg_operation_mode", mode.configured)
         self._publish_state("state_operation_mode", mode.effective,
-                            {"reason": mode.reason, "guards": guards or "all safe", "paused": paused})
+                            {"reason": mode.reason, "guards": guards or "all safe", "paused": paused,
+                             "guards_absent": absent})
         self._publish_state("map_config", overall, {
             "config": self.cfg.raw if self.cfg else {},
             "checks": {k: {"status": s, "message": m} for k, (s, m) in checks.items()},
@@ -847,6 +849,24 @@ class PowerEngine(hass.Hass):
             self.log(f"Notified: {title}")
         except Exception as err:
             self.log(f"Could not send a notification via {n['service']}: {err!r}", level="WARNING")
+
+    def _note_absent_guards(self, absent):
+        """Guard entities HA doesn't have (e.g. Predbat not connected) count as safe; say so once, and when they're
+        back."""
+        before = set(getattr(self, "_absent_guards", ()))
+        now = set(absent)
+        if now - before:
+            names = ", ".join(sorted(now - before))
+            self.log(f"Handover guard not available ({names}); treated as safe: it can't be controlling anything",
+                     level="WARNING")
+            self._notify("health", ("guard:absent", "PowerEngine: handover guard not available",
+                                    f"{names} isn't in Home Assistant right now (e.g. Predbat not connected). "
+                                    "PowerEngine treats it as safe, since it can't be controlling the inverter, "
+                                    "and carries on."))
+        if before and not now:
+            self.log("Handover guards available again")
+            self.notifier.clear("guard:absent")
+        self._absent_guards = now
 
     def _watch_inputs(self, checks, required):
         now = datetime.now(timezone.utc)
