@@ -109,3 +109,20 @@ def test_every_setting_is_in_exactly_one_config_page_section():
     assert sorted(keys) == sorted(SAFETY) and len(keys) == len(set(keys))
     cat = settings_catalogue()
     assert sorted(k for s in cat["sections"] for k in s["keys"]) == sorted(s["key"] for s in cat["safety"])
+
+
+def test_use_measured_capacity_flag():
+    from pe_core.config import use_measured
+    assert use_measured(parse_config({"inputs": {"battery_capacity": {"value": 18}}}), "battery_capacity")
+    cfg = parse_config({"inputs": {"battery_capacity": {"value": 18, "use_measured": False}}})
+    assert not use_measured(cfg, "battery_capacity")
+
+
+def test_use_measured_only_on_measurable_inputs():
+    import pytest
+
+    from pe_core.config import ConfigError
+    with pytest.raises(ConfigError, match="no measured figure"):
+        parse_config({"inputs": {"battery_max_charge_power": {"value": 4800, "use_measured": True}}})
+    with pytest.raises(ConfigError, match="true or false"):
+        parse_config({"inputs": {"battery_capacity": {"value": 18, "use_measured": "yes"}}})

@@ -168,6 +168,8 @@ def _check_input_spec(label: str, spec: Any) -> None:
         raise ConfigError(f"{label}: '{spec['entity']}' is not a valid entity id")
     if "invert" in spec and not isinstance(spec["invert"], bool):
         raise ConfigError(f"{label}: 'invert' must be true or false")
+    if "use_measured" in spec and not isinstance(spec["use_measured"], bool):
+        raise ConfigError(f"{label}: 'use_measured' must be true or false")
 
 
 def _check_role(role_key: str, spec: dict) -> None:
@@ -177,6 +179,8 @@ def _check_role(role_key: str, spec: dict) -> None:
     _check_input_spec(f"input '{role_key}'", spec)
     if spec.get("invert") and not role.signed:
         raise ConfigError(f"input '{role_key}' can't be inverted")
+    if "use_measured" in spec and not role.measurable:
+        raise ConfigError(f"input '{role_key}' has no measured figure")
     if "value" in spec:
         if not role.static_ok:
             raise ConfigError(f"input '{role_key}' must be an entity, not a fixed value")
@@ -360,6 +364,12 @@ BATTERY_PAIR = ("battery_charge_power", "battery_discharge_power")
 def uses_battery_pair(cfg: Config) -> bool:
     """True when separate charging/discharging sensors replace the single (unsigned) battery power sensor."""
     return all("entity" in (cfg.inputs.get(k) or {}) for k in BATTERY_PAIR)
+
+
+def use_measured(cfg: Config | None, role_key: str) -> bool:
+    """Whether a measurable input should use PowerEngine's measured figure once there is one (default yes)."""
+    spec = (cfg.inputs.get(role_key) if cfg else None) or {}
+    return spec.get("use_measured", True) is not False
 
 
 def required_roles(cfg: Config) -> list[str]:
