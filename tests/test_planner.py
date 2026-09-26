@@ -244,3 +244,23 @@ def test_plan_series_has_solar_export_and_fits_ha_limit():
     assert len(ser["solar_export_kwh"]) == len(ser["t"]) and max(ser["solar_export_kwh"]) > 0
     assert all(d == 0 for d in ser["discharge_kwh"])
     assert len(json.dumps(attrs, separators=(",", ":"))) < 15500
+
+
+@pytest.mark.parametrize("p", [P, FILL])
+def test_horizon_end_does_not_change_what_happens_now(p):
+    """#15: the 36-hour minimum horizon means the end of the plan never changes the current half-hour's action
+    (compared with a 48-hour horizon), over every start time of day, several charge levels, with and without sun."""
+    def slots(n, off, solar):
+        out = []
+        for i in range(n):
+            k = (i + off) % 48
+            out.append(Slot(T0 + (i + off) * SLOT, CHEAP if 14 <= k < 24 else PEAK, 0.15,
+                            solar_kwh=solar if 30 <= k <= 40 else 0.0, load_kwh=0.5))
+        return out
+    for off in range(0, 48, 3):
+        for soc in (15.0, 60.0, 95.0):
+            for solar in (0.0, 1.5):
+                now = T0 + off * SLOT
+                short = make_plan(slots(72, off, solar), soc=soc, p=p, now=now)
+                long = make_plan(slots(96, off, solar), soc=soc, p=p, now=now)
+                assert short.slots[0].action == long.slots[0].action, (off, soc, solar)

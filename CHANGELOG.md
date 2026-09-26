@@ -2,6 +2,28 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.5.18 (beta)
+
+### Behaviour changes
+- **Smart-slot certainty** (#14). Each planned EDF slot gets a certainty from the slot history (delivered, cut
+  short or cancelled), grouped by overnight/daytime and how far ahead it was announced; it starts at 70% and
+  learns as slots finish. The plan prices an upcoming slot at certainty × slot price + the rest at the normal
+  price, so it only relies on slots that usually happen (e.g. a slot that's often cancelled no longer counts as
+  cheap for charging the battery). The slot in progress keeps its real price. Shown on the Plan tab (each slot's
+  certainty and the price used) and the Health tab (overall and per group).
+- **Estimated prices no longer copy yesterday's smart slots.** Beyond the published prices, each half-hour is
+  estimated from the same time the day before; a cheap half-hour that was a smart slot (outside the usual
+  overnight window) is now estimated at that day's normal (peak) price instead.
+
+### Other
+- **Plan history tab** (#58). Pick a day (up to 30 days back) and a plan (start of day, or the first plan of any
+  hour) and see it against what happened: battery %, price, grid charging, battery and solar export, house load
+  and solar (plan dashed, actual solid), the plan's actions, and the plan's expected cost against the actual
+  cost for the half-hours it covered. The first plan of each hour is now kept for 60 days (plans-<date>.json);
+  plans saved before this version only have the battery level.
+- #15 (value charge left at the end of the plan) checked: the 36-hour horizon means the end of the plan never
+  changes what happens now; a regression test covers it. No change.
+
 ## 0.5.17 (beta)
 
 ### Behaviour changes

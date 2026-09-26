@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from .history import DAY_OPTIONS, PLAN_OPTIONS
+
 BASE_TOPIC = "powerengine"
 DISCOVERY_PREFIX = "homeassistant"
 AVAILABILITY_TOPIC = f"{BASE_TOPIC}/status"
@@ -165,7 +167,20 @@ CONTROL_SWITCHES: tuple[EntityDef, ...] = (
                "optimistic": False, "retain": True}),
 )
 
-ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES + UI_ENTITIES + CONTROL_SWITCHES
+# Plan history tab: which day and which of that day's plans to show (same retained command/state pattern).
+HISTORY_DAY_TOPIC = f"{BASE_TOPIC}/ui_history_day/set"
+HISTORY_PLAN_TOPIC = f"{BASE_TOPIC}/ui_history_plan/set"
+HISTORY_ENTITIES: tuple[EntityDef, ...] = (
+    EntityDef("select", "ui_history_day", "History day",
+              {"icon": "mdi:calendar-search", "options": DAY_OPTIONS, "command_topic": HISTORY_DAY_TOPIC,
+               "state_topic": HISTORY_DAY_TOPIC, "optimistic": False, "retain": True}),
+    EntityDef("select", "ui_history_plan", "History plan",
+              {"icon": "mdi:clock-outline", "options": PLAN_OPTIONS, "command_topic": HISTORY_PLAN_TOPIC,
+               "state_topic": HISTORY_PLAN_TOPIC, "optimistic": False, "retain": True}),
+    EntityDef("sensor", "plan_history", "Plan history", {"icon": "mdi:history"}),
+)
+
+ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES + UI_ENTITIES + CONTROL_SWITCHES + HISTORY_ENTITIES
 
 
 def device(version: str) -> dict[str, Any]:
