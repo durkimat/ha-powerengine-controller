@@ -8,9 +8,11 @@ from pe_core.notify import DAILY_CAP, Notifier, axle_message, daily_message, hea
 NOW = datetime(2026, 9, 26, 9, 0, tzinfo=timezone.utc)
 
 
-def test_notifications_are_off_until_a_service_is_set_and_validated():
+def test_notifications_go_to_the_ha_notification_area_by_default_and_are_validated():
     cfg = parse_config({})
-    assert cfg.notifications["service"] == "" and cfg.notifications["events"]["health"] is True
+    assert cfg.notifications["service"] == "persistent_notification" and cfg.notifications["events"]["health"] is True
+    assert parse_config({"notifications": {"service": "off"}}).notifications["service"] == ""
+    assert parse_config({"notifications": {"service": ""}}).notifications["service"] == ""
     assert cfg.notifications["events"]["daily"] is False
     cfg = parse_config({"notifications": {"service": "notify.mobile_app_pixel", "events": {"daily": True}}})
     assert cfg.notifications["events"]["daily"] is True
@@ -48,3 +50,26 @@ def test_messages():
     s = {"date": "2026-09-25", "s0": 4.72, "actual": 1.40, "solar": 1.03, "smart": 0.05, "s3a": 0.01, "s3b": 1.70}
     key, title, msg = daily_message(s)
     assert key == "daily:2026-09-25" and "£1.40" in title and "saved £3.32" in msg
+
+
+def test_notification_area_create_and_dismiss(monkeypatch, tmp_path):
+    import sys
+    import types
+    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
+    hassapi.Hass = type("Hass", (), {})
+    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
+    sys.modules.pop("powerengine", None)
+    import powerengine
+    a = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
+    a.cfg = parse_config({})
+    a.notifier = Notifier(str(tmp_path / "n.json"))
+    calls = []
+    a.call_service = lambda svc, **kw: calls.append((svc, kw))
+    a.log = lambda *args, **kw: None
+    a._notify("health", ("guard:absent", "T", "M"))
+    assert calls == [("persistent_notification/create",
+                      {"title": "T", "message": "M", "notification_id": "powerengine_guard_absent"})]
+    a._clear_notice("guard:absent")
+    assert calls[-1] == ("persistent_notification/dismiss", {"notification_id": "powerengine_guard_absent"})

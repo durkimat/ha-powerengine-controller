@@ -23,6 +23,7 @@ from pe_core.checks import OK, check, summarise
 from pe_core.config import (
     DEFAULT_PATHS,
     LOCATION_LAG_H,
+    NOTIFY_DEFAULT,
     ConfigError,
     load_config,
     required_roles,
@@ -92,6 +93,10 @@ RESULT_EVENT = "pe_config_result"
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
 PAUSE_ENTITY = "switch.pe_ctl_pause"
+
+
+def _notice_id(key: str) -> str:
+    return "powerengine_" + "".join(c if c.isalnum() else "_" for c in key)
 
 
 class PowerEngine(hass.Hass):
@@ -221,6 +226,10 @@ class PowerEngine(hass.Hass):
                 state = None
                 if spec and "entity" in spec:
                     state = self.get_state(spec["entity"], attribute="all")
+                    if state is None and role.group == "handover":       # AppDaemon lost track: ask HA
+                        live = self._guard_state(spec["entity"])
+                        if live not in (UNVERIFIED, "unknown", "unavailable", "None"):
+                            state = {"state": live, "attributes": {}}
                 checks[role.key] = check(role, spec, state)
             if uses_battery_pair(self.cfg) and "battery_power" in self.cfg.inputs:
                 checks["battery_power"] = (OK, "Not used: the charging and discharging sensors are mapped")
@@ -849,11 +858,24 @@ class PowerEngine(hass.Hass):
         if not n["service"] or not n["events"].get(event) or not self.notifier.should_send(key, now):
             return
         try:
-            self.call_service(n["service"].replace(".", "/", 1), title=title, message=message)
+            if n["service"] == NOTIFY_DEFAULT:
+                self.call_service("persistent_notification/create", title=title, message=message,
+                                  notification_id=_notice_id(key))
+            else:
+                self.call_service(n["service"].replace(".", "/", 1), title=title, message=message)
             self.notifier.mark(key, now)
             self.log(f"Notified: {title}")
         except Exception as err:
             self.log(f"Could not send a notification via {n['service']}: {err!r}", level="WARNING")
+
+    def _clear_notice(self, key):
+        """The problem behind a notification is over: allow it again, and take it out of HA's notification area."""
+        self.notifier.clear(key)
+        if self.cfg is not None and self.cfg.notifications["service"] == NOTIFY_DEFAULT:
+            try:
+                self.call_service("persistent_notification/dismiss", notification_id=_notice_id(key))
+            except Exception as err:
+                self.log(f"Could not dismiss a notification: {err!r}", level="WARNING")
 
     def _guard_state(self, eid):
         """A guard's state. AppDaemon's copy of HA's states can miss an entity that was re-created after it started
@@ -885,7 +907,7 @@ class PowerEngine(hass.Hass):
                                     "and carries on."))
         if before and not now:
             self.log("Handover guards available again")
-            self.notifier.clear("guard:absent")
+            self._clear_notice("guard:absent")
         self._absent_guards = now
 
     def _watch_inputs(self, checks, required):
@@ -894,7 +916,7 @@ class PowerEngine(hass.Hass):
             status, message = checks.get(key, ("unmapped", "Not set"))
             if status == OK:
                 if self._bad_since.pop(key, None) is not None:
-                    self.notifier.clear(f"input:{key}")
+                    self._clear_notice(f"input:{key}")
                 continue
             since = self._bad_since.setdefault(key, now)
             if (now - since).total_seconds() >= 15 * 60:

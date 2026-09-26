@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.9 (beta)
+
+### Behaviour changes
+- **Notifications go to Home Assistant's notification area by default** (the bell; a persistent notification per
+  problem, dismissed automatically when it's over). Before, nothing was sent until a phone notify service was
+  chosen. *Send to* now offers the notification area, your phones, or Off; configs that never chose one get the
+  notification area.
+- Health tab *Inputs*: a handover guard AppDaemon has lost track of is checked with Home Assistant directly (as
+  control already does since 0.8.6), so it no longer shows *missing* when it's there.
+
 ## 0.8.8 (beta)
 
 ### Behaviour changes
