@@ -199,12 +199,12 @@ def test_auto_threshold_is_used_by_the_plan():
 def test_arbitrage_sells_surplus_just_before_the_cheap_refill():
     from pe_core.decide import EXPORT
     arb = Params(arbitrage=True)
-    plan = make_plan(day(load=0.1), soc=100.0, p=arb, now=T0)
+    plan = make_plan(day(), soc=90.0, p=arb, now=T0)
     exports = [i for i, ps in enumerate(plan.slots) if ps.action == EXPORT]
     assert exports and max(exports) == 13 and all(i < 14 for i in exports)   # just before 00:00
-    assert plan.slots[13].soc_end >= arb.arbitrage_min_soc - 0.01            # only the top of the battery is sold
+    assert plan.slots[13].soc_end >= arb.min_reserve_soc + arb.arbitrage_keep_soc - 0.01   # the house stays covered
     assert all(plan.slots[i].grid_import < 0.01 for i in range(0, 14) if plan.slots[i].action != EXPORT)
-    without = make_plan(day(load=0.1), soc=100.0, p=Params(), now=T0)
+    without = make_plan(day(), soc=90.0, p=Params(), now=T0)
     assert plan.cost < without.cost and "refilled at 7p" in plan.slots[13].reason
 
 
@@ -266,16 +266,30 @@ def test_horizon_end_does_not_change_what_happens_now(p):
                 assert short.slots[0].action == long.slots[0].action, (off, soc, solar)
 
 
-def test_arbitrage_band_keeps_out_of_the_full_zone():
+def test_arbitrage_band_is_a_guide():
     from pe_core.decide import EXPORT
     arb = Params(arbitrage=True, arbitrage_min_soc=75, arbitrage_max_soc=90)
     assert arb.buffer_target == 90 and Params().buffer_target == 100
+    # selling at 15p after buying at 7p clears the 2p outside-band cost, so it may go below 75% while covered
     plan = make_plan(day(load=0.1), soc=100.0, p=arb, now=T0)
-    assert min(ps.soc_end for ps in plan.slots[:14]) >= 75 - 0.01                 # never sold below the band
-    cheap = [ps for ps in plan.slots[14:24]]
-    assert max(ps.soc_end for ps in cheap) <= 90 + 0.01                          # the cheap top-up stops at 90%
-    ps = PlanSlot(Slot(T0, PEAK, 0.30, load_kwh=0.0), EXPORT, "")
-    assert step(ps, 80.0, arb) >= 75 - 0.01                                     # a sale can't cross the floor
+    assert min(ps.soc_end for ps in plan.slots[:14]) < 75
+    assert plan.slots[13].soc_end >= arb.min_reserve_soc + arb.arbitrage_keep_soc - 0.01
+    # a high outside-band cost keeps it in the band
+    strict = Params(arbitrage=True, arbitrage_band_penalty_p=10.0)
+    tight = make_plan(day(load=0.1), soc=100.0, p=strict, now=T0)
+    assert any(ps.action == EXPORT for ps in tight.slots)
+    assert min(ps.soc_end for ps in tight.slots[:14]) >= 75 - 1.0
+    # routine cheap top-up stops at the band top
+    assert max(ps.soc_end for ps in plan.slots[14:24]) <= 90 + 0.01
+
+
+def test_optimiser_band_penalty():
+    from pe_core.decide import EXPORT, GRID_CHARGE
+    from pe_core.optimiser import band_penalty
+    arb = Params(arbitrage=True, capacity_kwh=10.0)
+    assert band_penalty(EXPORT, 80, 70, arb) == pytest.approx(0.5 * 0.02)      # 5% of 10 kWh below 75%
+    assert band_penalty(GRID_CHARGE, 85, 95, arb) == pytest.approx(0.5 * 0.02)  # 5% above 90%
+    assert band_penalty(EXPORT, 80, 70, Params()) == 0
 
 
 def test_config_arbitrage_band_validated():
