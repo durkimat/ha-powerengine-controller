@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.8.4 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.8.5 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.8.4 starting
+PowerEngine 0.8.5 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -419,7 +419,8 @@ later is the same one step.
 
 - **Handover guards:** if a guard becomes unsafe while PowerEngine is in control (e.g. Predbat taken out of
   read-only by hand), PowerEngine stops writing at once and notifies you; it writes nothing more, since something
-  else has taken over. The panel shows ✗; use the switch or *Re-apply* to put things straight.
+  else has taken over. A guard entity that doesn't exist at all (e.g. Predbat not connected to Home
+  Assistant) counts as safe: PowerEngine carries on and notifies you once. The panel shows ✗; use the switch or *Re-apply* to put things straight.
 - **Pause:** returns the inverter to Self-Use once, then no changes until you resume.
 - **Inputs failing:** if a required input stops working, PowerEngine returns the inverter to Self-Use, notifies
   you, and takes control again when the inputs recover.

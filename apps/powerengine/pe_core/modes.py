@@ -26,23 +26,36 @@ class ModeDecision:
     reason: str
 
 
-def guard_problems(cfg: Config | None, get_state) -> list[str]:
-    """Why another controller might still be in charge; empty when every mapped guard is safe.
+ABSENT = ("None", "unknown", "unavailable")
 
-    At least one guard must be mapped: without any, PowerEngine can't tell Predbat or the legacy
-    automations aren't also writing to the inverter."""
+
+def guard_status(cfg: Config | None, get_state) -> tuple[list[str], list[str]]:
+    """(problems, absent) for the handover guards.
+
+    problems: why another controller might still be in charge (empty when every mapped guard is safe). At least
+    one guard must be mapped: without any, PowerEngine can't tell Predbat or the legacy automations aren't also
+    writing to the inverter.
+    absent: guard entities Home Assistant doesn't have right now (missing, unknown or unavailable). These count as
+    safe: an entity that doesn't exist can't be controlling anything; e.g. Predbat's read-only switch is missing
+    only while Predbat isn't connected to Home Assistant, and then Predbat can't write to the inverter either."""
     if cfg is None:
-        return ["no config"]
+        return ["no config"], []
     mapped = [(key, want, cfg.inputs[key]["entity"]) for key, want in GUARDS
               if "entity" in (cfg.inputs.get(key) or {})]
     if not mapped:
-        return ["no handover guards are mapped"]
-    out = []
+        return ["no handover guards are mapped"], []
+    problems, absent = [], []
     for _key, want, eid in mapped:
-        state = get_state(eid)
-        if str(state) != want:
-            out.append(f"{eid} is {state} (must be {want})")
-    return out
+        state = str(get_state(eid))
+        if state in ABSENT:
+            absent.append(eid)
+        elif state != want:
+            problems.append(f"{eid} is {state} (must be {want})")
+    return problems, absent
+
+
+def guard_problems(cfg: Config | None, get_state) -> list[str]:
+    return guard_status(cfg, get_state)[0]
 
 
 def effective_mode(cfg: Config | None, config_error: str | None = None,
