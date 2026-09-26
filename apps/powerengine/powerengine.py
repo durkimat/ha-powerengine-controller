@@ -48,6 +48,7 @@ from pe_core.entities import (
     removal_messages,
     validate_definitions,
 )
+from pe_core.equipment import EquipmentSettings
 from pe_core.forecast import LoadProfile, build_slots, house_only_means, parse_history, profile_from_means
 from pe_core.health import overall, plan_snapshot
 from pe_core.heatpump import HeatPumpSettings
@@ -1119,7 +1120,9 @@ class PowerEngine(hass.Hass):
         """Your tariff (from the rate sensor's 'tariff' attribute), history, heat pump, location."""
         ctx = SimContext(history=History(os.path.join(self._sim_folder(), "history")),
                          house_includes_car=bool(self.cfg.system.get("house_load_includes_ev", True)),
-                         hp=HeatPumpSettings.from_dict(self._sim_settings().get("heat_pump")))
+                         hp=HeatPumpSettings.from_dict(self._sim_settings().get("heat_pump")),
+                         equipment=EquipmentSettings.from_dict(self._sim_settings().get("equipment")),
+                         auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)))
         eid = self._role_entity("import_rate_now")
         code = str(self.get_state(eid, attribute="tariff") or "") if eid else ""
         if code.startswith("E-1R-") and len(code) > 7:
@@ -1176,15 +1179,16 @@ class PowerEngine(hass.Hass):
 
     def _on_sim_settings(self, event_name, data, kwargs):
         s = HeatPumpSettings.from_dict(data.get("heat_pump"))
-        problems = s.problems()
+        e = EquipmentSettings.from_dict(data.get("equipment"))
+        problems = s.problems() + e.problems()
         if problems:
             self.fire_event("pe_sim_result", ok=False, message="Not saved: " + "; ".join(problems))
             return
         path = os.path.join(self._sim_folder(), "settings.json")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
-            json.dump({"heat_pump": s.as_dict()}, fh, indent=1)
-        self.log(f"Simulator: heat pump settings saved by {self._user_name(data)}")
+            json.dump({"heat_pump": s.as_dict(), "equipment": e.as_dict()}, fh, indent=1)
+        self.log(f"Simulator: settings saved by {self._user_name(data)}")
         self.fire_event("pe_sim_result", ok=True, message="Saved. Tonight's run includes them.")
         self._sim_publish()
 
@@ -1196,19 +1200,20 @@ class PowerEngine(hass.Hass):
                 "history_request": self._sim_history_request(), "settings": self._sim_settings(),
                 "running": getattr(self, "_sim_job", None) is not None}
 
-        def trim(win):
+        def trim(win, rows=30):
             if not win:
                 return None
             out = {k: v for k, v in win.items() if k != "ranking"}
             out["ranking"] = [{k: v for k, v in r.items() if k not in ("import_kwh", "export_kwh")}
-                              for r in win.get("ranking", [])[:30]]
+                              for r in win.get("ranking", [])[:rows]]
             return out
         short = trim((s.get("windows") or {}).get("30"))
         best = next((r for r in (short or {}).get("ranking", []) if r["id"] != "current"), None)
         self._publish_state("cost_simulator", best["name"][:250] if best else "unknown", {**meta, "window": short})
-        year = trim((s.get("windows") or {}).get("year"))
+        year = trim((s.get("windows") or {}).get("year"), 20)        # shares its sensor with the tables below
         self._publish_state("cost_simulator_year", year["days"] if year else "unknown",
-                            {"window": year, "heat_pump": s.get("heat_pump")})
+                            {"window": year, "heat_pump": s.get("heat_pump"), "planner": s.get("planner"),
+                             "equipment": s.get("equipment")})
 
     def _sim_notify(self, out):
         month = self._today().strftime("%Y-%m")

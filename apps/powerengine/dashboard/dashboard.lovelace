@@ -655,6 +655,34 @@ views:
               | {{ r.name }} | £{{ '%.2f' | format(r.with_hp_month) }}/mo | £{{ '%.2f' | format(r.without_month + r.gas_month) }}/mo | £{{ '%.2f' | format(r.saving_month) }}/mo | {{ r.hp_kwh | int }} | {{ r.scop }} | {{ (r.payback_years ~ ' yr') if r.payback_years else '–' }} |
               {%- endfor %}
               {%- endif %}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set pl = state_attr('sensor.pe_cost_simulator_year', 'planner') %}
+              {%- if pl and pl.rows %}
+              ### PowerEngine's planner against the best achievable
+              The rankings above use an optimiser that knows each day in advance. Here the same days are run by PowerEngine's own planner (the one that controls the battery), also knowing the day's load and solar. The gap is what a smarter planner could still be worth; forecast errors in real life add to it. Over {{ pl.window_days }} days, per month:
+
+              | Tariff | Best achievable | PowerEngine's planner | Gap | What you actually paid |
+              |---|---:|---:|---:|---:|
+              {%- for r in pl.rows %}
+              | {{ r.name }} | £{{ '%.2f' | format(r.best_month) }} | £{{ '%.2f' | format(r.planner_month) }} | £{{ '%.2f' | format(r.gap_month) }} | {{ ('£%.2f' | format(r.actual_month)) if r.actual_month is defined else '–' }} |
+              {%- endfor %}
+              {%- endif %}
+              {%- set e = state_attr('sensor.pe_cost_simulator_year', 'equipment') %}
+              {%- if e and e.rows %}
+
+              ### Equipment
+              Each item on your tariff and the best other tariff, against the same tariff without it, over {{ e.window_days }} days{{ '' if e.full_year else ' (payback needs a year of history, so it shows once winter days are in)' }}.
+
+              | Equipment | Tariff | With it | Without | Saving | Cost | Payback |
+              |---|---|---:|---:|---:|---:|---:|
+              {%- for r in e.rows %}
+              | {{ r.label }} | {{ r.name }} | £{{ '%.2f' | format(r.with_month) }}/mo | £{{ '%.2f' | format(r.without_month) }}/mo | £{{ '%.2f' | format(r.saving_month) }}/mo | {{ ('£%d' | format(r.cost)) if r.cost else '–' }} | {{ (r.payback_years ~ ' yr') if r.payback_years else '–' }} |
+              {%- endfor %}
+
+              A second car's *saving* is negative: it's the extra it would cost to charge on each tariff.
+              {%- endif %}
           - type: custom:powerengine-sim-card
             grid_options: {columns: full}
   - title: Costs

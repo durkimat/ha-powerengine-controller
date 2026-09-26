@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.6.2 (beta)
+
+### Behaviour changes
+- None to your devices.
+- **Simulator phase 4: equipment** (#54). New settings on the Simulator tab for a bigger battery (usable kWh, power,
+  cost), more solar (your kWp now, extra kWp, cost; recorded solar scaled, same roof direction) and a second car
+  (miles a year, kWh a mile, charger power; charged in each day's cheapest half-hours). Each ticked item, and all
+  of them together, is run on your tariff and the best other tariff and compared with the same tariff without it,
+  with payback once there's a year of history.
+- **Simulator phase 5: PowerEngine's planner against the best achievable.** Your tariff and the three best others
+  are also run by PowerEngine's own planner (knowing each day's load and solar). The tab shows best achievable,
+  planner and the gap per month, next to what you actually paid.
+
 ## 0.6.1 (beta)
 
 ### Behaviour changes

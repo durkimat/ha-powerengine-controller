@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 
 from . import kraken
+from .equipment import LABELS, EquipmentSettings, adjust_slots, cost_of, params_for
 from .heatpump import HeatPumpSettings, day_heat, hlc_kw_per_k, schedule
 from .simhistory import History
 from .simulator import (
@@ -157,6 +158,8 @@ class SimContext:
     hp: HeatPumpSettings | None = None
     weather: Weather | None = None
     weather_get: object = None
+    equipment: EquipmentSettings | None = None
+    auto_cheap: bool = True                # the planner's automatic cheap threshold (for the realistic run)
 
 
 def _date_span(first: date, last: date) -> list[str]:
@@ -246,7 +249,7 @@ def run(store: SimStore, days: list[str], load_day, params, tz, now: datetime, c
     actual = {d: {**actual_cost(recs(d)), "estimated": d not in recorded} for d in use_days}
     steps = 0
 
-    def replay(sid: str, scn: dict, tables: dict, run_sig: str, extra_load=None):
+    def replay(sid: str, scn: dict, tables: dict, run_sig: str, extra_load=None, p_over=None, strategy="best"):
         nonlocal steps
         res = store.results.get(sid)
         if not res or res.get("sig") != run_sig:
@@ -283,7 +286,7 @@ def run(store: SimStore, days: list[str], load_day, params, tz, now: datetime, c
                                     prod.get("standing_p") if prod else None)
             if any(sl.price is None for sl in slots):
                 break                                       # no price for this day (e.g. not yet published)
-            r = run_day(slots, nxt, soc, p, standing)
+            r = run_day(slots, nxt, soc, p_over or p, standing, strategy, tz, ctx.auto_cheap)
             r["estimated"] = est or d not in recorded
             r["lookahead"] = i + 1 < len(use_days)           # the next day was available (used if consecutive)
             if info:
@@ -320,7 +323,7 @@ def run(store: SimStore, days: list[str], load_day, params, tz, now: datetime, c
         window = comparison_days(store.results, use_days, n)
         if label == "year" and len(window) < 60:
             continue
-        summary["windows"][label] = summarise(store.results, actual, names, window, prefix_skip="hp|")
+        summary["windows"][label] = summarise(store.results, actual, names, window, prefix_skip="|")
 
     # heat pump: your tariff, heat-pump tariffs and the five best others, each with a heat pump added
     hp = ctx.hp
@@ -360,11 +363,90 @@ def run(store: SimStore, days: list[str], load_day, params, tz, now: datetime, c
                     continue
                 yield from replay("hp|" + sid, scn, tables_by[sid], hp_sig, add_heat)
             summary["heat_pump"] = heat_pump_summary(store.results, summary, picks, names, hp, hlc)
+    # PowerEngine's own planner (the realistic figure) on your tariff and the three best others
+    short = summary["windows"].get("30", {}).get("ranking", [])
+    top = [r["id"] for r in short if r["id"] != "current"][:3]
+    plan_picks = ["current"] + top
+    for sid in plan_picks:
+        scn = next((x for x in scns if x["id"] == sid), None)
+        if scn is None or sid not in tables_by:
+            continue
+        plan_sig = sig + ("A" if ctx.auto_cheap else "F")
+        yield from replay("plan|" + sid, scn, tables_by[sid], plan_sig, strategy="planner")
+    summary["planner"] = strategy_summary(store.results, summary, plan_picks, names, actual)
+
+    # equipment: each ticked item (and all together) on your tariff and on the best other tariff
+    eq = ctx.equipment
+    if eq is not None and eq.kinds() and not eq.problems():
+        eq_sig = sig + hashlib.sha1(json.dumps(eq.as_dict(), sort_keys=True).encode()).hexdigest()[:8]
+        eq_picks = ["current"] + top[:1]
+        for sid in eq_picks:
+            scn = next((x for x in scns if x["id"] == sid), None)
+            if scn is None or sid not in tables_by:
+                continue
+            for kind in eq.kinds():
+                yield from replay(f"eq:{kind}|{sid}", scn, tables_by[sid], eq_sig,
+                                  extra_load=lambda d, slots, k=kind: adjust_slots(k, eq, slots),
+                                  p_over=params_for(kind, eq, p))
+        summary["equipment"] = equipment_summary(store.results, summary, eq_picks, names, eq)
+
     store.summary = summary
     store.save()
     long = summary["windows"].get("year")
     basis = long if long and long["days"] >= 90 else summary["windows"].get("30")
     yield {"done": True, "new_products": new, "opportunities": opportunities(basis) if basis else []}
+
+
+def _window_days(results: dict, summary: dict) -> tuple[list[str], dict | None]:
+    win = summary["windows"].get("year") or summary["windows"].get("30")
+    if not win:
+        return [], None
+    base = (results.get("current") or {}).get("days", {})
+    return [d for d in _date_span(date.fromisoformat(win["from"]), date.fromisoformat(win["to"])) if d in base], win
+
+
+def strategy_summary(results: dict, summary: dict, picks: list[str], names: dict, actual: dict) -> dict:
+    """Best achievable (optimiser) against PowerEngine's planner, per tariff, over the longest window."""
+    days, win = _window_days(results, summary)
+    rows = []
+    for sid in picks:
+        best = (results.get(sid) or {}).get("days", {})
+        plan = (results.get("plan|" + sid) or {}).get("days", {})
+        common = [d for d in days if d in best and d in plan]
+        if not common:
+            continue
+        per_month = MONTH_DAYS / len(common)
+        b, pl = sum(best[d]["cost"] for d in common), sum(plan[d]["cost"] for d in common)
+        row = {"id": sid, "name": names.get(sid, {}).get("name", sid), "days": len(common),
+               "best_month": round(b * per_month, 2), "planner_month": round(pl * per_month, 2),
+               "gap_month": round((pl - b) * per_month, 2)}
+        if sid == "current" and all(d in actual for d in common):
+            row["actual_month"] = round(sum(actual[d]["cost"] for d in common) * per_month, 2)
+        rows.append(row)
+    return {"rows": rows, "window_days": len(days)}
+
+
+def equipment_summary(results: dict, summary: dict, picks: list[str], names: dict, eq: EquipmentSettings) -> dict:
+    days, win = _window_days(results, summary)
+    rows = []
+    for sid in picks:
+        without = (results.get(sid) or {}).get("days", {})
+        for kind in eq.kinds():
+            with_ = (results.get(f"eq:{kind}|{sid}") or {}).get("days", {})
+            common = [d for d in days if d in with_ and d in without]
+            if not common:
+                continue
+            n = len(common)
+            w, wo = sum(with_[d]["cost"] for d in common), sum(without[d]["cost"] for d in common)
+            saving_year = (wo - w) * 365 / n
+            cost = cost_of(kind, eq)
+            rows.append({"kind": kind, "label": LABELS[kind], "id": sid, "name": names.get(sid, {}).get("name", sid),
+                         "days": n, "with_month": round(w * MONTH_DAYS / n, 2),
+                         "without_month": round(wo * MONTH_DAYS / n, 2),
+                         "saving_month": round((wo - w) * MONTH_DAYS / n, 2), "cost": cost,
+                         "payback_years": round(cost / saving_year, 1) if cost and saving_year > 0 and n >= 300
+                         else None})
+    return {"rows": rows, "window_days": len(days), "full_year": len(days) >= 300}
 
 
 def heat_pump_summary(results: dict, summary: dict, picks: list[str], names: dict, hp: HeatPumpSettings,
