@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from .decide import EXPORT, FORCE_DISCHARGE, GRID_CHARGE, HOLD, SELF_USE
 from .forecast import Slot
-from .planner import Params, PlanSlot, step
+from .planner import Params, PlanSlot, car_slot, step
 
 LEVELS = 101                                  # 0..100 %
 
@@ -25,13 +25,14 @@ def grid_target(p: Params) -> float:
 def car_cheap_charge(s: Slot, p: Params) -> bool:
     """A car smart-charge slot at a cheap price, with top-up when cheap on: the battery charges alongside the car."""
     price = s.slot_price if s.slot_price is not None else s.price      # the slot's own price: if it happens, it's cheap
-    return (p.hold_for_car and s.smart_slot and p.fill_when_cheap and price is not None
+    return (car_slot(s, p) and p.fill_when_cheap and price is not None
             and price * 100 <= p.cheap_cap_p)
 
 
 def slot_target(s: Slot, p: Params) -> float:
-    """Grid-charge target for a slot: the top-up level alongside a cheap car charge, otherwise grid_target."""
-    return p.buffer_target if car_cheap_charge(s, p) else grid_target(p)
+    """Grid-charge target for a slot: alongside a cheap car charge, the top-up level (straight to the grid target
+    inside the fixed overnight window, where the battery is filled anyway); otherwise grid_target."""
+    return p.buffer_target if car_cheap_charge(s, p) and not s.overnight else grid_target(p)
 
 
 def band_penalty(a: str, lv: float, end: float, p: Params) -> float:
@@ -52,7 +53,7 @@ def _actions(s: Slot, p: Params) -> list[str]:
         return [FORCE_DISCHARGE]
     if p.free_enabled and s.free:
         return [GRID_CHARGE]
-    if p.hold_for_car and s.smart_slot:
+    if car_slot(s, p):
         if car_cheap_charge(s, p):
             return [GRID_CHARGE]                   # the car charges cheaply: so does the battery (to the top-up level)
         return [HOLD, GRID_CHARGE]                 # the car is in the house load: the battery mustn't feed it

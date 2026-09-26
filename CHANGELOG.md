@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.12 (beta)
+
+### Behaviour changes
+- **A smart slot the car has finished with is just cheap time.** If the car is unplugged, or plugged in but not
+  charging while its dispatch is already running (finished or stopped), the rest of that dispatch no longer holds
+  the battery for the car: the plan may charge, hold or sell in it like any cheap period (e.g. sell at 15p and
+  refill at 6.99p). Later dispatches still expect the car unless it's unplugged. The plan is remade as soon as the
+  car starts or stops charging.
+- **Overnight car slots charge straight to full.** Inside the fixed overnight window, charging alongside the car
+  goes to the grid-charge target (100%) instead of stopping at the arbitrage band's top (90%) and topping up after
+  the car slot ends. Daytime car slots still stop at 90%.
+
 ## 0.8.11 (beta)
 
 ### Behaviour changes

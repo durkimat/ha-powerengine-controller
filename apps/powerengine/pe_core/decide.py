@@ -190,7 +190,7 @@ def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bo
         if ps.action == GRID_CHARGE:
             return Decision(GRID_CHARGE, "car_charging", f"car is charging; {ps.reason}", target_soc=ps.target_soc)
         if cheap:
-            top = min(target, s["arbitrage_max_soc"]) if f.get("arbitrage") else target
+            top = min(target, s["arbitrage_max_soc"]) if f.get("arbitrage") and not ps.slot.overnight else target
             if f.get("fill_when_cheap", True) and soc < top:
                 return Decision(GRID_CHARGE, "car_charging", f"car is charging at a cheap rate ({price}); charge "
                                 f"the battery too, up to {top:.0f}%", target_soc=top)

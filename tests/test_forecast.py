@@ -98,3 +98,46 @@ def test_load_profile_with_no_car_history():
     house = [(now - timedelta(days=1, hours=-18), 900.0), (now - timedelta(days=1, hours=-19), 900.0)]
     prof = build_load_profile(house, [], now, UTC)          # car never charged: must not crash
     assert prof.watts
+
+
+def test_car_finished_mid_dispatch_frees_the_rest_of_it():
+    from dataclasses import replace
+
+    from pe_core.optimiser import optimise
+    from pe_core.planner import Params
+    r = read(CONFIG, get_state(), NOW)
+    s0 = slot_start(NOW)
+    r.dispatches = [Window(s0 - timedelta(hours=1), s0 + timedelta(hours=4)),       # running now
+                    Window(s0 + timedelta(hours=20), s0 + timedelta(hours=22))]     # a later one
+    r.ev_plug = "Charging"
+    assert all(s.car_expected for s in build_slots(r, [], None, BST) if s.smart_slot)
+    r.ev_plug = "EV Connected"                     # plugged in, not charging: finished
+    slots = build_slots(r, [], None, BST)
+    now_slots = [s for s in slots if s.smart_slot and s.start < s0 + timedelta(hours=4)]
+    later = [s for s in slots if s.smart_slot and s.start >= s0 + timedelta(hours=20)]
+    assert now_slots and not any(s.car_expected for s in now_slots) and all(s.car_kw == 0 for s in now_slots)
+    assert later and all(s.car_expected for s in later)
+    r.ev_plug = "EV Disconnected"
+    assert not any(s.car_expected for s in build_slots(r, [], None, BST) if s.smart_slot)
+    # the optimiser may sell in a smart slot the car has finished with
+    cheap = [replace(s, price=0.0699, export=0.15, load_kwh=0.2, solar_kwh=0.0) for s in slots[:12]]
+    free = [replace(s, smart_slot=True, car_expected=False) for s in cheap[:6]] + \
+        [replace(s, price=0.3028) for s in cheap[6:]]
+    res = optimise(free, 90.0, Params(arbitrage=True))
+    assert "export" in res["actions"][:6]                # 15p out, refilled at 6.99p: worth it
+    from pe_core.optimiser import _actions
+    assert "export" in _actions(free[0], Params(arbitrage=True))
+    busy = replace(free[0], car_expected=True)
+    assert "export" not in _actions(busy, Params(arbitrage=True))
+
+
+def test_overnight_car_slot_charges_straight_to_full():
+    from dataclasses import replace
+
+    from pe_core.optimiser import slot_target
+    from pe_core.planner import Params
+    r = read(CONFIG, get_state(), NOW)
+    s = replace(build_slots(r, [], None, BST)[0], smart_slot=True, price=0.0699, car_expected=True)
+    p = Params(arbitrage=True)
+    assert slot_target(s, p) == 90
+    assert slot_target(replace(s, overnight=True), p) == 100
