@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.7.5 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.7.6 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.7.5 starting
+PowerEngine 0.7.6 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device

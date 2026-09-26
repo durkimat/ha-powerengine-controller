@@ -3,4 +3,4 @@
 Everything in this package must be importable and testable without AppDaemon.
 """
 
-__version__ = "0.7.5"
+__version__ = "0.7.6"

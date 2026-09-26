@@ -199,148 +199,174 @@ views:
               · EDF slot {{ c.day }} {{ c.from }}–{{ c.to }}: {{ c.certainty }}% likely to happen, so planned at {{ c.expected_p }}p (slot price {{ c.slot_p }}p){% endfor %}
               {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}
               · prices after {{ as_timestamp(state_attr('sensor.pe_plan', 'estimated_prices_from')) | timestamp_custom('%a %H:%M') }} are estimated (not yet published){% endif %}
-          - type: custom:apexcharts-card
+          # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
+          - type: conditional
             grid_options: {columns: full, rows: auto}
-            graph_span: 36h
-            span:
-              start: minute
-            now:
-              show: true
-              label: Now
-            header:
-              show: true
-              title: Next 36 hours
-              show_states: false
-            apex_config:
-              chart: {height: 380}
-              legend: {show: true}
-              tooltip: {shared: true}
-            yaxis:
-              # each axis is drawn in the colour of what it measures
-              - id: soc
-                min: 0
-                max: 100
-                decimals: 0
-                apex_config:
-                  title: {text: "Battery %", style: {color: "#43a047"}}
-                  labels: {style: {colors: "#43a047"}}
-                  axisBorder: {show: true, color: "#43a047", width: 3}
-              - id: price
-                opposite: true
-                min: 0
-                decimals: 0
-                apex_config:
-                  title: {text: "Import price p/kWh", style: {color: "#fb8c00"}}
-                  labels: {style: {colors: "#fb8c00"}}
-                  axisBorder: {show: true, color: "#fb8c00", width: 3}
-              - id: kwh
-                opposite: true
-                min: 0
-                decimals: 1
-                apex_config:
-                  title: {text: "kWh per half-hour (solar, load, charge, export)", style: {color: "#1e88e5"}}
-                  labels: {style: {colors: "#1e88e5"}}
-                  axisBorder: {show: true, color: "#1e88e5", width: 3}
-            series:
-              - entity: sensor.pe_plan
-                name: Battery (planned)
-                yaxis_id: soc
-                type: line
-                color: "#43a047"
-                stroke_width: 3
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {t: []};
-                  return s.t.map((t, i) => [new Date(t).getTime() + 1800000, s.soc[i]]);
-              - entity: sensor.pe_plan
-                name: Battery (other method)
-                yaxis_id: soc
-                type: line
-                color: "#43a047"
-                stroke_width: 1
-                opacity: 0.6
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {t: []};
-                  const o = (entity.attributes.alternative || entity.attributes.optimiser || {}).soc || [];
-                  return s.t.map((t, i) => [new Date(t).getTime() + 1800000, o[i] ?? null]).filter(p => p[1] !== null);
-              - entity: sensor.pe_plan
-                name: Import price
-                yaxis_id: price
-                type: line
-                curve: stepline
-                color: "#fb8c00"
-                stroke_width: 2
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {t: []};
-                  return s.t.map((t, i) => [new Date(t).getTime(), s.price_p[i]]);
-              - entity: sensor.pe_plan
-                name: Solar forecast (kWh)
-                yaxis_id: kwh
-                type: area
-                color: "#fdd835"
-                opacity: 0.3
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {t: []};
-                  return s.t.map((t, i) => [new Date(t).getTime(), s.solar_kwh[i]]);
-              - entity: sensor.pe_plan
-                name: House load forecast (kWh)
-                yaxis_id: kwh
-                type: line
-                color: "#9e9e9e"
-                stroke_width: 1
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {t: []};
-                  return s.t.map((t, i) => [new Date(t).getTime(), s.load_kwh[i]]);
-              - entity: sensor.pe_plan
-                name: Grid charge (kWh)
-                yaxis_id: kwh
-                type: area
-                curve: stepline
-                opacity: 0.6
-                stroke_width: 1
-                color: "#1e88e5"
-                extend_to: false
-                # a block spanning each half-hour (not a thin bar at its start)
-                data_generator: |
-                  const s = entity.attributes.series || {t: []};
-                  const pts = s.t.map((t, i) => [new Date(t).getTime(), s.charge_kwh[i]]);
-                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
-                  return pts;
-              - entity: sensor.pe_plan
-                name: Battery export (kWh)
-                yaxis_id: kwh
-                type: area
-                curve: stepline
-                opacity: 0.6
-                stroke_width: 1
-                color: "#e53935"
-                extend_to: false
-                # a block spanning each half-hour (not a thin bar at its start)
-                data_generator: |
-                  const s = entity.attributes.series || {t: []};
-                  const pts = s.t.map((t, i) => [new Date(t).getTime(), s.discharge_kwh[i]]);
-                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
-                  return pts;
-              - entity: sensor.pe_plan
-                name: Solar export (kWh)
-                yaxis_id: kwh
-                type: area
-                curve: stepline
-                opacity: 0.75
-                stroke_width: 1
-                color: "#f9a825"
-                extend_to: false
-                # surplus solar the battery can't take (full, or charging at its limit), as half-hour blocks
-                data_generator: |
-                  const s = entity.attributes.series || {t: []};
-                  const e = s.solar_export_kwh || [];
-                  const pts = s.t.map((t, i) => [new Date(t).getTime(), e[i] ?? 0]);
-                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
-                  return pts;
+            conditions: [{condition: screen, media_query: "(min-width: 600px)"}]
+            card:
+              type: custom:apexcharts-card
+              grid_options: {columns: full, rows: auto}
+              graph_span: 36h
+              span:
+                start: minute
+              now:
+                show: true
+                label: Now
+              header:
+                show: true
+                title: Next 36 hours
+                show_states: false
+              apex_config:
+                chart: {height: 380}
+                legend: {show: true}
+                tooltip: {shared: true}
+              yaxis:
+                # each axis is drawn in the colour of what it measures
+                - id: soc
+                  min: 0
+                  max: 100
+                  decimals: 0
+                  apex_config:
+                    title: {text: "Battery %", style: {color: "#43a047"}}
+                    labels: {style: {colors: "#43a047"}}
+                    axisBorder: {show: true, color: "#43a047", width: 3}
+                - id: price
+                  opposite: true
+                  min: 0
+                  decimals: 0
+                  apex_config:
+                    title: {text: "Import price p/kWh", style: {color: "#fb8c00"}}
+                    labels: {style: {colors: "#fb8c00"}}
+                    axisBorder: {show: true, color: "#fb8c00", width: 3}
+                - id: kwh
+                  opposite: true
+                  min: 0
+                  decimals: 1
+                  apex_config:
+                    title: {text: "kWh per half-hour (solar, load, charge, export)", style: {color: "#1e88e5"}}
+                    labels: {style: {colors: "#1e88e5"}}
+                    axisBorder: {show: true, color: "#1e88e5", width: 3}
+              series: &chart_plan_series
+                - entity: sensor.pe_plan
+                  name: Battery
+                  yaxis_id: soc
+                  unit: "%"
+                  type: line
+                  color: "#43a047"
+                  stroke_width: 3
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    return s.t.map((t, i) => [new Date(t).getTime() + 1800000, s.soc[i]]);
+                - entity: sensor.pe_plan
+                  name: Alt plan
+                  yaxis_id: soc
+                  unit: "%"
+                  type: line
+                  color: "#43a047"
+                  stroke_width: 1
+                  opacity: 0.6
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const o = (entity.attributes.alternative || entity.attributes.optimiser || {}).soc || [];
+                    return s.t.map((t, i) => [new Date(t).getTime() + 1800000, o[i] ?? null]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan
+                  name: Price
+                  yaxis_id: price
+                  unit: "p/kWh"
+                  type: line
+                  curve: stepline
+                  color: "#fb8c00"
+                  stroke_width: 2
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    return s.t.map((t, i) => [new Date(t).getTime(), s.price_p[i]]);
+                - entity: sensor.pe_plan
+                  name: Solar
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  color: "#fdd835"
+                  opacity: 0.3
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    return s.t.map((t, i) => [new Date(t).getTime(), s.solar_kwh[i]]);
+                - entity: sensor.pe_plan
+                  name: Load
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: line
+                  color: "#9e9e9e"
+                  stroke_width: 1
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    return s.t.map((t, i) => [new Date(t).getTime(), s.load_kwh[i]]);
+                - entity: sensor.pe_plan
+                  name: Charge
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.6
+                  stroke_width: 1
+                  color: "#1e88e5"
+                  extend_to: false
+                  # a block spanning each half-hour (not a thin bar at its start)
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const pts = s.t.map((t, i) => [new Date(t).getTime(), s.charge_kwh[i]]);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan
+                  name: Export
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.6
+                  stroke_width: 1
+                  color: "#e53935"
+                  extend_to: false
+                  # a block spanning each half-hour (not a thin bar at its start)
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const pts = s.t.map((t, i) => [new Date(t).getTime(), s.discharge_kwh[i]]);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan
+                  name: Solar export
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.75
+                  stroke_width: 1
+                  color: "#f9a825"
+                  extend_to: false
+                  # surplus solar the battery can't take (full, or charging at its limit), as half-hour blocks
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const e = s.solar_export_kwh || [];
+                    const pts = s.t.map((t, i) => [new Date(t).getTime(), e[i] ?? 0]);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(max-width: 599px)"}]
+            card:
+              type: "custom:apexcharts-card"
+              grid_options: {"columns": "full", "rows": "auto"}
+              graph_span: "18h"
+              span: {"start": "minute"}
+              now: {"show": true, "label": "Now"}
+              header: {"show": true, "title": "Next 18 hours", "show_states": false}
+              apex_config: {"chart": {"height": 420}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true}, "xaxis": {"labels": {"style": {"fontSize": "10px"}}, "tickAmount": 6}, "grid": {"padding": {"left": 0, "right": 4}}}
+              yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#43a047", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#1e88e5", "fontSize": "10px"}}}, "show": false}]
+              series: *chart_plan_series
       - type: grid
         column_span: 3
         cards:
@@ -397,190 +423,235 @@ views:
               {%- else %}
               Choose a day above. The history builds up from 0.5.18: each hour's first plan is kept from now on.
               {%- endif %}
-          - type: custom:apexcharts-card
+          # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
+          - type: conditional
             grid_options: {columns: full, rows: auto}
-            graph_span: 24h
-            span:
-              start: day
-            header:
-              show: true
-              title: Battery, prices and grid use (plan dashed, actual solid)
-              show_states: false
-            apex_config:
-              chart: {height: 380}
-              legend: {show: true}
-              tooltip: {shared: true, x: {format: "HH:mm"}}
-              xaxis: {labels: {datetimeFormatter: {day: "HH:mm", hour: "HH:mm"}}}
-            yaxis:
-              - id: soc
-                min: 0
-                max: 100
-                decimals: 0
-                apex_config:
-                  title: {text: "Battery %", style: {color: "#43a047"}}
-                  labels: {style: {colors: "#43a047"}}
-                  axisBorder: {show: true, color: "#43a047", width: 3}
-              - id: price
-                opposite: true
-                min: 0
-                decimals: 0
-                apex_config:
-                  title: {text: "Import price p/kWh", style: {color: "#fb8c00"}}
-                  labels: {style: {colors: "#fb8c00"}}
-                  axisBorder: {show: true, color: "#fb8c00", width: 3}
-              - id: kwh
-                opposite: true
-                min: 0
-                decimals: 1
-                apex_config:
-                  title: {text: "kWh per half-hour", style: {color: "#1e88e5"}}
-                  labels: {style: {colors: "#1e88e5"}}
-                  axisBorder: {show: true, color: "#1e88e5", width: 3}
-            series:
-              - entity: sensor.pe_plan_history
-                name: Battery (actual)
-                yaxis_id: soc
-                type: line
-                color: "#2e7d32"
-                stroke_width: 3
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {x: []};
-                  return s.x.map((x, i) => [x + 1800000, s.actual_soc[i]]).filter(p => p[1] !== null);
-              - entity: sensor.pe_plan_history
-                name: Battery (plan)
-                yaxis_id: soc
-                type: line
-                color: "#66bb6a"
-                stroke_width: 2
-                stroke_dash: 5
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {x: []};
-                  return s.x.map((x, i) => [x + 1800000, s.plan_soc[i]]).filter(p => p[1] !== null);
-              - entity: sensor.pe_plan_history
-                name: Import price
-                yaxis_id: price
-                type: line
-                curve: stepline
-                color: "#fb8c00"
-                stroke_width: 2
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {x: []};
-                  return s.x.map((x, i) => [x, s.price_p[i]]).filter(p => p[1] !== null);
-              - entity: sensor.pe_plan_history
-                name: Grid charge (actual)
-                yaxis_id: kwh
-                type: area
-                curve: stepline
-                opacity: 0.5
-                stroke_width: 1
-                color: "#1e88e5"
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {x: []};
-                  const pts = s.x.map((x, i) => [x, s.actual_charge[i]]).filter(p => p[1] !== null);
-                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
-                  return pts;
-              - entity: sensor.pe_plan_history
-                name: Grid charge (plan)
-                yaxis_id: kwh
-                type: line
-                curve: stepline
-                stroke_width: 2
-                stroke_dash: 5
-                color: "#0d47a1"
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {x: []};
-                  const pts = s.x.map((x, i) => [x, s.plan_charge[i]]).filter(p => p[1] !== null);
-                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
-                  return pts;
-              - entity: sensor.pe_plan_history
-                name: Battery export (actual)
-                yaxis_id: kwh
-                type: area
-                curve: stepline
-                opacity: 0.6
-                stroke_width: 1
-                color: "#e53935"
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {x: []};
-                  const pts = s.x.map((x, i) => [x, s.actual_bat_export[i]]).filter(p => p[1] !== null);
-                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
-                  return pts;
-              - entity: sensor.pe_plan_history
-                name: Solar export (actual)
-                yaxis_id: kwh
-                type: area
-                curve: stepline
-                opacity: 0.75
-                stroke_width: 1
-                color: "#f9a825"
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {x: []};
-                  const pts = s.x.map((x, i) => [x, s.actual_solar_export[i]]).filter(p => p[1] !== null);
-                  if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
-                  return pts;
-          - type: custom:apexcharts-card
+            conditions: [{condition: screen, media_query: "(min-width: 600px)"}]
+            card:
+              type: custom:apexcharts-card
+              grid_options: {columns: full, rows: auto}
+              graph_span: 24h
+              span:
+                start: day
+              header:
+                show: true
+                title: Battery, prices and grid use (plan dashed, actual solid)
+                show_states: false
+              apex_config:
+                chart: {height: 380}
+                legend: {show: true}
+                tooltip: {shared: true, x: {format: "HH:mm"}}
+                xaxis: {labels: {datetimeFormatter: {day: "HH:mm", hour: "HH:mm"}}}
+              yaxis:
+                - id: soc
+                  min: 0
+                  max: 100
+                  decimals: 0
+                  apex_config:
+                    title: {text: "Battery %", style: {color: "#43a047"}}
+                    labels: {style: {colors: "#43a047"}}
+                    axisBorder: {show: true, color: "#43a047", width: 3}
+                - id: price
+                  opposite: true
+                  min: 0
+                  decimals: 0
+                  apex_config:
+                    title: {text: "Import price p/kWh", style: {color: "#fb8c00"}}
+                    labels: {style: {colors: "#fb8c00"}}
+                    axisBorder: {show: true, color: "#fb8c00", width: 3}
+                - id: kwh
+                  opposite: true
+                  min: 0
+                  decimals: 1
+                  apex_config:
+                    title: {text: "kWh per half-hour", style: {color: "#1e88e5"}}
+                    labels: {style: {colors: "#1e88e5"}}
+                    axisBorder: {show: true, color: "#1e88e5", width: 3}
+              series: &chart_day_series
+                - entity: sensor.pe_plan_history
+                  name: Battery
+                  yaxis_id: soc
+                  unit: "%"
+                  type: line
+                  color: "#2e7d32"
+                  stroke_width: 3
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x + 1800000, s.actual_soc[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: Battery plan
+                  yaxis_id: soc
+                  unit: "%"
+                  type: line
+                  color: "#66bb6a"
+                  stroke_width: 2
+                  stroke_dash: 5
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x + 1800000, s.plan_soc[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: Price
+                  yaxis_id: price
+                  unit: "p/kWh"
+                  type: line
+                  curve: stepline
+                  color: "#fb8c00"
+                  stroke_width: 2
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x, s.price_p[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: Charge
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.5
+                  stroke_width: 1
+                  color: "#1e88e5"
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    const pts = s.x.map((x, i) => [x, s.actual_charge[i]]).filter(p => p[1] !== null);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan_history
+                  name: Charge plan
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: line
+                  curve: stepline
+                  stroke_width: 2
+                  stroke_dash: 5
+                  color: "#0d47a1"
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    const pts = s.x.map((x, i) => [x, s.plan_charge[i]]).filter(p => p[1] !== null);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan_history
+                  name: Export
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.6
+                  stroke_width: 1
+                  color: "#e53935"
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    const pts = s.x.map((x, i) => [x, s.actual_bat_export[i]]).filter(p => p[1] !== null);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan_history
+                  name: Solar export
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.75
+                  stroke_width: 1
+                  color: "#f9a825"
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    const pts = s.x.map((x, i) => [x, s.actual_solar_export[i]]).filter(p => p[1] !== null);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+          - type: conditional
             grid_options: {columns: full, rows: auto}
-            graph_span: 24h
-            span:
-              start: day
-            header:
-              show: true
-              title: House load and solar (forecast dashed, actual solid)
-              show_states: false
-            apex_config:
-              chart: {height: 240}
-              legend: {show: true}
-              tooltip: {shared: true, x: {format: "HH:mm"}}
-            yaxis:
-              - min: 0
-                decimals: 1
-                apex_config: {title: {text: "kWh per half-hour"}}
-            series:
-              - entity: sensor.pe_plan_history
-                name: House (actual)
-                type: line
-                color: "#616161"
-                stroke_width: 2
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {x: []};
-                  return s.x.map((x, i) => [x, s.actual_load[i]]).filter(p => p[1] !== null);
-              - entity: sensor.pe_plan_history
-                name: House (forecast)
-                type: line
-                color: "#9e9e9e"
-                stroke_width: 2
-                stroke_dash: 5
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {x: []};
-                  return s.x.map((x, i) => [x, s.plan_load[i]]).filter(p => p[1] !== null);
-              - entity: sensor.pe_plan_history
-                name: Solar (actual)
-                type: area
-                color: "#fdd835"
-                opacity: 0.3
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {x: []};
-                  return s.x.map((x, i) => [x, s.actual_solar[i]]).filter(p => p[1] !== null);
-              - entity: sensor.pe_plan_history
-                name: Solar (forecast)
-                type: line
-                color: "#f9a825"
-                stroke_width: 2
-                stroke_dash: 5
-                extend_to: false
-                data_generator: |
-                  const s = entity.attributes.series || {x: []};
-                  return s.x.map((x, i) => [x, s.plan_solar[i]]).filter(p => p[1] !== null);
+            conditions: [{condition: screen, media_query: "(max-width: 599px)"}]
+            card:
+              type: "custom:apexcharts-card"
+              grid_options: {"columns": "full", "rows": "auto"}
+              graph_span: "24h"
+              span: {"start": "day"}
+              header: {"show": true, "title": "Battery, prices and grid use (plan dashed, actual solid)", "show_states": false}
+              apex_config: {"chart": {"height": 420}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"datetimeFormatter": {"day": "HH:mm", "hour": "HH:mm"}, "style": {"fontSize": "10px"}}, "tickAmount": 6}, "grid": {"padding": {"left": 0, "right": 4}}}
+              yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#43a047", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#1e88e5", "fontSize": "10px"}}}, "show": false}]
+              series: *chart_day_series
+          # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(min-width: 600px)"}]
+            card:
+              type: custom:apexcharts-card
+              grid_options: {columns: full, rows: auto}
+              graph_span: 24h
+              span:
+                start: day
+              header:
+                show: true
+                title: House load and solar (forecast dashed, actual solid)
+                show_states: false
+              apex_config:
+                chart: {height: 240}
+                legend: {show: true}
+                tooltip: {shared: true, x: {format: "HH:mm"}}
+              yaxis:
+                - min: 0
+                  decimals: 1
+                  apex_config: {title: {text: "kWh per half-hour"}}
+              series: &chart_load_series
+                - entity: sensor.pe_plan_history
+                  name: House (actual)
+                  unit: "kWh"
+                  type: line
+                  color: "#616161"
+                  stroke_width: 2
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x, s.actual_load[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: House (forecast)
+                  unit: "kWh"
+                  type: line
+                  color: "#9e9e9e"
+                  stroke_width: 2
+                  stroke_dash: 5
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x, s.plan_load[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: Solar (actual)
+                  unit: "kWh"
+                  type: area
+                  color: "#fdd835"
+                  opacity: 0.3
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x, s.actual_solar[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: Solar (forecast)
+                  unit: "kWh"
+                  type: line
+                  color: "#f9a825"
+                  stroke_width: 2
+                  stroke_dash: 5
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x, s.plan_solar[i]]).filter(p => p[1] !== null);
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(max-width: 599px)"}]
+            card:
+              type: "custom:apexcharts-card"
+              grid_options: {"columns": "full", "rows": "auto"}
+              graph_span: "24h"
+              span: {"start": "day"}
+              header: {"show": true, "title": "House load and solar (forecast dashed, actual solid)", "show_states": false}
+              apex_config: {"chart": {"height": 240}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"style": {"fontSize": "10px"}}, "tickAmount": 6}, "grid": {"padding": {"left": 0, "right": 4}}}
+              yaxis: [{"min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"fontSize": "10px"}}}}]
+              series: *chart_load_series
           - type: heading
             heading: The plan's actions for the day
           - type: markdown
@@ -722,88 +793,105 @@ views:
 
               PowerEngine was recording for {{ ((done | last).coverage * 100) | round(0) | int }}% of that day (restarts or gaps), so the day's figures are partial.
               {%- endif %}
-          - type: custom:apexcharts-card
+          # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
+          - type: conditional
             grid_options: {columns: full, rows: auto}
-            graph_span: 8d
-            span:
-              end: day
-              offset: "-12h"
-            header:
-              show: true
-              title: Daily cost, step by step
-              show_states: false
-            apex_config:
-              chart: {height: 380}
-              legend: {show: true}
-              tooltip: {shared: true}
-              xaxis: {labels: {format: "ddd dd"}}
-            yaxis:
-              - decimals: 2
-                apex_config: {title: {text: "£ per day"}}
-            series:
-              - entity: sensor.pe_cost_days
-                show: {legend_value: false}
-                name: "S0: no solar or battery"
-                type: column
-                color: "#8d6e63"
-                extend_to: false
-                data_generator: |
-                  const from = Date.now() - 8 * 86400000;
-                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[0][1]]).filter(p => p[0] >= from);
-              - entity: sensor.pe_cost_days
-                show: {legend_value: false}
-                name: "S1: + solar"
-                type: column
-                color: "#fdd835"
-                extend_to: false
-                data_generator: |
-                  const from = Date.now() - 8 * 86400000;
-                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[1][1]]).filter(p => p[0] >= from);
-              - entity: sensor.pe_cost_days
-                show: {legend_value: false}
-                name: "S2: + smart charge"
-                type: column
-                color: "#26a69a"
-                extend_to: false
-                data_generator: |
-                  const from = Date.now() - 8 * 86400000;
-                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[2][1]]).filter(p => p[0] >= from);
-              - entity: sensor.pe_cost_days
-                show: {legend_value: false}
-                name: "S3a: + battery (default)"
-                type: column
-                color: "#42a5f5"
-                extend_to: false
-                data_generator: |
-                  const from = Date.now() - 8 * 86400000;
-                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[3][1]]).filter(p => p[0] >= from);
-              - entity: sensor.pe_cost_days
-                show: {legend_value: false}
-                name: "S3b: + battery control"
-                type: column
-                color: "#1e88e5"
-                extend_to: false
-                data_generator: |
-                  const from = Date.now() - 8 * 86400000;
-                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[4][1]]).filter(p => p[0] >= from);
-              - entity: sensor.pe_cost_days
-                show: {legend_value: false}
-                name: "S4: + battery export (arbitrage)"
-                type: column
-                color: "#ab47bc"
-                extend_to: false
-                data_generator: |
-                  const from = Date.now() - 8 * 86400000;
-                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[5][1]]).filter(p => p[0] >= from);
-              - entity: sensor.pe_cost_days
-                show: {legend_value: false}
-                name: "Actual"
-                type: column
-                color: "#424242"
-                extend_to: false
-                data_generator: |
-                  const from = Date.now() - 8 * 86400000;
-                  return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[7][1]]).filter(p => p[0] >= from);
+            conditions: [{condition: screen, media_query: "(min-width: 600px)"}]
+            card:
+              type: custom:apexcharts-card
+              grid_options: {columns: full, rows: auto}
+              graph_span: 8d
+              span:
+                end: day
+                offset: "-12h"
+              header:
+                show: true
+                title: Daily cost, step by step
+                show_states: false
+              apex_config:
+                chart: {height: 380}
+                legend: {show: true}
+                tooltip: {shared: true}
+                xaxis: {labels: {format: "ddd dd"}}
+              yaxis:
+                - decimals: 2
+                  apex_config: {title: {text: "£ per day"}}
+              series: &chart_costs_series
+                - entity: sensor.pe_cost_days
+                  show: {legend_value: false}
+                  name: "S0: no solar or battery"
+                  type: column
+                  color: "#8d6e63"
+                  extend_to: false
+                  data_generator: |
+                    const from = Date.now() - 8 * 86400000;
+                    return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[0][1]]).filter(p => p[0] >= from);
+                - entity: sensor.pe_cost_days
+                  show: {legend_value: false}
+                  name: "S1: + solar"
+                  type: column
+                  color: "#fdd835"
+                  extend_to: false
+                  data_generator: |
+                    const from = Date.now() - 8 * 86400000;
+                    return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[1][1]]).filter(p => p[0] >= from);
+                - entity: sensor.pe_cost_days
+                  show: {legend_value: false}
+                  name: "S2: + smart charge"
+                  type: column
+                  color: "#26a69a"
+                  extend_to: false
+                  data_generator: |
+                    const from = Date.now() - 8 * 86400000;
+                    return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[2][1]]).filter(p => p[0] >= from);
+                - entity: sensor.pe_cost_days
+                  show: {legend_value: false}
+                  name: "S3a: + battery (default)"
+                  type: column
+                  color: "#42a5f5"
+                  extend_to: false
+                  data_generator: |
+                    const from = Date.now() - 8 * 86400000;
+                    return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[3][1]]).filter(p => p[0] >= from);
+                - entity: sensor.pe_cost_days
+                  show: {legend_value: false}
+                  name: "S3b: + battery control"
+                  type: column
+                  color: "#1e88e5"
+                  extend_to: false
+                  data_generator: |
+                    const from = Date.now() - 8 * 86400000;
+                    return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[4][1]]).filter(p => p[0] >= from);
+                - entity: sensor.pe_cost_days
+                  show: {legend_value: false}
+                  name: "S4: + battery export (arbitrage)"
+                  type: column
+                  color: "#ab47bc"
+                  extend_to: false
+                  data_generator: |
+                    const from = Date.now() - 8 * 86400000;
+                    return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[5][1]]).filter(p => p[0] >= from);
+                - entity: sensor.pe_cost_days
+                  show: {legend_value: false}
+                  name: "Actual"
+                  type: column
+                  color: "#424242"
+                  extend_to: false
+                  data_generator: |
+                    const from = Date.now() - 8 * 86400000;
+                    return (entity.attributes.days || []).map(d => [new Date(d.date + "T00:00:00").getTime(), d.steps[7][1]]).filter(p => p[0] >= from);
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(max-width: 599px)"}]
+            card:
+              type: "custom:apexcharts-card"
+              grid_options: {"columns": "full", "rows": "auto"}
+              graph_span: "5d"
+              span: {"end": "day", "offset": "-12h"}
+              header: {"show": true, "title": "Daily cost, step by step", "show_states": false}
+              apex_config: {"chart": {"height": 380}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true}, "xaxis": {"labels": {"format": "ddd dd", "style": {"fontSize": "10px"}}, "tickAmount": 6}, "grid": {"padding": {"left": 0, "right": 4}}}
+              yaxis: [{"decimals": 2, "apex_config": {"labels": {"style": {"fontSize": "10px"}}}}]
+              series: *chart_costs_series
       - type: grid
         column_span: 3
         cards:
@@ -922,63 +1010,82 @@ views:
 
               {%- set lp = state_attr('sensor.pe_diag_system_losses', 'percent_yesterday') %}{% set la = state_attr('sensor.pe_diag_system_losses', 'average_percent') %}
               **System losses yesterday: {{ states('sensor.pe_diag_system_losses') }} kWh{{ (' (' ~ lp ~ '% of the energy handled)') if lp is not none else '' }}** (average {{ state_attr('sensor.pe_diag_system_losses', 'average_kwh') or '–' }} kWh{{ (', ' ~ la ~ '%') if la is not none else '' }} a day): everything supplied (solar, grid, battery) minus everything used, i.e. inverter conversion, standby and heat. The purple line is each day's losses as a share of all the energy handled: it should stay fairly steady, so a jump is the thing to look into.
-          - type: custom:apexcharts-card
+          # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
+          - type: conditional
             grid_options: {columns: full, rows: auto}
-            graph_span: 30d
-            span:
-              end: day
-            header:
-              show: true
-              title: System losses by day
-              show_states: false
-            apex_config:
-              chart: {height: 240}
-              legend: {show: true}
-              # % labels on the line only (datalabels are switched on per series below)
-              dataLabels:
-                offsetY: -6
-                style: {fontSize: "10px"}
-                background: {enabled: false}
-                formatter: |
-                  EVAL:function(val) { return val === null || val === undefined ? "" : val + "%"; }
-            yaxis:
-              - id: kwh
-                decimals: 1
-                min: 0
-                apex_config:
-                  title: {text: "kWh", style: {color: "#ef6c00"}}
-                  labels: {style: {colors: "#ef6c00"}}
-              - id: pct
-                opposite: true
-                decimals: 0
-                min: 0
-                apex_config:
-                  title: {text: "% of energy handled", style: {color: "#6a1b9a"}}
-                  labels: {style: {colors: "#6a1b9a"}}
-            series:
-              - entity: sensor.pe_diag_system_losses
-                name: Losses (kWh)
-                yaxis_id: kwh
-                type: column
-                color: "#ef6c00"
-                extend_to: false
-                show: {legend_value: false}
-                data_generator: |
-                  const days = entity.attributes.by_day || [];
-                  return days.map(d => [new Date(d[0] + "T12:00:00").getTime(), d[1]]);
-              # steadier than the kWh: a jump here points at a sensor or inverter problem rather than a busy day
-              - entity: sensor.pe_diag_system_losses
-                name: Losses (% of energy handled)
-                yaxis_id: pct
-                type: line
-                color: "#6a1b9a"
-                stroke_width: 2
-                extend_to: false
-                show: {legend_value: false, datalabels: true}
-                data_generator: |
-                  const days = entity.attributes.by_day || [];
-                  return days.filter(d => d[2] !== null && d[2] !== undefined)
-                             .map(d => [new Date(d[0] + "T12:00:00").getTime(), d[2]]);
+            conditions: [{condition: screen, media_query: "(min-width: 600px)"}]
+            card:
+              type: custom:apexcharts-card
+              grid_options: {columns: full, rows: auto}
+              graph_span: 30d
+              span:
+                end: day
+              header:
+                show: true
+                title: System losses by day
+                show_states: false
+              apex_config:
+                chart: {height: 240}
+                legend: {show: true}
+                # % labels on the line only (datalabels are switched on per series below)
+                dataLabels:
+                  offsetY: -6
+                  style: {fontSize: "10px"}
+                  background: {enabled: false}
+                  formatter: |
+                    EVAL:function(val) { return val === null || val === undefined ? "" : val + "%"; }
+              yaxis:
+                - id: kwh
+                  decimals: 1
+                  min: 0
+                  apex_config:
+                    title: {text: "kWh", style: {color: "#ef6c00"}}
+                    labels: {style: {colors: "#ef6c00"}}
+                - id: pct
+                  opposite: true
+                  decimals: 0
+                  min: 0
+                  apex_config:
+                    title: {text: "% of energy handled", style: {color: "#6a1b9a"}}
+                    labels: {style: {colors: "#6a1b9a"}}
+              series: &chart_losses_series
+                - entity: sensor.pe_diag_system_losses
+                  name: Losses kWh
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: column
+                  color: "#ef6c00"
+                  extend_to: false
+                  show: {legend_value: false}
+                  data_generator: |
+                    const days = entity.attributes.by_day || [];
+                    return days.map(d => [new Date(d[0] + "T12:00:00").getTime(), d[1]]);
+                # steadier than the kWh: a jump here points at a sensor or inverter problem rather than a busy day
+                - entity: sensor.pe_diag_system_losses
+                  name: Losses %
+                  yaxis_id: pct
+                  unit: "%"
+                  type: line
+                  color: "#6a1b9a"
+                  stroke_width: 2
+                  extend_to: false
+                  show: {legend_value: false, datalabels: true}
+                  data_generator: |
+                    const days = entity.attributes.by_day || [];
+                    return days.filter(d => d[2] !== null && d[2] !== undefined)
+                               .map(d => [new Date(d[0] + "T12:00:00").getTime(), d[2]]);
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(max-width: 599px)"}]
+            card:
+              type: "custom:apexcharts-card"
+              grid_options: {"columns": "full", "rows": "auto"}
+              graph_span: "14d"
+              span: {"end": "day"}
+              header: {"show": true, "title": "System losses by day", "show_states": false}
+              apex_config: {"chart": {"height": 240}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "dataLabels": {"offsetY": -6, "style": {"fontSize": "10px"}, "background": {"enabled": false}, "formatter": "EVAL:function(val) { return val === null || val === undefined ? \"\" : val + \"%\"; }\n"}, "xaxis": {"labels": {"style": {"fontSize": "10px"}}, "tickAmount": 6}, "grid": {"padding": {"left": 0, "right": 4}}}
+              yaxis: [{"id": "kwh", "decimals": 1, "min": 0, "apex_config": {"labels": {"style": {"colors": "#ef6c00", "fontSize": "10px"}}}}, {"id": "pct", "opposite": true, "decimals": 0, "min": 0, "apex_config": {"labels": {"style": {"colors": "#6a1b9a", "fontSize": "10px"}}}, "show": false}]
+              series: *chart_losses_series
       - type: grid
         column_span: 3
         cards:
