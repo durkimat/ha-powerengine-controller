@@ -12,10 +12,14 @@
 # For testing, pause PowerEngine (panel or Monitoring tab) while it's the controller: nobody drives the battery
 # (Self-Use) and supervised tests are allowed. Un-pause to go live again.
 # The legacy automations are no longer a choice: both handovers keep them off.
+#
+# Also here: restart AppDaemon when a new PowerEngine version is installed (or PowerEngine stops), and restart
+# Predbat if it didn't connect after a Home Assistant restart. Everything is named "PowerEngine - ..." so it's easy
+# to find. Entity IDs are unchanged from earlier versions (only the names changed).
 
 input_select:
   battery_controller:
-    name: Battery controller
+    name: PowerEngine - Battery controller
     icon: mdi:battery-sync
     options:
       - Predbat                    # first = what HA falls back to if the saved choice is no longer an option
@@ -23,7 +27,7 @@ input_select:
 
 script:
   battery_handover_to_powerengine:
-    alias: Battery - Hand control to PowerEngine (live)
+    alias: PowerEngine - Hand control to PowerEngine (live)
     icon: mdi:battery-sync
     mode: single
     sequence:
@@ -66,7 +70,7 @@ script:
             {% endif %}
 
   battery_handover_to_predbat:
-    alias: Battery - Hand control to Predbat (live)
+    alias: PowerEngine - Hand control to Predbat (live)
     icon: mdi:battery-sync
     mode: single
     sequence:
@@ -95,7 +99,7 @@ script:
             read-only, so it takes over at its next update. The legacy automations stay off.
 
 automation:
-  - alias: Battery controller selector
+  - alias: PowerEngine - Battery controller switch
     id: battery_controller_selector
     mode: queued
     triggers:
@@ -120,7 +124,7 @@ automation:
 
   # Watchdog: PowerEngine programs the inverter's timed windows ahead. If it stops (heartbeat stale or unavailable
   # for 15 minutes) while it's the battery controller, close every window so the inverter falls back to Self-Use.
-  - alias: PowerEngine watchdog
+  - alias: PowerEngine - Watchdog
     id: powerengine_watchdog
     mode: single
     triggers:
@@ -189,3 +193,79 @@ automation:
           message: >-
             PowerEngine stopped updating for 15 minutes, so the inverter's charge and discharge windows were closed
             (Self-Use). Check AppDaemon, then resume.
+
+  # HACS replaces PowerEngine's files but AppDaemon keeps running the old code. PowerEngine notices the new version
+  # on disk (within a minute) and fires pe_update_installed; restart AppDaemon so it loads it.
+  - alias: PowerEngine - Restart AppDaemon after an update
+    id: powerengine_restart_after_update
+    mode: single
+    triggers:
+      - trigger: event
+        event_type: pe_update_installed
+    actions:
+      - delay: "00:00:30"          # let HACS finish writing the files
+      - action: hassio.addon_restart
+        data:
+          addon: a0d7b954_appdaemon
+      - action: persistent_notification.create
+        data:
+          notification_id: powerengine_updated
+          title: PowerEngine updated
+          message: >-
+            Version {{ trigger.event.data.installed }} installed (was {{ trigger.event.data.running }}); AppDaemon
+            restarted to load it. Refresh the browser so the dashboard loads the matching card.
+
+  # If PowerEngine stops updating (e.g. an update left AppDaemon unable to load it), restart AppDaemon once. At most
+  # once an hour, so a real fault doesn't cause a restart loop; the watchdog above still closes the windows at 15 min.
+  - alias: PowerEngine - Restart AppDaemon if PowerEngine stops
+    id: powerengine_restart_if_stopped
+    mode: single
+    triggers:
+      - trigger: template
+        value_template: >-
+          {{ (now() - as_datetime(states('sensor.pe_diag_heartbeat'), now())).total_seconds() > 420 }}
+      - trigger: state
+        entity_id: sensor.pe_diag_heartbeat
+        to: unavailable
+        for: "00:07:00"
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ this.attributes.last_triggered is none
+             or (now() - this.attributes.last_triggered).total_seconds() > 3600 }}
+    actions:
+      - action: hassio.addon_restart
+        data:
+          addon: a0d7b954_appdaemon
+      - action: persistent_notification.create
+        data:
+          notification_id: powerengine_restarted
+          title: PowerEngine stopped
+          message: >-
+            PowerEngine hadn't updated for 7 minutes, so AppDaemon was restarted. If this keeps happening, check the
+            AppDaemon log.
+
+  # Predbat (add-on) gives up if Home Assistant isn't ready when it starts, and then never creates its entities,
+  # including the read-only switch PowerEngine's handover guard needs. Restart it if that switch is missing.
+  - alias: PowerEngine - Restart Predbat if it didn't connect
+    id: powerengine_restart_predbat
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - delay: "00:05:00"
+      - if:
+          - condition: template
+            value_template: "{{ states('switch.predbat_set_read_only') in ['unknown', 'unavailable'] }}"
+        then:
+          - action: hassio.addon_restart
+            data:
+              addon: 6adb4f0d_predbat
+          - action: persistent_notification.create
+            data:
+              notification_id: powerengine_predbat_restart
+              title: Predbat restarted
+              message: >-
+                Predbat hadn't connected 5 minutes after Home Assistant started (its read-only switch was missing),
+                so its add-on was restarted.

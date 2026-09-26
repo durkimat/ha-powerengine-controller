@@ -73,6 +73,7 @@ from pe_core.smartcharge import SmartCharger, worth_asking
 from pe_core.status import entity_states
 from pe_core.store import save_config, with_operation
 from pe_core.tariff import overnight_window
+from pe_core.version import installed_version
 from pe_core.weather import Weather
 
 HEARTBEAT_SECONDS = 60
@@ -199,6 +200,7 @@ class PowerEngine(hass.Hass):
         self.run_in(lambda kwargs: self._sim_publish(), 20)
         self.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
         self.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
+        self.run_every(self._check_update, "now+120", 60)        # a new version installed: ask HA to restart us
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
@@ -1599,6 +1601,18 @@ class PowerEngine(hass.Hass):
         self._logbook(f"configuration saved by {user}: {changed}")
         self._reload()
         self.fire_event(RESULT_EVENT, ok=True, message=f"Saved. {changed}.")
+
+    def _check_update(self, kwargs):
+        """HACS replaces the app's files but AppDaemon keeps the old modules loaded. When the version on disk differs
+        from the one running, fire pe_update_installed once; the handover package's automation restarts AppDaemon.
+        (PowerEngine can't restart AppDaemon itself: that needs admin rights it deliberately doesn't have.)"""
+        installed = installed_version(os.path.join(os.path.dirname(os.path.abspath(__file__)), "pe_core",
+                                                   "__init__.py"))
+        if installed is None or installed == __version__ or getattr(self, "_update_seen", None) == installed:
+            return
+        self._update_seen = installed
+        self.log(f"Version {installed} installed (running {__version__}); asking Home Assistant to restart AppDaemon")
+        self.fire_event("pe_update_installed", running=__version__, installed=installed)
 
     def _on_set_control(self, event_name, data, kwargs):
         """The Battery controller switch: Active when handed to PowerEngine, Passive when handed to Predbat.
