@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.8.1 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.8.2 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.8.1 starting
+PowerEngine 0.8.2 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -228,30 +228,25 @@ read-only.
 
 ## Step 6: configure PowerEngine
 
-Open the PowerEngine dashboard's **Config** tab (you must be an admin to save). The page is split into
-collapsible sections: *Expand all* opens everything, and a section that needs attention opens by itself and
-shows how many items to check. Work through it top to bottom:
+Open the PowerEngine dashboard's **Config** tab (you must be an admin to save). The page has one section per
+topic, and each section holds everything for it: its on/off switches, its inputs (required first, then optional),
+its settings and what it learns.
 
-1. **Operation and features**
-   - *Operation*: leave on **Passive** (monitor and simulate only; nothing is controlled).
-   - *Features*: tick what you use. *Automatic cheap threshold* and *Top up when cheap* are on by default.
-     *Smart-charge optimisation* only records what it would ask EDF for until Active mode. Before turning on
-     *Energy arbitrage*, check your export tariff allows exporting energy bought from the grid (in Passive mode it
-     only plans and simulates). Inputs only needed by a feature you've switched off become optional.
-2. **Notifications (optional):** pick your phone's notify service (from the HA companion app, usually
-   `notify.mobile_app_<phone name>`) and tick what you want to hear about. Nothing is sent until a service is
-   chosen.
-3. **Settings** (four sections; the defaults are sensible):
-   - *Battery and charging*: minimum reserve, cheap-import threshold (with the automatic threshold on, this is
-     the most it can be), grid-charge target, charge restart margin.
-   - *Supply limits*: **Main supply fuse** (the rating on your supply cutout; default 60 A, the cautious
-     choice; update it if the fuse is upgraded), **Car charger power** (7.4 kW for a 32 A Zappi), **Export
-     limit** (your DNO-approved limit).
-   - *Axle events*: look-ahead and safety margin.
-   - *Arbitrage*: **Battery wear cost** (battery price ÷ (capacity × rated cycles); the help text shows an
-     example) and the minimum profit per kWh.
-4. **Inputs**, one section per group. Unmapped inputs show **Suggested: <entity>** (click to use it), and a
-   section with several has **Use all N suggested entities**. For every input:
+- **Search** at the top finds any input or setting by name, description or entity ID. The chips filter to *Needs
+  attention*, *Required* or *Optional*.
+- **Colours:** a green strip is a required input that's working; red is one that's missing or failing; amber is
+  needed only for something not in use yet (going live, or a feature that's off); grey is optional. The line
+  under the search box says how many required inputs need attention; tap it to jump to the first.
+- Section headers show counts (e.g. *8 required ✓ · 3 optional*) and open by themselves when something needs
+  attention. Switched-off topics are greyed out.
+
+Work through it top to bottom:
+
+1. **Operation:** leave on **Passive** (monitor and simulate only). Going live is done later with the Battery
+   controller panel.
+2. **Battery, Grid and house, Solar, Tariff and planning:** the required inputs. Unmapped inputs show
+   **Suggested: <entity>** (click to use it), and a section with several has **Use all N suggested entities**.
+   For every input:
    - Check the **Now:** value looks right.
    - Signed inputs (battery power, grid power): read the **reads as** text. If it says *charging* when the
      battery is discharging (or *importing* when you're exporting), tick **Invert**.
@@ -260,19 +255,26 @@ shows how many items to check. Work through it top to bottom:
      discharging power** (Solis: `sensor.solis_battery_input_energy` / `sensor.solis_battery_output_energy`,
      which despite their names are power in W). The single **Battery power** input then shows *Not used*.
    - *Grid and house*: tick **House load includes the car charger** if the inverter's house load includes
-     the car. If unsure, compare *House power* on the Monitoring tab with and without the car charging.
-   - *Control outputs* (Solis timed-slot hours/minutes, currents, update button, storage mode, export limit):
-     only written in Active mode, but map them now so PowerEngine can count the writes your current setup makes
-     (Health tab, EEPROM wear).
-   - *Handover guards* (read only): entities that show nothing else is controlling the inverter. With Predbat
-     and the legacy automations: **Other controller read-only** = `switch.predbat_set_read_only` (must be on),
-     **Other control off (1)/(2)** = `automation.charge_house_battery_on` and
-     `automation.house_battery_start_charging` (must be off). Active mode and supervised tests are refused
-     until every mapped guard is safe.
-   - Fix anything shown in red.
-5. **Solar plants:** the main plant (on the hybrid inverter) is pre-filled. Use **+ Add solar plant** for
-   extra arrays.
-6. **Save.** PowerEngine checks everything, writes `/homeassistant/powerengine/config.yaml` and keeps the
+     the car, and set the **Main supply fuse** (default 60 A).
+   - *Tariff and planning*: *Automatic cheap threshold* and *Top up when cheap* are on by default.
+3. **Car and EDF smart charge:** the charger inputs, **Car charger power** (7.4 kW for a 32 A Zappi) and
+   *Smart-charge optimisation* (only records what it would ask EDF for until live).
+4. **Selling:** **Export limit** (your DNO-approved kW) and, if you want it, *Energy arbitrage* (check your
+   export tariff allows exporting energy bought from the grid; while Passive it only plans and simulates) with
+   **Battery wear cost** and the arbitrage band.
+5. **Axle events, Free-power sessions, Cold battery:** switch on what you use; their inputs become required.
+6. **Inverter control (needed to go live):** the Solis timed-window hours/minutes, currents, apply button and
+   storage mode (amber until you go live, then required), the **Inverter clock** and **Sync inverter clock**,
+   and the **Handover guards** (read only: **Other controller read-only** = `switch.predbat_set_read_only`,
+   **Other control off (1)/(2)** = `automation.charge_house_battery_on` and
+   `automation.house_battery_start_charging`). Map them now so PowerEngine can count the writes your current
+   setup makes (Health tab, EEPROM wear) and show what it would set.
+7. **Notifications (optional):** pick your phone's notify service (usually `notify.mobile_app_<phone name>`)
+   and tick what you want to hear about.
+8. Fix anything shown in red.
+9. **Solar plants** (in *Solar*): the main plant (on the hybrid inverter) is pre-filled. Use **+ Add solar
+   plant** for extra arrays.
+10. **Save.** PowerEngine checks everything, writes `/homeassistant/powerengine/config.yaml` and keeps the
    previous version as `config.yaml.bak-<date>`.
 
 **Check:** the banner says *Saved*, inputs show *PowerEngine check: OK*, and *Operation mode* becomes
@@ -324,7 +326,8 @@ PowerEngine learns from the half-hours it records (Health tab, *Learned from use
 | Car charge rate | Typical kW of a half-hour the car charged throughout | *Learn: car charge rate* |
 | Cold threshold and rate | Charges that slowed, or didn't, at a given battery temperature | *Learn cold behaviour* |
 
-All the *Learn* features are on by default and can be switched off one by one in Features.
+All the *Learn* switches are on by default; each sits under *Learning* in its topic (Battery, Car, Selling,
+Cold battery) and can be switched off on its own.
 
 The rates only learn from half-hours where PowerEngine was in control and asked for the full rate, so they build up
 once it's live. The inverter is always asked for the configured rate; learned figures only shape the plan.
@@ -333,7 +336,7 @@ once it's live. The inverter is always asked for the configured rate; learned fi
 estimated from the outside temperature, following it over a time set by **Battery location** (garage or outbuilding
 24 h, outside 6 h, inside 72 h, or *Custom* with *Battery warm-up time*). The outside temperature comes from
 Open-Meteo's forecast for your home's location (the last 3 days and the next 3, fetched hourly). Two optional inputs
-under *Battery and inverter* improve it: **Outside temperature** (your own sensor, used for the hours it has seen
+in the *Cold battery* section improve it: **Outside temperature** (your own sensor, used for the hours it has seen
 instead of the forecast) and **Battery temperature** (the battery's own sensor: the estimate ahead starts from it,
 and the learning uses it). Leave both unmapped for forecast only.
 Below *Cold caution
@@ -371,13 +374,14 @@ The *Operation* setting further down the Config tab is what the switch sets; you
 ### One-off setup (before the first switch)
 
 1. **Map on the Config tab** and save:
-   - all *Control outputs* (found automatically; check none show a problem);
+   everything in the *Inverter control* section:
+   - the timed-window entities (found automatically; check none show a problem);
    - *Inverter clock* = `sensor.solis_rtc`, *Sync inverter clock* = `button.solis_sync_rtc`;
-   - *Handover guards*: *Other controller read-only* = `switch.predbat_set_read_only`,
+   - the handover guards: *Other controller read-only* = `switch.predbat_set_read_only`,
      *Other control off (1)* = `automation.charge_house_battery_on`,
      *Other control off (2)* = `automation.house_battery_start_charging`.
      (You only map them. The switch puts them in the right state: read-only **on**, both automations **off**.)
-2. Check the **Daily write limit** (*Inverter control* settings, default 150).
+2. Check the **Daily write limit** (same section, default 150).
 3. **Install the handover package**: copy `docs/ha/powerengine_handover.yaml` to `/config/packages/`, check the
    config, restart HA. The panel says so if it's missing.
 

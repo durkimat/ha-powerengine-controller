@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.2 (beta)
+
+### Behaviour changes
+- None. The Config page is reorganised by topic, with search, filters and colour for required and optional
+  inputs (card 0.8.2). The inverter's export-limit entity is now labelled *Inverter export limit (entity)* so it
+  isn't confused with the *Export limit* setting (the kW your DNO allows).
+
 ## 0.8.1 (beta)
 
 ### Behaviour changes
