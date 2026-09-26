@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.4 (beta)
+
+### Behaviour changes
+- **Quicker recovery when inputs come back:** while required inputs are missing (e.g. the SolaX Modbus integration
+  reconnecting after an HA restart), PowerEngine now rechecks them every 30 s instead of every 5 minutes, so it
+  goes back to Active within half a minute of them returning.
+
 ## 0.8.3 (beta)
 
 ### Behaviour changes

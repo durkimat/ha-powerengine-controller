@@ -332,3 +332,22 @@ def test_mode_sensor_accepts_every_effective_mode():
     from pe_core.modes import ACTIVE, PASSIVE, PAUSED, UNCONFIGURED
     opts = next(e for e in ENTITIES if e.key == "state_operation_mode").options["options"]
     assert set(opts) >= {UNCONFIGURED, PASSIVE, ACTIVE, PAUSED}
+
+
+def test_unconfigured_rechecks_every_cycle(app):
+    calls = []
+    app.cfg_error = None
+    app._evaluate = lambda: calls.append(1)
+    app.mode = effective_mode(app.cfg, missing_required=["battery_soc"])
+    assert app.mode.effective == "unconfigured"
+    app.read = None
+    import powerengine
+    orig = powerengine.read
+    powerengine.read = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop"))
+    try:
+        app._cycle({})
+    except Exception:
+        pass
+    finally:
+        powerengine.read = orig
+    assert calls == [1]
