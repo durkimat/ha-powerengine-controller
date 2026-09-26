@@ -36,6 +36,13 @@ def outcome(rec: dict) -> float | None:
     return None                                     # still planned
 
 
+def continued(rec: dict, starts: list[datetime]) -> bool:
+    """A 'cut short' slot that another began within 10 minutes of (EDF re-listing a running dispatch from the
+    current half-hour, recorded before 0.8.10 as cut short): it carried on, so it was delivered."""
+    ended, start = datetime.fromisoformat(rec["ended"]), datetime.fromisoformat(rec["start"])
+    return any(start < s <= ended + timedelta(minutes=10) and s >= ended - timedelta(minutes=10) for s in starts)
+
+
 def group(start: datetime, first_seen: datetime | None, tz=None) -> tuple[str, str]:
     lt = start.astimezone(tz) if tz else start
     night = "overnight" if lt.hour >= 23 or lt.hour < 6 else "daytime"
@@ -49,8 +56,11 @@ class Certainty:
         self.n = 0.0
         self.total = 0.0
         self.groups: dict[tuple[str, str], list[float]] = {}
+        starts = [datetime.fromisoformat(r["start"]) for r in slots.values()]
         for rec in slots.values():
             o = outcome(rec)
+            if rec.get("status") == "cut_short" and rec.get("ended") and continued(rec, starts):
+                o = 1.0 if (rec.get("car_kwh") or 0.0) >= MIN_CAR_KWH or rec.get("confirmed") else 0.5
             if o is None:
                 continue
             start = datetime.fromisoformat(rec["start"])

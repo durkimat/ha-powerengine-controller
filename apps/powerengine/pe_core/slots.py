@@ -17,6 +17,8 @@ from datetime import datetime, timedelta
 
 from .readings import Window
 
+CONTINUE_GAP = timedelta(minutes=10)     # a new slot starting this soon after one vanishes mid-run continues it
+
 KEEP_DAYS = 30
 
 
@@ -61,7 +63,12 @@ class SlotTracker:
             if now >= end:
                 rec["status"], changed = "done", True
             elif key not in listed and key not in done:
-                rec["status"] = "cut_short" if now >= start else "cancelled"
+                nxt = next((w for w in planned if start < w.start <= now + CONTINUE_GAP and w.end > now), None)
+                if now >= start and nxt is not None:
+                    # EDF re-lists a running dispatch from the current half-hour: the same slot, carrying on
+                    rec["status"], rec["end"], rec["continued"] = "done", nxt.start.isoformat(), True
+                else:
+                    rec["status"] = "cut_short" if now >= start else "cancelled"
                 rec["ended"] = now.isoformat(timespec="seconds")
                 changed = True
         cutoff = (now - timedelta(days=KEEP_DAYS)).isoformat()

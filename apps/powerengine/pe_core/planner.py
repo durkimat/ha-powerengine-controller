@@ -97,6 +97,13 @@ class Plan:
         return self.baseline_cost - self.cost + self.extra_value
 
 
+def _slot_p(s: Slot) -> str:
+    """A smart slot's own tariff price, with how likely it is when uncertain (the plan counts the expected price)."""
+    if s.slot_price is not None and s.certainty is not None and s.certainty < 0.995:
+        return f"{_p(s.slot_price)}, {s.certainty * 100:.0f}% likely"
+    return _p(s.slot_price if s.slot_price is not None else s.price)
+
+
 def _p(gbp: float | None) -> str:
     return "?" if gbp is None else (f"{gbp * 100:.2f}".rstrip("0").rstrip(".") + "p")
 
@@ -237,7 +244,7 @@ def _default(s: Slot, p: Params, tz) -> PlanSlot:
                "wrong")
         return PlanSlot(s, GRID_CHARGE, why, target_soc=p.buffer_target)
     if p.hold_for_car and s.smart_slot:
-        return PlanSlot(s, HOLD, f"car smart-charge slot ({_p(s.price)}): the battery mustn't feed the car")
+        return PlanSlot(s, HOLD, f"car smart-charge slot ({_slot_p(s)}): the battery mustn't feed the car")
     if cheap:
         why = f"cheap import ({_p(s.price)}): the grid covers the house, the battery is saved for later"
         return PlanSlot(s, HOLD, why)
@@ -351,7 +358,7 @@ def _overlay(rules: Plan, opt: dict, soc: float, p: Params, now: datetime, tz) -
 def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool], p: Params, now, tz) -> str:
     s = src[i].slot
     if a == GRID_CHARGE and p.hold_for_car and s.smart_slot and cheap[i] and p.fill_when_cheap:
-        return f"car smart-charge slot ({_p(s.price)}): charge the battery too, up to {p.buffer_target:.0f}%"
+        return f"car smart-charge slot ({_slot_p(s)}): charge the battery too, up to {p.buffer_target:.0f}%"
     if a == GRID_CHARGE:
         for j in range(i + 1, len(src)):
             if acts[j] == EXPORT and src[j].slot.export is not None:
@@ -370,7 +377,7 @@ def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool]
         return f"sell at {_p(s.export)}: stored energy is worth more sold than used"
     if a == HOLD:
         if p.hold_for_car and s.smart_slot:
-            return f"car smart-charge slot ({_p(s.price)}): the battery mustn't feed the car"
+            return f"car smart-charge slot ({_slot_p(s)}): the battery mustn't feed the car"
         if cheap[i]:
             return f"cheap import ({_p(s.price)}): the grid covers the house, the battery is saved for later"
         for j in range(i + 1, len(src)):
@@ -442,6 +449,11 @@ def _rules_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None
 
 # --- presenting the plan -------------------------------------------------------------
 
+def _tariff_price(s: Slot) -> float | None:
+    """The price actually on the tariff (a smart slot's own price, not the certainty-weighted one the plan counts)."""
+    return s.slot_price if s.slot_price is not None else s.price
+
+
 def windows(plan: list[PlanSlot], tz=None, now: datetime | None = None) -> list[dict]:
     """Merge consecutive slots with the same action and reason into windows.
 
@@ -456,12 +468,12 @@ def windows(plan: list[PlanSlot], tz=None, now: datetime | None = None) -> list[
         if same:
             w = out[-1]
             w["end"] = ps.slot.end
-            w["prices"].append(ps.slot.price)
+            w["prices"].append(_tariff_price(ps.slot))
             w["soc_end"] = ps.soc_end
             w["cost"] += ps.cost
         else:
             out.append({"_key": key, "start": ps.slot.start, "end": ps.slot.end, "action": ps.action,
-                        "reason": ps.reason, "target_soc": ps.target_soc, "prices": [ps.slot.price],
+                        "reason": ps.reason, "target_soc": ps.target_soc, "prices": [_tariff_price(ps.slot)],
                         "soc_start": ps.soc_start, "soc_end": ps.soc_end, "cost": ps.cost,
                         "estimated": ps.slot.price_estimated})
     for w in out:

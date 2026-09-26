@@ -56,6 +56,7 @@ from pe_core.forecast import LoadProfile, build_slots, house_only_means, parse_h
 from pe_core.health import overall, plan_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_day, chosen_plan, day_view
+from pe_core.journal import WriteJournal
 from pe_core.loadstore import LoadStore
 from pe_core.modes import GUARDS, UNVERIFIED, effective_mode, guard_problems, guard_status
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
@@ -1012,10 +1013,14 @@ class PowerEngine(hass.Hass):
             return None
         key = tuple(sorted(first.items()))
         cached = getattr(self, "_slot_cache", None)
-        if cached and cached[0] == key:
+        now = datetime.now(timezone.utc)
+        if cached and cached[0] == key and (cached[1] is not None or (now - cached[2]).total_seconds() < 600):
             return cached[1]
         m = slot_entities(first, lambda e: self.get_state(e) is not None)
-        self._slot_cache = (key, m)
+        if m is None and not (cached and cached[1] is None):
+            self.log("Inverter windows 2 and 3 not found (the '_2'/'_3' entities); using the single rolling window "
+                     "for now, rechecking every 10 minutes", level="WARNING")
+        self._slot_cache = (key, m, now)       # found: kept; not found: looked for again in 10 minutes
         return m
 
     def _slot_keys(self, slots):
@@ -1055,6 +1060,7 @@ class PowerEngine(hass.Hass):
             if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
                     and not self._test_running()
                     and (not recent or kind != ctl["kind"]) and self._within_write_limit(len(writes))):
+                self._write_why = f"rolling window: {decision.action} ({decision.rule})"
                 self._execute(writes, entities)
                 ctl["last_write"] = r.now
             ctl["kind"], ctl["end"] = kind, end
@@ -1099,6 +1105,7 @@ class PowerEngine(hass.Hass):
             recent = ctl["last_write"] is not None and (r.now - ctl["last_write"]).total_seconds() < 60
             if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
                     and not self._test_running() and not recent and self._within_write_limit(len(writes))):
+                self._write_why = f"three windows: {decision.action} ({decision.rule})"
                 self._execute(writes, entities)
                 ctl["last_write"] = r.now
             self._ctl = ctl
@@ -1106,11 +1113,22 @@ class PowerEngine(hass.Hass):
             self.log(f"Control step failed: {err!r}", level="WARNING")
 
     def _write(self, writes, entities):
-        """Send writes to the inverter's control entities (never bump/boost ones)."""
+        """Send writes to the inverter's control entities (never bump/boost ones). Each is journalled with why."""
+        now = datetime.now(timezone.utc)
+        journal = getattr(self, "journal", None)
+        if journal is None:
+            try:
+                journal = self.journal = WriteJournal(os.path.join(os.path.dirname(self._save_path()),
+                                                                   "write_journal.json"))
+            except Exception:                         # no data folder (tests): write without a journal
+                journal = None
+        why = getattr(self, "_write_why", "") or "control"
         for w in writes:
             eid = entities.get(w.role)
             if not eid or is_forbidden_control(eid):
                 continue
+            if journal is not None:
+                journal.add(now, eid, w.value, None if w.kind == "button" else self.get_state(eid), why)
             if w.kind == "number":
                 self.call_service("number/set_value", entity_id=eid, value=w.value)
             elif w.kind == "select":
@@ -1118,6 +1136,11 @@ class PowerEngine(hass.Hass):
             elif w.kind == "button":
                 self.call_service("button/press", entity_id=eid)
             self.writes.own(self._today())          # 'observed' is counted by the state listener
+        try:
+            if journal is not None:
+                journal.save(now)
+        except OSError as err:
+            self.log(f"Could not save the write journal: {err!r}", level="WARNING")
 
     def _execute(self, writes, entities, attempt=1):
         """Active mode, pause and leaving Active. Write, then verify."""
@@ -1132,6 +1155,7 @@ class PowerEngine(hass.Hass):
             return
         if kwargs["attempt"] == 1:
             self.log(f"Inverter read-back mismatch ({[w['role'] for w in bad]}); retrying once", level="WARNING")
+            self._write_why = "read-back retry"
             self._execute([Write(w["role"], w["value"], w["kind"]) for w in bad], kwargs["entities"], attempt=2)
             return
         self._halted = True                              # no more writes until AppDaemon restarts
@@ -1226,6 +1250,7 @@ class PowerEngine(hass.Hass):
                 want["storage_mode"] = "Self-Use"
                 writes = writes_for(want, have)
                 if writes:
+                    self._write_why = "return to Self-Use"
                     self._execute(writes, entities)
             except Exception as err:
                 self.log(f"Could not return the inverter to Self-Use: {err!r}", level="WARNING")
@@ -1238,6 +1263,7 @@ class PowerEngine(hass.Hass):
             have = {role: self.get_state(entities[role]) for role in want}
             writes = writes_needed(want, have)
             if writes:
+                self._write_why = "return to Self-Use"
                 self._execute(writes, entities)
         except Exception as err:
             self.log(f"Could not return the inverter to Self-Use: {err!r}", level="WARNING")
@@ -1264,6 +1290,7 @@ class PowerEngine(hass.Hass):
                 "sync_due": due, "sync_button": button})
             if due and button and self.mode.effective == "active" and not self._test_running():
                 self.log(f"Syncing the inverter clock ({due}; drift {drift} s)")
+                self._write_why = "clock sync"
                 self._write([Write("inverter_clock_sync", None, "button")], {"inverter_clock_sync": button})
                 self._logbook(f"inverter clock synced ({due}, was {drift} s out)")
             if (clock.finding(old) is None) != (clock.finding(drift) is None):
@@ -1319,6 +1346,7 @@ class PowerEngine(hass.Hass):
         have = {role: self.get_state(entities[role]) for role in want}
         writes = writes_needed(want, have)
         run.step(now, "before", **self._battery_now(), settings=have)
+        self._write_why = f"supervised test: {req['action']}"
         self._write(writes, entities)
         run.step(now, "wrote", writes=[w.as_dict() for w in writes])
         self.log(f"Supervised test started by {user}: {req['action']} for {req['minutes']} min "
@@ -1366,6 +1394,7 @@ class PowerEngine(hass.Hass):
         entities, _ = self._control_entities(want)
         have = {role: self.get_state(entities[role]) for role in want}
         writes = writes_needed(want, have)
+        self._write_why = "supervised test: revert"
         self._write(writes, entities)
         run.step(datetime.now(timezone.utc), "reverted to Self-Use", writes=[w.as_dict() for w in writes])
         self._publish_test()
