@@ -48,8 +48,10 @@ class Params:
     export_limit_kw: float = 6.0      # DNO export limit
     wear_p: float = 2.0               # battery wear per kWh cycled (p)
     min_margin_p: float = 1.0         # arbitrage must clear this per kWh after losses and wear (p)
-    arbitrage_min_soc: float = 75.0   # arbitrage sells only down to this (%)
-    arbitrage_max_soc: float = 90.0   # with arbitrage on, cheap top-ups stop here, out of the full zone (%)
+    arbitrage_min_soc: float = 75.0   # arbitrage band, a guide not a limit: selling below this costs the penalty
+    arbitrage_max_soc: float = 90.0   # ...and routine cheap top-ups stop here with arbitrage on (%)
+    arbitrage_band_penalty_p: float = 2.0   # extra p/kWh counted when arbitrage goes outside the band
+    arbitrage_keep_soc: float = 10.0  # hard: reach the refill with at least the reserve plus this (%)
 
     @property
     def buffer_target(self) -> float:
@@ -164,8 +166,7 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
         imp, exp = max(0.0, flow), max(0.0, -flow)
     elif ps.action == EXPORT:
         room_kw = min(p.max_discharge_kw, p.export_limit_kw + max(0.0, net) / dt_h)
-        sell_floor = max(floor, p.arbitrage_min_soc / 100 * cap)          # arbitrage stays in its band
-        out = min(room_kw * dt_h, max(0.0, stored - sell_floor) * p.efficiency)
+        out = min(room_kw * dt_h, max(0.0, stored - floor) * p.efficiency)
         stored -= out / p.efficiency
         flow = net - out                                # the battery covers the house first, the rest is sold
         imp, exp = max(0.0, flow), max(0.0, -flow)
@@ -258,7 +259,7 @@ def _add_arbitrage(plan: list[PlanSlot], soc: float, p: Params, now: datetime, t
     for i in starts:
         buy = plan[i].slot.price
         refill = _hhmm(plan[i].slot.start, tz)
-        keep = max(p.min_reserve_soc, p.arbitrage_min_soc)
+        keep = p.min_reserve_soc + p.arbitrage_keep_soc          # hard: the house must still be covered
         for j in range(i - 1, -1, -1):
             c = plan[j]
             if c.action != SELF_USE or c.slot.axle or c.slot.free or c.slot.smart_slot or c.slot.export is None:
@@ -273,6 +274,10 @@ def _add_arbitrage(plan: list[PlanSlot], soc: float, p: Params, now: datetime, t
             simulate(plan, soc, p)
             worse = any(ps.grid_import > b + 0.01 for ps, b in zip(plan[j:i], before_imports, strict=True)
                         if ps.action != EXPORT)
+            # below the band is allowed when it still pays with the band penalty on top (a guide, not a limit)
+            below_band = min(ps.soc_end for ps in plan[j:i]) < p.arbitrage_min_soc - 0.05
+            if below_band and margin_p - p.arbitrage_band_penalty_p < p.min_margin_p:
+                worse = True
             if plan[i - 1].soc_end < keep or worse:
                 plan[j] = c                                  # undo, and stop for this refill
                 simulate(plan, soc, p)
@@ -429,6 +434,7 @@ def params_from(cfg, readings=None) -> Params:
         arbitrage=bool(f.get("arbitrage", False)),
         arbitrage_min_soc=s.get("arbitrage_min_soc", 75),
         arbitrage_max_soc=s.get("arbitrage_max_soc", 90),
+        arbitrage_band_penalty_p=s.get("arbitrage_band_penalty_p", 2.0),
         export_limit_kw=s.get("export_limit_kw", 6.0),
         wear_p=s.get("battery_wear_p", 2.0),
         min_margin_p=s.get("arbitrage_min_margin_p", 1.0),

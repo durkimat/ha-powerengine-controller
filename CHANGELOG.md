@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.6.5 (beta)
+
+### Behaviour changes
+- **The arbitrage band is a guide, not a limit.** Selling below the band's bottom (75%) is allowed when it still pays
+  after a new *Arbitrage outside-band cost* (default 2p/kWh, on top of wear) and the forecast load is still covered:
+  the battery must reach the next cheap period with the reserve plus 10% and no half-hour before it may import more
+  than it would have. Grid-charging above the band's top (90%) works the same way in the optimiser; routine cheap
+  top-ups still stop at the top, and a forecast shortfall can still charge higher. Setting the cost to 0 ignores the
+  band; a high value keeps arbitrage inside it.
+- Simulator results are recomputed overnight with the new rule.
+
 ## 0.6.4 (beta)
 
 ### Behaviour changes

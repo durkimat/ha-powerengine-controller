@@ -28,7 +28,7 @@ NOTIFY_MIN_GBP_MONTH = 5.0        # a scenario is worth a look if it saves at le
 NOTIFY_MIN_SHARE = 0.05           # ...and at least this share of the baseline
 MIN_DAYS_TO_COMPARE = 14
 MONTH_DAYS = 30.44
-METHOD = 3                        # bump to recompute every cached result (3: arbitrage band, planner's charge targets)
+METHOD = 4                        # bump to recompute every cached result (4: arbitrage band as a guide)
 
 NOTES = (("INTELLI", "needs a compatible car or charger"), ("IOG", "needs a compatible car or charger"),
          ("COSY", "for homes with a heat pump"), ("HEAT_PUMP", "for homes with a heat pump"),
@@ -223,7 +223,7 @@ def run_day(slots: list[Slot], lookahead: list[Slot], soc: float, p: Params, sta
 def signature(p: Params) -> str:
     keys = ("method", "capacity_kwh", "max_charge_kw", "max_discharge_kw", "efficiency", "min_reserve_soc",
             "export_limit_kw", "fuse_kw", "arbitrage", "wear_p", "target_soc", "arbitrage_min_soc",
-            "arbitrage_max_soc", "min_margin_p")
+            "arbitrage_max_soc", "min_margin_p", "arbitrage_band_penalty_p")
     values = {k: (METHOD if k == "method" else getattr(p, k)) for k in keys}
     blob = json.dumps(values, sort_keys=True)
     return hashlib.sha1(blob.encode()).hexdigest()[:10]

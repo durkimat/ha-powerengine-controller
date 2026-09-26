@@ -17,8 +17,22 @@ LEVELS = 101                                  # 0..100 %
 
 
 def grid_target(p: Params) -> float:
-    """How full grid charging may take the battery: 100%, or the arbitrage ceiling while arbitrage is on."""
-    return p.buffer_target if p.arbitrage else 100.0
+    """How full grid charging may take the battery. Always 100%: with arbitrage on, charging above the band costs
+    the band penalty instead (a guide, not a limit)."""
+    return 100.0
+
+
+def band_penalty(a: str, lv: float, end: float, p: Params) -> float:
+    """GBP for the part of an arbitrage move outside the band: selling below its bottom, or grid-charging above
+    its top."""
+    if not p.arbitrage or not p.arbitrage_band_penalty_p:
+        return 0.0
+    kwh = 0.0
+    if a == EXPORT and end < lv:
+        kwh = max(0.0, min(lv, p.arbitrage_min_soc) - end) / 100 * p.capacity_kwh
+    elif a == GRID_CHARGE and end > lv:
+        kwh = max(0.0, end - max(lv, p.arbitrage_max_soc)) / 100 * p.capacity_kwh
+    return kwh * p.arbitrage_band_penalty_p / 100
 
 
 def _actions(s: Slot, p: Params) -> list[str]:
@@ -56,6 +70,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0) -> dic
                 total = ps.cost + nxt[min(LEVELS - 1, max(0, round(end)))]
                 if wear and end < lv:
                     total += (lv - end) / 100 * cap * wear
+                total += band_penalty(a, float(lv), end, p)
                 if best is None or total < best - 1e-9:
                     best, best_a = total, a
             row[lv], pick[lv] = best, best_a
