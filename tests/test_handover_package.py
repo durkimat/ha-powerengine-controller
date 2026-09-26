@@ -47,3 +47,17 @@ def test_selector_uses_own_scripts_only():
     assert "predbat_handover_to_" not in text
     assert "Legacy automations" not in text
     assert set(_load()["script"]) == {"battery_handover_to_powerengine", "battery_handover_to_predbat"}
+
+
+def test_everything_is_named_powerengine():
+    d = _load()
+    names = [a["alias"] for a in d["automation"]] + [x["alias"] for x in d["script"].values()]
+    names.append(d["input_select"]["battery_controller"]["name"])
+    assert all(n.startswith("PowerEngine - ") for n in names), names
+
+
+def test_ids_unchanged_and_new_automations_present():
+    ids = [a["id"] for a in _load()["automation"]]
+    assert ids[:2] == ["battery_controller_selector", "powerengine_watchdog"]
+    new = {"powerengine_restart_after_update", "powerengine_restart_if_stopped", "powerengine_restart_predbat"}
+    assert new <= set(ids)

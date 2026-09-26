@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.8.2 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.8.3 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.8.2 starting
+PowerEngine 0.8.3 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -447,8 +447,10 @@ the test, so a restart can't leave it running. Result: `sensor.pe_diag_test_writ
 The dashboard updates itself with the app; refresh the browser after updating.
 
 1. HACS shows updates under *Settings → Updates*, with the version number.
+   With the handover package installed (0.8.3 or later), AppDaemon restarts by itself about a minute after
+   the update is installed; you get a *PowerEngine updated* notification. Then refresh the browser.
 2. Update **both** repos to the **same** version. The card warns if they differ.
-3. Restart AppDaemon, then reload the browser.
+3. Restart AppDaemon (automatic with the handover package), then reload the browser.
 4. Read the release notes' **Behaviour changes** first: they list anything that changes what PowerEngine does.
 
 Your settings (`/homeassistant/powerengine/config.yaml`) live outside the app

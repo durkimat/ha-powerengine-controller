@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.3 (beta)
+
+### Behaviour changes
+- **Restart after an update:** when HACS installs a newer version, PowerEngine notices within a minute (the version
+  on disk differs from the one running) and fires `pe_update_installed` once. The handover package's new
+  *PowerEngine - Restart AppDaemon after an update* automation restarts AppDaemon (add-on `a0d7b954_appdaemon`)
+  30 s later and notifies you to refresh the browser.
+- **Handover package (HA side):** everything is now named *PowerEngine - ...* (entity IDs unchanged), plus two more
+  automations: *Restart AppDaemon if PowerEngine stops* (heartbeat 7 minutes old; at most once an hour) and
+  *Restart Predbat if it didn't connect* (5 minutes after HA starts, if Predbat's read-only switch is missing;
+  add-on `6adb4f0d_predbat`).
+
 ## 0.8.2 (beta)
 
 ### Behaviour changes
