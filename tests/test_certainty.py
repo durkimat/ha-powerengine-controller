@@ -63,3 +63,29 @@ def test_estimate_does_not_copy_yesterdays_smart_slot():
     slots = build_slots(r, [], None, UTC, min_h=60, horizon_h=60)
     s = next(s for s in slots if s.start == when + timedelta(days=1))
     assert s.price_estimated and s.price == pytest.approx(0.30)
+
+
+def test_relisted_running_slot_is_a_continuation_not_cut_short():
+    from datetime import datetime, timezone
+
+    from pe_core.readings import Window
+    from pe_core.slots import SlotTracker
+    t = datetime(2026, 9, 26, 17, 10, tzinfo=timezone.utc)
+    tr = SlotTracker(None)
+    w1 = Window(t, t.replace(hour=23), -30.0)
+    tr.update(t, [w1], [], True, 7000, 60)
+    later = t.replace(minute=31)
+    w2 = Window(t.replace(minute=30), t.replace(hour=23), -28.0)
+    tr.update(later, [w2], [], True, 7000, 60)
+    rec = tr.slots[t.isoformat()]
+    assert rec["status"] == "done" and rec["continued"] and rec["end"] == w2.start.isoformat()
+
+
+def test_old_cut_short_records_that_carried_on_count_as_delivered():
+    from pe_core.certainty import Certainty
+    recs = {"a": {"start": "2026-09-26T18:10:00+01:00", "end": "2026-09-27T04:00:00+01:00", "status": "cut_short",
+                  "ended": "2026-09-26T17:31:27+00:00", "car_kwh": 2.4, "confirmed": False},
+            "b": {"start": "2026-09-26T18:30:00+01:00", "end": "2026-09-27T04:00:00+01:00", "status": "planned",
+                  "car_kwh": 0.0, "confirmed": False}}
+    c = Certainty(recs)
+    assert c.total == 1.0 and c.n == 1

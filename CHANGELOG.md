@@ -2,6 +2,24 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.10 (beta)
+
+### Behaviour changes
+- **EDF slots that carry on count as delivered.** EDF re-lists a running dispatch from the current half-hour
+  (18:10–04:00 becomes 18:30–04:00), which was recorded as *cut short* and dragged the slot certainty down (to
+  about 53%, so the plan counted a 6.99p slot as ~17.9p). A slot that vanishes while running with a new one starting
+  within 10 minutes is now a continuation, and past records like that are re-read the same way (your history
+  goes from ~53% to ~88%).
+- **Prices shown as on the tariff:** the Actions table and reasons show a smart slot's own price, with how likely it
+  is (e.g. *6.99p, 88% likely*), instead of the certainty-weighted figure the plan uses internally.
+- **Three windows retried:** if the inverter's `_2`/`_3` window entities weren't found (e.g. at start-up before the
+  integration was ready), PowerEngine used the single rolling window until AppDaemon restarted. It now looks again
+  every 10 minutes and logs when it falls back.
+
+### New
+- **Write journal:** every inverter write is recorded with its time, entity, old and new value and why
+  (`/homeassistant/powerengine/write_journal.json`, last 3 days), to find where writes add up.
+
 ## 0.8.9 (beta)
 
 ### Behaviour changes
