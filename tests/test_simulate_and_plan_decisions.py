@@ -69,3 +69,24 @@ def test_live_car_charging_overrides_plan():
 def test_live_axle_overrides_plan():
     plan = _plan_with_first(0.30)
     assert decide(R(axle_active=True), CFG, plan=plan).action == "force_discharge"
+
+
+def test_car_charging_cheaply_charges_the_battery_too_even_if_the_plan_holds():
+    from dataclasses import replace
+    plan = _plan_with_first(0.07)
+    plan.slots[0] = replace(plan.slots[0], action=HOLD, target_soc=None)
+    arb = parse_config({"features": {"arbitrage": True}, "inputs": {"battery_capacity": {"value": 18}}})
+    d = decide(R(ev_power=7000, ev_plug="Charging", import_rate=0.07, battery_soc=60), arb, plan=plan)
+    assert d.action == GRID_CHARGE and d.target_soc == 90 and "too" in d.reason
+    full = decide(R(ev_power=7000, ev_plug="Charging", import_rate=0.07, battery_soc=95), arb, plan=plan)
+    assert full.action == HOLD
+
+
+def test_optimiser_charges_the_battery_in_a_cheap_car_slot():
+    from pe_core.optimiser import optimise
+    s0 = slot_start(NOW)
+    slots = [Slot(s0 + i * SLOT, 0.07 if i < 4 else 0.30, 0.15, load_kwh=0.3, smart_slot=i < 4) for i in range(24)]
+    p = params_from(parse_config({"features": {"arbitrage": True}, "inputs": {"battery_capacity": {"value": 18}}}))
+    res = optimise(slots, 50.0, p)
+    assert res["actions"][:4] == [GRID_CHARGE] * 4
+    assert max(res["soc"][:4]) <= 90.5                                   # to the top-up level, not beyond

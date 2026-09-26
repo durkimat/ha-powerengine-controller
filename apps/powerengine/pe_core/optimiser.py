@@ -22,6 +22,17 @@ def grid_target(p: Params) -> float:
     return 100.0
 
 
+def car_cheap_charge(s: Slot, p: Params) -> bool:
+    """A car smart-charge slot at a cheap price, with top-up when cheap on: the battery charges alongside the car."""
+    return (p.hold_for_car and s.smart_slot and p.fill_when_cheap and s.price is not None
+            and s.price * 100 <= p.cheap_cap_p)
+
+
+def slot_target(s: Slot, p: Params) -> float:
+    """Grid-charge target for a slot: the top-up level alongside a cheap car charge, otherwise grid_target."""
+    return p.buffer_target if car_cheap_charge(s, p) else grid_target(p)
+
+
 def band_penalty(a: str, lv: float, end: float, p: Params) -> float:
     """GBP for the part of an arbitrage move outside the band: selling below its bottom, or grid-charging above
     its top."""
@@ -41,6 +52,8 @@ def _actions(s: Slot, p: Params) -> list[str]:
     if p.free_enabled and s.free:
         return [GRID_CHARGE]
     if p.hold_for_car and s.smart_slot:
+        if car_cheap_charge(s, p):
+            return [GRID_CHARGE]                   # the car charges cheaply: so does the battery (to the top-up level)
         return [HOLD, GRID_CHARGE]                 # the car is in the house load: the battery mustn't feed it
     acts = [SELF_USE, HOLD, GRID_CHARGE]
     if p.arbitrage:
@@ -95,7 +108,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
         for lv in range(LEVELS):
             options = []
             for a in acts:
-                ps = PlanSlot(s, a, "", target_soc=grid_target(p))
+                ps = PlanSlot(s, a, "", target_soc=slot_target(s, p))
                 end = step(ps, float(lv), p)
                 if a == EXPORT and end < p.min_reserve_soc + p.arbitrage_keep_soc - 1e-6:
                     continue                           # a sale never takes the battery near the reserve
@@ -120,7 +133,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
     kp = KIND.get(prev_action, NONE_K) if prev_action else NONE_K
     for t, s in enumerate(slots):
         a = choice[t][min(LEVELS - 1, max(0, round(lvl)))][kp]
-        ps = PlanSlot(s, a, "", target_soc=grid_target(p))
+        ps = PlanSlot(s, a, "", target_soc=slot_target(s, p))
         lvl = step(ps, lvl, p)
         actions.append(a)
         socs.append(round(lvl, 1))

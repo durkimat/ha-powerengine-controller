@@ -350,6 +350,8 @@ def _overlay(rules: Plan, opt: dict, soc: float, p: Params, now: datetime, tz) -
 
 def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool], p: Params, now, tz) -> str:
     s = src[i].slot
+    if a == GRID_CHARGE and p.hold_for_car and s.smart_slot and cheap[i] and p.fill_when_cheap:
+        return f"car smart-charge slot ({_p(s.price)}): charge the battery too, up to {p.buffer_target:.0f}%"
     if a == GRID_CHARGE:
         for j in range(i + 1, len(src)):
             if acts[j] == EXPORT and src[j].slot.export is not None:
