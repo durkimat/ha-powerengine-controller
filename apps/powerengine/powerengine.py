@@ -86,6 +86,7 @@ REPLAN_SECONDS = 300
 HISTORY_DAYS = 14
 BACKFILL_DAYS = 14
 RECHECK_SECONDS = 300
+INPUT_GRACE_SECONDS = 600         # inputs missing: keep the inverter's programmed windows this long before releasing
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
@@ -272,8 +273,10 @@ class PowerEngine(hass.Hass):
         if self.cfg is not None and not self.cfg_error and (self.mode.effective == "unconfigured"
                                                             or getattr(self, "_guard_live", False)):
             self._guard_live = False
-            self._evaluate()              # inputs missing (e.g. just after an HA restart): recheck every cycle, so
-                                          # control resumes within a cycle of them coming back, not up to 5 minutes
+            # inputs missing (e.g. just after an HA restart) or a guard AppDaemon can't see: recheck every cycle, so
+            # control resumes within a cycle of them coming back, not up to 5 minutes
+            self._evaluate()
+        self._release_if_still_missing()
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
                 readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
@@ -1148,6 +1151,13 @@ class PowerEngine(hass.Hass):
             self.log(f"Leaving Active: {new.reason}", level="WARNING")
             self._notify("health", ("control:guard", "PowerEngine: control stopped", new.reason))
             return
+        if new.effective == "unconfigured" and new.configured == "active" and not self.cfg_error:
+            # inputs gone (e.g. HA or the inverter integration restarting): leave the programmed windows running
+            # for a while rather than rewriting them; hand back to Self-Use only if the inputs stay missing
+            self._release_due = datetime.now(timezone.utc) + timedelta(seconds=INPUT_GRACE_SECONDS)
+            self.log(f"Inputs not ready ({new.reason}); the inverter keeps its programmed windows for "
+                     f"{INPUT_GRACE_SECONDS // 60} minutes while they come back", level="WARNING")
+            return
         self.log(f"Leaving Active ({new.effective}: {new.reason}); returning the inverter to Self-Use",
                  level="INFO" if new.effective == "paused" or new.configured == "passive" else "WARNING")
         if new.effective == "paused":
@@ -1159,6 +1169,29 @@ class PowerEngine(hass.Hass):
             self._notify("health", ("control:inputs", "PowerEngine: control stopped",
                                     f"{new.reason} The inverter is back on Self-Use; control resumes by itself "
                                     "when the inputs are working again."))
+        self._release()
+
+    def _release_if_still_missing(self):
+        """After the grace period, inputs still missing: hand the inverter back to Self-Use, once."""
+        due = getattr(self, "_release_due", None)
+        if due is None:
+            return
+        if self.mode.effective == "active":
+            self._release_due = None
+            self.log("Inputs back; control resumed without rewriting the inverter")
+            return
+        if datetime.now(timezone.utc) < due:
+            return
+        self._release_due = None
+        if self.mode.effective != "unconfigured":
+            return                                   # paused, Passive or a guard since: handled when that happened
+        reason = self.mode.reason
+        self.log(f"Inputs still not ready after {INPUT_GRACE_SECONDS // 60} minutes ({reason}); returning the "
+                 "inverter to Self-Use", level="WARNING")
+        self._logbook(f"control stopped ({reason}); inverter returned to Self-Use")
+        self._notify("health", ("control:inputs", "PowerEngine: control stopped",
+                                f"{reason} The inverter is back on Self-Use; control resumes by itself when the "
+                                "inputs are working again."))
         self._release()
 
     def _release(self):

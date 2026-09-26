@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.8.7 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.8.8 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.8.7 starting
+PowerEngine 0.8.8 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -422,8 +422,10 @@ later is the same one step.
   else has taken over. A guard entity that doesn't exist at all (e.g. Predbat not connected to Home
   Assistant) counts as safe: PowerEngine carries on and notifies you once. The panel shows ✗; use the switch or *Re-apply* to put things straight.
 - **Pause:** returns the inverter to Self-Use once, then no changes until you resume.
-- **Inputs failing:** if a required input stops working, PowerEngine returns the inverter to Self-Use, notifies
-  you, and takes control again when the inputs recover.
+- **Inputs failing:** if a required input stops working (e.g. while HA or the inverter integration restarts),
+  PowerEngine stops making changes and leaves the inverter's programmed windows running. If the inputs are still
+  missing after 10 minutes, it returns the inverter to Self-Use and notifies you. Either way it takes control again
+  by itself within 30 seconds of the inputs recovering.
 - **Stopped app:** windows set ahead keep running as planned. The watchdog automation in the handover package closes
   every window (Self-Use) if PowerEngine's heartbeat stops for 15 minutes while it's the battery controller.
 - **Read-back:** every write is read back after 6 seconds and retried once; if it still doesn't match, control
