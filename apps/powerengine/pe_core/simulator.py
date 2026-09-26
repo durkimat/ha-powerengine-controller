@@ -179,12 +179,21 @@ def sim_params(p: Params) -> Params:
     return replace(p, hold_for_car=False, axle_enabled=False, free_enabled=False)
 
 
-def run_day(slots: list[Slot], lookahead: list[Slot], soc: float, p: Params, standing: float) -> dict:
-    """Best achievable cost for one day (next day as look-ahead), and the charge carried into the next."""
+def run_day(slots: list[Slot], lookahead: list[Slot], soc: float, p: Params, standing: float,
+            strategy: str = "best", tz=None, auto_cheap: bool = True) -> dict:
+    """Cost for one day (next day as look-ahead), and the charge carried into the next.
+
+    strategy "best": the optimiser (best achievable). "planner": PowerEngine's own planner, as it runs live but
+    knowing the day's load and solar (the realistic figure)."""
     n = len(slots)
-    opt = optimise(slots + lookahead, soc, p, wear=p.wear_p / 100) or {"actions": []}
+    if strategy == "planner":
+        from .planner import make_plan
+        plan = make_plan(slots + lookahead, soc, p, slots[0].start, tz, auto_cheap=auto_cheap, wear_p=p.wear_p)
+        actions = [ps.action for ps in plan.slots]
+    else:
+        actions = (optimise(slots + lookahead, soc, p, wear=p.wear_p / 100) or {"actions": []})["actions"]
     lvl, imp_c, exp_i, imp_k, exp_k = soc, 0.0, 0.0, 0.0, 0.0
-    for s, a in zip(slots, opt["actions"][:n], strict=True):
+    for s, a in zip(slots, actions[:n], strict=True):
         ps = PlanSlot(s, a, "", target_soc=100.0)
         lvl = step(ps, lvl, p)
         imp_k += ps.grid_import
@@ -212,7 +221,7 @@ def summarise(results: dict[str, dict], actual: dict[str, dict], names: dict[str
     rows = []
     n = len(days)
     for sid, res in results.items():
-        if prefix_skip and sid.startswith(prefix_skip):
+        if prefix_skip and prefix_skip in sid:
             continue
         per_day = res.get("days", {})
         have = [per_day[d] for d in days if d in per_day]
