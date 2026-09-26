@@ -267,6 +267,9 @@ class PowerEngine(hass.Hass):
     def _cycle(self, kwargs):
         """Read inputs, decide (Passive: would-do only), then publish entities that changed."""
         readings, decision = None, None
+        if self.cfg is not None and not self.cfg_error and self.mode.effective == "unconfigured":
+            self._evaluate()              # inputs missing (e.g. just after an HA restart): recheck every cycle, so
+                                          # control resumes within a cycle of them coming back, not up to 5 minutes
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
                 readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
