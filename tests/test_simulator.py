@@ -187,7 +187,7 @@ def test_overnight_run_end_to_end(tmp_path):
     steps = list(run(store, DAYS, lambda d: day_records(d), p, LON, now, 7.4, fetch=fake_api, log=lambda m: None))
     last = steps[-1]
     assert last["done"]
-    s = store.summary
+    s = store.summary["windows"]["30"]
     assert s["days"] == 3 and [r["id"] for r in s["ranking"]][:1]
     ids = {r["id"] for r in s["ranking"]}
     assert ids == {"current", "octopus:GO-VAR-22-10-14+OUTGOING-VAR-24-10-26"}

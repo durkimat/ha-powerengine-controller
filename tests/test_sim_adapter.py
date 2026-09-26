@@ -21,12 +21,17 @@ def test_overnight_run_publishes_and_notifies(app, tmp_path, monkeypatch):  # no
     app.run_in = lambda cb, delay, **kw: app.timers.append((cb, kw))
     notes = []
     app._notify = lambda event, msg: notes.append((event, msg))
+    from datetime import date
+    app._today = lambda: date(2026, 9, 23)
+    logs = []
+    app.log = lambda m, level=None: logs.append(m)
     app._sim_start({})
     while app.timers:
         cb, kw = app.timers.pop(0)
         cb(kw)
-    key, state, attrs = next(p for p in app.published if p[0] == "cost_simulator")
-    assert attrs["days"] == 3 and len(attrs["ranking"]) == 2
+    key, state, attrs = next((p for p in app.published if p[0] == "cost_simulator"), (None, None, logs))
+    assert isinstance(attrs, dict), attrs
+    assert attrs["window"]["days"] == 3 and len(attrs["window"]["ranking"]) == 2
     assert os.path.exists(tmp_path / "simulator" / "results.json")
     assert all(e == "simulator" for e, _ in notes)
 

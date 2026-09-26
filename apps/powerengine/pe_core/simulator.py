@@ -205,12 +205,15 @@ def signature(p: Params) -> str:
 
 # --- results -----------------------------------------------------------------------------------
 
-def summarise(results: dict[str, dict], actual: dict[str, dict], names: dict[str, dict], days: list[str]) -> dict:
+def summarise(results: dict[str, dict], actual: dict[str, dict], names: dict[str, dict], days: list[str],
+              prefix_skip: str | None = None) -> dict:
     """Ranking over `days` (scenarios missing any of them are left out). `results`: id -> {"sig", "days": {day:
     result}}. Costs are also given per 30.44 days so periods compare."""
     rows = []
     n = len(days)
     for sid, res in results.items():
+        if prefix_skip and sid.startswith(prefix_skip):
+            continue
         per_day = res.get("days", {})
         have = [per_day[d] for d in days if d in per_day]
         if n == 0 or len(have) < n:
@@ -234,7 +237,7 @@ def summarise(results: dict[str, dict], actual: dict[str, dict], names: dict[str
         if actual_total is not None:
             r["vs_actual_month"] = round((r["total"] - actual_total) / n * MONTH_DAYS, 2)
     return {"days": n, "from": days[0] if days else None, "to": days[-1] if days else None,
-            "actual_total": actual_total,
+            "actual_total": actual_total, "actual_estimated": any(actual.get(d, {}).get("estimated") for d in days),
             "actual_per_month": round(actual_total / n * MONTH_DAYS, 2) if actual_total is not None else None,
             "ranking": rows}
 
