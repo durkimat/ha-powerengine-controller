@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.7.0 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.7.1 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.7.0 starting
+PowerEngine 0.7.1 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -313,9 +313,11 @@ All in `/homeassistant/powerengine/` (outside the app folder, so updates never t
 
 ## Active mode
 
-In Active mode PowerEngine writes the Solis timed-slot settings (storage mode stays Self-Use; a charge window for
-grid charge or hold, a discharge window for Axle/export, both closed otherwise; windows at most 35 minutes ahead,
-rolled forward while needed), and, if *Smart-charge optimisation* is on, sets EDF's ready-by time to ask for
+In Active mode PowerEngine writes the Solis timed-slot settings (storage mode stays Self-Use). With all three
+charge and three discharge windows available (SolaX Modbus's `_2`/`_3` entities, found automatically from the first
+window's), the plan's next charge periods (grid charge or hold) and sell periods within 24 hours are set in one go
+and only rewritten when they change, so a repeating night costs next to no writes; hold and charge share the charge
+current (0 A to hold). With only one window it falls back to a single window at most 35 minutes ahead. And, if *Smart-charge optimisation* is on, sets EDF's ready-by time to ask for
 slots. It never uses Backup or Off-Grid mode and never writes bump/boost entities.
 
 ### Before switching
@@ -346,8 +348,9 @@ slots. It never uses Backup or Off-Grid mode and never writes bump/boost entitie
   resume. Choosing Passive does the same.
 - **Inputs failing:** if a required input stops working, PowerEngine returns the inverter to Self-Use, notifies
   you, and takes control again when the inputs recover.
-- **Stopped app:** windows reach at most 35 minutes ahead, so if AppDaemon stops the inverter drops back to
-  Self-Use by itself.
+- **Stopped app:** windows set ahead keep running as planned. The watchdog automation in
+  `docs/ha/powerengine_handover.yaml` closes every window (Self-Use) if PowerEngine's heartbeat stops for 15 minutes
+  while it's the battery controller; install or update that package before going Active.
 - **Read-back:** every write is read back after 6 seconds and retried once; if it still doesn't match, control
   stops until AppDaemon restarts and you're notified.
 - **Daily write limit:** see above. Resuming allows the limit again.

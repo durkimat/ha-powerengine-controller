@@ -2,6 +2,30 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.7.1 (beta)
+
+### Behaviour changes
+- **All three inverter windows** (Active; previewed in Passive). The plan's next charge periods (grid charge or hold)
+  and sell periods within 24 hours are programmed into the Solis's three charge and three discharge windows at once
+  (the `_2`/`_3` entities are found from the first window's), split at midnight. A window is only rewritten when its
+  period has passed and the slot is needed, or when the plan moves it by more than 30 minutes (periods starting
+  within 2 hours are always set exactly). Hold and charge share the charge current, set for the window running or
+  the next one due. A repeating night therefore costs next to no writes. Without the extra windows it falls back to
+  the rolling single window.
+- **Watchdog automation** added to `docs/ha/powerengine_handover.yaml`: closes every window (Self-Use) if
+  PowerEngine's heartbeat stops for 15 minutes while it's the battery controller.
+- **The fixed overnight window** (learned from your rates: 23:00-06:00 for EDF Go Electric) is marked in the plan.
+  Inside it the arbitrage band doesn't apply, and with *top up when cheap* on the optimiser must end it at the
+  grid-charge target (100%), so it can sell deep and refill once rather than shuffle between 75% and 90%.
+- **Window change cost** (new setting under *Inverter control*, default 5p): counted by the optimiser each time the
+  plan switches between self-use, charging and selling (a hold/charge change counts a fifth), so it only switches
+  when that clearly pays. On 24 Sep: 17 switches down to 10, for 10p less.
+- **Car charging follows the plan:** while the car charges, the battery charges if the plan says so (to the plan's
+  level, not 100%), and otherwise holds; it never feeds the car.
+- Health tab: inverter writes for the three-slot design are counted alongside the others (*would*), so you can see
+  the rate on your own plans while in Passive.
+- Simulator results are recomputed overnight with the new rules.
+
 ## 0.7.0 (beta)
 
 ### Behaviour changes

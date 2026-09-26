@@ -184,12 +184,14 @@ def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bo
     s, f = cfg.safety, cfg.features
     if f.get("free_power_days") and r.free_state() == "active":
         return Decision(GRID_CHARGE, "free_power", "free-electricity session: fill the battery", target_soc=100)
-    if r.house_includes_ev and r.ev_state() == "charging":
-        if cheap and soc < target:
-            why = f"car is charging at a cheap rate ({price}); charge the battery too"
-            return Decision(GRID_CHARGE, "car_charging", why, target_soc=target)
-        return _car_at_peak(r, soc, s, price)
     ps = plan.slots[0]
+    if r.house_includes_ev and r.ev_state() == "charging":
+        # the battery mustn't feed the car: follow the plan if it charges now, otherwise hold
+        if ps.action == GRID_CHARGE:
+            return Decision(GRID_CHARGE, "car_charging", f"car is charging; {ps.reason}", target_soc=ps.target_soc)
+        if cheap:
+            return Decision(HOLD, "car_charging", f"car is charging at a cheap rate ({price}); the battery holds")
+        return _car_at_peak(r, soc, s, price)
     if ps.action == FORCE_DISCHARGE and r.axle_state() != "active":
         return Decision(HOLD, "plan", "Axle event due now per the plan, but not started yet: holding charge")
     if ps.action == SELF_USE and soc <= s["min_reserve_soc"]:

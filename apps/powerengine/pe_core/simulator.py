@@ -28,7 +28,7 @@ NOTIFY_MIN_GBP_MONTH = 5.0        # a scenario is worth a look if it saves at le
 NOTIFY_MIN_SHARE = 0.05           # ...and at least this share of the baseline
 MIN_DAYS_TO_COMPARE = 14
 MONTH_DAYS = 30.44
-METHOD = 4                        # bump to recompute every cached result (4: arbitrage band as a guide)
+METHOD = 5                        # bump to recompute every cached result (5: overnight window, window-change cost)
 
 NOTES = (("INTELLI", "needs a compatible car or charger"), ("IOG", "needs a compatible car or charger"),
          ("COSY", "for homes with a heat pump"), ("HEAT_PUMP", "for homes with a heat pump"),
@@ -192,6 +192,23 @@ def sim_params(p: Params) -> Params:
     return replace(p, hold_for_car=False, axle_enabled=False, free_enabled=False)
 
 
+def mark_overnight(slots: list[Slot], lookahead: list[Slot], tz) -> None:
+    """Flag the fixed overnight window: times of day at the lowest price on both days (smart slots move, so they
+    drop out; a dynamic tariff usually has none)."""
+    from .tariff import tod
+
+    def cheapest(sl):
+        prices = [s.price for s in sl if s.price is not None]
+        if len(prices) < 46:
+            return None
+        lo = min(prices)
+        return {tod(s.start, tz) for s in sl if s.price is not None and s.price <= lo + 1e-6}
+    a, b = cheapest(slots), cheapest(lookahead) if lookahead else None
+    window = (a & b) if a is not None and b is not None else set()
+    for s in slots + lookahead:
+        s.overnight = tod(s.start, tz) in window
+
+
 def run_day(slots: list[Slot], lookahead: list[Slot], soc: float, p: Params, standing: float,
             strategy: str = "best", tz=None, auto_cheap: bool = True) -> dict:
     """Cost for one day (next day as look-ahead), and the charge carried into the next.
@@ -199,6 +216,7 @@ def run_day(slots: list[Slot], lookahead: list[Slot], soc: float, p: Params, sta
     strategy "best": the optimiser (best achievable). "planner": PowerEngine's own planner, as it runs live but
     knowing the day's load and solar (the realistic figure)."""
     n = len(slots)
+    mark_overnight(slots, lookahead, tz)
     if strategy == "planner":
         from .planner import make_plan
         plan = make_plan(slots + lookahead, soc, p, slots[0].start, tz, auto_cheap=auto_cheap, wear_p=p.wear_p)
@@ -223,7 +241,7 @@ def run_day(slots: list[Slot], lookahead: list[Slot], soc: float, p: Params, sta
 def signature(p: Params) -> str:
     keys = ("method", "capacity_kwh", "max_charge_kw", "max_discharge_kw", "efficiency", "min_reserve_soc",
             "export_limit_kw", "fuse_kw", "arbitrage", "wear_p", "target_soc", "arbitrage_min_soc",
-            "arbitrage_max_soc", "min_margin_p", "arbitrage_band_penalty_p")
+            "arbitrage_max_soc", "min_margin_p", "arbitrage_band_penalty_p", "switch_cost_p")
     values = {k: (METHOD if k == "method" else getattr(p, k)) for k in keys}
     blob = json.dumps(values, sort_keys=True)
     return hashlib.sha1(blob.encode()).hexdigest()[:10]

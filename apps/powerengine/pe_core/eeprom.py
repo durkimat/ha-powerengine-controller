@@ -108,12 +108,14 @@ class BlockWriteModel(WriteModel):
 class WriteLog:
     def __init__(self, path: str | None = None):
         self.path = path
-        self.data: dict = {"observed": {}, "would": {}, "would_block": {}, "own": {}, "by_entity": {}, "since": None}
+        self.data: dict = {"observed": {}, "would": {}, "would_block": {}, "would_slots": {}, "own": {},
+                           "by_entity": {}, "since": None}
         if path and os.path.exists(path):
             try:
                 with open(path, encoding="utf-8") as fh:
                     self.data.update(json.load(fh))
                 self.data.setdefault("own", {})
+                self.data.setdefault("would_slots", {})
             except (OSError, ValueError):
                 pass
         self._dirty = False
@@ -144,7 +146,7 @@ class WriteLog:
         if not self.path or not (self._dirty or force):
             return
         cutoff = (date.today() - timedelta(days=400)).isoformat()
-        for kind in ("observed", "would", "would_block", "own"):
+        for kind in ("observed", "would", "would_block", "would_slots", "own"):
             self.data[kind] = {d: n for d, n in self.data.get(kind, {}).items() if d >= cutoff}
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
@@ -155,7 +157,7 @@ class WriteLog:
     def summary(self, today: date, days: int = 14) -> dict:
         since = self.data.get("since")
         out: dict = {"budget": BUDGET, "since": since, "by_entity": self.data["by_entity"]}
-        for kind in ("observed", "would", "would_block", "own"):
+        for kind in ("observed", "would", "would_block", "would_slots", "own"):
             counts = self.data.get(kind, {})
             window = [(today - timedelta(days=i)).isoformat() for i in range(days, 0, -1)]
             full = [d for d in window if since and d > since]          # skip the first (partial) day
