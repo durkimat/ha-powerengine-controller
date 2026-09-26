@@ -141,3 +141,28 @@ def test_overnight_car_slot_charges_straight_to_full():
     p = Params(arbitrage=True)
     assert slot_target(s, p) == 90
     assert slot_target(replace(s, overnight=True), p) == 100
+
+
+def test_smart_slot_inside_the_overnight_window_is_not_discounted():
+    from pe_core.certainty import Certainty
+    r = read(CONFIG, get_state(), NOW)
+    s0 = slot_start(NOW)
+    r.dispatches = [Window(s0 + timedelta(hours=1), s0 + timedelta(hours=6))]
+    cert = Certainty({})
+    slots = build_slots(r, [], None, BST, certainty=cert, overnight=set(range(48)))     # all overnight
+    smart = [s for s in slots if s.smart_slot]
+    assert smart and all(s.slot_price is None and s.certainty is None for s in smart)
+    slots = build_slots(r, [], None, BST, certainty=cert, overnight=set())
+    assert all(s.certainty is not None for s in slots if s.smart_slot)
+
+
+def test_equal_prices_charge_sooner_rather_than_at_the_end():
+    from pe_core.forecast import Slot
+    from pe_core.optimiser import optimise
+    from pe_core.planner import Params
+    s0 = slot_start(NOW)
+    slots = [Slot(s0 + timedelta(minutes=30 * i), 0.0699 if i < 12 else 0.3028, 0.15, load_kwh=0.2,
+                  overnight=i < 12) for i in range(20)]
+    res = optimise(slots, 40.0, Params())
+    first_charge = res["actions"].index("grid_charge")
+    assert first_charge <= 1 and res["soc"][11] >= 99

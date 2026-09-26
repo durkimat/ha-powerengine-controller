@@ -65,6 +65,8 @@ def _actions(s: Slot, p: Params) -> list[str]:
 
 NONE_K, HOLD_K, CHARGE_K, DISCHARGE_K = 0, 1, 2, 3
 KIND = {SELF_USE: NONE_K, HOLD: HOLD_K, GRID_CHARGE: CHARGE_K, EXPORT: DISCHARGE_K, FORCE_DISCHARGE: DISCHARGE_K}
+EARLY_BIAS = 5e-4                     # GBP per kWh per half-hour of delay, in the fixed overnight window only: charge
+                                      # early there (same price all night) rather than leave it all to the last hours
 FULL_PENALTY = 1.0                    # GBP per kWh short of the target at the end of the fixed overnight window
 
 
@@ -122,6 +124,8 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
                     total += band_penalty(a, float(lv), end, p)
                 if ends[t] and p.fill_when_cheap and end < p.target_soc:
                     total += (p.target_soc - end) / 100 * cap * FULL_PENALTY
+                if a == GRID_CHARGE and end > lv and s.overnight:
+                    total += (end - lv) / 100 * cap * EARLY_BIAS * t     # same price all night: charge sooner
                 options.append((total, a, k))
             for kp in range(K):
                 best, best_a = None, SELF_USE

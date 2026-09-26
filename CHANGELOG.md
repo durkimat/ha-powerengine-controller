@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.13 (beta)
+
+### Behaviour changes
+- **Smart slots inside the fixed overnight window aren't discounted.** The planner weighs an uncertain EDF slot's
+  price by its likelihood against the price without it. Inside the overnight window that price is the same cheap
+  rate, but it was weighed against the peak rate, so slots there looked dearer (~9.7p) than the unslotted end of the
+  window (6.99p). The plan then held for hours and charged at the very end. They're now counted at the real price.
+- **Charge early in the overnight window.** With the same price all night, the optimiser now prefers charging
+  sooner rather than leaving it all to the last hours (a tiny cost per half-hour of delay, overnight only), so a
+  slow or cold battery still finishes by 06:00.
+
 ## 0.8.12 (beta)
 
 ### Behaviour changes

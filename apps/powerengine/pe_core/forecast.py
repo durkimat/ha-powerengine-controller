@@ -215,7 +215,9 @@ def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | No
                     axle=_in(axle, s), free=_in(free, s), overnight=tod(s, tz) in (overnight or set()))
         if slot.smart_slot and not _car_expected(r, s):
             slot.car_expected, slot.car_kw = False, 0.0
-        if slot.smart_slot and certainty is not None and s > start and price is not None:
+        # weigh a future smart slot by how likely it is, except inside the fixed overnight window: the price there
+        # is the same with or without the slot, so there's nothing to discount
+        if slot.smart_slot and certainty is not None and s > start and price is not None and not slot.overnight:
             rng = day_range(s)
             std = rng[1] if rng else price
             win = next((w for w in r.dispatches if w.start <= s < w.end), None)
