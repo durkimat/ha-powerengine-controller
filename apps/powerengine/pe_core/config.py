@@ -42,10 +42,10 @@ KNOWN_KEYS = frozenset(
 MODES = ("passive", "active")
 FORECAST_SOURCES = ("none", "solcast_site", "scaled")
 FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
-            "free_power_days")
+            "free_power_days", "tariff_simulator")
 FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
                     "arbitrage": False, "axle": True,
-                    "free_power_days": True}
+                    "free_power_days": True, "tariff_simulator": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 SAFETY = {
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
@@ -70,6 +70,8 @@ NOTIFY_EVENTS = {
     "axle": (True, "Axle events", "When an Axle event is scheduled, with its time."),
     "free_power": (True, "Free-power sessions", "When a free-electricity session is announced."),
     "daily": (False, "Daily summary", "Each morning: yesterday's cost and savings."),
+    "simulator": (True, "Tariff opportunities", "When the overnight Simulator finds a tariff that would have cost "
+                                                "noticeably less, or new tariffs appear."),
 }
 _NOTIFY_SERVICE = re.compile(r"^notify\.[a-z0-9_]+$")
 

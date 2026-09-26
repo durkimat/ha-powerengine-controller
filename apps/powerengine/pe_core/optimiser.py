@@ -27,7 +27,8 @@ def _actions(s: Slot, p: Params) -> list[str]:
     return acts
 
 
-def optimise(slots: list[Slot], soc: float, p: Params) -> dict | None:
+def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0) -> dict | None:
+    """`wear`: GBP per kWh taken out of the battery, counted in the choice (not in the cash cost returned)."""
     if not slots:
         return None
     prices = [s.price for s in slots if s.price is not None]
@@ -48,6 +49,8 @@ def optimise(slots: list[Slot], soc: float, p: Params) -> dict | None:
                 ps = PlanSlot(s, a, "", target_soc=100.0)
                 end = step(ps, float(lv), p)
                 total = ps.cost + nxt[min(LEVELS - 1, max(0, round(end)))]
+                if wear and end < lv:
+                    total += (lv - end) / 100 * cap * wear
                 if best is None or total < best - 1e-9:
                     best, best_a = total, a
             row[lv], pick[lv] = best, best_a

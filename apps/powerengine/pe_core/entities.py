@@ -144,6 +144,7 @@ MONEY = {"unit_of_measurement": "GBP", "icon": "mdi:cash", "suggested_display_pr
 COST_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "cost_today", "Cost today", MONEY),
     EntityDef("sensor", "cost_days", "Daily costs", MONEY),
+    EntityDef("sensor", "cost_simulator", "Tariff simulator", {"icon": "mdi:scale-balance"}),
     EntityDef("sensor", "event_last", "Last special event", {**MONEY, "icon": "mdi:star-outline"}),
     EntityDef("sensor", "event_months", "Special events this month", {**MONEY, "icon": "mdi:calendar-star"}),
 )

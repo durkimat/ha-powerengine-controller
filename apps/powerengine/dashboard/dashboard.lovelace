@@ -594,6 +594,45 @@ views:
               {%- else %}
               No actions stored for this plan (plans saved before 0.5.18 kept only the battery level).
               {%- endif %}
+  - title: Simulator
+    path: simulator
+    icon: mdi:scale-balance
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set s = states.sensor.pe_cost_simulator %}
+              {%- if s and s.attributes.ranking is defined and s.attributes.days %}{% set a = s.attributes %}
+              {%- set cur = a.ranking | selectattr('id', 'eq', 'current') | first %}
+              **What your last {{ a.days }} days ({{ a.from }} to {{ a.to }}) would have cost on other tariffs**, with the battery run as well as possible on each. Costs are per month (30.4 days) and include standing charges and export income.
+
+              You actually paid **£{{ '%.2f' | format(a.actual_per_month) }}** a month{% if cur %}; on your tariff with the best battery strategy it would have been **£{{ '%.2f' | format(cur.per_month) }}**, the fair baseline for the comparison below{% endif %}.
+              {%- if a.new_products %}
+
+              New tariffs since the last run: {{ a.new_products | map(attribute='name') | join(', ') }}.{% endif %}
+
+              Updated {{ as_timestamp(a.updated) | timestamp_custom('%a %d %b %H:%M') }}. Runs each night at 01:30; results for a day you already have are kept, so the nightly run only adds new days and tariffs.
+              {%- else %}
+              The Simulator runs each night at 01:30 (switch it on or off under Features on the Config tab). Results appear here the morning after the first run.
+              {%- endif %}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set a = state_attr('sensor.pe_cost_simulator', 'ranking') or [] %}
+              {%- if a %}
+              | # | Tariff | Per month | vs your tariff | Export income | Standing | Notes |
+              |---:|---|---:|---:|---:|---:|---|
+              {%- for r in a %}
+              | {{ loop.index }} | {{ ('**' ~ r.name ~ '**') if r.id == 'current' else r.name }} | £{{ '%.2f' | format(r.per_month) }} | {{ '–' if r.id == 'current' else (('−£%.2f' | format(-r.vs_current_month)) if r.vs_current_month < 0 else ('+£%.2f' | format(r.vs_current_month))) }} | £{{ '%.2f' | format(r.export_income) }} | £{{ '%.2f' | format(r.standing) }} | {{ r.notes }}{{ ('; ' if r.notes else '') ~ 'prices estimated for some days' if r.estimated else '' }} |
+              {%- endfor %}
+
+              *Export income* and *Standing* are totals for the period. **How it's worked out:** your recorded house load, car charging and solar for each day are replayed on each tariff's published rates for that date. The battery is run by PowerEngine's optimiser knowing the day in advance, so these are best-achievable figures. Selling from the battery counts only if Arbitrage is on. The car's charging is moved to each day's cheapest half-hours, except on your own tariff, where it stays where it was. A tariff launched after a date uses its current time-of-day prices for that date (*prices estimated*). EDF tariffs keep your current export rate; Octopus tariffs use Octopus's export tariff. Eligibility notes aren't checked.
+              {%- endif %}
   - title: Costs
     path: costs
     icon: mdi:cash-multiple
