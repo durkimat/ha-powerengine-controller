@@ -182,6 +182,8 @@ views:
 
               Plan made {{ as_timestamp(made) | timestamp_custom('%H:%M') if made not in ['unknown', 'unavailable', ''] else '–' }}
               · re-plans every 5 minutes and when prices, slots or events change
+              {%- set alt = state_attr('sensor.pe_plan', 'alternative') %}{% if state_attr('sensor.pe_plan', 'strategy') == 'optimiser' %}
+              · planned by the optimiser (lowest cost, arbitrage band and safety rules included){% if alt %}; the rule-based planner would {{ ('cost £%.2f more' | format(alt.costs_more_by)) if alt.costs_more_by >= 0.01 else 'do as well' }} over the same period{{ (' (it differs in ' ~ alt.half_hours_differ ~ ' half-hours; thin green line on the chart)') if alt.costs_more_by >= 0.01 else '' }}{% endif %}{% endif %}
               {%- set o = state_attr('sensor.pe_plan', 'optimiser') %}{% if o %}
               · for comparison (not used), an optimiser finds {{ ('a plan £%.2f cheaper' | format(o.better_by)) if o.better_by >= 0.01 else 'nothing better' }} over the same period{{ (' (it differs in ' ~ o.half_hours_differ ~ ' half-hours; thin green line on the chart)') if o.better_by >= 0.01 else '' }}{% endif %}
               {%- if state_attr('sensor.pe_plan', 'cheap_p') is not none %}
@@ -251,7 +253,7 @@ views:
                   const s = entity.attributes.series || {t: []};
                   return s.t.map((t, i) => [new Date(t).getTime() + 1800000, s.soc[i]]);
               - entity: sensor.pe_plan
-                name: Battery (optimiser)
+                name: Battery (other method)
                 yaxis_id: soc
                 type: line
                 color: "#43a047"
@@ -260,7 +262,7 @@ views:
                 extend_to: false
                 data_generator: |
                   const s = entity.attributes.series || {t: []};
-                  const o = (entity.attributes.optimiser || {}).soc || [];
+                  const o = (entity.attributes.alternative || entity.attributes.optimiser || {}).soc || [];
                   return s.t.map((t, i) => [new Date(t).getTime() + 1800000, o[i] ?? null]).filter(p => p[1] !== null);
               - entity: sensor.pe_plan
                 name: Import price
@@ -660,10 +662,10 @@ views:
             content: |-
               {%- set pl = state_attr('sensor.pe_cost_simulator_year', 'planner') %}
               {%- if pl and pl.rows %}
-              ### PowerEngine's planner against the best achievable
-              The rankings above use an optimiser that knows each day in advance. Here the same days are run by PowerEngine's own planner (the one that controls the battery), also knowing the day's load and solar. The gap is what a smarter planner could still be worth; forecast errors in real life add to it. Over {{ pl.window_days }} days, per month:
+              ### The rule-based planner against the optimiser
+              The rankings above use the optimiser, which plans PowerEngine's battery (with *Optimised planning* on) and here knows each day in advance. The same days are also run by the rule-based planner (the fallback with *Optimised planning* off). The gap is what the optimiser is worth; forecast errors in real life take something off both. Over {{ pl.window_days }} days, per month:
 
-              | Tariff | Best achievable | PowerEngine's planner | Gap | What you actually paid |
+              | Tariff | Optimiser (best achievable) | Rule-based planner | Gap | What you actually paid |
               |---|---:|---:|---:|---:|
               {%- for r in pl.rows %}
               | {{ r.name }} | £{{ '%.2f' | format(r.best_month) }} | £{{ '%.2f' | format(r.planner_month) }} | £{{ '%.2f' | format(r.gap_month) }} | {{ ('£%.2f' | format(r.actual_month)) if r.actual_month is defined else '–' }} |
