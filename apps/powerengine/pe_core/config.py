@@ -83,7 +83,7 @@ SYSTEM_CHOICES = {
 }
 LOCATION_LAG_H = {"garage": 24.0, "outside": 6.0, "indoors": 72.0}
 
-# Phone notifications via the HA companion app (a notify.* service). Off until a service is chosen.
+# Notifications: HA's notification area by default, or a phone via the companion app (a notify.* service).
 NOTIFY_EVENTS = {
     "health": (True, "Health problems", "When the Health tab finds a problem (checked after start-up and each night)."),
     "inputs": (True, "Inputs not working", "When a required input has been unavailable or stale for 15 minutes."),
@@ -94,6 +94,7 @@ NOTIFY_EVENTS = {
                                                 "noticeably less, or new tariffs appear."),
 }
 _NOTIFY_SERVICE = re.compile(r"^notify\.[a-z0-9_]+$")
+NOTIFY_DEFAULT = "persistent_notification"      # HA's own notification area (the bell); no phone needed
 
 # Labels and one-line help for the config page (kept next to the defaults they describe).
 SETTING_TEXT = {
@@ -297,9 +298,13 @@ def _parse_notifications(raw: Any) -> dict[str, Any]:
     unknown = sorted(set(raw) - {"service", "events"})
     if unknown:
         raise ConfigError(f"unknown notification setting(s): {', '.join(unknown)}")
-    service = raw.get("service") or ""
-    if not isinstance(service, str) or (service and not _NOTIFY_SERVICE.match(service)):
-        raise ConfigError("notifications.service must be a notify service, e.g. notify.mobile_app_my_phone")
+    # "persistent_notification" = HA's notification area (the default); "off" (or "") = none; else a notify service
+    service = raw.get("service", NOTIFY_DEFAULT)
+    if service in ("", None, "off"):
+        service = ""
+    if not isinstance(service, str) or (service and service != NOTIFY_DEFAULT and not _NOTIFY_SERVICE.match(service)):
+        raise ConfigError("notifications.service must be off, persistent_notification (HA's notification area) or "
+                          "a notify service, e.g. notify.mobile_app_my_phone")
     events = {k: v[0] for k, v in NOTIFY_EVENTS.items()}
     raw_events = raw.get("events") or {}
     if not isinstance(raw_events, dict):

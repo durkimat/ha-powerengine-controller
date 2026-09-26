@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.8.8 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.8.9 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.8.8 starting
+PowerEngine 0.8.9 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -269,8 +269,9 @@ Work through it top to bottom:
    **Other control off (1)/(2)** = `automation.charge_house_battery_on` and
    `automation.house_battery_start_charging`). Map them now so PowerEngine can count the writes your current
    setup makes (Health tab, EEPROM wear) and show what it would set.
-7. **Notifications (optional):** pick your phone's notify service (usually `notify.mobile_app_<phone name>`)
-   and tick what you want to hear about.
+7. **Notifications:** shown in Home Assistant's notification area (the bell) by default, and each clears itself
+   when the problem is over. Or pick your phone's notify service (usually `notify.mobile_app_<phone name>`), or
+   Off. Tick what you want to hear about.
 8. Fix anything shown in red.
 9. **Solar plants** (in *Solar*): the main plant (on the hybrid inverter) is pre-filled. Use **+ Add solar
    plant** for extra arrays.
