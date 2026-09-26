@@ -240,13 +240,13 @@ def _default(s: Slot, p: Params, tz) -> PlanSlot:
         return PlanSlot(s, GRID_CHARGE, "free-electricity session: fill the battery", target_soc=100.0)
     cheap = s.price is not None and s.price * 100 <= p.cheap_cap_p
     if cheap and p.fill_when_cheap:
-        why = (f"cheap import ({_p(s.price)}): top up to {p.buffer_target:.0f}% as a buffer in case the forecast is "
-               "wrong")
+        why = (f"cheap import ({_p(_tariff_price(s))}): top up to {p.buffer_target:.0f}% as a buffer in case the "
+               "forecast is wrong")
         return PlanSlot(s, GRID_CHARGE, why, target_soc=p.buffer_target)
     if p.hold_for_car and s.smart_slot:
         return PlanSlot(s, HOLD, f"car smart-charge slot ({_slot_p(s)}): the battery mustn't feed the car")
     if cheap:
-        why = f"cheap import ({_p(s.price)}): the grid covers the house, the battery is saved for later"
+        why = f"cheap import ({_p(_tariff_price(s))}): the grid covers the house, the battery is saved for later"
         return PlanSlot(s, HOLD, why)
     return PlanSlot(s, SELF_USE, "the battery covers the house")
 
@@ -362,28 +362,28 @@ def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool]
     if a == GRID_CHARGE:
         for j in range(i + 1, len(src)):
             if acts[j] == EXPORT and src[j].slot.export is not None:
-                return (f"charge at {_p(s.price)} to sell at {_p(src[j].slot.export)} from "
+                return (f"charge at {_p(_tariff_price(s))} to sell at {_p(src[j].slot.export)} from "
                         f"{_when(src[j].slot.start, now, tz)}")
             if acts[j] == SELF_USE and src[j].slot.price is not None and s.price is not None \
                     and src[j].slot.price > s.price + 0.005:
-                return (f"charge at {_p(s.price)} to use instead of buying at {_p(src[j].slot.price)} from "
-                        f"{_when(src[j].slot.start, now, tz)}")
-        return f"cheap import ({_p(s.price)}): store it for later"
+                return (f"charge at {_p(_tariff_price(s))} to use instead of buying at "
+                        f"{_p(_tariff_price(src[j].slot))} from {_when(src[j].slot.start, now, tz)}")
+        return f"cheap import ({_p(_tariff_price(s))}): store it for later"
     if a == EXPORT:
         for j in range(i + 1, len(src)):
             if acts[j] == GRID_CHARGE and cheap[j]:
-                return (f"sell at {_p(s.export)}: refilled at {_p(src[j].slot.price)} from "
+                return (f"sell at {_p(s.export)}: refilled at {_p(_tariff_price(src[j].slot))} from "
                         f"{_when(src[j].slot.start, now, tz)}")
         return f"sell at {_p(s.export)}: stored energy is worth more sold than used"
     if a == HOLD:
         if p.hold_for_car and s.smart_slot:
             return f"car smart-charge slot ({_slot_p(s)}): the battery mustn't feed the car"
         if cheap[i]:
-            return f"cheap import ({_p(s.price)}): the grid covers the house, the battery is saved for later"
+            return f"cheap import ({_p(_tariff_price(s))}): the grid covers the house, the battery is saved for later"
         for j in range(i + 1, len(src)):
             if acts[j] in (SELF_USE, EXPORT) and src[j].slot.price is not None and s.price is not None \
                     and src[j].slot.price > s.price + 0.005:
-                return f"keep the charge for {_when(src[j].slot.start, now, tz)} ({_p(src[j].slot.price)})"
+                return f"keep the charge for {_when(src[j].slot.start, now, tz)} ({_p(_tariff_price(src[j].slot))})"
         return "keep the charge for later"
     if a == SELF_USE:
         return "the battery covers the house"
@@ -582,7 +582,8 @@ def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
     for ps in plan.slots:
         ser["t"].append(ps.slot.start.isoformat())
         ser["soc"].append(round(ps.soc_end, 1))
-        ser["price_p"].append(None if ps.slot.price is None else round(ps.slot.price * 100, 2))
+        tp = _tariff_price(ps.slot)
+        ser["price_p"].append(None if tp is None else round(tp * 100, 2))
         ser["solar_kwh"].append(round(ps.slot.solar_kwh, 2))
         ser["load_kwh"].append(round(ps.slot.load_kwh, 2))
         ser["charge_kwh"].append(round(ps.grid_to_battery, 2))

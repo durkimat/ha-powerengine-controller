@@ -24,8 +24,9 @@ def grid_target(p: Params) -> float:
 
 def car_cheap_charge(s: Slot, p: Params) -> bool:
     """A car smart-charge slot at a cheap price, with top-up when cheap on: the battery charges alongside the car."""
-    return (p.hold_for_car and s.smart_slot and p.fill_when_cheap and s.price is not None
-            and s.price * 100 <= p.cheap_cap_p)
+    price = s.slot_price if s.slot_price is not None else s.price      # the slot's own price: if it happens, it's cheap
+    return (p.hold_for_car and s.smart_slot and p.fill_when_cheap and price is not None
+            and price * 100 <= p.cheap_cap_p)
 
 
 def slot_target(s: Slot, p: Params) -> float:

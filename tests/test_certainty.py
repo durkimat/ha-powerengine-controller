@@ -89,3 +89,19 @@ def test_old_cut_short_records_that_carried_on_count_as_delivered():
                   "car_kwh": 0.0, "confirmed": False}}
     c = Certainty(recs)
     assert c.total == 1.0 and c.n == 1
+
+
+def test_plan_shows_the_tariff_price_not_the_weighted_one():
+    from datetime import datetime, timedelta, timezone
+
+    from pe_core.forecast import Slot
+    from pe_core.planner import Params, make_plan, plan_entity_states
+    t0 = datetime(2026, 9, 26, 22, 0, tzinfo=timezone.utc)
+    slots = [Slot(t0 + timedelta(minutes=30 * i), 0.097 if i < 2 else 0.3028, 0.15, load_kwh=0.3,
+                  smart_slot=i < 2, certainty=0.88 if i < 2 else None, slot_price=0.0699 if i < 2 else None)
+             for i in range(8)]
+    plan = make_plan(slots, 50.0, Params(), t0)
+    attrs = plan_entity_states(plan)["plan"][1]
+    assert attrs["series"]["price_p"][:2] == [6.99, 6.99]
+    text = " ".join(w["price"] + " " + w["reason"] for w in attrs["windows"])
+    assert "9.7p" not in text
