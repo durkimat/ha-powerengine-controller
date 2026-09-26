@@ -167,7 +167,7 @@ def test_plan_uses_learned_figures_control_uses_configured(monkeypatch):
 
 
 def test_learned_figures_can_be_turned_off(monkeypatch):
-    a = _app(monkeypatch, {"features": {"use_learned": False},
+    a = _app(monkeypatch, {"features": {"learn_taper": False, "learn_reserve": False},
                            "inputs": {"battery_max_charge_power": {"value": 4800, "use_measured": False}}})
     a.learned = L.Learned(max_charge_kw=4.3, reserve_soc=15.0, taper=((95.0, 0.3),))
     p = a._params()
@@ -219,3 +219,45 @@ def test_weather_recent_and_series(tmp_path):
     assert w.refresh_recent(get=lambda url: data) == 1
     s = w.series(T0, T0 + timedelta(hours=2))
     assert s == {T0: 1.5}
+
+
+def test_each_learned_figure_has_its_own_switch(monkeypatch):
+    a = _app(monkeypatch, {"features": {"learn_car": False, "use_learned": True}})     # legacy key ignored
+    a.learned = L.Learned(reserve_soc=15.0, car_kw=7.0)
+    p = a._params()
+    assert p.min_reserve_soc == 15.0 and p.ev_charger_kw == 7.4
+
+
+def test_battery_location_sets_the_lag(monkeypatch):
+    assert _app(monkeypatch)._cold_settings().lag_h == 24
+    assert _app(monkeypatch, {"system": {"battery_location": "outside"}})._cold_settings().lag_h == 6
+    a = _app(monkeypatch, {"system": {"battery_location": "custom"}, "safety": {"battery_temp_lag_h": 40}})
+    assert a._cold_settings().lag_h == 40
+
+
+def test_bad_battery_location_is_rejected():
+    import pytest
+
+    from pe_core.config import ConfigError, parse_config, settings_catalogue
+    with pytest.raises(ConfigError, match="one of"):
+        parse_config({"system": {"battery_location": "shed"}})
+    sysset = {x["key"]: x for x in settings_catalogue()["system"]}
+    assert sysset["battery_location"]["section"] == "cold" and len(sysset["battery_location"]["options"]) == 4
+    assert "options" not in sysset["house_load_includes_ev"]
+
+
+def test_measured_battery_temperature_anchors_the_estimate():
+    outside = {T0 + timedelta(hours=h): 0.0 for h in range(48)}
+    tb = L.battery_temps(outside, 24, anchor=(T0 + timedelta(hours=24), 10.0))
+    assert tb[T0 + timedelta(hours=24)] == 10.0
+    assert 5 < tb[T0 + timedelta(hours=36)] < 10
+
+
+def test_own_outside_sensor_wins(tmp_path):
+    from pe_core.weather import Weather
+    w = Weather(str(tmp_path / "w.json"), 51.75, -0.34)
+    w.refresh_recent(get=lambda url: {"hourly": {"time": ["2026-12-01T00:00"], "temperature_2m": [5.0]}})
+    w.set_local(T0, 1.0)
+    assert w.series(T0, T0) == {T0: 1.0}
+    w.save()
+    assert Weather(str(tmp_path / "w.json"), 51.75, -0.34).series(T0, T0) == {T0: 1.0}

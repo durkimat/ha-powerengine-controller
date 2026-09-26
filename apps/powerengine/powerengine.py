@@ -22,6 +22,7 @@ from pe_core.certainty import Certainty
 from pe_core.checks import OK, check, summarise
 from pe_core.config import (
     DEFAULT_PATHS,
+    LOCATION_LAG_H,
     ConfigError,
     load_config,
     required_roles,
@@ -332,7 +333,9 @@ class PowerEngine(hass.Hass):
         w = getattr(self, "_wlive", None)
         if w is not None:                              # for learning: outside and estimated battery temperature
             hh.temp_c = w.at(hh.start + timedelta(minutes=15))
-            hh.tb_c = (getattr(self, "_tb", None) or {}).get(learning.hour_of(hh.start))
+            measured = self._temperature("battery_temperature")
+            hh.tb_c = measured if measured is not None else (getattr(self, "_tb", None) or {}).get(
+                learning.hour_of(hh.start))
         try:
             rec = self.costbook.add(hh, r, **self._cost_params())
             if rec is None:
@@ -370,24 +373,37 @@ class PowerEngine(hass.Hass):
         if lr.max_discharge_kw and use_measured(self.cfg, "battery_max_discharge_power") \
                 and 0.5 * p.max_discharge_kw <= lr.max_discharge_kw <= 1.2 * p.max_discharge_kw:
             out["max_discharge_kw"] = lr.max_discharge_kw
-        if self.cfg.features.get("use_learned", True):
-            if lr.taper:
-                out["taper"] = lr.taper
-            if lr.reserve_soc is not None and p.min_reserve_soc < lr.reserve_soc <= p.min_reserve_soc + 15:
-                out["min_reserve_soc"] = lr.reserve_soc            # only ever raises the floor
-            if lr.export_kw is not None and lr.export_kw < p.export_limit_kw:
-                out["export_limit_kw"] = lr.export_kw
-            if lr.car_kw is not None and 1.0 <= lr.car_kw <= 22:
-                out["ev_charger_kw"] = lr.car_kw
+        f = self.cfg.features
+        if f.get("learn_taper", True) and lr.taper:
+            out["taper"] = lr.taper
+        if f.get("learn_reserve", True) and lr.reserve_soc is not None \
+                and p.min_reserve_soc < lr.reserve_soc <= p.min_reserve_soc + 15:
+            out["min_reserve_soc"] = lr.reserve_soc                    # only ever raises the floor
+        if f.get("learn_export", True) and lr.export_kw is not None and lr.export_kw < p.export_limit_kw:
+            out["export_limit_kw"] = lr.export_kw
+        if f.get("learn_car", True) and lr.car_kw is not None and 1.0 <= lr.car_kw <= 22:
+            out["ev_charger_kw"] = lr.car_kw
         return out
 
     # --- cold-battery caution --------------------------------------------------------------------------
 
     def _cold_settings(self) -> learning.ColdSettings:
         s = self.cfg.safety
+        where = self.cfg.system.get("battery_location", "garage")
+        lag = LOCATION_LAG_H.get(where, s.get("battery_temp_lag_h", 24.0))      # "custom": the setting
         return learning.ColdSettings(threshold_c=s.get("cold_caution_temp_c", 4.0),
                                      factor=s.get("cold_charge_pct", 50) / 100,
-                                     release_c=s.get("cold_release_c", 3.0), lag_h=s.get("battery_temp_lag_h", 24.0))
+                                     release_c=s.get("cold_release_c", 3.0), lag_h=lag)
+
+    def _temperature(self, role):
+        """A mapped temperature input (°C), or None."""
+        eid = self._role_entity(role)
+        if not eid:
+            return None
+        try:
+            return float(self.get_state(eid))
+        except (TypeError, ValueError):
+            return None
 
     def _cold_in_use(self):
         """(threshold, factor, learned?) the caution uses now."""
@@ -419,9 +435,15 @@ class PowerEngine(hass.Hass):
             w = self._wlive = Weather(os.path.join(self._sim_folder(), "weather_live.json"), lat, lon)
         try:
             w.refresh_recent()
-            w.save()
         except Exception as err:
             self.log(f"Outside temperature not available (Open-Meteo): {err!r}", level="WARNING")
+        local = self._temperature("outside_temperature")
+        if local is not None:                             # your own sensor wins for the hours it has seen
+            w.set_local(now, local)
+        try:
+            w.save()
+        except OSError as err:
+            self.log(f"Could not save temperatures: {err!r}", level="WARNING")
         self._cold_model(now)
 
     def _cold_model(self, now):
@@ -430,14 +452,19 @@ class PowerEngine(hass.Hass):
             return
         c = self._cold_settings()
         outside = w.series(now - timedelta(days=4), now + timedelta(days=3))
-        self._tb = learning.battery_temps(outside, c.lag_h)
+        measured = self._temperature("battery_temperature")
+        anchor = (learning.hour_of(now), measured) if measured is not None else None
+        self._tb = learning.battery_temps(outside, c.lag_h, anchor=anchor)
         thr, _, _ = self._cold_in_use()
         self._caution = learning.caution_by_hour(self._tb, thr, c.release_c)
         tb_now = self._tb.get(learning.hour_of(now))
         self._publish_if_changed("diag_battery_temperature", tb_now if tb_now is not None else "unknown", {
             "outside_c": outside.get(learning.hour_of(now)), "caution_now": bool(self._caution.get(
                 learning.hour_of(now))), "threshold_c": thr, "lag_h": c.lag_h,
-            "note": "estimated from the outside temperature (Open-Meteo); it lags behind it"})
+            "measured": measured is not None, "location": self.cfg.system.get("battery_location", "garage"),
+            "outside_source": "your sensor" if self._role_entity("outside_temperature") else "Open-Meteo forecast",
+            "note": "the battery's own sensor now; estimated ahead" if measured is not None
+            else "estimated from the outside temperature; it lags behind it"})
         self._plan_sig = None                                          # re-plan with the new temperatures
 
     def _apply_cold(self, slots, now):

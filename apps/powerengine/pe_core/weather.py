@@ -44,12 +44,14 @@ class Weather:
             saved = {}
         same = saved.get("lat") == self.lat and saved.get("lon") == self.lon
         self.hours: dict[str, float] = saved.get("hours", {}) if same else {}
+        self.local: dict[str, float] = saved.get("local", {})     # your own sensor, by hour: wins over Open-Meteo
 
     def save(self) -> None:
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump({"lat": self.lat, "lon": self.lon, "hours": self.hours}, fh, separators=(",", ":"))
+            json.dump({"lat": self.lat, "lon": self.lon, "hours": self.hours, "local": self.local}, fh,
+                      separators=(",", ":"))
         os.replace(tmp, self.path)
 
     def missing_days(self, first: date, last: date) -> list[date]:
@@ -85,12 +87,20 @@ class Weather:
                "&forecast_days=3&timezone=UTC")
         return _merge(self.hours, get(url) if get else _get(url, timeout=8))
 
+    def set_local(self, t: datetime, value: float) -> None:
+        """A reading from your own outside sensor for this hour (kept 8 days)."""
+        key = t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H")
+        self.local[key] = round(float(value), 1)
+        cutoff = (t.astimezone(timezone.utc) - timedelta(days=8)).strftime("%Y-%m-%dT%H")
+        self.local = {k: v for k, v in self.local.items() if k >= cutoff}
+
     def series(self, start: datetime, end: datetime) -> dict[datetime, float]:
-        """Hourly temperatures (UTC hour starts) from start to end, where known."""
+        """Hourly temperatures (UTC hour starts) from start to end, where known (your sensor first)."""
         out: dict[datetime, float] = {}
         t = start.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
         while t <= end:
-            v = self.hours.get(t.strftime("%Y-%m-%dT%H"))
+            key = t.strftime("%Y-%m-%dT%H")
+            v = self.local.get(key, self.hours.get(key))
             if v is not None:
                 out[t] = v
             t += timedelta(hours=1)

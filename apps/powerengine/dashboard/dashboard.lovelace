@@ -1021,7 +1021,7 @@ views:
               {%- set t = states.sensor.pe_diag_battery_temperature %}
               {%- if t and t.state not in ['unknown', 'unavailable'] %}
 
-              **Battery temperature (estimated): {{ t.state }}°C** · outside {{ t.attributes.outside_c }}°C · cold caution {{ 'ON' if t.attributes.caution_now else 'off' }} (below {{ t.attributes.threshold_c }}°C). Estimated from the outside temperature, following it over about {{ t.attributes.lag_h | int }} hours.
+              **Battery temperature ({{ 'measured' if t.attributes.measured else 'estimated' }}): {{ t.state }}°C** · outside {{ t.attributes.outside_c }}°C ({{ t.attributes.outside_source }}) · cold caution {{ 'ON' if t.attributes.caution_now else 'off' }} (below {{ t.attributes.threshold_c }}°C). Battery location: {{ t.attributes.location }}, so it follows the outside temperature over about {{ t.attributes.lag_h | int }} hours{{ '; the estimate ahead starts from the measured value' if t.attributes.measured else '' }}.
               {%- endif %}
       - type: grid
         column_span: 3

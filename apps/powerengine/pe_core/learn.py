@@ -170,10 +170,12 @@ def learn(halves: list[dict], rated_charge_kw: float, rated_discharge_kw: float,
 
 # --- battery temperature and caution ---------------------------------------------------------------------------
 
-def battery_temps(outside: dict[datetime, float], lag_h: float) -> dict[datetime, float]:
+def battery_temps(outside: dict[datetime, float], lag_h: float,
+                  anchor: tuple[datetime, float] | None = None) -> dict[datetime, float]:
     """Estimated battery temperature each hour: it follows the outside temperature with a time constant of lag_h.
 
     Starts from the average of the first day (so the estimate is sensible after a restart with 3 days of history).
+    With a measured battery temperature (anchor: its hour and value), the estimate restarts from it there.
     """
     hours = sorted(outside)
     if not hours:
@@ -186,6 +188,8 @@ def battery_temps(outside: dict[datetime, float], lag_h: float) -> dict[datetime
         dt = (h - prev).total_seconds() / 3600
         k = 1 - math.exp(-dt / lag_h) if lag_h > 0 else 1.0
         tb += (outside[h] - tb) * k
+        if anchor is not None and h == anchor[0]:
+            tb = anchor[1]
         out[h] = round(tb, 2)
         prev = h
     return out

@@ -42,11 +42,14 @@ KNOWN_KEYS = frozenset(
 MODES = ("passive", "active")
 FORECAST_SOURCES = ("none", "solcast_site", "scaled")
 FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
-            "free_power_days", "tariff_simulator", "optimised_plan", "use_learned", "cold_caution", "cold_learning")
+            "free_power_days", "tariff_simulator", "optimised_plan", "learn_taper", "learn_reserve", "learn_export",
+            "learn_car", "cold_caution", "cold_learning")
+LEGACY_FEATURES = ("use_learned",)          # 0.8.0's single switch, replaced by one per figure: ignored if saved
 FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
                     "arbitrage": False, "axle": True,
                     "free_power_days": True, "tariff_simulator": True, "optimised_plan": True,
-                    "use_learned": True, "cold_caution": True, "cold_learning": True}
+                    "learn_taper": True, "learn_reserve": True, "learn_export": True, "learn_car": True,
+                    "cold_caution": True, "cold_learning": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 SAFETY = {
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
@@ -70,7 +73,15 @@ SAFETY = {
     "cold_release_c": (3.0, 0, 15),           # ...until the battery is this much warmer than the threshold
     "battery_temp_lag_h": (24.0, 1, 96),      # how long the battery takes to follow the outside temperature (h)
 }
-SYSTEM_DEFAULTS = {"house_load_includes_ev": True}
+SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage"}
+# system settings chosen from a list: key -> (config-page section, ((value, label), ...))
+SYSTEM_CHOICES = {
+    "battery_location": ("cold", (("garage", "Garage or outbuilding (follows outside over about 24 h)"),
+                                  ("outside", "Outside, sheltered (about 6 h)"),
+                                  ("indoors", "Inside the house (about 72 h)"),
+                                  ("custom", "Custom: use Battery warm-up time below"))),
+}
+LOCATION_LAG_H = {"garage": 24.0, "outside": 6.0, "indoors": 72.0}
 
 # Phone notifications via the HA companion app (a notify.* service). Off until a service is chosen.
 NOTIFY_EVENTS = {
@@ -137,8 +148,11 @@ SETTING_TEXT = {
                        "Once cautious, stay so until the battery is this much warmer than the threshold, so one "
                        "milder afternoon doesn't end it."),
     "battery_temp_lag_h": ("Battery warm-up time", "h",
-                           "How long the battery takes to follow the outside temperature: about 24 h in a garage "
-                           "or outbuilding, 6 h outside, 72 h indoors."),
+                           "Used when Battery location is Custom: how long the battery takes to follow the outside "
+                           "temperature (24 h garage, 6 h outside, 72 h indoors)."),
+    "battery_location": ("Battery location", "",
+                         "Where the battery is, which sets how quickly it follows the outside temperature: how long "
+                         "a cold spell takes to chill it, and to warm it back up."),
     "house_load_includes_ev": ("House load includes the car charger", "",
                                "Tick if the car is inside the inverter's house load. PowerEngine then subtracts it and "
                                "stops the battery discharging into the car."),
@@ -155,6 +169,7 @@ SETTING_SECTIONS = (
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p")),
     ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p")),
     ("cold", "Cold battery", ("cold_caution_temp_c", "cold_charge_pct", "cold_release_c", "battery_temp_lag_h")),
+    # (battery_location, a choice, is shown at the top of this section)
 )
 
 
@@ -164,6 +179,8 @@ def settings_catalogue() -> dict:
     safety = [{"key": k, "default": SAFETY[k][0], "min": SAFETY[k][1], "max": SAFETY[k][2],
                "label": SETTING_TEXT[k][0], "unit": SETTING_TEXT[k][1], "help": SETTING_TEXT[k][2]} for k in order]
     system = [{"key": k, "default": d, "label": SETTING_TEXT[k][0], "help": SETTING_TEXT[k][2]}
+              | ({"section": SYSTEM_CHOICES[k][0], "options": [list(o) for o in SYSTEM_CHOICES[k][1]]}
+                 if k in SYSTEM_CHOICES else {})
               for k, d in SYSTEM_DEFAULTS.items()]
     return {"safety": safety, "system": system,
             "sections": [{"key": sec, "label": label, "keys": list(keys)} for sec, label, keys in SETTING_SECTIONS]}
@@ -190,7 +207,7 @@ class Config:
     mode: str = "passive"
     features: dict[str, bool] = field(default_factory=lambda: dict(FEATURE_DEFAULTS))
     safety: dict[str, float] = field(default_factory=lambda: {k: v[0] for k, v in SAFETY.items()})
-    system: dict[str, bool] = field(default_factory=lambda: dict(SYSTEM_DEFAULTS))
+    system: dict = field(default_factory=lambda: dict(SYSTEM_DEFAULTS))
     remove_entities: bool = False
     notifications: dict[str, Any] = field(default_factory=lambda: _parse_notifications(None))
     inputs: dict[str, Any] = field(default_factory=dict)
@@ -334,6 +351,8 @@ def parse_config(data: Any) -> Config:
     if not isinstance(raw_features, dict):
         raise ConfigError("'features' must be a mapping")
     for key, value in raw_features.items():
+        if key in LEGACY_FEATURES:
+            continue
         if key not in FEATURES:
             raise ConfigError(f"unknown feature '{key}'")
         if not isinstance(value, bool):
@@ -367,7 +386,11 @@ def parse_config(data: Any) -> Config:
     for key, value in raw_system.items():
         if key not in SYSTEM_DEFAULTS:
             raise ConfigError(f"unknown system setting '{key}'")
-        if not isinstance(value, bool):
+        if key in SYSTEM_CHOICES:
+            if value not in [v for v, _ in SYSTEM_CHOICES[key][1]]:
+                raise ConfigError(f"system setting '{key}' must be one of "
+                                  + ", ".join(v for v, _ in SYSTEM_CHOICES[key][1]))
+        elif not isinstance(value, bool):
             raise ConfigError(f"system setting '{key}' must be true or false")
         system[key] = value
 
