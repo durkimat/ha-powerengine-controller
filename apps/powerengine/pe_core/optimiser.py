@@ -16,6 +16,11 @@ from .planner import Params, PlanSlot, step
 LEVELS = 101                                  # 0..100 %
 
 
+def grid_target(p: Params) -> float:
+    """How full grid charging may take the battery: 100%, or the arbitrage ceiling while arbitrage is on."""
+    return p.buffer_target if p.arbitrage else 100.0
+
+
 def _actions(s: Slot, p: Params) -> list[str]:
     if p.axle_enabled and s.axle:
         return [FORCE_DISCHARGE]
@@ -46,7 +51,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0) -> dic
         for lv in range(LEVELS):
             best, best_a = None, SELF_USE
             for a in acts:
-                ps = PlanSlot(s, a, "", target_soc=100.0)
+                ps = PlanSlot(s, a, "", target_soc=grid_target(p))
                 end = step(ps, float(lv), p)
                 total = ps.cost + nxt[min(LEVELS - 1, max(0, round(end)))]
                 if wear and end < lv:
@@ -58,7 +63,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0) -> dic
     actions, socs, cost, lvl = [], [], 0.0, soc
     for t, s in enumerate(slots):
         a = choice[t][min(LEVELS - 1, max(0, round(lvl)))]
-        ps = PlanSlot(s, a, "", target_soc=100.0)
+        ps = PlanSlot(s, a, "", target_soc=grid_target(p))
         lvl = step(ps, lvl, p)
         actions.append(a)
         socs.append(round(lvl, 1))

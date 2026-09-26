@@ -199,12 +199,12 @@ def test_auto_threshold_is_used_by_the_plan():
 def test_arbitrage_sells_surplus_just_before_the_cheap_refill():
     from pe_core.decide import EXPORT
     arb = Params(arbitrage=True)
-    plan = make_plan(day(), soc=90.0, p=arb, now=T0)
+    plan = make_plan(day(load=0.1), soc=100.0, p=arb, now=T0)
     exports = [i for i, ps in enumerate(plan.slots) if ps.action == EXPORT]
     assert exports and max(exports) == 13 and all(i < 14 for i in exports)   # just before 00:00
-    assert plan.slots[13].soc_end >= arb.min_reserve_soc + arb.arbitrage_keep_soc - 0.01
+    assert plan.slots[13].soc_end >= arb.arbitrage_min_soc - 0.01            # only the top of the battery is sold
     assert all(plan.slots[i].grid_import < 0.01 for i in range(0, 14) if plan.slots[i].action != EXPORT)
-    without = make_plan(day(), soc=90.0, p=Params(), now=T0)
+    without = make_plan(day(load=0.1), soc=100.0, p=Params(), now=T0)
     assert plan.cost < without.cost and "refilled at 7p" in plan.slots[13].reason
 
 
@@ -264,3 +264,24 @@ def test_horizon_end_does_not_change_what_happens_now(p):
                 short = make_plan(slots(72, off, solar), soc=soc, p=p, now=now)
                 long = make_plan(slots(96, off, solar), soc=soc, p=p, now=now)
                 assert short.slots[0].action == long.slots[0].action, (off, soc, solar)
+
+
+def test_arbitrage_band_keeps_out_of_the_full_zone():
+    from pe_core.decide import EXPORT
+    arb = Params(arbitrage=True, arbitrage_min_soc=75, arbitrage_max_soc=90)
+    assert arb.buffer_target == 90 and Params().buffer_target == 100
+    plan = make_plan(day(load=0.1), soc=100.0, p=arb, now=T0)
+    assert min(ps.soc_end for ps in plan.slots[:14]) >= 75 - 0.01                 # never sold below the band
+    cheap = [ps for ps in plan.slots[14:24]]
+    assert max(ps.soc_end for ps in cheap) <= 90 + 0.01                          # the cheap top-up stops at 90%
+    ps = PlanSlot(Slot(T0, PEAK, 0.30, load_kwh=0.0), EXPORT, "")
+    assert step(ps, 80.0, arb) >= 75 - 0.01                                     # a sale can't cross the floor
+
+
+def test_config_arbitrage_band_validated():
+    from pe_core.config import ConfigError, parse_config
+    from pe_core.planner import params_from
+    p = params_from(parse_config({"features": {"arbitrage": True}}))
+    assert (p.arbitrage_min_soc, p.arbitrage_max_soc) == (75, 90)
+    with pytest.raises(ConfigError, match="lowest charge"):
+        parse_config({"safety": {"arbitrage_min_soc": 90, "arbitrage_max_soc": 80}})

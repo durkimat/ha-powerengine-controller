@@ -48,7 +48,14 @@ class Params:
     export_limit_kw: float = 6.0      # DNO export limit
     wear_p: float = 2.0               # battery wear per kWh cycled (p)
     min_margin_p: float = 1.0         # arbitrage must clear this per kWh after losses and wear (p)
-    arbitrage_keep_soc: float = 10.0  # keep this much above the reserve when the refill starts (%)
+    arbitrage_min_soc: float = 75.0   # arbitrage sells only down to this (%)
+    arbitrage_max_soc: float = 90.0   # with arbitrage on, cheap top-ups stop here, out of the full zone (%)
+
+    @property
+    def buffer_target(self) -> float:
+        """Where a routine cheap top-up stops: the grid-charge target, or the arbitrage ceiling when arbitrage is on
+        (keeping the battery out of the full zone while it cycles). A forecast shortfall can still charge higher."""
+        return min(self.target_soc, self.arbitrage_max_soc) if self.arbitrage else self.target_soc
 
 
 @dataclass
@@ -157,7 +164,8 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
         imp, exp = max(0.0, flow), max(0.0, -flow)
     elif ps.action == EXPORT:
         room_kw = min(p.max_discharge_kw, p.export_limit_kw + max(0.0, net) / dt_h)
-        out = min(room_kw * dt_h, max(0.0, stored - floor) * p.efficiency)
+        sell_floor = max(floor, p.arbitrage_min_soc / 100 * cap)          # arbitrage stays in its band
+        out = min(room_kw * dt_h, max(0.0, stored - sell_floor) * p.efficiency)
         stored -= out / p.efficiency
         flow = net - out                                # the battery covers the house first, the rest is sold
         imp, exp = max(0.0, flow), max(0.0, -flow)
@@ -207,8 +215,9 @@ def _default(s: Slot, p: Params, tz) -> PlanSlot:
         return PlanSlot(s, GRID_CHARGE, "free-electricity session: fill the battery", target_soc=100.0)
     cheap = s.price is not None and s.price * 100 <= p.cheap_cap_p
     if cheap and p.fill_when_cheap:
-        why = f"cheap import ({_p(s.price)}): top up to {p.target_soc:.0f}% as a buffer in case the forecast is wrong"
-        return PlanSlot(s, GRID_CHARGE, why, target_soc=p.target_soc)
+        why = (f"cheap import ({_p(s.price)}): top up to {p.buffer_target:.0f}% as a buffer in case the forecast is "
+               "wrong")
+        return PlanSlot(s, GRID_CHARGE, why, target_soc=p.buffer_target)
     if p.hold_for_car and s.smart_slot:
         return PlanSlot(s, HOLD, f"car smart-charge slot ({_p(s.price)}): the battery mustn't feed the car")
     if cheap:
@@ -249,7 +258,7 @@ def _add_arbitrage(plan: list[PlanSlot], soc: float, p: Params, now: datetime, t
     for i in starts:
         buy = plan[i].slot.price
         refill = _hhmm(plan[i].slot.start, tz)
-        keep = p.min_reserve_soc + p.arbitrage_keep_soc
+        keep = max(p.min_reserve_soc, p.arbitrage_min_soc)
         for j in range(i - 1, -1, -1):
             c = plan[j]
             if c.action != SELF_USE or c.slot.axle or c.slot.free or c.slot.smart_slot or c.slot.export is None:
@@ -418,6 +427,8 @@ def params_from(cfg, readings=None) -> Params:
         fuse_kw=s.get("main_fuse_a", 60) * 0.230 * 0.9,
         fill_when_cheap=bool(f.get("fill_when_cheap", True)),
         arbitrage=bool(f.get("arbitrage", False)),
+        arbitrage_min_soc=s.get("arbitrage_min_soc", 75),
+        arbitrage_max_soc=s.get("arbitrage_max_soc", 90),
         export_limit_kw=s.get("export_limit_kw", 6.0),
         wear_p=s.get("battery_wear_p", 2.0),
         min_margin_p=s.get("arbitrage_min_margin_p", 1.0),

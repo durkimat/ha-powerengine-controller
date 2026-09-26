@@ -59,6 +59,8 @@ SAFETY = {
     "export_limit_kw": (6.0, 0, 30),          # DNO-approved export limit (kW)
     "battery_wear_p": (2.0, 0, 20),           # wear cost per kWh cycled through the battery (p/kWh)
     "arbitrage_min_margin_p": (1.0, 0, 50),   # profit per kWh an arbitrage cycle must clear after losses + wear
+    "arbitrage_min_soc": (75, 10, 100),       # arbitrage sells only down to this (%)
+    "arbitrage_max_soc": (90, 20, 100),       # with arbitrage on, cheap top-ups stop here (%)
     "max_writes_per_day": (150, 20, 2000),    # Active: pause control if PowerEngine's own writes reach this
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True}
@@ -100,6 +102,13 @@ SETTING_TEXT = {
     "arbitrage_min_margin_p": ("Arbitrage minimum profit", "p/kWh",
                                "Arbitrage runs only if, per kWh exported, export price − purchase price ÷ losses − "
                                "wear is at least this."),
+    "arbitrage_min_soc": ("Arbitrage lowest charge", "%",
+                          "Selling from the battery stops here, so arbitrage only uses the top of the battery and "
+                          "the house is never left short."),
+    "arbitrage_max_soc": ("Arbitrage highest charge", "%",
+                          "With arbitrage on, cheap top-ups (including smart-charge slots) stop here, keeping the "
+                          "battery out of the full zone that wears it fastest. A forecast shortfall can still charge "
+                          "it higher. Set 100 to top up fully."),
     "max_writes_per_day": ("Daily write limit", "writes",
                            "Safety stop for inverter EEPROM wear: if PowerEngine's own writes today reach this, it "
                            "pauses control (inverter back to Self-Use) and notifies you. Resuming allows this many "
@@ -116,7 +125,8 @@ SETTING_SECTIONS = (
                                          "charge_hysteresis_soc")),
     ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
     ("axle", "Axle events", ("pre_axle_lookahead_h", "axle_margin_soc")),
-    ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p")),
+    ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
+                                "arbitrage_max_soc")),
     ("control", "Inverter control", ("max_writes_per_day",)),
 )
 
@@ -316,6 +326,8 @@ def parse_config(data: Any) -> Config:
         if not lo <= value <= hi:
             raise ConfigError(f"safety setting '{key}' must be between {lo} and {hi}")
         safety[key] = value
+    if safety["arbitrage_min_soc"] >= safety["arbitrage_max_soc"]:
+        raise ConfigError("arbitrage lowest charge must be below its highest charge")
     if safety["min_reserve_soc"] >= safety["grid_charge_target_soc"]:
         raise ConfigError("minimum reserve must be below the grid-charge target")
 
