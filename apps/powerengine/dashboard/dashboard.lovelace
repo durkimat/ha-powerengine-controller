@@ -196,7 +196,7 @@ views:
               {%- set extra = state_attr('sensor.pe_plan', 'extra_kwh') | float(0) %}{% if extra | abs >= 0.5 %}
               · the plan ends with {{ '%.1f' | format(extra | abs) }} kWh {{ 'more' if extra > 0 else 'less' }} in the battery than plain self-use (worth £{{ '%.2f' | format(state_attr('sensor.pe_plan', 'extra_value') | float(0) | abs) }} at the cheapest price), counted in the saving{% endif %}
               {%- for c in state_attr('sensor.pe_plan', 'slot_certainty') or [] %}
-              · EDF slot {{ c.day }} {{ c.from }}–{{ c.to }}: {{ c.certainty }}% likely to happen, so planned at {{ c.expected_p }}p (slot price {{ c.slot_p }}p){% endfor %}
+              · EDF slot {{ c.day }} {{ c.from }}–{{ c.to }} at {{ c.slot_p }}p: {{ c.certainty }}% likely to happen (the plan allows for it not happening){% endfor %}
               {%- set cold = state_attr('sensor.pe_plan', 'cold') %}{% if cold and cold.periods %}
               · cold battery ({{ cold.battery_c_now }}°C estimated now; caution below {{ cold.threshold_c }}°C{{ ', learned' if cold.learned else '' }}): charging planned at {{ (cold.factor * 100) | round | int }}% of the normal rate {% for p in cold.periods %}{{ p.from }}–{{ p.to }}{{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}
               {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}

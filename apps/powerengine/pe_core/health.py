@@ -103,7 +103,7 @@ def plan_snapshot(plan, day_start: datetime, day_end: datetime) -> dict:
         if day_start <= ps.slot.start < day_end:
             slots.append({"start": ps.slot.start.isoformat(), "soc": round(ps.soc_end, 1), "action": ps.action,
                           "load_kwh": round(ps.slot.load_kwh, 3), "solar_kwh": round(ps.slot.solar_kwh, 3),
-                          "price_p": None if ps.slot.price is None else round(ps.slot.price * 100, 2),
+                          "price_p": None if _tp(ps.slot) is None else round(_tp(ps.slot) * 100, 2),
                           "charge_kwh": round(ps.grid_to_battery, 3),
                           "bat_export_kwh": round(ps.battery_export, 3),
                           "solar_export_kwh": round(max(0.0, ps.grid_export - ps.battery_export), 3),
@@ -114,3 +114,9 @@ def plan_snapshot(plan, day_start: datetime, day_end: datetime) -> dict:
                if w.get("start") and w.get("end") and datetime.fromisoformat(w["start"]) < day_end
                and datetime.fromisoformat(w["end"]) > day_start]
     return {"made_at": plan.made_at.isoformat(timespec="seconds"), "slots": slots, "windows": windows}
+
+
+def _tp(slot):
+    """The tariff's own price (a smart slot's price, not the certainty-weighted one the plan uses)."""
+    sp = getattr(slot, "slot_price", None)
+    return sp if sp is not None else slot.price

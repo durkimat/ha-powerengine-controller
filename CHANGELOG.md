@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.11 (beta)
+
+### Behaviour changes
+- **Only real tariff prices are shown.** The plan chart's price line, every reason, the Actions table, the Plan
+  history and the EDF-slot notes now show a smart slot's own price (e.g. 6.99p). The certainty-weighted figure is
+  used only inside the planner's sums and never displayed. The EDF-slot note now reads *slot at 6.99p: 88% likely
+  to happen (the plan allows for it not happening)*.
+- Charging the battery alongside the car in a smart slot is decided on the slot's own price, not the weighted one.
+
 ## 0.8.10 (beta)
 
 ### Behaviour changes
