@@ -27,6 +27,7 @@ class ModeDecision:
 
 
 ABSENT = ("None", "unknown", "unavailable")
+UNVERIFIED = "unverified"        # the adapter couldn't confirm the state with Home Assistant: never counts as safe
 
 
 def guard_status(cfg: Config | None, get_state) -> tuple[list[str], list[str]]:

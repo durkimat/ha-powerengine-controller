@@ -56,7 +56,7 @@ from pe_core.health import overall, plan_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_day, chosen_plan, day_view
 from pe_core.loadstore import LoadStore
-from pe_core.modes import GUARDS, effective_mode, guard_problems, guard_status
+from pe_core.modes import GUARDS, UNVERIFIED, effective_mode, guard_problems, guard_status
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
 from pe_core.optimiser import compare, optimise
 from pe_core.planner import make_plan, params_from, plan_entity_states, slot_certainty_rows
@@ -225,7 +225,7 @@ class PowerEngine(hass.Hass):
                 checks["battery_power"] = (OK, "Not used: the charging and discharging sensors are mapped")
         missing = [k for k in required if checks.get(k, ("unmapped", ""))[0] != OK]
         self._watch_inputs(checks, required)
-        guards, absent = guard_status(self.cfg, self.get_state) if self.cfg is not None else ([], [])
+        guards, absent = guard_status(self.cfg, self._guard_state) if self.cfg is not None else ([], [])
         self._note_absent_guards(absent)
         paused = self.get_state(PAUSE_ENTITY) == "on"
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused)
@@ -269,7 +269,9 @@ class PowerEngine(hass.Hass):
     def _cycle(self, kwargs):
         """Read inputs, decide (Passive: would-do only), then publish entities that changed."""
         readings, decision = None, None
-        if self.cfg is not None and not self.cfg_error and self.mode.effective == "unconfigured":
+        if self.cfg is not None and not self.cfg_error and (self.mode.effective == "unconfigured"
+                                                            or getattr(self, "_guard_live", False)):
+            self._guard_live = False
             self._evaluate()              # inputs missing (e.g. just after an HA restart): recheck every cycle, so
                                           # control resumes within a cycle of them coming back, not up to 5 minutes
         if self.cfg is not None and self.mode.effective != "unconfigured":
@@ -850,6 +852,21 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Could not send a notification via {n['service']}: {err!r}", level="WARNING")
 
+    def _guard_state(self, eid):
+        """A guard's state. AppDaemon's copy of HA's states can miss an entity that was re-created after it started
+        (Predbat restarting does this), so when it has nothing, ask Home Assistant directly. If that can't be
+        checked either, the guard is "unverified", which never counts as safe."""
+        state = self.get_state(eid)
+        if state is not None:
+            return state
+        try:
+            live = str(self.render_template(f"{{{{ states('{eid}') }}}}")).strip()
+        except Exception as err:
+            self.log(f"Couldn't check {eid} with Home Assistant: {err!r}", level="WARNING")
+            return UNVERIFIED
+        self._guard_live = True                       # AppDaemon can't tell us when it changes: keep rechecking
+        return live or UNVERIFIED
+
     def _note_absent_guards(self, absent):
         """Guard entities HA doesn't have (e.g. Predbat not connected) count as safe; say so once, and when they're
         back."""
@@ -1226,7 +1243,7 @@ class PowerEngine(hass.Hass):
             return
         req_roles = list(release()) + ["timed_charge_current", "timed_discharge_current"]
         entities, missing = self._control_entities(req_roles) if self.cfg else ({}, ["config"])
-        guards = guard_problems(self.cfg, self.get_state) if self.cfg else ["no config"]
+        guards = guard_problems(self.cfg, self._guard_state) if self.cfg else ["no config"]
         req, err = testwrite.validate(data, guards, missing, self._test_running())
         if not err and self.mode.effective == "active":
             err = "PowerEngine is in control; pause it first"
