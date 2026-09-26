@@ -166,3 +166,16 @@ def test_equal_prices_charge_sooner_rather_than_at_the_end():
     res = optimise(slots, 40.0, Params())
     first_charge = res["actions"].index("grid_charge")
     assert first_charge <= 1 and res["soc"][11] >= 99
+
+
+def test_rest_of_a_running_dispatch_is_counted_at_its_price():
+    from pe_core.certainty import Certainty
+    r = read(CONFIG, get_state(), NOW)
+    s0 = slot_start(NOW)
+    r.dispatches = [Window(s0 - timedelta(minutes=30), s0 + timedelta(hours=2)),        # running now
+                    Window(s0 + timedelta(hours=5), s0 + timedelta(hours=6))]           # not started
+    slots = build_slots(r, [], None, BST, certainty=Certainty({}), overnight=set())
+    running = [s for s in slots if s.smart_slot and s.start < s0 + timedelta(hours=2)]
+    later = [s for s in slots if s.smart_slot and s.start >= s0 + timedelta(hours=5)]
+    assert running and all(s.certainty is None for s in running)
+    assert later and all(s.certainty is not None for s in later)

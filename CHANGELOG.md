@@ -2,6 +2,14 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.14 (beta)
+
+### Behaviour changes
+- **The rest of a running EDF dispatch counts at its real price.** Only dispatches that haven't started yet are
+  weighed by how likely they are. The rest of one already running was also weighed (6.99p looked like ~9.7p), so
+  the plan paused charging in it to wait for the guaranteed overnight rate. If EDF ends a running dispatch early,
+  the plan is remade straight away, as before.
+
 ## 0.8.13 (beta)
 
 ### Behaviour changes
