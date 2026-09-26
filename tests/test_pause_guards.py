@@ -236,13 +236,31 @@ def test_guard_trip_writes_nothing(app):
     assert not app.calls
 
 
-def test_inputs_failing_while_active_release(app):
+def test_inputs_failing_while_active_release_after_the_grace_period(app):
+    import powerengine
     active = effective_mode(parse_config(GUARDED), build_supports_active=True)
     broken = effective_mode(parse_config(GUARDED), build_supports_active=True, missing_required=["battery_soc"])
     assert broken.effective == "unconfigured"
+    app.cfg_error = None
     app.states["number.timed_charge_end_hour"] = 5
     app._leave_active(active, broken, [])
-    assert app.states["number.timed_charge_end_hour"] == 0
+    assert app.states["number.timed_charge_end_hour"] == 5            # windows left running for now
+    app.mode = broken
+    app._release_if_still_missing()
+    assert app.states["number.timed_charge_end_hour"] == 5
+    app._release_due = datetime.now(timezone.utc) - powerengine.timedelta(seconds=1)
+    app._release_if_still_missing()
+    assert app.states["number.timed_charge_end_hour"] == 0 and app._release_due is None
+
+
+def test_inputs_back_within_the_grace_period_writes_nothing(app):
+    active = effective_mode(parse_config(GUARDED), build_supports_active=True)
+    broken = effective_mode(parse_config(GUARDED), build_supports_active=True, missing_required=["battery_soc"])
+    app.cfg_error = None
+    app._leave_active(active, broken, [])
+    app.mode = active
+    app._release_if_still_missing()
+    assert app._release_due is None and not app.calls
 
 
 def test_write_limit_pauses(app):

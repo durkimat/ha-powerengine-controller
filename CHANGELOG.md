@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.8.8 (beta)
+
+### Behaviour changes
+- **Riding through restarts:** when required inputs go missing while live (e.g. an HA restart, with the inverter
+  integration reconnecting), PowerEngine now stops making changes but leaves the inverter's programmed windows
+  running for 10 minutes, instead of immediately closing them and writing them again when the inputs return. If
+  they're still missing after 10 minutes, it returns the inverter to Self-Use and notifies you, as before. Fewer
+  inverter writes, and a charge in progress isn't interrupted.
+
 ## 0.8.7 (beta)
 
 ### Behaviour changes
