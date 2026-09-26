@@ -16,6 +16,17 @@ PLAN_OPTIONS = ["Start of day"] + [f"{h:02d}:00" for h in range(24)]
 HALF = timedelta(minutes=30)
 
 
+def _imp(rec: dict):
+    """Rates of a recorded half-hour; rebuilt ones keep them only in the valued rates ("v")."""
+    v = rec.get("import_rate")
+    return v if v is not None else (rec.get("v") or {}).get("act")
+
+
+def _exp(rec: dict):
+    v = rec.get("export_rate")
+    return v if v is not None else (rec.get("v") or {}).get("exp")
+
+
 def chosen_day(option: str | None, today: date) -> date:
     if option == "Today":
         return today
@@ -66,7 +77,8 @@ def day_view(day: date, records: list[dict], snapshot: dict | None, plan_label: 
         ser["x"].append(int(datetime.combine(today, local.time(), tzinfo=tz).timestamp() * 1000))
         ser["plan_soc"].append(p["soc"] if p else None)
         ser["actual_soc"].append(rec.get("soc_end") if rec else None)
-        price = rec["import_rate"] * 100 if rec and rec.get("import_rate") is not None else (p or {}).get("price_p")
+        rate = _imp(rec) if rec else None
+        price = rate * 100 if rate is not None else (p or {}).get("price_p")
         ser["price_p"].append(_r(price))
         for key, pk, rk in (("charge", "charge_kwh", "g_b"), ("bat_export", "bat_export_kwh", "b_e"),
                             ("solar_export", "solar_export_kwh", "s_e"), ("load", "load_kwh", "house"),
@@ -78,8 +90,8 @@ def day_view(day: date, records: list[dict], snapshot: dict | None, plan_label: 
         t += HALF
 
     def cost(rec):
-        imp = (rec.get("grid_import") or 0) * (rec.get("import_rate") or 0)
-        return imp - (rec.get("grid_export") or 0) * (rec.get("export_rate") or 0)
+        imp = (rec.get("grid_import") or 0) * (_imp(rec) or 0)
+        return imp - (rec.get("grid_export") or 0) * (_exp(rec) or 0)
 
     summary = None
     if both:

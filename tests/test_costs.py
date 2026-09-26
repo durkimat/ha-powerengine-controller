@@ -346,3 +346,34 @@ def test_battery_parameters_from_half_hours():
     assert p["max_charge_kw"] == pytest.approx(4.0) and p["max_discharge_kw"] == pytest.approx(3.0)
     implausible = battery_parameters(halves, 0.95, configured_kwh=10.0, enough_days=True)
     assert not implausible["capacity_measured"]
+
+
+def test_export_rate_falls_back_to_the_current_one(tmp_path):
+    """Half-hours rebuilt from history before the export-rate sensor had any history were valued at 0p."""
+    from pe_core.costbook import CostBook
+    rates = day_rates(T0)
+    book = CostBook(str(tmp_path), UTC)
+    book.export_fallback = 0.15
+    rec = Recorder()
+    t = T0 + timedelta(hours=12)
+    out = []
+    for i in range(62):                               # 31 minutes exporting 2 kW, no export rate known
+        r = R(t + timedelta(seconds=30 * i), grid_power=-2000, battery_power=0, house_power=500, import_rate=0.30,
+              rates=rates, battery_soc=50)
+        r.export_rate = None
+        hh = rec.add(r)
+        if hh:
+            out.append(book.add(hh, r, capacity=18, eff=0.95, floor_soc=12, max_kw=4.8, includes_ev=True))
+    stored = [x for x in out if x]
+    assert stored and stored[0]["v"]["exp"] == 0.15
+    # and re-valuing an old record that has 0p fills it in
+    records = book.day_records(T0.date())
+    for x in records:
+        x["v"]["exp"] = 0.0
+        x["export_rate"] = None
+    import json
+    import os
+    with open(os.path.join(str(tmp_path), f"{T0.date().isoformat()}.json"), "w") as fh:
+        json.dump(records, fh)
+    book.revalue(capacity=18, eff=0.95, floor_soc=12, max_kw=4.8, includes_ev=True)
+    assert book.day_records(T0.date())[0]["v"]["exp"] == 0.15

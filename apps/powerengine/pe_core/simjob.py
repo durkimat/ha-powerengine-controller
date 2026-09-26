@@ -27,6 +27,8 @@ from .simulator import (
     opportunities,
     price_fn,
     rate_key,
+    rec_export_rate,
+    rec_import_rate,
     run_day,
     scenarios,
     signature,
@@ -216,6 +218,10 @@ def run(store: SimStore, days: list[str], load_day, params, tz, now: datetime, c
             return cache[d]
         if d in recorded:
             out = load_day(d)
+            if ctx.export_p:
+                for r in out:                             # rebuilt before the export rate had any history
+                    if not rec_export_rate(r):
+                        r["export_rate"] = ctx.export_p
         elif cur_tables and ctx.history is not None:
             out = ctx.history.day_records(date.fromisoformat(d), tz, ctx.house_includes_car)
             unit, stand = cur_tables["standard-unit-rates"], cur_tables["standing-charges"]
@@ -238,7 +244,7 @@ def run(store: SimStore, days: list[str], load_day, params, tz, now: datetime, c
     use_days = []
     for d in all_days:
         rs = recs(d)
-        if complete(rs) and all(r.get("import_rate") is not None for r in rs):
+        if complete(rs) and all(rec_import_rate(r) is not None for r in rs):
             use_days.append(d)
     if not use_days:
         store.summary = {"windows": {}, "note": "no complete days yet", "updated": now.isoformat(timespec="seconds")}

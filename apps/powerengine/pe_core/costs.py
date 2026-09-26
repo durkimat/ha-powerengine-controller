@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from .ledger import Ledger
 from .tariff import Rates
 
-METHOD_VERSION = 2
+METHOD_VERSION = 3        # 3: export rate falls back to your current one when history had none
 # daily energy totals (kWh) shown for checking against the inverter's own counters
 ENERGY_KEYS = ("grid_import", "grid_export", "solar", "house", "car", "battery_in", "battery_out", "b_e",
                "unallocated_src", "unallocated_sink", "correction_kwh")

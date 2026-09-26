@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.6.3 (beta)
+
+### Behaviour changes
+- None to your devices.
+- **Fix: export income on days rebuilt from HA history.** Half-hours rebuilt before the export-rate sensor had any
+  history were valued at 0p for export, which understated export income on the Costs tab (11-24 Sep for you) and
+  in the Simulator. They now fall back to your current export rate. The cost history is re-valued once on start-up
+  (cost method 3) and the Simulator recomputes its cached results in the next overnight run.
+- With that fixed, the planner comparison on 11-25 Sep shows PowerEngine's planner level with the best achievable
+  (not £3 a month behind, as 0.6.2 reported); topping up overnight and exporting the next day's surplus solar is
+  not a loss when export pays more than the cheap import plus losses and wear.
+
 ## 0.6.2 (beta)
 
 ### Behaviour changes
