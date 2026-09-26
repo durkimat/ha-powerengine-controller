@@ -326,3 +326,9 @@ def test_switch_event_rejects_nonsense(app, tmp_path):
     app._notify = lambda ev, msg: notes.append(msg[1])
     app._on_set_control("pe_set_control", {"operation": "boost"}, {})
     assert notes == ["PowerEngine: switch failed"] and not (tmp_path / "config.yaml").exists()
+
+
+def test_mode_sensor_accepts_every_effective_mode():
+    from pe_core.modes import ACTIVE, PASSIVE, PAUSED, UNCONFIGURED
+    opts = next(e for e in ENTITIES if e.key == "state_operation_mode").options["options"]
+    assert set(opts) >= {UNCONFIGURED, PASSIVE, ACTIVE, PAUSED}

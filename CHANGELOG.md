@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.7.5 (beta)
+
+### Behaviour changes
+- None. Fix: *Operation mode* (`sensor.pe_state_operation_mode`) now accepts **paused**. Before, HA rejected that
+  value and kept showing the previous one (usually *passive*), so the Battery controller panel showed ✗ while
+  PowerEngine was correctly paused for testing.
+
+### Card
+- Battery controller panel: an entity it can't read (e.g. Predbat's read-only switch while Predbat is restarting) now
+  makes the status *not fully live*, with a note, instead of *live*.
+
 ## 0.7.4 (beta)
 
 ### Behaviour changes
