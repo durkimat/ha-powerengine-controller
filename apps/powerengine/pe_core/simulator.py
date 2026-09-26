@@ -19,7 +19,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 from .forecast import Slot
-from .optimiser import optimise
+from .optimiser import grid_target, optimise
 from .planner import Params, PlanSlot, step
 
 REGION = "A"                      # Eastern England (from the MPAN); a config setting later
@@ -28,7 +28,7 @@ NOTIFY_MIN_GBP_MONTH = 5.0        # a scenario is worth a look if it saves at le
 NOTIFY_MIN_SHARE = 0.05           # ...and at least this share of the baseline
 MIN_DAYS_TO_COMPARE = 14
 MONTH_DAYS = 30.44
-METHOD = 2                        # bump to recompute every cached result (2: export rates missing from rebuilt days)
+METHOD = 3                        # bump to recompute every cached result (3: arbitrage band, planner's charge targets)
 
 NOTES = (("INTELLI", "needs a compatible car or charger"), ("IOG", "needs a compatible car or charger"),
          ("COSY", "for homes with a heat pump"), ("HEAT_PUMP", "for homes with a heat pump"),
@@ -203,11 +203,13 @@ def run_day(slots: list[Slot], lookahead: list[Slot], soc: float, p: Params, sta
         from .planner import make_plan
         plan = make_plan(slots + lookahead, soc, p, slots[0].start, tz, auto_cheap=auto_cheap, wear_p=p.wear_p)
         actions = [ps.action for ps in plan.slots]
+        plan_targets = [ps.target_soc if ps.target_soc is not None else p.target_soc for ps in plan.slots]
     else:
         actions = (optimise(slots + lookahead, soc, p, wear=p.wear_p / 100) or {"actions": []})["actions"]
+        plan_targets = []
     lvl, imp_c, exp_i, imp_k, exp_k = soc, 0.0, 0.0, 0.0, 0.0
-    for s, a in zip(slots, actions[:n], strict=True):
-        ps = PlanSlot(s, a, "", target_soc=100.0)
+    for i, (s, a) in enumerate(zip(slots, actions[:n], strict=True)):
+        ps = PlanSlot(s, a, "", target_soc=grid_target(p) if strategy != "planner" else plan_targets[i])
         lvl = step(ps, lvl, p)
         imp_k += ps.grid_import
         exp_k += ps.grid_export
@@ -220,7 +222,8 @@ def run_day(slots: list[Slot], lookahead: list[Slot], soc: float, p: Params, sta
 
 def signature(p: Params) -> str:
     keys = ("method", "capacity_kwh", "max_charge_kw", "max_discharge_kw", "efficiency", "min_reserve_soc",
-            "export_limit_kw", "fuse_kw", "arbitrage", "wear_p")
+            "export_limit_kw", "fuse_kw", "arbitrage", "wear_p", "target_soc", "arbitrage_min_soc",
+            "arbitrage_max_soc", "min_margin_p")
     values = {k: (METHOD if k == "method" else getattr(p, k)) for k in keys}
     blob = json.dumps(values, sort_keys=True)
     return hashlib.sha1(blob.encode()).hexdigest()[:10]

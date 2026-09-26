@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.6.4 (beta)
+
+### Behaviour changes
+- **Arbitrage band** (new settings under *Arbitrage*): *Arbitrage lowest charge* (default 75%) and *Arbitrage highest
+  charge* (default 90%). Selling from the battery now stops at the lowest charge (before: the reserve plus 10%), so
+  arbitrage only ever uses the top of the battery. With arbitrage on, routine cheap top-ups (overnight and in
+  smart-charge slots) stop at the highest charge instead of the grid-charge target, keeping the battery out of the
+  full zone while it cycles; a forecast shortfall can still charge it higher. Arbitrage runs in any cheap period,
+  smart-charge slots included. Passive-only effect until Active is chosen.
+- Simulator: the optimiser keeps to the same band; PowerEngine's planner run now uses the planner's own charge
+  targets (before, every grid charge went to 100%). Cached results are recomputed overnight.
+
 ## 0.6.3 (beta)
 
 ### Behaviour changes
