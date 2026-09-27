@@ -2,6 +2,12 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.15 (beta)
+
+### Behaviour changes
+- **Battery health (SOH) and the inverter's minimum SOC are no longer flagged as stale.** They're settings rather than
+  readings and can go years unchanged, so only a missing or unavailable entity is reported now.
+
 ## 0.9.14 (beta)
 
 ### Behaviour changes

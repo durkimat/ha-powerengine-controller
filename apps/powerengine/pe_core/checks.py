@@ -19,6 +19,9 @@ OK, UNMAPPED, MISSING, UNAVAILABLE, WRONG_UNIT, WRONG_DOMAIN, STALE, FORBIDDEN, 
 # Live readings that should change regularly; everything else isn't age-checked. A power reading of exactly 0
 # is never stale (see check()).
 STALE_AFTER = {"power": timedelta(minutes=30), "percent": timedelta(hours=6)}
+# Settings rather than readings: they can go months or years unchanged (and many integrations only write on
+# change), so they're never age-checked; only missing or unavailable is flagged.
+SLOW_ROLES = frozenset({"battery_soh", "inverter_min_soc"})
 
 
 def _is_zero(value: Any) -> bool:
@@ -78,7 +81,7 @@ def check(role: Role, spec: dict[str, Any] | None, state: dict[str, Any] | None,
         unit = attrs.get("unit_of_measurement")
         if unit not in allowed:
             return WRONG_UNIT, f"Unit is {unit or 'none'}; expected {' or '.join(allowed)}"
-    limit = STALE_AFTER.get(role.kind)
+    limit = None if role.key in SLOW_ROLES else STALE_AFTER.get(role.kind)
     if limit and role.kind == "power" and _is_zero(state.get("state")):
         # An idle charger or solar at night sits at 0 W, and many integrations only write on change.
         limit = None

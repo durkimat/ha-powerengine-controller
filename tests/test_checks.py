@@ -70,3 +70,16 @@ def test_summary():
 def test_axle_direction_unknown_between_events_is_ok():
     assert check(R["axle_direction"], {"entity": "sensor.a"}, st("unknown", None), NOW)[0] == "ok"
     assert check(R["axle_direction"], {"entity": "sensor.a"}, st("unavailable", None), NOW)[0] == "unavailable"
+
+
+def test_slow_settings_are_never_stale():
+    from datetime import datetime, timedelta, timezone
+
+    from pe_core.checks import OK, check
+    from pe_core.roles import ROLE_BY_KEY
+    now = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+    old = (now - timedelta(days=900)).isoformat()
+    st = {"state": "98", "attributes": {"unit_of_measurement": "%"}, "last_updated": old}
+    for key in ("battery_soh", "inverter_min_soc"):
+        assert check(ROLE_BY_KEY[key], {"entity": "sensor.x"}, st, now)[0] == OK
+    assert check(ROLE_BY_KEY["battery_soc"], {"entity": "sensor.x"}, st, now)[0] == "stale"
