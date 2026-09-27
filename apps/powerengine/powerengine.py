@@ -1297,9 +1297,15 @@ class PowerEngine(hass.Hass):
         local = now.astimezone(self.tz) if self.tz else now
         into = (local.minute % 30) * 60 + local.second
         started = getattr(self, "_started_at", None)
-        if started is not None and now - started < STICK_WARMUP:
-            return 0.0            # just started: the first plans use a default load profile and no weather yet, so
-                                  # their choice isn't worth keeping; let the plan settle freely first
+        if started is not None:
+            # just started: the first plans use a default load profile and no weather yet, so their choice isn't
+            # worth keeping. Stay free for the rest of the half-hour the warm-up ends in (not just the warm-up
+            # itself), so a choice made on unsettled inputs is never locked in for that half-hour.
+            warm = (started + STICK_WARMUP).astimezone(self.tz) if self.tz else started + STICK_WARMUP
+            free_until = warm.replace(minute=warm.minute - warm.minute % 30, second=0, microsecond=0) \
+                + timedelta(minutes=30)
+            if now < free_until:
+                return 0.0
         return MID_SLOT_STICK if into > 120 and getattr(self, "_decision", None) is not None else 0.0
 
     def _control_slots(self, r, decision, slots):

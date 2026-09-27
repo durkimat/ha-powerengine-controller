@@ -504,5 +504,9 @@ def test_no_mid_slot_stickiness_just_after_a_start(app):
     app._decision = Decision("self_use", "plan", "x")
     app._started_at = t - timedelta(minutes=1)
     assert app._mid_slot_stick(t) == 0.0                            # the startup plan's choice isn't kept
-    app._started_at = t - timedelta(minutes=6)
+    app._started_at = t - timedelta(minutes=6)                      # warm-up over, but it ended in this half-hour:
+    assert app._mid_slot_stick(t) == 0.0                            # a choice made before it isn't locked in
+    assert app._mid_slot_stick(t + timedelta(minutes=15)) == 0.0
+    assert app._mid_slot_stick(t + timedelta(minutes=30)) > 0       # next half-hour: settled, sticky again
+    app._started_at = t - timedelta(minutes=40)
     assert app._mid_slot_stick(t) > 0

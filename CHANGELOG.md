@@ -2,6 +2,14 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.31 (beta)
+
+### Behaviour changes
+- After a start (an update or restart), the half-hour that's running is no longer held to whatever the first,
+  unsettled plans chose. Mid-half-hour stickiness (which stops near-ties flip-flopping the inverter) now waits until
+  the next half-hour begins, instead of only the 5-minute warm-up. This fixes an unexplained "hold" in the running
+  half-hour after an update, when selling or charging would have paid.
+
 ## 0.9.30 (beta)
 
 ### Behaviour changes
