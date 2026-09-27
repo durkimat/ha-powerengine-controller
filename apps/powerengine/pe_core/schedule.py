@@ -85,29 +85,60 @@ def _close(a: tuple, b: tuple) -> bool:
             and abs(mins(a[2], a[3]) - mins(b[2], b[3])) <= TOLERANCE.seconds // 60)
 
 
+AHEAD = timedelta(hours=4)             # only periods starting within this are programmed (the rest wait their turn)
+
+
+def _starts_in(w: tuple, now_local: datetime) -> timedelta | None:
+    """How long until a programmed window next starts: 0 if it's running now, None if closed."""
+    if tuple(w) == CLOSED or not all(0 <= x <= 59 for x in w) or w[0] > 23 or w[2] > 23:
+        return None                                    # closed, or unknown (it'll be written)
+    start = now_local.replace(hour=w[0], minute=w[1], second=0, microsecond=0)
+    end = now_local.replace(hour=w[2], minute=w[3], second=0, microsecond=0)
+    if start <= now_local < end:
+        return timedelta(0)
+    if start <= now_local:
+        start += timedelta(days=1)
+    return start - now_local
+
+
 def assign(wanted: list[Period], programmed: list[tuple], now_local: datetime) -> list[tuple]:
-    """New contents of the SLOTS windows of one kind. Keeps what's already programmed where it matches (exactly, or
-    within the tolerance for periods starting more than NEAR ahead); fills free slots; closes the rest."""
+    """New contents of the SLOTS windows of one kind, changing as little as possible:
+
+    - a window already programmed for a period is kept: exactly, within the tolerance for periods more than NEAR
+      ahead, or, for a period that's running, any running window with the same end (its start is in the past and
+      doesn't matter, so it isn't moved forward every half-hour);
+    - only periods starting within AHEAD are programmed; later ones wait until they're that close (so a plan that
+      changes its mind about tomorrow afternoon doesn't rewrite the inverter overnight);
+    - windows for later times that the plan no longer wants are left alone until they're within AHEAD, then closed.
+    """
     wanted = wanted[:SLOTS]
     result: list[tuple | None] = [None] * SLOTS
     todo = []
     for p in wanted:
         w = window_of(p)
+        running = p.start <= now_local
         exact = next((i for i in range(SLOTS) if result[i] is None and tuple(programmed[i]) == w), None)
+        if exact is None and running:
+            exact = next((i for i in range(SLOTS) if result[i] is None and _starts_in(programmed[i], now_local)
+                          == timedelta(0) and tuple(programmed[i])[2:] == w[2:]), None)
         loose = None
         if exact is None and p.start - now_local > NEAR:
             loose = next((i for i in range(SLOTS) if result[i] is None and tuple(programmed[i]) != CLOSED
                           and _close(tuple(programmed[i]), w)), None)
         i = exact if exact is not None else loose
-        if i is None:
-            todo.append(w)
-        else:
+        if i is not None:
             result[i] = tuple(programmed[i])
+        elif p.start - now_local <= AHEAD:
+            todo.append(w)
+
+    def later(k: int) -> bool:                         # holds a window for later: keep it if we can
+        d = _starts_in(programmed[k], now_local)
+        return d is not None and d > AHEAD
     for w in todo:                     # into the free slot needing the fewest changed values (fewest writes)
         free = [i for i in range(SLOTS) if result[i] is None]
-        i = min(free, key=lambda k: (sum(1 for x, y in zip(programmed[k], w, strict=True) if x != y), k))
+        i = min(free, key=lambda k: (later(k), sum(1 for x, y in zip(programmed[k], w, strict=True) if x != y), k))
         result[i] = w
-    return [r if r is not None else CLOSED for r in result]
+    return [r if r is not None else (tuple(programmed[k]) if later(k) else CLOSED) for k, r in enumerate(result)]
 
 
 def slot_entities(first: dict[str, str], exists) -> dict[int, dict[str, str]] | None:
@@ -187,3 +218,38 @@ def writes_for(want: dict, have: dict):
     for n in sorted(slots_changed):
         out.append(Write(f"timed_update_button#{n}", None, "button"))
     return out
+
+
+URGENT = timedelta(minutes=30)
+SETTLE = timedelta(minutes=10)
+
+
+def urgent(writes, want: dict, have: dict, now_local: datetime) -> bool:
+    """Do these writes touch something running now or due within URGENT (a window, a current or the mode)? Changes
+    only to later windows can wait until the plan has settled (see settled)."""
+    for w in writes:
+        if w.kind == "button":
+            continue
+        if "#" not in w.role:
+            return True                                  # a current or the storage mode
+        n = int(w.role.split("#")[1])
+        kind = "charge" if w.role.startswith("timed_charge") else "discharge"
+        keys = [f"{r}#{n}" for r in TIME_KEYS[kind]]
+        for src in (want, have):
+            try:
+                win = tuple(int(float(src.get(k))) for k in keys)
+            except (TypeError, ValueError):
+                return True
+            d = _starts_in(win, now_local)
+            if d is not None and d <= URGENT:
+                return True
+    return False
+
+
+def settled(pending: tuple | None, want: dict, now: datetime) -> tuple[bool, tuple]:
+    """(write now?, new pending) for non-urgent changes: only once the same wanted state has held for SETTLE, so a
+    plan that flips and flips back within minutes doesn't reprogram the inverter twice."""
+    key = tuple(sorted((k, str(v)) for k, v in want.items()))
+    if pending is None or pending[0] != key:
+        return False, (key, now)
+    return now - pending[1] >= SETTLE, pending

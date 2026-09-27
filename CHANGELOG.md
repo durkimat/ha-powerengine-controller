@@ -2,6 +2,24 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.0 (beta)
+
+### Behaviour changes
+- **Far fewer inverter writes** (last night: 318 in 9 hours, which hit the daily limit). From the write journal:
+  - **A running window's start is no longer moved forward every half-hour.** The plan's period always starts at the
+    current half-hour, so a window running since 21:30 was rewritten to 22:00, 22:30… (2–3 writes each time, for
+    every running window). A running window with the right end time is now left alone.
+  - **Only periods starting within 4 hours are programmed.** Windows for tomorrow afternoon were written overnight
+    and rewritten each time the plan changed its mind about them. They now wait until they're 4 hours away; a
+    window the plan no longer wants is closed once it's that close.
+  - **Changes to later windows wait for the plan to settle.** A change that doesn't touch anything running or due
+    within 30 minutes is written only once the plan has wanted it for 10 minutes, so a plan that flips and flips
+    back (03:40 and 03:45 last night: 35 writes) writes nothing.
+  In a simulated night with the plan remade every half-hour, the windows are programmed once and then only real
+  changes are written.
+- **The arbitrage band applies overnight too.** Its outside-band cost now counts in the fixed overnight window as
+  well; the requirement to be full by 06:00 still wins, so the last top-up happens at the end of the window.
+
 ## 0.8.15 (beta)
 
 ### Behaviour changes
