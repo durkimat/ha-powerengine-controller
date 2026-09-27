@@ -72,17 +72,20 @@ SAFETY = {
     "cold_charge_pct": (50, 10, 100),         # ...at this share of the normal charge rate (%)
     "cold_release_c": (3.0, 0, 15),           # ...until the battery is this much warmer than the threshold
     "battery_temp_lag_h": (24.0, 1, 96),      # how long the battery takes to follow the outside temperature (h)
+    "ram_refresh_min": (1.0, 0.5, 4.0),       # RAM remote control: re-send the command this often (min)
     "damp_restart_min": (5.0, 1, 30),         # restart hold-off: no writes this long after a start or resume (min)
     "damp_burst_window_min": (10.0, 2, 60),   # burst damping: something written this recently counts as a burst
     "damp_burst_settle_min": (5.0, 1, 30),    # ...and then waits for the plan to be steady this long (min)
 }
-SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage"}
+SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage", "control_method": "timed_windows"}
 # system settings chosen from a list: key -> (config-page section, ((value, label), ...))
 SYSTEM_CHOICES = {
     "battery_location": ("cold", (("garage", "Garage or outbuilding (follows outside over about 24 h)"),
                                   ("outside", "Outside, sheltered (about 6 h)"),
                                   ("indoors", "Inside the house (about 72 h)"),
                                   ("custom", "Custom: use Battery warm-up time below"))),
+    "control_method": ("control", (("timed_windows", "Timed windows (the inverter's charge/discharge times; EEPROM)"),
+                                   ("ram_remote", "RAM remote control (Battery control override; no EEPROM writes)"))),
 }
 LOCATION_LAG_H = {"garage": 24.0, "outside": 6.0, "indoors": 72.0}
 
@@ -165,6 +168,15 @@ SETTING_TEXT = {
     "damp_burst_settle_min": ("Burst settle time", "min",
                               "With Burst damping on: a change within a burst waits until the plan has been steady "
                               "for this long, so several quick changes become one write."),
+    "control_method": ("Control method", "",
+                       "How PowerEngine drives the inverter. Timed windows: programs the inverter's charge and "
+                       "discharge times (stored in its EEPROM, so each change wears it). RAM remote control: sends "
+                       "Force charge / Force discharge / Off through SolaX Modbus's Battery control override "
+                       "(temporary settings, no EEPROM writes), re-sent every RAM refresh; if PowerEngine stops, "
+                       "the inverter returns to Self-Use by itself within about 5 minutes. Tested on the Tests tab."),
+    "ram_refresh_min": ("RAM refresh", "min",
+                        "With RAM remote control: how often the current command is re-sent. Must stay well inside "
+                        "the inverter's remote-control timeout (about 5 minutes on yours)."),
     "battery_location": ("Battery location", "",
                          "Where the battery is, which sets how quickly it follows the outside temperature: how long "
                          "a cold spell takes to chill it, and to warm it back up."),
@@ -182,7 +194,7 @@ SETTING_SECTIONS = (
     ("axle", "Axle events", ("pre_axle_lookahead_h", "axle_margin_soc")),
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p")),
-    ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p")),
+    ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p", "ram_refresh_min")),
     ("cold", "Cold battery", ("cold_caution_temp_c", "cold_charge_pct", "cold_release_c", "battery_temp_lag_h")),
     ("damping", "Dampening tuning", ("damp_restart_min", "damp_burst_window_min", "damp_burst_settle_min")),
     # (battery_location, a choice, is shown at the top of this section)

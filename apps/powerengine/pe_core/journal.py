@@ -42,6 +42,11 @@ def is_staged(name: str) -> bool:
     return any(part in s for part in STAGED_PARTS)
 
 
+def is_ram(name: str) -> bool:
+    """Remote-control settings (SolaX Modbus 'Battery control override'): temporary, not EEPROM writes."""
+    return "battery_control_override" in (name or "").lower()
+
+
 def _short(entity: str) -> str:
     name = entity.split(".", 1)[-1]
     for prefix in ("solis_inverter_", "solis_"):
@@ -55,7 +60,8 @@ def day_summary(entries: list[dict], since_iso: str, tz=None, recent: int = 30) 
     'writes' counts real inverter writes (button presses and directly written settings); staged window times are
     counted separately."""
     today = [e for e in entries if e.get("t", "") >= since_iso]
-    real = [e for e in today if not is_staged(e.get("entity", ""))]
+    ram = [e for e in today if is_ram(e.get("entity", ""))]
+    real = [e for e in today if not is_staged(e.get("entity", "")) and not is_ram(e.get("entity", ""))]
     reasons: dict[str, int] = {}
     for e in real:
         reasons[e.get("why") or "control"] = reasons.get(e.get("why") or "control", 0) + 1
@@ -68,6 +74,6 @@ def day_summary(entries: list[dict], since_iso: str, tz=None, recent: int = 30) 
         what = "pressed" if e.get("value") is None else f"{e.get('before')} → {e.get('value')}"
         return {"time": t.strftime("%H:%M:%S"), "setting": _short(e.get("entity", "")), "change": what,
                 "why": e.get("why") or ""}
-    return {"writes": len(real), "staged": len(today) - len(real), "changes": changes,
+    return {"writes": len(real), "staged": len(today) - len(real) - len(ram), "ram": len(ram), "changes": changes,
             "by_reason": sorted(({"why": k, "writes": n} for k, n in reasons.items()), key=lambda x: -x["writes"]),
             "recent": [fmt(e) for e in reversed(real[-recent:])]}

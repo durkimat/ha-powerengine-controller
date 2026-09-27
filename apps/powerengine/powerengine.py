@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
 
-from pe_core import __version__, clock, damping, diagnostics, rctest, testwrite
+from pe_core import __version__, clock, damping, diagnostics, ramcontrol, rctest, testwrite
 from pe_core import learn as learning
 from pe_core.activity import ActivityLog
 from pe_core.certainty import Certainty
@@ -820,7 +820,9 @@ class PowerEngine(hass.Hass):
             except Exception as err:
                 self.log(f"Optimiser comparison failed: {err!r}", level="WARNING")
         try:                                              # the writes the plan implies, for the plan chart
-            sm = self._slot_map()
+            sm = self._slot_map() if self._control_method() != "ram_remote" else None
+            if sm is None and self.cfg is not None and self._control_method() == "ram_remote":
+                extra["writes_forecast"], extra["writes_forecast_24h"] = {}, 0
             if sm and self.plan is not None:
                 ents = self._slot_keys(sm)
                 have = {k: self.get_state(e) for k, e in ents.items() if e and "update_button" not in k}
@@ -1058,6 +1060,12 @@ class PowerEngine(hass.Hass):
         return keys
 
     def _control(self, r, decision):
+        method = self._control_method()
+        if method == "ram_remote":
+            return self._control_ram(r, decision)
+        if getattr(self, "_ram_was_on", False) and self.mode.effective == "active":
+            self._ram_off("control method changed to timed windows")
+        self._publish_method("timed_windows")
         slots = self._slot_map()
         if slots:
             return self._control_slots(r, decision, slots)
@@ -1142,6 +1150,124 @@ class PowerEngine(hass.Hass):
             self.damper.count_held(day)
             self.log(f"Writes held back ({self.damper.last_reason})")
         return out
+
+    # --- RAM remote control (control method) ---------------------------------------------------
+
+    def _ram(self):
+        rc = getattr(self, "_ramctl", None)
+        if rc is None:
+            rc = self._ramctl = ramcontrol.RamController()
+        return rc
+
+    def _control_method(self):
+        """The configured control method, falling back to timed windows (and saying so) if RAM remote control is
+        chosen but SolaX Modbus's Battery control override entities can't be found."""
+        method = (self.cfg.system.get("control_method") if self.cfg else None) or "timed_windows"
+        self._ram_fallback = None
+        if method == "ram_remote":
+            gone = [r for r in ("rc_mode", "rc_charge_power", "rc_discharge_power") if not self._rc_entities().get(r)]
+            if gone:
+                self._ram_fallback = "remote-control entities not found: " + ", ".join(gone)
+                self._notify("health", ("control:ram_missing", "PowerEngine: using timed windows",
+                                        "RAM remote control is selected but SolaX Modbus's Battery control override "
+                                        f"entities weren't found ({', '.join(gone)}). PowerEngine is using the "
+                                        "timed windows until they're back."))
+                return "timed_windows"
+        return method
+
+    def _publish_method(self, method, extra=None):
+        ram = self._ram()
+        day = str(self._today())
+        attrs = {"method": method, "fallback": getattr(self, "_ram_fallback", None),
+                 "refresh_min": float(self.cfg.safety.get("ram_refresh_min", 1)) if self.cfg else None,
+                 "ram_changes_today": ram.changes.get(day, 0), "ram_refreshes_today": ram.refreshes.get(day, 0),
+                 "following": ram.follow if method == "ram_remote" else None}
+        attrs.update(extra or {})
+        label = "RAM remote control" if method == "ram_remote" else "Timed windows"
+        if attrs.get("fallback"):
+            label = "Timed windows (fallback)"
+        self._publish_if_changed("state_control_method", label, attrs)
+
+    def _control_ram(self, r, decision):
+        try:
+            ram, rc, now = self._ram(), self._rc_entities(), r.now
+            p = self._control_params(r)
+            want = ramcontrol.command_for(decision.action, decision.power_w, p.max_charge_kw * 1000,
+                                          p.max_discharge_kw * 1000)
+            active = self.mode.effective == "active"
+            if self._test_running():
+                ram.forget()                                   # the test drives remote control itself
+            elif active and not getattr(self, "_halted", False):
+                if not getattr(self, "_ram_was_on", False):     # taking over: close the timed windows once
+                    self.log("RAM remote control takes over: timed windows closed, then left alone")
+                    self._release()
+                    self._ram_was_on = True
+                    ram.forget()
+                refresh = timedelta(minutes=float(self.cfg.safety.get("ram_refresh_min", 1)))
+                writes, why = ram.step(now, want, refresh)
+                if writes and self._ram_send(writes, rc, why, want):
+                    ram.done(now, str(self._today()), want, why)
+                floor = float(self.cfg.safety.get("min_reserve_soc", 12))
+                if ram.check_following(now, r.battery_power, r.battery_soc, floor) == "not following":
+                    self._notify("health", (f"control:ram_follow:{ram.changed_at}",
+                                            "PowerEngine: inverter not following remote control",
+                                            f"Asked for {ram.sent.text()} but the battery is at "
+                                            f"{round(r.battery_power or 0)} W (+ discharging) after 3 minutes. "
+                                            "Check the inverter and SolaX Modbus; switch the Control method back "
+                                            "to Timed windows if it persists."))
+            sent = ram.sent
+            self._publish_method("ram_remote", {
+                "command": sent.text() if sent and active else want.text() + (" (would send)" if not active else ""),
+                "last_sent": ram.sent_at.isoformat(timespec="seconds") if ram.sent_at else None,
+                "entities": rc})
+            self._publish_if_changed("diag_control", "RAM remote control", {
+                "decision": decision.action, "strategy": "ram_remote", "command": want.text(),
+                "rows": [{"kind": "remote control", "slot": "", "want": want.text(),
+                          "now": sent.text() if sent else "unknown"}],
+                "writes": [w.as_dict() for w in want.writes()], "following": ram.follow})
+        except Exception as err:
+            self.log(f"RAM control step failed: {err!r}", level="WARNING")
+
+    def _ram_send(self, writes, rc, why, want):
+        """Send remote-control writes (temporary settings: not counted as EEPROM writes). Changes are journalled;
+        refreshes aren't. True if all were sent."""
+        now = datetime.now(timezone.utc)
+        journal = getattr(self, "journal", None)
+        ok = True
+        for w in writes:
+            eid = rc.get(w.role)
+            if not eid:
+                ok = False
+                continue
+            try:
+                if why == "change" and journal is not None:
+                    journal.add(now, eid, w.value, self.get_state(eid), f"RAM remote control: {want.text()}")
+                if w.kind == "select":
+                    self.call_service("select/select_option", entity_id=eid, option=w.value)
+                else:
+                    self.call_service("number/set_value", entity_id=eid, value=w.value)
+            except Exception as err:
+                ok = False
+                self._ram().errors += 1
+                self.log(f"RAM remote control: could not set {eid}: {err!r}", level="WARNING")
+        if why == "change":
+            self.log(f"RAM remote control: {want.text()}")
+            try:
+                if journal is not None:
+                    journal.save(now)
+            except OSError:
+                pass
+            self._publish_writes_today()
+        return ok
+
+    def _ram_off(self, reason):
+        rc = self._rc_entities()
+        self._ram_was_on = False
+        self._ram().forget()
+        if rc.get("rc_mode"):
+            self.log(f"RAM remote control Off ({reason})")
+            self._ram_send([ramcontrol.Command(rctest.OPTION_OFF).writes()[0]], rc, "change",
+                           ramcontrol.Command(rctest.OPTION_OFF))
 
     def _mid_slot_stick(self, now):
         """A replan part-way through a half-hour (not in its first two minutes, when the plan's next half-hour takes
@@ -1322,9 +1448,12 @@ class PowerEngine(hass.Hass):
     def _leave_active(self, old, new, guards=()):
         """Leaving Active hands the inverter back to Self-Use once (pause, choosing Passive, or inputs that stopped
         working), except when a handover guard tripped: then another controller has taken over and PowerEngine
-        writes nothing."""
+        writes nothing to the timed windows. With RAM remote control, remote control is always switched Off (a
+        temporary setting, so harmless even when something else has taken over)."""
         if old is None or old.effective != "active" or new.effective == "active":
             return
+        if getattr(self, "_ram_was_on", False):
+            self._ram_off(f"leaving Active ({new.effective})")
         if guards and new.configured == "active":
             self.log(f"Leaving Active: {new.reason}", level="WARNING")
             self._notify("health", ("control:guard", "PowerEngine: control stopped", new.reason))
@@ -1557,11 +1686,18 @@ class PowerEngine(hass.Hass):
     # --- supervised remote-control (RC register) tests ------------------------------------------
 
     def _rc_entities(self):
+        """SolaX Modbus's remote-control entities, found by name (looked up at most every 10 minutes)."""
+        now = datetime.now(timezone.utc)
+        cached = getattr(self, "_rc_cache", None)
+        if cached and now - cached[0] < timedelta(minutes=10) and len(cached[1]) == 3:
+            return cached[1]
         try:
             ids = list((self.get_state() or {}).keys())
         except Exception:
             ids = []
-        return rctest.find_entities(ids)
+        found = rctest.find_entities(ids)
+        self._rc_cache = (now, found)
+        return found
 
     def _rc_start(self, req, run, rc, now, user):
         test = req["action"]

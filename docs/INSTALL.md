@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.9.15 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.9.16 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.9.15 starting
+PowerEngine 0.9.16 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -438,6 +438,22 @@ later is the same one step.
   top of the Health tab.
 - **Inverter clock:** checked every 10 minutes. While live it's synced weekly, and within 10 minutes if it's a
   minute or more out (including when the clocks change, since the inverter doesn't adjust for daylight saving).
+
+### Control method: timed windows or RAM remote control
+
+Config → Inverter control → **Control method**.
+
+- **Timed windows** (default): PowerEngine programs the inverter's three charge and three discharge windows. They
+  are stored in the inverter's EEPROM, so each change wears it (Health tab, *Inverter writes today*).
+- **RAM remote control:** PowerEngine sends Force charge / Force discharge / Off with a power through SolaX Modbus's
+  *Battery control override* entities. These are temporary settings: no EEPROM writes. The command is re-sent every
+  **RAM refresh** (default 1 minute); if PowerEngine stops sending, the inverter returns to Self-Use by itself
+  (about 5 minutes on firmware 420044; check yours with the *RC failsafe* test on the Tests tab first).
+
+Switching over (either way) needs no other steps: on the next cycle PowerEngine closes the timed windows once (to
+RAM) or switches remote control Off (to timed windows). The Monitoring tab's **Inverter control** tile shows the
+method in use, the current command and whether the inverter is following it; you're notified if it stops
+following for 3 minutes, and PowerEngine falls back to the timed windows if the remote-control entities disappear.
 
 ### Supervised inverter tests
 
