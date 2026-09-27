@@ -1,0 +1,10 @@
+{
+  "domain": "pe_modbus_probe",
+  "name": "PowerEngine Modbus probe",
+  "after_dependencies": ["solax_modbus"],
+  "codeowners": [],
+  "documentation": "https://github.com/durkimat/ha-powerengine-controller",
+  "iot_class": "local_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}
