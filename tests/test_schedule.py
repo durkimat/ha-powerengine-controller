@@ -30,7 +30,10 @@ def test_periods_merge_split_at_midnight_and_use_the_live_action():
 def test_assign_keeps_matching_windows_and_reuses_free_slots():
     w1 = Period("charge", NOW.replace(hour=23), NOW.replace(hour=23, minute=59), GRID_CHARGE)
     programmed = [(23, 0, 23, 59), CLOSED, (7, 0, 8, 0)]
-    assert assign([w1], programmed, NOW) == [(23, 0, 23, 59), CLOSED, CLOSED]
+    # 07:00 is 10 h away: left alone for now (closed or reused once it's within 4 h)
+    assert assign([w1], programmed, NOW) == [(23, 0, 23, 59), CLOSED, (7, 0, 8, 0)]
+    assert assign([], programmed, NOW.replace(hour=23, minute=30) + timedelta(hours=4)) == \
+        [(23, 0, 23, 59), CLOSED, CLOSED]              # 03:30: 07:00 is near and unwanted; 23:00 isn't near yet
     far = Period("charge", NOW.replace(hour=23, minute=30), NOW.replace(hour=23, minute=59), GRID_CHARGE)
     assert assign([far], [(23, 0, 23, 59), CLOSED, CLOSED], NOW - timedelta(hours=3)) == [(23, 0, 23, 59), CLOSED,
                                                                                           CLOSED]   # within tolerance
@@ -97,3 +100,59 @@ def test_optimiser_sells_below_the_band_inside_the_overnight_window():
     night = [i for i, s in enumerate(_night()) if s.overnight]
     assert min(b["soc"][i] for i in night) < 60                     # a deep cycle, not a 75-90% shuffle
     assert min(b["soc"]) >= Params().min_reserve_soc + Params().arbitrage_keep_soc - 1.0
+
+
+def test_a_running_window_is_not_moved_forward_each_half_hour():
+    run = Period("charge", NOW.replace(hour=22, minute=30), NOW.replace(hour=23, minute=59), GRID_CHARGE)
+    at = NOW.replace(hour=22, minute=40)
+    assert assign([run], [(21, 30, 23, 59), CLOSED, CLOSED], at) == [(21, 30, 23, 59), CLOSED, CLOSED]
+    # but a changed end is written
+    shorter = Period("charge", run.start, NOW.replace(hour=23, minute=30), GRID_CHARGE)
+    assert assign([shorter], [(21, 30, 23, 59), CLOSED, CLOSED], at)[0] == (22, 30, 23, 30)
+
+
+def test_far_periods_wait_until_they_are_near():
+    far = Period("discharge", (NOW + timedelta(hours=16)).replace(minute=30), NOW + timedelta(hours=17),
+                 EXPORT)                                                  # 13:30 tomorrow, from 21:00
+    assert assign([far], [CLOSED, CLOSED, CLOSED], NOW) == [CLOSED, CLOSED, CLOSED]
+    soon = NOW + timedelta(hours=13)                                      # 10:00: now within 4 h
+    assert assign([far], [CLOSED, CLOSED, CLOSED], soon)[0] == (13, 30, 14, 0)
+
+
+def test_a_night_with_a_moving_plan_writes_little():
+    """Simulate a night where the plan is remade every half-hour: running windows keep their start, so the only
+    writes are real changes."""
+    acts = [GRID_CHARGE] * 6 + [EXPORT] * 4 + [GRID_CHARGE] * 4 + [SELF_USE] * 20
+    have: dict = {f"{r}#{n}": 0 for k in ("charge", "discharge") for r in
+                  (f"timed_{k}_start_hour", f"timed_{k}_start_minute", f"timed_{k}_end_hour", f"timed_{k}_end_minute")
+                  for n in (1, 2, 3)}
+    have.update({"timed_charge_current": 90, "timed_discharge_current": 90, "storage_mode": "Self-Use"})
+    total = 0
+    start = NOW.replace(hour=23)
+    for step in range(12):                        # 23:00 .. 04:30, remade each half-hour
+        now = start + timedelta(minutes=30 * step)
+        pers = periods(plan_of(acts[step:], now), now, LON)
+        ws = writes_for(desired_state(pers, have, now, None, None, 52.0, 4800, 4800), have)
+        total += len(ws)
+        have.update({w.role: w.value for w in ws if w.kind != "button"})
+    assert total <= 15, total                 # programming the night once, plus one real change
+
+
+def test_later_changes_wait_for_the_plan_to_settle():
+    from pe_core.control import Write
+    from pe_core.schedule import settled, urgent
+    at = NOW.replace(hour=3, minute=40)
+    have = {"timed_discharge_start_hour#2": 0, "timed_discharge_start_minute#2": 0,
+            "timed_discharge_end_hour#2": 0, "timed_discharge_end_minute#2": 0}
+    want = dict(have, **{"timed_discharge_start_hour#2": 8, "timed_discharge_end_hour#2": 10})
+    ws = [Write("timed_discharge_start_hour#2", 8, "number"), Write("timed_discharge_end_hour#2", 10, "number")]
+    assert not urgent(ws, want, have, at)
+    ok, pend = settled(None, want, at)
+    assert not ok
+    ok, pend = settled(pend, want, at + timedelta(minutes=5))
+    assert not ok
+    ok, pend = settled(pend, want, at + timedelta(minutes=11))
+    assert ok
+    soon = dict(have, **{"timed_discharge_start_hour#2": 4, "timed_discharge_end_hour#2": 5})
+    assert urgent([Write("timed_discharge_start_hour#2", 4, "number")], soon, have, at)      # due in 20 min
+    assert urgent([Write("timed_charge_current", 0, "number")], {}, {}, at)

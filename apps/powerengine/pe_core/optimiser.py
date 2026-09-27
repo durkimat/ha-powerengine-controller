@@ -120,8 +120,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
                 total = ps.cost + nxt[min(LEVELS - 1, max(0, round(end)))][k]
                 if wear and end < lv:
                     total += (lv - end) / 100 * cap * wear
-                if not s.overnight:
-                    total += band_penalty(a, float(lv), end, p)
+                total += band_penalty(a, float(lv), end, p)   # overnight too: cycle inside the band, fill last
                 if ends[t] and p.fill_when_cheap and end < p.target_soc:
                     total += (p.target_soc - end) / 100 * cap * FULL_PENALTY
                 if a == GRID_CHARGE and end > lv and s.overnight:

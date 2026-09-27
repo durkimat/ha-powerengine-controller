@@ -65,7 +65,7 @@ from pe_core.planner import make_plan, params_from, plan_entity_states, slot_cer
 from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue, is_forbidden_control
-from pe_core.schedule import desired_state, periods, slot_entities, writes_for
+from pe_core.schedule import desired_state, periods, settled, slot_entities, urgent, writes_for
 from pe_core.simhistory import History, months_wanted, parse_upload
 from pe_core.simjob import SimContext, SimStore
 from pe_core.simjob import run as sim_run
@@ -1103,6 +1103,12 @@ class PowerEngine(hass.Hass):
                      "rows": rows, "writes": [w.as_dict() for w in writes]}
             self._publish_if_changed("diag_control", state, attrs)
             recent = ctl["last_write"] is not None and (r.now - ctl["last_write"]).total_seconds() < 60
+            if writes and not urgent(writes, want, have, now_local):
+                ok, self._pending_want = settled(getattr(self, "_pending_want", None), want, r.now)
+                if not ok:
+                    writes = []                          # only later windows change: wait for the plan to settle
+            else:
+                self._pending_want = None
             if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
                     and not self._test_running() and not recent and self._within_write_limit(len(writes))):
                 self._write_why = f"three windows: {decision.action} ({decision.rule})"
