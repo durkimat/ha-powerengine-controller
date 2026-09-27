@@ -36,6 +36,8 @@ class Readings:
     battery_soc: float | None = None
     battery_power: float | None = None   # W, + discharging
     grid_power: float | None = None      # W, + importing
+    grid_ref_power: float | None = None  # W, + importing: a second meter, for the cross-check only
+    grid_ref_at: datetime | None = None  # when the second meter last reported
     house_power: float | None = None     # W, house only (car removed)
     house_power_raw: float | None = None
     house_includes_ev: bool = True       # the inverter's house load includes the car charger
@@ -225,6 +227,15 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None) -> Readi
     else:
         r.battery_power = _power_w(state("battery_power"), inv("battery_power"))
     r.grid_power = _power_w(state("grid_power"), inv("grid_power"))
+    ref = state("grid_power_reference")
+    r.grid_ref_power = _power_w(ref, inv("grid_power_reference"))
+    if ref and r.grid_ref_power is not None:
+        stamp = ref.get("last_reported") or ref.get("last_updated")
+        try:
+            t = datetime.fromisoformat(str(stamp).replace("Z", "+00:00")) if stamp else None
+            r.grid_ref_at = t.replace(tzinfo=timezone.utc) if t is not None and t.tzinfo is None else t
+        except ValueError:
+            r.grid_ref_at = None
     r.house_power_raw = _power_w(state("house_load_power"))
     r.ev_power = _power_w(state("ev_charge_power"))
     r.house_includes_ev = bool(cfg.system.get("house_load_includes_ev", True))

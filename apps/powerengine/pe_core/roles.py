@@ -105,6 +105,8 @@ ROLES: tuple[Role, ...] = (
     # --- grid and house ---
     Role("grid_power", "grid", "Grid power", "Live import/export at the meter.",
          "power", signed=True, sign_note="+ importing, - exporting", suggest=(r"^sensor\.solis_meter_active_power$",)),
+    Role("grid_power_reference", "grid", "Check meter", "A second grid meter (e.g. Zappi CT).", "power",
+         required="no", signed=True, sign_note="+ in, - out", suggest=(r"^sensor\.myenergi_.*_power_grid$",)),
     Role("grid_import_today", "grid", "Grid import today", "Energy imported today, for costs and losses.",
          "energy", suggest=(r"^sensor\.solis_grid_import_today$",)),
     Role("grid_export_today", "grid", "Grid export today", "Energy exported today, for costs and losses.",

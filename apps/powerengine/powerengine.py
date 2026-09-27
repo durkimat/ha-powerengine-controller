@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
 
-from pe_core import __version__, clock, damping, diagnostics, ramcontrol, rctest, testwrite
+from pe_core import __version__, clock, damping, diagnostics, gridcheck, ramcontrol, rctest, testwrite
 from pe_core import learn as learning
 from pe_core.activity import ActivityLog
 from pe_core.certainty import Certainty
@@ -306,6 +306,7 @@ class PowerEngine(hass.Hass):
             try:
                 readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
                 self._record_load(readings)
+                self._grid_check(readings)
                 self._record_costs(readings)
                 self._watch_events(readings)
                 self._track_slots(readings)
@@ -763,6 +764,26 @@ class PowerEngine(hass.Hass):
                      "PowerEngine's own load record is still used.", level="WARNING")
             self.run_in(self._learn_load, 3600)
         self._rebuild_profile()
+
+    def _grid_check(self, r):
+        """Compare the inverter's grid meter with a second one, when one is mapped (Configuration: Grid and house)."""
+        if r.grid_ref_power is None:
+            return
+        try:
+            gc = getattr(self, "_gridcheck", None)
+            if gc is None:
+                gc = self._gridcheck = gridcheck.GridCheck()
+            gc.add(str(self._today()), r.now, r.battery_power, r.grid_power, r.grid_ref_power, r.grid_ref_at)
+            last = getattr(self, "_gridcheck_published", None)
+            if last is None or (r.now - last).total_seconds() >= 60:
+                self._gridcheck_published = r.now
+                diff = None if r.grid_power is None else round(r.grid_power - r.grid_ref_power)
+                attrs = {"inverter_meter_w": r.grid_power, "reference_meter_w": r.grid_ref_power,
+                         "battery_w": r.battery_power, "battery_state": gridcheck.battery_state(r.battery_power),
+                         **gc.summary()}
+                self._publish_state("diag_grid_check", "unknown" if diff is None else diff, attrs)
+        except Exception as err:
+            self.log(f"Grid meter cross-check failed: {err!r}", level="WARNING")
 
     def _record_load(self, r):
         """Add the current house-only load to PowerEngine's own half-hourly record."""

@@ -37,7 +37,7 @@ def test_catalogue_fits_in_ha_attribute_limit():
     # HA's recorder stores attributes as compact JSON and skips any over 16 KiB
     for part in (catalogue(), settings_catalogue()):            # published on two sensors
         size = len(json.dumps(part, separators=(",", ":"), ensure_ascii=False))
-        assert size < 15500, size
+        assert size < 15800, size      # HA's limit is 16384; split the catalogue before it gets closer
 
 
 @pytest.mark.parametrize("eid,forbidden", [
