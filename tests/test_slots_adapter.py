@@ -68,3 +68,17 @@ def test_preview_lists_all_six_windows(app):  # noqa: F811
     a._control(type("R", (), {"now": now})(), Decision(EXPORT, "plan", "sell"))
     rows = a.published[-1][2]["rows"]
     assert len([r for r in rows if r["slot"] in (1, 2, 3)]) == 6 and not a.calls
+
+
+def test_restart_hold_off_in_the_adapter(app):  # noqa: F811
+    from datetime import timedelta
+    a = _with_slots(app)
+    now = datetime(2026, 9, 24, 22, 0, tzinfo=UTC)
+    a.plan = Plan(slots=plan_of([EXPORT] * 2 + [SELF_USE] * 8, now), made_at=now)
+    a._params = lambda readings=None: __import__("pe_core.planner", fromlist=["Params"]).Params()
+    a._damp_restart(now)
+    a._control(type("R", (), {"now": now + timedelta(minutes=2)})(), Decision(EXPORT, "plan", "sell"))
+    assert not a.calls and "restart hold-off" in a.published[-1][2]["damping"]
+    a._control(type("R", (), {"now": now + timedelta(minutes=6)})(), Decision(EXPORT, "plan", "sell"))
+    press(a)
+    assert any(s == "button/press" for s, _ in a.calls)

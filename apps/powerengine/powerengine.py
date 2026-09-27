@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
 
-from pe_core import __version__, clock, diagnostics, rctest, testwrite
+from pe_core import __version__, clock, damping, diagnostics, rctest, testwrite
 from pe_core import learn as learning
 from pe_core.activity import ActivityLog
 from pe_core.certainty import Certainty
@@ -109,6 +109,8 @@ def _real(writes) -> int:
 class PowerEngine(hass.Hass):
     def initialize(self):
         self.log(f"PowerEngine {__version__} starting")
+        self.damper = damping.Damper()
+        self._damp_restart(datetime.now(timezone.utc))
         validate_definitions()
 
         # Optional override. Not "config_path": AppDaemon sets that arg itself.
@@ -248,6 +250,9 @@ class PowerEngine(hass.Hass):
         paused = self.get_state(PAUSE_ENTITY) == "on"
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused)
         self._leave_active(getattr(self, "mode", None), mode, guards)
+        prev = getattr(self, "mode", None)
+        if mode.effective == "active" and (prev is None or prev.effective != "active"):
+            self._damp_restart(datetime.now(timezone.utc))        # resumed, or went Active
         if getattr(self, "_paused", False) and not paused:          # resumed: allow a fresh day's worth of writes
             self.writes.set_base(self._today(), self.writes.own_today(self._today()))
             self._cap_base = self.writes.base(self._today())
@@ -1091,6 +1096,28 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Control step failed: {err!r}", level="WARNING")
 
+    def _damp_restart(self, now):
+        if not hasattr(self, "damper"):
+            self.damper = damping.Damper()
+        mins = float(self.cfg.safety.get("damp_restart_min", 5)) if self.cfg else 5.0
+        self.damper.restarted(now, mins)
+
+    def _damp(self, now, writes, want, decision):
+        """Dampening tuning (config page): the writes to make now, or none while held back."""
+        if not hasattr(self, "damper"):
+            self.damper = damping.Damper()
+        f, sft = self.cfg.features, self.cfg.safety
+        day = str(self._today())
+        before = self.damper.last_reason
+        out = self.damper.filter(now, day, writes, want, decision.rule,
+                                 bool(f.get("damp_restart", True)), bool(f.get("damp_bursts", False)),
+                                 float(sft.get("damp_burst_window_min", 10)),
+                                 float(sft.get("damp_burst_settle_min", 5)))
+        if not out and self.damper.last_reason and self.damper.last_reason != before:
+            self.damper.count_held(day)
+            self.log(f"Writes held back ({self.damper.last_reason})")
+        return out
+
     def _mid_slot_stick(self, now):
         """A replan part-way through a half-hour (not in its first two minutes, when the plan's next half-hour takes
         over) keeps the running action unless changing it clearly pays: near-ties flip-flopped the inverter."""
@@ -1140,10 +1167,17 @@ class PowerEngine(hass.Hass):
                     writes = []                          # only later windows change: wait for the plan to settle
             else:
                 self._pending_want = None
+            if self.mode.effective == "active" and writes and not missing:
+                wanted = writes
+                writes = self._damp(r.now, writes, want, decision)
+                if wanted and not writes:
+                    attrs["damping"] = self.damper.last_reason
+                    self._publish_if_changed("diag_control", f"held: {len(wanted)} writes", attrs)
             if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
                     and not self._test_running() and not recent and self._within_write_limit(_real(writes))):
                 self._write_why = f"three windows: {decision.action} ({decision.rule})"
                 self._execute(writes, entities)
+                self.damper.wrote(r.now, writes)
                 ctl["last_write"] = r.now
             self._ctl = ctl
         except Exception as err:
@@ -1608,6 +1642,11 @@ class PowerEngine(hass.Hass):
             since = local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
             s = day_summary(journal.entries, since.isoformat(timespec="seconds"), self.tz)
             s["limit"] = int(self.cfg.safety.get("max_writes_per_day", 150)) if self.cfg else None
+            d = getattr(self, "damper", None)
+            s["held"] = d.held.get(str(self._today()), 0) if d else 0
+            if self.cfg:
+                s["damping"] = {"restart": bool(self.cfg.features.get("damp_restart", True)),
+                                "bursts": bool(self.cfg.features.get("damp_bursts", False))}
             try:
                 s["observed"] = self.writes.summary(self._today())["observed"]["today"]
             except Exception:
