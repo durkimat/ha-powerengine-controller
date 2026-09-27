@@ -1099,7 +1099,11 @@ class PowerEngine(hass.Hass):
     def _damp_restart(self, now):
         if not hasattr(self, "damper"):
             self.damper = damping.Damper()
-        mins = float(self.cfg.safety.get("damp_restart_min", 5)) if self.cfg else 5.0
+        cfg = getattr(self, "cfg", None)                  # not loaded yet when called from initialize()
+        try:
+            mins = float(cfg.safety.get("damp_restart_min", 5)) if cfg else 5.0
+        except (TypeError, ValueError):
+            mins = 5.0
         self.damper.restarted(now, mins)
 
     def _damp(self, now, writes, want, decision):
