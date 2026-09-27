@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.29 (beta)
+
+### Behaviour changes
+- None.
+
+### Fixes
+- **Monitoring flow card: the battery's direction was the wrong way round** (dots leaving the battery while it
+  charged). The Sunsynk card reads battery power with the opposite sign to PowerEngine's (+ discharging), so it's
+  now inverted in the card.
+
 ## 0.9.28 (beta)
 
 ### Behaviour changes
