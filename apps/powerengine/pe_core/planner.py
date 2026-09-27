@@ -315,7 +315,8 @@ def _add_arbitrage(plan: list[PlanSlot], soc: float, p: Params, now: datetime, t
 
 
 def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None, auto_cheap: bool = False,
-              wear_p: float = 2.0, strategy: str = "rules", prev_action: str | None = None) -> Plan:
+              wear_p: float = 2.0, strategy: str = "rules", prev_action: str | None = None,
+              stick: float = 0.0) -> Plan:
     """The plan. strategy "optimiser": the optimiser chooses each half-hour's action (lowest cost, arbitrage band
     and safety rules included) and the rule-based plan supplies the explanations where they agree."""
     rules = _rules_plan(slots, soc, p, now, tz, auto_cheap, wear_p)
@@ -323,7 +324,7 @@ def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None, 
         return rules
     from .optimiser import optimise
     p_used = replace(p, cheap_cap_p=rules.cheap_p) if rules.cheap_p is not None else p
-    opt = optimise(slots, soc, p_used, wear=p.wear_p / 100, prev_action=prev_action)
+    opt = optimise(slots, soc, p_used, wear=p.wear_p / 100, prev_action=prev_action, stick=stick)
     if not opt:
         return rules
     plan = _overlay(rules, opt, soc, p_used, now, tz)

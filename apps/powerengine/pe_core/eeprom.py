@@ -138,6 +138,16 @@ class WriteLog:
     def own_today(self, day: date) -> int:
         return self.data["own"].get(day.isoformat(), 0)
 
+    def base(self, day: date) -> int:
+        """Own writes already made today when control was last resumed (the daily limit counts from there).
+        Kept in the file so an AppDaemon restart doesn't re-trip a limit the user already resumed past."""
+        b = self.data.get("limit_base") or {}
+        return int(b.get("n", 0)) if b.get("day") == day.isoformat() else 0
+
+    def set_base(self, day: date, n: int) -> None:
+        self.data["limit_base"] = {"day": day.isoformat(), "n": int(n)}
+        self._dirty = True
+
     def observed(self, day: date, entity_id: str) -> None:
         self._add("observed", day)
         self.data["by_entity"][entity_id] = self.data["by_entity"].get(entity_id, 0) + 1

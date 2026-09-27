@@ -167,7 +167,10 @@ def app(monkeypatch):
 
     def add_own(day, n=1):
         own["n"] += n
-    a.writes = types.SimpleNamespace(observed=lambda day, eid: None, own=add_own, own_today=lambda day: own["n"])
+    base = {}
+    a.writes = types.SimpleNamespace(observed=lambda day, eid: None, own=add_own, own_today=lambda day: own["n"],
+                                     base=lambda day: base.get(day, 0),
+                                     set_base=lambda day, n: base.__setitem__(day, n))
     a._today = lambda: "2026-09-25"
     return a
 
@@ -274,7 +277,7 @@ def test_write_limit_pauses(app):
 def test_write_limit_counts_from_resume(app):
     app._publish = lambda topic, payload: app.published.append((topic, payload))
     app.own["n"] = 200
-    app._cap_base = 150                     # resumed after 150 writes
+    app.writes.set_base(app._today(), 150)  # resumed after 150 writes
     assert app._within_write_limit(100) and not app._within_write_limit(101)
 
 
@@ -449,3 +452,28 @@ def test_log_ring_keeps_recent_lines():
     for i in range(5):
         r.add(datetime(2026, 9, 27, tzinfo=timezone.utc), "INFO", f"line {i}")
     assert [x["msg"] for x in r.lines] == ["line 2", "line 3", "line 4"]
+
+
+def test_limit_base_survives_a_restart(tmp_path):
+    from datetime import date
+
+    from pe_core.eeprom import WriteLog
+    path = str(tmp_path / "w.json")
+    w = WriteLog(path)
+    w.own(date(2026, 9, 27), 90)
+    w.set_base(date(2026, 9, 27), 90)
+    w.save()
+    again = WriteLog(path)
+    assert again.base(date(2026, 9, 27)) == 90 and again.base(date(2026, 9, 28)) == 0
+
+
+def test_mid_slot_replan_keeps_the_running_action_on_a_near_tie():
+    from test_optimiser import T0, day
+
+    from pe_core.optimiser import optimise
+    from pe_core.planner import Params
+    slots = day()
+    free = optimise(slots, 50.0, Params(arbitrage=True), prev_action="hold")
+    kept = optimise(slots, 50.0, Params(arbitrage=True), prev_action="hold", stick=10.0)   # huge: always keep
+    assert kept["actions"][0] == "hold" and T0
+    assert free["actions"][0] in ("self_use", "hold", "grid_charge", "export")

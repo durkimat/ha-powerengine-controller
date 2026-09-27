@@ -249,7 +249,8 @@ class PowerEngine(hass.Hass):
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused)
         self._leave_active(getattr(self, "mode", None), mode, guards)
         if getattr(self, "_paused", False) and not paused:          # resumed: allow a fresh day's worth of writes
-            self._cap_base = self.writes.own_today(self._today())
+            self.writes.set_base(self._today(), self.writes.own_today(self._today()))
+            self._cap_base = self.writes.base(self._today())
         self.mode = mode
         self._guards, self._paused = guards, paused
 
@@ -801,7 +802,8 @@ class PowerEngine(hass.Hass):
         self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz,
                               auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)),
                               wear_p=self.cfg.safety.get("battery_wear_p", 2.0), strategy=strategy,
-                              prev_action=self._decision.action if getattr(self, "_decision", None) else None)
+                              prev_action=self._decision.action if getattr(self, "_decision", None) else None,
+                              stick=self._mid_slot_stick(r.now))
         self._plan_sig, self._plan_time = sig, r.now
         self._snapshot_plan(r.now)
         extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0,
@@ -1077,6 +1079,14 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Control step failed: {err!r}", level="WARNING")
 
+    def _mid_slot_stick(self, now):
+        """A replan part-way through a half-hour (not in its first two minutes, when the plan's next half-hour takes
+        over) keeps the running action unless changing it clearly pays: near-ties flip-flopped the inverter."""
+        from pe_core.optimiser import MID_SLOT_STICK
+        local = now.astimezone(self.tz) if self.tz else now
+        into = (local.minute % 30) * 60 + local.second
+        return MID_SLOT_STICK if into > 120 and getattr(self, "_decision", None) is not None else 0.0
+
     def _control_slots(self, r, decision, slots):
         """The three-slot strategy: program the plan's next charge and discharge periods into the inverter."""
         try:
@@ -1219,9 +1229,7 @@ class PowerEngine(hass.Hass):
         """False (and pause control) if these writes would take today's own writes past the daily limit."""
         limit = int(self.cfg.safety.get("max_writes_per_day", 150))
         today = self.writes.own_today(self._today())
-        base = getattr(self, "_cap_base", 0)
-        if base > today:                                  # a new day
-            base = self._cap_base = 0
+        base = self._cap_base = self.writes.base(self._today())     # 0 on a new day or if never resumed today
         if today - base + n <= limit:
             return True
         self.log(f"Daily write limit reached ({today - base} writes, limit {limit}); pausing control",
