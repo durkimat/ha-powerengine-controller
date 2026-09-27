@@ -111,3 +111,11 @@ def test_switching_back_to_timed_windows_turns_remote_control_off(ramapp):
     a.cfg = parse_config(dict(a.cfg.raw, system={"control_method": "timed_windows"}))
     a._control(R(T + timedelta(minutes=1)), Decision(SELF_USE, "plan", "idle"))
     assert a.states["select.solis_inverter_battery_control_override"] == "Off"
+
+
+def test_switch_cost_follows_the_control_method():
+    from pe_core.planner import params_from
+    timed = parse_config({"safety": {"window_switch_cost_p": 5, "ram_switch_cost_p": 0.5}})
+    ram = parse_config({"safety": {"window_switch_cost_p": 5, "ram_switch_cost_p": 0.5},
+                        "system": {"control_method": "ram_remote"}})
+    assert params_from(timed).switch_cost_p == 5 and params_from(ram).switch_cost_p == 0.5
