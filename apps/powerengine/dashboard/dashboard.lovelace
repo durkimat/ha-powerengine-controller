@@ -1454,44 +1454,30 @@ views:
         cards:
           - type: heading
             heading: B · Sunsynk flow (HACS)
+          # kept to the documented minimum (the Solis example): extra options gave a configuration error
           - type: custom:sunsynk-power-flow-card
             grid_options: {columns: full}
             cardstyle: lite
             show_solar: true
-            large_font: true
-            decimal_places: 1
-            dynamic_line_width: true
             inverter:
               model: solis
-              modern: true
-              autarky: power
+              modern: false
+              autarky: "no"
             battery:
               energy: 18000
               shutdown_soc: 12
-              show_daily: false
-              max_power: 5200
             solar:
               mppts: 1
-              show_daily: false
-              max_power: 6000
             load:
               show_daily: false
-              max_power: 8000
-              additional_loads: 1
-              load1_name: Car
-              load1_icon: mdi:car-electric
             grid:
-              show_daily_buy: false
               show_nonessential: false
-              max_power: 6000
             entities:
               battery_power_190: sensor.pe_state_battery_power
               battery_soc_184: sensor.pe_state_battery_soc
               grid_ct_power_172: sensor.pe_state_grid_power
               essential_power: sensor.pe_state_house_power
-              essential_load1: sensor.pe_state_ev_power
               pv1_power_186: sensor.pe_state_solar_power
-              pv_total: sensor.pe_state_solar_power
       - type: grid
         cards:
           - type: heading
@@ -1555,61 +1541,19 @@ views:
         cards:
           - type: heading
             heading: D · Last 30 minutes
-          - type: conditional
+          # HA's own history graph (the ApexCharts version stuck on "loading" at a 30-minute span)
+          - type: history-graph
             grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
-            card:
-              type: custom:apexcharts-card
-              grid_options: {columns: full, rows: auto}
-              graph_span: 30min
-              update_interval: 30s
-              header: {show: true, title: "Last 30 minutes (W)", show_states: true, colorize_states: true}
-              apex_config:
-                chart: {height: 260}
-                legend: {show: true}
-                tooltip: {shared: true}
-              yaxis:
-                - id: w
-                  decimals: 0
-                  apex_config:
-                    title: {text: "W (battery + discharging, grid + importing)"}
-              series: &chart_trend_series
-                - entity: sensor.pe_state_house_power
-                  name: House
-                  yaxis_id: w
-                  color: "#757575"
-                  stroke_width: 2
-                  curve: stepline
-                - entity: sensor.pe_state_battery_power
-                  name: Battery
-                  yaxis_id: w
-                  color: "#1565c0"
-                  stroke_width: 3
-                  curve: stepline
-                - entity: sensor.pe_state_grid_power
-                  name: Grid
-                  yaxis_id: w
-                  color: "#e53935"
-                  stroke_width: 2
-                  curve: stepline
-                - entity: sensor.pe_state_solar_power
-                  name: Solar
-                  yaxis_id: w
-                  color: "#f9a825"
-                  stroke_width: 2
-                  curve: stepline
-          - type: conditional
-            grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
-            card:
-              type: custom:apexcharts-card
-              grid_options: {columns: full, rows: auto}
-              graph_span: 30min
-              update_interval: 30s
-              header: {show: true, title: "Last 30 minutes (W)", show_states: true, colorize_states: true}
-              apex_config: {"chart": {"height": 260, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px"}, "tooltip": {"shared": true}, "grid": {"padding": {"left": 4, "right": 18}}}
-              yaxis: [{"id": "w", "decimals": 0, "apex_config": {"labels": {"style": {"fontSize": "10px"}}}}]
-              series: *chart_trend_series
+            hours_to_show: 0.5
+            entities:
+              - entity: sensor.pe_state_house_power
+                name: House
+              - entity: sensor.pe_state_battery_power
+                name: Battery (+ discharging)
+              - entity: sensor.pe_state_grid_power
+                name: Grid (+ importing)
+              - entity: sensor.pe_state_solar_power
+                name: Solar
       - type: grid
         column_span: 3
         cards:
