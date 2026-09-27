@@ -95,7 +95,7 @@ views:
             heading: Gauges
           - type: gauge
             entity: sensor.pe_state_battery_power
-            name: Battery (← charging · discharging →)
+            name: Battery
             needle: true
             min: -5200
             max: 5200
@@ -106,7 +106,7 @@ views:
               - {from: 150, color: "#fb8c00"}
           - type: gauge
             entity: sensor.pe_state_grid_power
-            name: Grid (← export · import →)
+            name: Grid
             needle: true
             min: -6000
             max: 12000
@@ -115,6 +115,14 @@ views:
               - {from: -6000, color: "#43a047"}
               - {from: -150, color: "#9e9e9e"}
               - {from: 150, color: "#e53935"}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set b = states('sensor.pe_state_battery_power') | float(0) %}
+              {%- set g = states('sensor.pe_state_grid_power') | float(0) %}
+              {%- macro kw(x) %}{{ '%.2f' | format(x | abs / 1000) }} kW{% endmacro %}
+              **Battery:** {{ ('charging ' ~ kw(b)) if b < -50 else ('discharging ' ~ kw(b)) if b > 50 else 'idle' }} · **Grid:** {{ ('importing ' ~ kw(g)) if g > 50 else ('exporting ' ~ kw(g)) if g < -50 else 'idle' }}
+              <br><small>Gauges: left of centre = battery charging / grid exporting (green); right = battery discharging (orange) / grid importing (red).</small>
           - type: gauge
             entity: sensor.pe_state_solar_power
             name: Solar

@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.30 (beta)
+
+### Behaviour changes
+- None.
+
+### Dashboard
+- The battery and grid gauges have short names (the long ones were cut off on a phone), with a line under them
+  saying in words which way each is flowing and how fast (for example "discharging 5.06 kW", "exporting
+  3.99 kW"), and a key to the gauge colours.
+
 ## 0.9.29 (beta)
 
 ### Behaviour changes
