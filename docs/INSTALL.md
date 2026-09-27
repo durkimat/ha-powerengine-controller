@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.9.5 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.9.6 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.9.5 starting
+PowerEngine 0.9.6 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -432,7 +432,10 @@ later is the same one step.
 - **Read-back:** every write is read back after 6 seconds and retried once; if it still doesn't match, control
   stops until AppDaemon restarts and you're notified.
 - **Daily write limit:** control pauses if PowerEngine's own writes reach it in a day. Resuming allows the limit
-  again.
+  again. Only real inverter writes count: update-button presses (each sends a whole block of window times),
+  currents, the storage mode and remote-control settings. Window start/end times are staged in HA until the button
+  sends them, so they're shown but not counted. Today's writes: *Writes today* on the Monitoring tab, details at the
+  top of the Health tab.
 - **Inverter clock:** checked every 10 minutes. While live it's synced weekly, and within 10 minutes if it's a
   minute or more out (including when the clocks change, since the inverter doesn't adjust for daylight saving).
 

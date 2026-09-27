@@ -281,9 +281,9 @@ def test_write_limit_counts_from_resume(app):
 def test_own_writes_counted(app):
     app._write(writes_needed(release(), {}), {r: f"number.{r}" for r in release()} | {
         "storage_mode": "select.storage_mode", "timed_update_button": "button.timed_update_button"})
-    assert app.own["n"] == 9                # 8 times + mode; the button a few seconds later
+    assert app.own["n"] == 1                # the mode; the 8 window times are staged in HA, not inverter writes
     run_timers(app)
-    assert app.own["n"] == 10
+    assert app.own["n"] == 2                # + the update button, which sends them (one block write)
 
 
 def _clock_app(app, mode_active, drift_s, synced_days_ago):
@@ -397,3 +397,24 @@ def test_guard_that_cannot_be_checked_is_never_safe(app):
     app.render_template = boom
     probs = guard_problems(app.cfg, app._guard_state)
     assert probs and "unverified" in probs[0]
+
+
+def test_writes_today_summary():
+    from pe_core.journal import day_summary, is_staged
+    assert is_staged("number.solis_timed_charge_start_hours_2") and is_staged("timed_discharge_end_minute")
+    assert not is_staged("number.solis_timed_charge_current")
+    assert not is_staged("button.solis_update_charge_discharge_times")
+    e = [{"t": "2026-09-26T23:00:00+00:00", "entity": "number.solis_timed_charge_current", "value": 50, "before": 0,
+          "why": "old"},
+         {"t": "2026-09-27T08:00:00+00:00", "entity": "number.solis_timed_charge_start_hours", "value": 9, "before": 0,
+          "why": "three windows: grid_charge (plan)"},
+         {"t": "2026-09-27T08:00:00+00:00", "entity": "number.solis_timed_charge_current", "value": 100, "before": 0,
+          "why": "three windows: grid_charge (plan)"},
+         {"t": "2026-09-27T08:00:03+00:00", "entity": "button.solis_update_charge_discharge_times", "value": None,
+          "before": None, "why": "three windows: grid_charge (plan)"}]
+    s = day_summary(e, "2026-09-26T23:00:01+00:00")
+    assert (s["writes"], s["staged"], s["changes"]) == (2, 1, 1)
+    assert s["by_reason"] == [{"why": "three windows: grid_charge (plan)", "writes": 2}]
+    assert s["recent"][0] == {"time": "08:00:03", "setting": "update charge discharge times", "change": "pressed",
+                              "why": "three windows: grid_charge (plan)"}
+    assert s["recent"][1]["change"] == "0 → 100"

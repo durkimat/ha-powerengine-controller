@@ -56,7 +56,7 @@ from pe_core.forecast import LoadProfile, build_slots, house_only_means, parse_h
 from pe_core.health import overall, plan_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_day, chosen_plan, day_view
-from pe_core.journal import WriteJournal
+from pe_core.journal import WriteJournal, day_summary, is_staged
 from pe_core.loadstore import LoadStore
 from pe_core.modes import GUARDS, UNVERIFIED, effective_mode, guard_problems, guard_status
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
@@ -100,6 +100,11 @@ PAUSE_ENTITY = "switch.pe_ctl_pause"
 def _notice_id(key: str) -> str:
     return "powerengine_" + "".join(c if c.isalnum() else "_" for c in key)
 
+
+
+def _real(writes) -> int:
+    """Writes that reach the inverter (staged window times don't until the update button sends them)."""
+    return sum(not is_staged(w.role) for w in writes)
 
 class PowerEngine(hass.Hass):
     def initialize(self):
@@ -966,6 +971,8 @@ class PowerEngine(hass.Hass):
     def _on_control_change(self, entity, attribute, old, new, kwargs):
         if old == new or old in (None, "unknown", "unavailable") or new in (None, "unknown", "unavailable"):
             return
+        if is_staged(entity):                    # window times stay in HA until the update button sends them
+            return
         self.writes.observed(self._today(), entity)
 
     def _count_would_writes(self, r, decision):
@@ -1060,7 +1067,7 @@ class PowerEngine(hass.Hass):
             recent = ctl["last_write"] is not None and (r.now - ctl["last_write"]).total_seconds() < 60
             if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
                     and not self._test_running()
-                    and (not recent or kind != ctl["kind"]) and self._within_write_limit(len(writes))):
+                    and (not recent or kind != ctl["kind"]) and self._within_write_limit(_real(writes))):
                 self._write_why = f"rolling window: {decision.action} ({decision.rule})"
                 self._execute(writes, entities)
                 ctl["last_write"] = r.now
@@ -1111,7 +1118,7 @@ class PowerEngine(hass.Hass):
             else:
                 self._pending_want = None
             if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
-                    and not self._test_running() and not recent and self._within_write_limit(len(writes))):
+                    and not self._test_running() and not recent and self._within_write_limit(_real(writes))):
                 self._write_why = f"three windows: {decision.action} ({decision.rule})"
                 self._execute(writes, entities)
                 ctl["last_write"] = r.now
@@ -1145,7 +1152,8 @@ class PowerEngine(hass.Hass):
                 numbers.append((eid, w.value))
             elif w.kind == "select":
                 self.call_service("select/select_option", entity_id=eid, option=w.value)
-            self.writes.own(self._today())          # 'observed' is counted by the state listener
+            if not is_staged(w.role):                # window times are only sent by the update button
+                self.writes.own(self._today())      # 'observed' is counted by the state listener
         if buttons:
             # The Solis "update times" button sends the window entities' current values to the inverter. Pressed at
             # once, it can go before the new values have landed and send the old ones (the inverter then runs one
@@ -1160,6 +1168,7 @@ class PowerEngine(hass.Hass):
                 journal.save(now)
         except OSError as err:
             self.log(f"Could not save the write journal: {err!r}", level="WARNING")
+        self._publish_writes_today()
 
     def _press_buttons(self, kwargs):
         pending = [eid for eid, v in kwargs["numbers"] if str(self.get_state(eid)) not in (str(v), f"{v}.0")]
@@ -1181,6 +1190,7 @@ class PowerEngine(hass.Hass):
                 journal.save(now)
         except OSError as err:
             self.log(f"Could not save the write journal: {err!r}", level="WARNING")
+        self._publish_writes_today()
 
     def _execute(self, writes, entities, attempt=1):
         """Active mode, pause and leaving Active. Write, then verify."""
@@ -1565,7 +1575,28 @@ class PowerEngine(hass.Hass):
                                 + ("; " + "; ".join(run.problems) if run.problems else "")))
         self._publish_test()
 
+    def _publish_writes_today(self):
+        """Today's real inverter writes (from the journal): count, by reason and the latest ones."""
+        try:
+            journal = getattr(self, "journal", None)
+            if journal is None:
+                journal = self.journal = WriteJournal(os.path.join(os.path.dirname(self._save_path()),
+                                                                   "write_journal.json"))
+            now = datetime.now(timezone.utc)
+            local = now.astimezone(self.tz) if self.tz else now
+            since = local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+            s = day_summary(journal.entries, since.isoformat(timespec="seconds"), self.tz)
+            s["limit"] = int(self.cfg.safety.get("max_writes_per_day", 150)) if self.cfg else None
+            try:
+                s["observed"] = self.writes.summary(self._today())["observed"]["today"]
+            except Exception:
+                s["observed"] = None
+            self._publish_state("diag_writes_today", s["writes"], s)
+        except Exception as err:
+            self.log(f"Could not publish today's writes: {err!r}", level="WARNING")
+
     def _publish_writes(self):
+        self._publish_writes_today()
         try:
             self.writes.save()
             s = self.writes.summary(self._today())
