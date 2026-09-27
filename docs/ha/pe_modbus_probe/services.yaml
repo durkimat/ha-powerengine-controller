@@ -1,0 +1,37 @@
+read:
+  name: Read registers
+  description: Read Solis registers through the SolaX Modbus connection (read-only; nothing is written).
+  fields:
+    address:
+      name: First register
+      required: true
+      example: 43128
+      selector: {number: {min: 30000, max: 49999, mode: box}}
+    count:
+      name: How many
+      default: 10
+      selector: {number: {min: 1, max: 20, mode: box}}
+    register_type:
+      name: Register type
+      default: holding
+      selector: {select: {options: [holding, input]}}
+    hub:
+      name: SolaX Modbus hub name (only if you have more than one)
+      required: false
+      selector: {text: {}}
+write:
+  name: Write a remote-control limit register
+  description: Write one of the Solis remote-control registers (43129, 43130, 43131, 43136, 43282 only).
+  fields:
+    address:
+      name: Register
+      required: true
+      selector: {select: {options: ["43129", "43130", "43131", "43136", "43282"]}}
+    value:
+      name: Raw value (watts ÷ 10 for power registers; minutes for 43282)
+      required: true
+      selector: {number: {min: 0, max: 1000, mode: box}}
+    hub:
+      name: SolaX Modbus hub name (only if you have more than one)
+      required: false
+      selector: {text: {}}
