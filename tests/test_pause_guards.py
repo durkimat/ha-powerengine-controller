@@ -494,3 +494,15 @@ def test_smart_requests_wait_to_settle_after_start(app):
     assert not app._smart_settled(t + timedelta(minutes=18), "07:00")
     assert app._smart_settled(t + timedelta(minutes=34), "07:00")
     assert not app._smart_settled(t + timedelta(minutes=35), "unavailable")
+
+
+def test_no_mid_slot_stickiness_just_after_a_start(app):
+    from datetime import timedelta
+
+    from pe_core.decide import Decision
+    t = datetime(2026, 9, 27, 17, 10, tzinfo=timezone.utc)          # 10 minutes into a half-hour
+    app._decision = Decision("self_use", "plan", "x")
+    app._started_at = t - timedelta(minutes=1)
+    assert app._mid_slot_stick(t) == 0.0                            # the startup plan's choice isn't kept
+    app._started_at = t - timedelta(minutes=6)
+    assert app._mid_slot_stick(t) > 0

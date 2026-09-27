@@ -84,6 +84,7 @@ SIM_SLICE_SECONDS = 2.0           # work per callback, then hand AppDaemon back 
 CONTROL_STRATEGY = "rolling"      # "rolling" | "block": decided by #44 (EEPROM writes) before Active ships
 BATTERY_VOLTS = 52.0              # nominal, for converting power to the inverter's current settings
 CYCLE_SECONDS = 30
+STICK_WARMUP = timedelta(minutes=5)   # after a start, no mid-slot stickiness while the plan's inputs load
 REPLAN_SECONDS = 300
 HISTORY_DAYS = 14
 BACKFILL_DAYS = 14
@@ -109,8 +110,9 @@ def _real(writes) -> int:
 class PowerEngine(hass.Hass):
     def initialize(self):
         self.log(f"PowerEngine {__version__} starting")
+        self._started_at = datetime.now(timezone.utc)
         self.damper = damping.Damper()
-        self._damp_restart(datetime.now(timezone.utc))
+        self._damp_restart(self._started_at)
         validate_definitions()
 
         # Optional override. Not "config_path": AppDaemon sets that arg itself.
@@ -1293,6 +1295,10 @@ class PowerEngine(hass.Hass):
         from pe_core.optimiser import MID_SLOT_STICK
         local = now.astimezone(self.tz) if self.tz else now
         into = (local.minute % 30) * 60 + local.second
+        started = getattr(self, "_started_at", None)
+        if started is not None and now - started < STICK_WARMUP:
+            return 0.0            # just started: the first plans use a default load profile and no weather yet, so
+                                  # their choice isn't worth keeping; let the plan settle freely first
         return MID_SLOT_STICK if into > 120 and getattr(self, "_decision", None) is not None else 0.0
 
     def _control_slots(self, r, decision, slots):

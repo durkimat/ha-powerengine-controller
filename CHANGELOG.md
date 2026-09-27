@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.20 (beta)
+
+### Behaviour changes
+- **A restart no longer defers the current half-hour's plan.** Right after a start, the first plan is made before
+  the load profile (about 30 s later) and the weather have loaded, and it often picks Self-Use. The mid-slot rule
+  (0.9.8) then kept that choice for the rest of the half-hour, so a planned charge or sale was skipped until the
+  next half-hour. For the first 5 minutes after a start the mid-slot rule is now off, so the plan settles on its
+  real choice at once.
+
 ## 0.9.19 (beta)
 
 ### Behaviour changes
