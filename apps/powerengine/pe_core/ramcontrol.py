@@ -50,8 +50,13 @@ class Command:
         return f"{self.option} at {self.watts} W"
 
     def writes(self) -> list[Write]:
-        """The mode first, then the power: some firmware only takes the power once remote control is on."""
-        out = [Write("rc_mode", self.option, "select")]
+        """The power, the mode, then the power again (the adapter re-sends it a few seconds later too): on some
+        firmware a power written just before or with the mode change doesn't take, and the inverter keeps the
+        previous power."""
+        out = []
+        if self.power_role:
+            out.append(Write(self.power_role, self.watts, "number"))
+        out.append(Write("rc_mode", self.option, "select"))
         if self.power_role:
             out.append(Write(self.power_role, self.watts, "number"))
         return out

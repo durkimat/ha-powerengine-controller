@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.19 (beta)
+
+### Behaviour changes
+- **RAM remote control: the power is written before and after the mode, and again 5 seconds later.** A force
+  charge asked for 5200 W ran at about 1900 W, close to the 2000 W left over from the earlier test: the power
+  written straight after the mode change hadn't taken. Now it's written, then the mode, then the power again, and
+  once more after 5 seconds; each refresh sends the power either side of the mode too.
+- The "not following" notification and log now include what the inverter's power and mode settings read, to tell
+  a setting that didn't take from a limit elsewhere (battery, BMS or fuse).
+
 ## 0.9.18 (beta)
 
 ### Behaviour changes

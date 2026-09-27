@@ -21,7 +21,8 @@ def test_command_for_each_action():
     assert command_for(HOLD, None, 4800, 4800) == Command("Force charge", 0)
     assert command_for(EXPORT, 9000, 4800, 4800) == Command("Force discharge", 4800)
     assert command_for(SELF_USE, None, 4800, 4800) == Command("Off", 0)
-    assert [w.role for w in Command("Force discharge", 2000).writes()] == ["rc_mode", "rc_discharge_power"]
+    assert [w.role for w in Command("Force discharge", 2000).writes()] == ["rc_discharge_power", "rc_mode",
+                                                                         "rc_discharge_power"]
     assert [w.role for w in Command("Off").writes()] == ["rc_mode"]
 
 
@@ -29,7 +30,7 @@ def test_changes_go_at_once_and_force_commands_are_refreshed():
     c = RamController()
     ch = Command("Force charge", 3000)
     w, why = c.step(T, ch, timedelta(minutes=1))
-    assert why == "change" and len(w) == 2
+    assert why == "change" and len(w) == 3
     c.done(T, "2026-09-27", ch, why)
     assert c.step(T + timedelta(seconds=30), ch, timedelta(minutes=1)) == ([], None)
     assert c.step(T + timedelta(seconds=30), Command("Force charge", 3050), timedelta(minutes=1)) == ([], None)
@@ -87,7 +88,7 @@ def test_ram_control_in_the_adapter(ramapp):
     a._control(R(T + timedelta(seconds=30), -2900), Decision(GRID_CHARGE, "plan", "charge", power_w=3000))
     assert not a.calls                                              # nothing new yet
     a._control(R(T + timedelta(seconds=70), -2900), Decision(GRID_CHARGE, "plan", "charge", power_w=3000))
-    assert [c[0] for c in a.calls] == ["select/select_option", "number/set_value"]   # the refresh
+    assert [c[0] for c in a.calls] == ["number/set_value", "select/select_option", "number/set_value"]  # refresh
     a._control(R(T + timedelta(seconds=90), -2900), Decision(SELF_USE, "plan", "idle"))
     assert a.states[sel] == "Off"
     # pausing switches remote control off
@@ -119,3 +120,14 @@ def test_switch_cost_follows_the_control_method():
     ram = parse_config({"safety": {"window_switch_cost_p": 5, "ram_switch_cost_p": 0.5},
                         "system": {"control_method": "ram_remote"}})
     assert params_from(timed).switch_cost_p == 5 and params_from(ram).switch_cost_p == 0.5
+
+
+def test_power_is_resent_after_a_change(ramapp):
+    a = ramapp
+    a._control(R(T), Decision(GRID_CHARGE, "plan", "charge", power_w=3000))
+    relatch = [(cb, kw) for cb, kw in a.timers if cb.__name__ == "_ram_relatch"]
+    assert relatch and relatch[-1][1] == {"role": "rc_charge_power", "watts": 3000}
+    a.calls.clear()
+    relatch[-1][0](relatch[-1][1])
+    assert a.calls == [("number/set_value", {"entity_id": "number.solis_inverter_battery_control_override_charge_power",
+                                             "value": 3000})]

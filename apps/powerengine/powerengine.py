@@ -1207,14 +1207,20 @@ class PowerEngine(hass.Hass):
                 writes, why = ram.step(now, want, refresh)
                 if writes and self._ram_send(writes, rc, why, want):
                     ram.done(now, str(self._today()), want, why)
+                    if why == "change" and want.power_role:        # and once more once the mode has landed
+                        self.run_in(self._ram_relatch, 5, role=want.power_role, watts=want.watts)
                 floor = float(self.cfg.safety.get("min_reserve_soc", 12))
                 if ram.check_following(now, r.battery_power, r.battery_soc, floor) == "not following":
+                    pw = self.get_state(rc.get(ram.sent.power_role)) if ram.sent.power_role else None
+                    self.log(f"RAM remote control: inverter not following {ram.sent.text()} (battery "
+                             f"{round(r.battery_power or 0)} W, SoC {r.battery_soc}, power setting reads {pw}, "
+                             f"mode reads {self.get_state(rc.get('rc_mode'))})", level="WARNING")
                     self._notify("health", (f"control:ram_follow:{ram.changed_at}",
                                             "PowerEngine: inverter not following remote control",
                                             f"Asked for {ram.sent.text()} but the battery is at "
-                                            f"{round(r.battery_power or 0)} W (+ discharging) after 3 minutes. "
-                                            "Check the inverter and SolaX Modbus; switch the Control method back "
-                                            "to Timed windows if it persists."))
+                                            f"{round(r.battery_power or 0)} W (+ discharging) after 3 minutes "
+                                            f"(power setting reads {pw}). Check the inverter and SolaX Modbus; "
+                                            "switch the Control method back to Timed windows if it persists."))
             sent = ram.sent
             self._publish_method("ram_remote", {
                 "command": sent.text() if sent and active else want.text() + (" (would send)" if not active else ""),
@@ -1227,6 +1233,18 @@ class PowerEngine(hass.Hass):
                 "writes": [w.as_dict() for w in want.writes()], "following": ram.follow})
         except Exception as err:
             self.log(f"RAM control step failed: {err!r}", level="WARNING")
+
+    def _ram_relatch(self, kwargs):
+        """The power once more, a few seconds after a change of command (see ramcontrol.Command.writes)."""
+        ram = self._ram()
+        if ram.sent is None or ram.sent.power_role != kwargs["role"] or ram.sent.watts != kwargs["watts"]:
+            return                                         # superseded
+        eid = self._rc_entities().get(kwargs["role"])
+        if eid and self.mode.effective == "active":
+            try:
+                self.call_service("number/set_value", entity_id=eid, value=kwargs["watts"])
+            except Exception as err:
+                self.log(f"RAM remote control: could not re-send {eid}: {err!r}", level="WARNING")
 
     def _ram_send(self, writes, rc, why, want):
         """Send remote-control writes (temporary settings: not counted as EEPROM writes). Changes are journalled;
