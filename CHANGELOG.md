@@ -2,6 +2,30 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.16 (beta)
+
+### Behaviour changes
+- None until you choose it: the Control method defaults to Timed windows, as before.
+
+### New
+- **RAM remote control** (Config → Inverter control → *Control method*). Drives the inverter through SolaX
+  Modbus's *Battery control override* entities (Solis registers 43135 with the power in 43136/43129) instead of the
+  timed windows: grid charge → Force charge at the planned power, hold → Force charge at 0 W, sell or Axle →
+  Force discharge at the planned power, Self-Use → Off. Temporary settings, so no EEPROM writes. A change is sent
+  at once; a force command is re-sent every *RAM refresh* (default 1 minute) so it stays inside the inverter's
+  timeout (about 5 minutes on firmware 420044, measured on the Tests tab). If PowerEngine, AppDaemon or HA
+  stops, the inverter returns to Self-Use by itself within about 5 minutes.
+  - When it takes over, the timed windows are closed once and then left alone. Pausing, Passive, leaving Active
+    for any reason, or switching back to Timed windows turns remote control Off.
+  - **Monitoring:** PowerEngine checks the battery follows each command (90 s to respond; charging at least half
+    the asked power unless nearly full, discharging at least half unless near the reserve, holding not
+    discharging). If it doesn't for 3 minutes you're notified. If the remote-control entities go missing, it falls
+    back to the timed windows and tells you.
+  - **Status:** a new *Inverter control* tile on the Monitoring tab (method, command, whether the inverter is
+    following it); details in the Health tab's control preview. Remote-control changes are journalled but not
+    counted as inverter writes; refreshes aren't journalled. The dampening rules and planned-writes forecast
+    apply to the timed windows only.
+
 ## 0.9.15 (beta)
 
 ### Behaviour changes

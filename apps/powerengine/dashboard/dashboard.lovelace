@@ -31,21 +31,28 @@ views:
           - type: tile
             entity: sensor.pe_state_operation_mode
             name: Mode
-            grid_options: {columns: 3}
+            grid_options: {columns: 4}
           - type: tile
             entity: sensor.pe_state_decision
             name: Decision
-            grid_options: {columns: 3}
+            grid_options: {columns: 4}
           - type: tile
             entity: sensor.pe_state_battery_soc
             name: Battery
-            grid_options: {columns: 3}
+            grid_options: {columns: 4}
             features:
               - type: bar-gauge
           - type: tile
+            entity: sensor.pe_state_control_method
+            name: Inverter control
+            grid_options: {columns: 6}
+            tap_action:
+              action: navigate
+              navigation_path: health
+          - type: tile
             entity: sensor.pe_diag_writes_today
             name: Writes today
-            grid_options: {columns: 3}
+            grid_options: {columns: 6}
             tap_action:
               action: navigate
               navigation_path: health
@@ -947,6 +954,7 @@ views:
               {%- if w and w.attributes.by_reason is defined %}{% set a = w.attributes %}
               **{{ w.state }} inverter write{{ '' if w.state | int == 1 else 's' }} by PowerEngine today** in {{ a.changes }} change{{ '' if a.changes == 1 else 's' }}{% if a.limit %} · daily limit {{ a.limit }} ({{ [a.limit - w.state | int, 0] | max }} left){% endif %}{% if a.observed is not none %} · {{ a.observed }} seen from all sources{% endif %}.
               {%- if a.staged %} Plus {{ a.staged }} window-time settings staged in HA (these only reach the inverter with the update button, so they aren't counted).{% endif %}
+              {%- if a.ram %} {{ a.ram }} RAM remote-control change{{ '' if a.ram == 1 else 's' }} today (temporary settings, not counted).{% endif %}
               {%- if a.damping is defined %} Dampening: restart hold-off {{ 'on' if a.damping.restart else 'off' }}, burst damping {{ 'on' if a.damping.bursts else 'off' }}{{ (' · ' ~ a.held ~ ' change' ~ ('' if a.held == 1 else 's') ~ ' held back today') if a.held else '' }}.{% endif %}
               {%- set dw = a.damping_week %}
               {%- if dw and (dw.none or dw.restart or dw.both) %}
@@ -1195,7 +1203,11 @@ views:
             grid_options: {columns: full}
             content: |-
               {%- set c = states.sensor.pe_diag_control %}
-              {%- if c and c.attributes.strategy == 'slots' and c.attributes.rows is defined %}
+              {%- if c and c.attributes.strategy == 'ram_remote' %}
+              {%- set m = states.sensor.pe_state_control_method %}
+              PowerEngine drives the inverter by **RAM remote control** (current decision: **{{ c.attributes.decision | replace('_', '-') }}**): it wants **{{ c.attributes.command }}**; last sent: **{{ m.attributes.command if m else '–' }}**{{ (' at ' ~ as_timestamp(m.attributes.last_sent) | timestamp_custom('%H:%M:%S')) if m and m.attributes.last_sent else '' }}. The inverter is {{ {'ok': 'following it', 'waiting': 'responding (waiting to check)', 'not following': '**not following it**', 'n/a': 'on Self-Use'}[c.attributes.following] | default(c.attributes.following) }}.
+              Force commands are re-sent every {{ m.attributes.refresh_min if m else 1 }} min ({{ m.attributes.ram_refreshes_today if m else 0 }} refreshes and {{ m.attributes.ram_changes_today if m else 0 }} changes today; temporary settings, not EEPROM writes). The timed windows stay closed. If PowerEngine stops, the inverter returns to Self-Use by itself within about 5 minutes.
+              {%- elif c and c.attributes.strategy == 'slots' and c.attributes.rows is defined %}
               {%- if c.state == 'not mapped' %}
               Map these control outputs on the Config tab to preview control: {{ c.attributes.missing | join(', ') }}.
               {%- else %}
