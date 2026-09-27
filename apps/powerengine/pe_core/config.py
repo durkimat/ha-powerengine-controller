@@ -135,9 +135,10 @@ SETTING_TEXT = {
                           "where the refill is guaranteed, selling may go lower when it still pays after the "
                           "outside-band cost."),
     "arbitrage_max_soc": ("Arbitrage band: top", "%",
-                          "With arbitrage on, routine cheap top-ups (smart-charge slots included) stop here, out of "
-                          "the full zone that wears the battery fastest. A forecast shortfall, or a sale that pays "
-                          "after the outside-band cost, can still take it higher. Set 100 to top up fully."),
+                          "With arbitrage on, grid charging (smart-charge slots included) stops here, out of the full "
+                          "zone that wears the battery fastest, except for the final top-up at the end of the "
+                          "overnight window, which fills to the grid-charge target for the day ahead. Solar can "
+                          "still fill it higher. Set 100 to allow full charges any time."),
     "arbitrage_band_penalty_p": ("Arbitrage outside-band cost", "p/kWh",
                                  "Extra cost counted for each kWh arbitrage moves outside the band. Higher keeps "
                                  "cycles inside it more strictly; 0 ignores the band."),

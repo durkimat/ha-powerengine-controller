@@ -44,3 +44,21 @@ def test_arbitrage_sells_from_full_before_idling_there():
         slots.append(s)
     opt = optimise(slots, 100.0, Params(arbitrage=True))
     assert opt["soc"][0] < 99.0 and opt["soc"][11] >= 99.0, opt["soc"]
+
+
+def test_arbitrage_stays_in_the_band_and_only_the_final_top_up_goes_to_full():
+    from pe_core.optimiser import final_topup
+    # 20:00: a cheap smart slot all evening, then the fixed overnight window 23:30-05:30, export 15p
+    t0 = T0.replace(hour=19)
+    slots = []
+    for i in range(24):
+        s = Slot(t0 + i * SLOT, CHEAP, 0.15, load_kwh=0.35)
+        s.overnight = 7 <= i < 19
+        slots.append(s)
+    p = Params(arbitrage=True, max_charge_kw=5.0, capacity_kwh=18.0)
+    fin = final_topup(slots, p)
+    assert fin[18] and fin[17] and not fin[15] and not fin[5]
+    opt = optimise(slots, 80.0, p)
+    soc = opt["soc"]
+    assert max(soc[:16]) <= 90.5, soc                      # evening cycles and most of the night: within the band
+    assert soc[18] >= 99.0, soc                            # full when the overnight window ends

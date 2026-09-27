@@ -29,10 +29,34 @@ def car_cheap_charge(s: Slot, p: Params) -> bool:
             and price * 100 <= p.cheap_cap_p)
 
 
-def slot_target(s: Slot, p: Params) -> float:
-    """Grid-charge target for a slot: alongside a cheap car charge, the top-up level (straight to the grid target
-    inside the fixed overnight window, where the battery is filled anyway); otherwise grid_target."""
-    return p.buffer_target if car_cheap_charge(s, p) and not s.overnight else grid_target(p)
+def slot_target(s: Slot, p: Params, final: bool = False) -> float:
+    """Grid-charge target for a slot. With arbitrage on, grid charging stops at the top of the arbitrage band
+    (the full zone wears the battery), except for the final top-up at the end of the fixed overnight window
+    (`final`: the battery goes into the morning full) and free-power sessions. Alongside a cheap car charge outside
+    the overnight window: the top-up level. Otherwise grid_target (100%)."""
+    if car_cheap_charge(s, p) and not s.overnight:
+        return p.buffer_target
+    if p.arbitrage and not final and not s.free:
+        return min(grid_target(p), p.arbitrage_max_soc)
+    return grid_target(p)
+
+
+def final_topup(slots: list[Slot], p: Params) -> list[bool]:
+    """The last half-hours of each fixed overnight window, long enough to charge from the top of the arbitrage band
+    to the grid-charge target (plus one to spare): the only time grid charging goes above the band."""
+    ends = window_ends(slots)
+    out = [False] * len(slots)
+    gap_kwh = max(0.0, p.target_soc - p.arbitrage_max_soc) / 100 * p.capacity_kwh
+    for t, end in enumerate(ends):
+        if not end:
+            continue
+        rate = max(0.1, p.max_charge_kw * 0.5 * p.efficiency * (slots[t].charge_factor or 1.0))
+        k = int(-(-gap_kwh // rate)) + 1
+        for i in range(t, max(-1, t - k), -1):
+            if not slots[i].overnight:
+                break
+            out[i] = True
+    return out
 
 
 def sell_floor(s: Slot, p: Params) -> float:
@@ -113,6 +137,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
     T = len(slots)
     K = 4
     ends = window_ends(slots)
+    final = final_topup(slots, p)
     # value[t][level][k] = lowest cost from half-hour t onwards, at that level, the previous half-hour's kind k
     value = [[[0.0] * K for _ in range(LEVELS)] for _ in range(T + 1)]
     for lv in range(LEVELS):
@@ -125,7 +150,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
         for lv in range(LEVELS):
             options = []
             for a in acts:
-                ps = PlanSlot(s, a, "", target_soc=slot_target(s, p))
+                ps = PlanSlot(s, a, "", target_soc=slot_target(s, p, final[t]))
                 end = step(ps, float(lv), p)
                 if a == EXPORT and end < sell_floor(s, p) - 1e-6:
                     continue                           # below the band only where the refill is guaranteed
@@ -156,7 +181,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
     kp = KIND.get(prev_action, NONE_K) if prev_action else NONE_K
     for t, s in enumerate(slots):
         a = choice[t][min(LEVELS - 1, max(0, round(lvl)))][kp]
-        ps = PlanSlot(s, a, "", target_soc=slot_target(s, p))
+        ps = PlanSlot(s, a, "", target_soc=slot_target(s, p, final[t]))
         lvl = step(ps, lvl, p)
         actions.append(a)
         socs.append(round(lvl, 1))

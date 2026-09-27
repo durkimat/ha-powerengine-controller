@@ -136,7 +136,7 @@ def test_car_finished_mid_dispatch_frees_the_rest_of_it():
     assert "export" not in _actions(busy, Params(arbitrage=True))
 
 
-def test_overnight_car_slot_charges_straight_to_full():
+def test_overnight_car_slot_stays_in_the_band_until_the_final_top_up():
     from dataclasses import replace
 
     from pe_core.optimiser import slot_target
@@ -145,7 +145,8 @@ def test_overnight_car_slot_charges_straight_to_full():
     s = replace(build_slots(r, [], None, BST)[0], smart_slot=True, price=0.0699, car_expected=True)
     p = Params(arbitrage=True)
     assert slot_target(s, p) == 90
-    assert slot_target(replace(s, overnight=True), p) == 100
+    assert slot_target(replace(s, overnight=True), p) == 90                  # within the band overnight too
+    assert slot_target(replace(s, overnight=True), p, final=True) == 100      # the final top-up before morning
 
 
 def test_smart_slot_inside_the_overnight_window_is_not_discounted():
