@@ -2,6 +2,23 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.6 (beta)
+
+### Behaviour changes
+- **Write counts (and the daily write limit) now count only real inverter writes.** SolaX Modbus keeps the timed
+  windows' start/end times in Home Assistant and only sends them when the update button is pressed (one block
+  write), so setting those numbers doesn't write to the inverter. They were counted as writes, which roughly
+  tripled the count (last night: 170 journal entries, 43 real writes) and tripped the daily limit early. Button
+  presses, charge/discharge currents, the storage mode and the remote-control settings still count. The staged
+  times are still journalled and shown separately. The same daily limit now allows about three times as many real
+  changes; lower it on the Config tab if you want the old protection.
+
+### New
+- **Writes today** tile on the Monitoring tab (tap for details).
+- **Inverter writes today** at the top of the Health tab: count, changes, daily limit and what's left, writes seen
+  from all sources, a breakdown by reason and the latest 30 writes (time, setting, old → new, why). The EEPROM wear
+  table moved up with it. New sensor `sensor.pe_diag_writes_today`.
+
 ## 0.9.5 (beta)
 
 ### Behaviour changes

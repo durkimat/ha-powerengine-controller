@@ -31,17 +31,24 @@ views:
           - type: tile
             entity: sensor.pe_state_operation_mode
             name: Mode
-            grid_options: {columns: 4}
+            grid_options: {columns: 3}
           - type: tile
             entity: sensor.pe_state_decision
             name: Decision
-            grid_options: {columns: 4}
+            grid_options: {columns: 3}
           - type: tile
             entity: sensor.pe_state_battery_soc
             name: Battery
-            grid_options: {columns: 4}
+            grid_options: {columns: 3}
             features:
               - type: bar-gauge
+          - type: tile
+            entity: sensor.pe_diag_writes_today
+            name: Writes today
+            grid_options: {columns: 3}
+            tap_action:
+              action: navigate
+              navigation_path: health
       - type: grid
         column_span: 2
         cards:
@@ -906,6 +913,64 @@ views:
         column_span: 3
         cards:
           - type: heading
+            heading: Inverter writes today
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set w = states.sensor.pe_diag_writes_today %}
+              {%- if w and w.attributes.by_reason is defined %}{% set a = w.attributes %}
+              **{{ w.state }} inverter write{{ '' if w.state | int == 1 else 's' }} by PowerEngine today** in {{ a.changes }} change{{ '' if a.changes == 1 else 's' }}{% if a.limit %} · daily limit {{ a.limit }} ({{ [a.limit - w.state | int, 0] | max }} left){% endif %}{% if a.observed is not none %} · {{ a.observed }} seen from all sources{% endif %}.
+              {%- if a.staged %} Plus {{ a.staged }} window-time settings staged in HA (these only reach the inverter with the update button, so they aren't counted).{% endif %}
+              {%- if a.by_reason %}
+
+              | Why | Writes |
+              |---|---:|
+              {%- for r in a.by_reason %}
+              | {{ r.why }} | {{ r.writes }} |
+              {%- endfor %}
+
+              **Latest writes**
+
+              | Time | Setting | Change | Why |
+              |---|---|---|---|
+              {%- for e in a.recent %}
+              | {{ e.time }} | {{ e.setting }} | {{ e.change }} | {{ e.why }} |
+              {%- endfor %}
+              {%- else %}
+
+              No writes yet today.
+              {%- endif %}
+              {%- else %}
+              Today's writes appear after PowerEngine's next write or within 10 minutes.
+              {%- endif %}
+          - type: heading
+            heading: Inverter writes (EEPROM wear)
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set w = states.sensor.pe_diag_inverter_writes %}
+              {%- if w and w.attributes.budget is defined %}{% set o, p = w.attributes.observed, w.attributes.would %}
+              Inverter settings are stored in EEPROM, typically rated for about 100,000 writes.
+
+              | | Writes today | Per day (average) | 100,000 writes would last |
+              |---|---:|---:|---:|
+              | Your current setup (observed) | {{ o.today }} | {{ o.per_day if o.per_day is not none else '–' }} | {{ (o.years ~ ' years') if o.years else ('no writes' if o.per_day == 0 else '–') }} |
+              {%- set m = w.attributes.own %}{% if m and (m.today or m.per_day) %}
+              | PowerEngine's own writes (included above) | {{ m.today }} | {{ m.per_day if m.per_day is not none else '–' }} | {{ (m.years ~ ' years') if m.years else '–' }} |{% endif %}
+              | PowerEngine, rolling 35-minute windows (would) | {{ p.today }} | {{ p.per_day if p.per_day is not none else '–' }} | {{ (p.years ~ ' years') if p.years else ('no writes' if p.per_day == 0 else '–') }} |
+              {%- set b = w.attributes.would_block %}{% if b %}
+              | PowerEngine, one window per block (would) | {{ b.today }} | {{ b.per_day if b.per_day is not none else '–' }} | {{ (b.years ~ ' years') if b.years else ('no writes' if b.per_day == 0 else '–') }} |{% endif %}
+              {%- set sl = w.attributes.would_slots %}{% if sl %}
+              | PowerEngine, all three inverter slots (would) | {{ sl.today }} | {{ sl.per_day if sl.per_day is not none else '–' }} | {{ (sl.years ~ ' years') if sl.years else ('no writes' if sl.per_day == 0 else '–') }} |{% endif %}
+
+              *Observed* counts changes to the inverter's control entities mapped on the Config tab (a press of the timed-window update button is one write; setting a value to what it already is isn't seen, so this can undercount). *All three inverter slots* is the Active design from 0.7.1: the plan's next charge and sell periods are set into the inverter's three charge and three discharge windows and only rewritten when they change, so a repeating night costs next to nothing. *Rolling* was the earlier design: one write to open, roll forward or close a timed window, and one per change of charge current. *One window per block* is the low-write alternative (#44): each window runs to the end of the plan's block and usually expires by itself; safety then comes from an HA automation that closes the windows if PowerEngine stops. Target for 25 years: about 11 a day. Averages use full days since {{ w.attributes.since or 'tracking started' }}.
+              {%- else %}
+              Counting starts once PowerEngine 0.5.3 is running; map the timed-window controls on the Config tab to see what your current setup writes.
+              {%- endif %}
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
             heading: Battery and losses
           - type: markdown
             grid_options: {columns: full}
@@ -1122,30 +1187,6 @@ views:
               {%- endif %}
               {%- else %}
               The preview appears once PowerEngine has made a decision.
-              {%- endif %}
-          - type: heading
-            heading: Inverter writes (EEPROM wear)
-          - type: markdown
-            grid_options: {columns: full}
-            content: |-
-              {%- set w = states.sensor.pe_diag_inverter_writes %}
-              {%- if w and w.attributes.budget is defined %}{% set o, p = w.attributes.observed, w.attributes.would %}
-              Inverter settings are stored in EEPROM, typically rated for about 100,000 writes.
-
-              | | Writes today | Per day (average) | 100,000 writes would last |
-              |---|---:|---:|---:|
-              | Your current setup (observed) | {{ o.today }} | {{ o.per_day if o.per_day is not none else '–' }} | {{ (o.years ~ ' years') if o.years else ('no writes' if o.per_day == 0 else '–') }} |
-              {%- set m = w.attributes.own %}{% if m and (m.today or m.per_day) %}
-              | PowerEngine's own writes (included above) | {{ m.today }} | {{ m.per_day if m.per_day is not none else '–' }} | {{ (m.years ~ ' years') if m.years else '–' }} |{% endif %}
-              | PowerEngine, rolling 35-minute windows (would) | {{ p.today }} | {{ p.per_day if p.per_day is not none else '–' }} | {{ (p.years ~ ' years') if p.years else ('no writes' if p.per_day == 0 else '–') }} |
-              {%- set b = w.attributes.would_block %}{% if b %}
-              | PowerEngine, one window per block (would) | {{ b.today }} | {{ b.per_day if b.per_day is not none else '–' }} | {{ (b.years ~ ' years') if b.years else ('no writes' if b.per_day == 0 else '–') }} |{% endif %}
-              {%- set sl = w.attributes.would_slots %}{% if sl %}
-              | PowerEngine, all three inverter slots (would) | {{ sl.today }} | {{ sl.per_day if sl.per_day is not none else '–' }} | {{ (sl.years ~ ' years') if sl.years else ('no writes' if sl.per_day == 0 else '–') }} |{% endif %}
-
-              *Observed* counts changes to the inverter's control entities mapped on the Config tab (a press of the timed-window update button is one write; setting a value to what it already is isn't seen, so this can undercount). *All three inverter slots* is the Active design from 0.7.1: the plan's next charge and sell periods are set into the inverter's three charge and three discharge windows and only rewritten when they change, so a repeating night costs next to nothing. *Rolling* was the earlier design: one write to open, roll forward or close a timed window, and one per change of charge current. *One window per block* is the low-write alternative (#44): each window runs to the end of the plan's block and usually expires by itself; safety then comes from an HA automation that closes the windows if PowerEngine stops. Target for 25 years: about 11 a day. Averages use full days since {{ w.attributes.since or 'tracking started' }}.
-              {%- else %}
-              Counting starts once PowerEngine 0.5.3 is running; map the timed-window controls on the Config tab to see what your current setup writes.
               {%- endif %}
           - type: heading
             heading: Inverter clock

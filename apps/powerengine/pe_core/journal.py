@@ -30,3 +30,44 @@ class WriteJournal:
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(self.entries, fh, separators=(",", ":"))
         os.replace(tmp, self.path)
+
+
+STAGED_PARTS = ("_start_hour", "_start_minute", "_end_hour", "_end_minute")
+
+
+def is_staged(name: str) -> bool:
+    """Window start/end times (role or entity id). SolaX Modbus keeps these in HA and only sends them to the
+    inverter when the update button is pressed (one block write), so setting them isn't an inverter write."""
+    s = (name or "").lower()
+    return any(part in s for part in STAGED_PARTS)
+
+
+def _short(entity: str) -> str:
+    name = entity.split(".", 1)[-1]
+    for prefix in ("solis_inverter_", "solis_"):
+        if name.startswith(prefix):
+            name = name[len(prefix):]
+    return name.replace("_", " ")
+
+
+def day_summary(entries: list[dict], since_iso: str, tz=None, recent: int = 30) -> dict:
+    """Today's writes from the journal (entries at or after since_iso, UTC ISO strings).
+    'writes' counts real inverter writes (button presses and directly written settings); staged window times are
+    counted separately."""
+    today = [e for e in entries if e.get("t", "") >= since_iso]
+    real = [e for e in today if not is_staged(e.get("entity", ""))]
+    reasons: dict[str, int] = {}
+    for e in real:
+        reasons[e.get("why") or "control"] = reasons.get(e.get("why") or "control", 0) + 1
+    changes = len({(e["t"][:16], e.get("why")) for e in real})
+
+    def fmt(e):
+        t = datetime.fromisoformat(e["t"])
+        if tz is not None:
+            t = t.astimezone(tz)
+        what = "pressed" if e.get("value") is None else f"{e.get('before')} → {e.get('value')}"
+        return {"time": t.strftime("%H:%M:%S"), "setting": _short(e.get("entity", "")), "change": what,
+                "why": e.get("why") or ""}
+    return {"writes": len(real), "staged": len(today) - len(real), "changes": changes,
+            "by_reason": sorted(({"why": k, "writes": n} for k, n in reasons.items()), key=lambda x: -x["writes"]),
+            "recent": [fmt(e) for e in reversed(real[-recent:])]}
