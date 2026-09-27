@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.8 (beta)
+
+### Behaviour changes
+- **No flip-flopping part-way through a half-hour.** A replan in the middle of a half-hour keeps the action the
+  inverter is already doing unless changing it gains at least 15p. The plan's next half-hour still takes over at the
+  boundary as normal. Near-ties had been switching between hold, charge, sell and Self-Use every few minutes, each
+  switch costing a current write and window updates.
+- **The daily write limit remembers a resume across restarts.** Resuming after the limit lets PowerEngine carry on
+  for the rest of the day, but an AppDaemon restart (an update, for example) forgot that and tripped the limit again
+  straight away: back to Self-Use and more writes each time. The resume point is now saved with the write counts.
+
 ## 0.9.7 (beta)
 
 ### Behaviour changes

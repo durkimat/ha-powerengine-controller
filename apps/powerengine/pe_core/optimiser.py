@@ -94,8 +94,12 @@ def window_ends(slots: list[Slot]) -> list[bool]:
     return [s.overnight and (t + 1 == len(slots) or not slots[t + 1].overnight) for t, s in enumerate(slots)]
 
 
-def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_action: str | None = None
-             ) -> dict | None:
+MID_SLOT_STICK = 0.15                 # GBP: changing the running half-hour's action part-way through (a replan
+                                      # mid-slot): only for a clear gain, not a near-tie (changes cost writes)
+
+
+def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_action: str | None = None,
+             stick: float = 0.0) -> dict | None:
     """`wear`: GBP per kWh taken out of the battery, counted in the choice (not in the cash cost returned).
 
     Also counted in the choice: the arbitrage band's outside-band cost (not inside the fixed overnight window),
@@ -127,6 +131,8 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
                     continue                           # below the band only where the refill is guaranteed
                 k = KIND[a]
                 total = ps.cost + nxt[min(LEVELS - 1, max(0, round(end)))][k]
+                if t == 0 and stick and prev_action and a != prev_action:
+                    total += stick                     # mid-slot: keep what the inverter is already doing
                 if wear and end < lv:
                     total += (lv - end) / 100 * cap * wear
                 total += band_penalty(a, float(lv), end, p)   # overnight too: cycle inside the band, fill last
