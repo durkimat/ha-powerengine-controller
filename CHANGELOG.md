@@ -2,6 +2,14 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.4 (beta)
+
+### Behaviour changes
+- **With arbitrage on, sitting above the arbitrage band costs a little (battery wear).** Where two plans earn the
+  same, the plan now sells or uses the top of the battery first and fills it last, instead of charging to 100%
+  early and parking there for hours before selling. Overnight this removes the "stops just after midnight" idle at
+  full; the battery still ends the cheap window full.
+
 ## 0.9.3 (beta)
 
 ### Behaviour changes

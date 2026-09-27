@@ -32,3 +32,15 @@ def test_optimiser_runs_quickly():
     t = time.perf_counter()
     optimise(day(n=96), 50.0, Params(arbitrage=True))
     assert time.perf_counter() - t < 3.0
+
+
+
+def test_arbitrage_sells_from_full_before_idling_there():
+    # full at 23:00 in a cheap window with a later refill: sell the top now rather than park at 100% and sell later
+    slots = []
+    for i in range(24):
+        s = Slot(T0.replace(hour=23) + i * SLOT, CHEAP if i < 12 else PEAK, 0.15, load_kwh=0.3)
+        s.overnight = i < 12
+        slots.append(s)
+    opt = optimise(slots, 100.0, Params(arbitrage=True))
+    assert opt["soc"][0] < 99.0 and opt["soc"][11] >= 99.0, opt["soc"]
