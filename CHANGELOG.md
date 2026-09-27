@@ -2,6 +2,22 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.11 (beta)
+
+### Behaviour changes
+- **EDF slot requests wait 15 minutes after a restart.** No ready-by change is sent until PowerEngine has been running
+  for 15 minutes and EDF's dispatch and ready-by entities have been available for 15 minutes. Straight after a
+  restart of AppDaemon, HA or the EDF integration, an empty slot list may only mean it hasn't loaded yet, and a
+  request would make EDF re-plan for nothing.
+- **Request results count half-hours gained and lost.** A re-plan can also move or drop slots already planned, so a
+  request now only counts as a success if it gained more slot time than it lost; the back-off follows the same rule.
+  The Health tab shows "+gained / −lost half-hours".
+- A ready-by entity coming back after a restart (unavailable → a time) is no longer logged as a request by your
+  automations.
+
+### New
+- The diagnostics export includes the slot requests and the slot record.
+
 ## 0.9.10 (beta)
 
 ### Behaviour changes

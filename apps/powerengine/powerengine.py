@@ -1640,8 +1640,8 @@ class PowerEngine(hass.Hass):
             self._ready_by_handle = self.listen_state(self._on_ready_by_change, eid)
 
     def _on_ready_by_change(self, entity, attribute, old, new, kwargs):
-        if old == new or new in (None, "unknown", "unavailable"):
-            return
+        if old == new or new in (None, "unknown", "unavailable") or old in (None, "unknown", "unavailable"):
+            return                                   # coming back after a restart isn't anyone's request
         ours = self._our_write
         if ours and ours[0] == str(new)[:5] and (datetime.now(timezone.utc) - ours[1]).total_seconds() < 120:
             return                                                   # PowerEngine's own change
@@ -1675,7 +1675,8 @@ class PowerEngine(hass.Hass):
                              r.export_rate * 100 if r.export_rate is not None else None, cheap_p)
         active = self.mode.effective == "active"
         now_local = r.now.astimezone(self.tz) if self.tz else r.now
-        a = self.smart.step(r.now, now_local, worth, options, st.get("state"), r.dispatches, active)
+        a = self.smart.step(r.now, now_local, worth, options, st.get("state"), r.dispatches, active,
+                            settled=self._smart_settled(r.now, st.get("state")))
         if a:
             verb = "Asking" if active else "Would ask"
             self.log(f"{verb} EDF for smart-charge slots: ready-by {a['from']} → {a['to']} ({a['why']})")
@@ -1683,6 +1684,20 @@ class PowerEngine(hass.Hass):
                 self._request_slots(eid, a["to"])
         if a or changed:
             self._save_smart()
+
+    def _smart_settled(self, now, ready_by_state):
+        """True once PowerEngine has run for SETTLE and EDF's dispatch and ready-by entities have been available
+        for SETTLE: right after a restart of AppDaemon, HA or the EDF integration, an empty slot list may only
+        mean it hasn't loaded, so no requests are made until things have settled."""
+        from pe_core.smartcharge import SETTLE
+        disp = self._role_entity("smart_dispatches")
+        bad = ready_by_state in (None, "unknown", "unavailable") or (
+            disp and self.get_state(disp) in (None, "unknown", "unavailable"))
+        since = getattr(self, "_smart_ok_since", None)
+        if bad or since is None:
+            self._smart_ok_since = None if bad else now
+            return False
+        return now - since >= SETTLE
 
     def _request_slots(self, eid, value):
         """Active mode only: set the ready-by time (and keep the charge target at 100%)."""
@@ -2035,6 +2050,8 @@ class PowerEngine(hass.Hass):
             "plan": s(lambda: plan_snapshot(self.plan, now - timedelta(hours=1), now + timedelta(hours=36)))
             if getattr(self, "plan", None) is not None else None,
             "test": run.as_dict() | {"status": run.status} if run is not None else None,
+            "smart_requests": s(lambda: self.smart.attempts[-40:]) if getattr(self, "smart", None) else None,
+            "smart_slots": s(lambda: self.slots.summary(now, tz=self.tz)) if getattr(self, "slots", None) else None,
             "log": list(getattr(self.__dict__.get("_log_ring"), "lines", [])),
         }
 
