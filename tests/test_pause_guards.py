@@ -183,8 +183,8 @@ def test_supervised_hold_writes_reads_back_then_reverts(app):
     assert app._test.status == "running"
     assert app.states["number.timed_charge_end_hour"] != 0 or app.states["number.timed_charge_end_minute"] != 0
     assert app.states["number.timed_charge_current"] == 0
+    run_timers(app)                                   # apply button, start check, end (revert), end check
     assert any(s == "button/press" for s, _ in app.calls)
-    run_timers(app)                                   # start check, then end (revert), then end check
     assert app._test.status == "passed", app._test.problems
     assert all(app.states[f"number.{r}"] == 0 for r in release() if r != "storage_mode")
 
@@ -281,7 +281,9 @@ def test_write_limit_counts_from_resume(app):
 def test_own_writes_counted(app):
     app._write(writes_needed(release(), {}), {r: f"number.{r}" for r in release()} | {
         "storage_mode": "select.storage_mode", "timed_update_button": "button.timed_update_button"})
-    assert app.own["n"] == 10               # 8 times + mode + button
+    assert app.own["n"] == 9                # 8 times + mode; the button a few seconds later
+    run_timers(app)
+    assert app.own["n"] == 10
 
 
 def _clock_app(app, mode_active, drift_s, synced_days_ago):
