@@ -5,7 +5,6 @@ import types
 
 import pytest
 
-
 AD_METHODS = ("listen_state", "listen_event", "run_every", "run_in", "run_daily", "run_at", "run_minutely",
               "run_hourly", "run_once", "call_service", "fire_event", "set_state", "cancel_timer",
               "cancel_listen_state", "cancel_listen_event", "get_app", "get_plugin_api", "get_ad_api",
