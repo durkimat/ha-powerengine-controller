@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.32 (beta)
+
+### Behaviour changes
+- None. Nothing new is written to the inverter; this release only reads and reports.
+
+### Diagnostics
+- **Grid meter cross-check.** A new optional input, Configuration → Grid and house → **Check meter**, takes a second,
+  independent grid reading (suggested: the Zappi's grid CT, `sensor.myenergi_…_power_grid`). PowerEngine compares it
+  with the inverter's meter, split by what the battery is doing (charging, discharging, idle). It shows the result on
+  `sensor.pe_diag_grid_check`: the live difference, averages per battery state over the last 3 days, and a one-line
+  verdict. This is to find out why the house load reads about 1.6 kW high whenever the battery charges from the grid.
+- The diagnostics export now includes 24 h of history for the raw grid, check-meter, battery, house-load and car
+  readings behind PowerEngine's figures, plus the cross-check sensor.
+
 ## 0.9.31 (beta)
 
 ### Behaviour changes
