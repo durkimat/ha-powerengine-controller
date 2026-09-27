@@ -20,6 +20,8 @@ def test_command_for_each_action():
     assert command_for(GRID_CHARGE, None, 4800, 4800) == Command("Force charge", 4800)
     assert command_for(HOLD, None, 4800, 4800) == Command("Force charge", 0)
     assert command_for(EXPORT, 9000, 4800, 4800) == Command("Force discharge", 4800)
+    assert command_for(GRID_CHARGE, None, 5200, 5200, cap_w=5000) == Command("Force charge", 5000)
+    assert command_for(EXPORT, 3000, 5200, 5200, cap_w=5000) == Command("Force discharge", 3000)
     assert command_for(SELF_USE, None, 4800, 4800) == Command("Off", 0)
     assert [w.role for w in Command("Force discharge", 2000).writes()] == ["rc_discharge_power", "rc_mode",
                                                                          "rc_discharge_power"]
@@ -131,3 +133,12 @@ def test_power_is_resent_after_a_change(ramapp):
     relatch[-1][0](relatch[-1][1])
     assert a.calls == [("number/set_value", {"entity_id": "number.solis_inverter_battery_control_override_charge_power",
                                              "value": 3000})]
+
+
+def test_plan_uses_the_remote_control_ceiling():
+    from pe_core.planner import params_from
+    inputs = {"battery_max_charge_power": {"value": 5200}, "battery_max_discharge_power": {"value": 5200}}
+    ram = parse_config({"inputs": inputs, "system": {"control_method": "ram_remote"}})
+    timed = parse_config({"inputs": inputs})
+    assert params_from(ram).max_charge_kw == 5.0 and params_from(ram).max_discharge_kw == 5.0
+    assert params_from(timed).max_charge_kw == 5.2

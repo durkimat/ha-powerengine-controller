@@ -1195,7 +1195,8 @@ class PowerEngine(hass.Hass):
             ram, rc, now = self._ram(), self._rc_entities(), r.now
             p = self._control_params(r)
             want = ramcontrol.command_for(decision.action, decision.power_w, p.max_charge_kw * 1000,
-                                          p.max_discharge_kw * 1000)
+                                          p.max_discharge_kw * 1000,
+                                          float(self.cfg.safety.get("ram_max_power_w", 5000)))
             active = self.mode.effective == "active"
             if self._test_running():
                 ram.forget()                                   # the test drives remote control itself

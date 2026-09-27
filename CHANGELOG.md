@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.21 (beta)
+
+### Behaviour changes
+- **RAM remote control never asks for more than the inverter accepts.** Reading the inverter's registers (the new
+  PowerEngine Modbus probe) showed it refuses a force power above 5000 W (register value 500): asked for 5200 W,
+  it kept the previous 2000 W, which is why charging and selling ran at about 2 kW. A new setting, *RAM max power*
+  (default 5000 W, Config → Inverter control), caps the commands, and with RAM remote control the plan uses it as
+  the charge and discharge rate. Timed windows are unchanged.
+
 ## 0.9.20 (beta)
 
 ### Behaviour changes

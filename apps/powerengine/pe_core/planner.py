@@ -534,12 +534,17 @@ def params_from(cfg, readings=None) -> Params:
         except (TypeError, ValueError):
             return default
     s, f = cfg.safety, cfg.features
+    ram = cfg.system.get("control_method") == "ram_remote"
+    cap = s.get("ram_max_power_w", 5000) / 1000 if ram else None       # the inverter's remote-control ceiling
     max_dis = static("battery_max_discharge_power", 4800) / 1000
+    max_chg = static("battery_max_charge_power", 4800) / 1000
+    if cap:
+        max_dis, max_chg = min(max_dis, cap), min(max_chg, cap)
     rte = min(100.0, max(50.0, static("battery_round_trip", 90.25)))      # 90.25% = 95% each way
     return Params(
         efficiency=round((rte / 100) ** 0.5, 4),
         capacity_kwh=static("battery_capacity", 18.0),
-        max_charge_kw=static("battery_max_charge_power", 4800) / 1000,
+        max_charge_kw=max_chg,
         max_discharge_kw=max_dis,
         min_reserve_soc=s["min_reserve_soc"],
         target_soc=s["grid_charge_target_soc"],
@@ -554,8 +559,7 @@ def params_from(cfg, readings=None) -> Params:
         arbitrage_min_soc=s.get("arbitrage_min_soc", 75),
         arbitrage_max_soc=s.get("arbitrage_max_soc", 90),
         arbitrage_band_penalty_p=s.get("arbitrage_band_penalty_p", 2.0),
-        switch_cost_p=(s.get("ram_switch_cost_p", 0.5) if cfg.system.get("control_method") == "ram_remote"
-                       else s.get("window_switch_cost_p", 5.0)),
+        switch_cost_p=s.get("ram_switch_cost_p", 0.5) if ram else s.get("window_switch_cost_p", 5.0),
         export_limit_kw=s.get("export_limit_kw", 6.0),
         wear_p=s.get("battery_wear_p", 2.0),
         min_margin_p=s.get("arbitrage_min_margin_p", 1.0),
