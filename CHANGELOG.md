@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.28 (beta)
+
+### Behaviour changes
+- None by default.
+
+### New
+- **Deeper selling overnight** (Config → Selling, on by default): 0.9.27's behaviour, one deeper overnight sale
+  instead of many shallow cycles. Untick it and the arbitrage band's bottom holds inside the overnight window too
+  (a hard floor, as it is the rest of the day).
+
 ## 0.9.27 (beta)
 
 ### Behaviour changes

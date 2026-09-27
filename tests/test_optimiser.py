@@ -74,3 +74,16 @@ def test_overnight_arbitrage_is_one_deeper_cycle_not_many_shallow_ones():
     p = Params(arbitrage=True, max_charge_kw=5.0, max_discharge_kw=5.0, capacity_kwh=18.0, switch_cost_p=0.5)
     night = optimise(slots, 80.0, p)["actions"][7:19]
     assert sum(1 for x, y in zip(night, night[1:], strict=False) if x != y) <= 3, night
+
+
+def test_deeper_overnight_selling_can_be_switched_off():
+    t0 = T0.replace(hour=19)
+    slots = []
+    for i in range(24):
+        s = Slot(t0 + i * SLOT, CHEAP if i < 19 else PEAK, 0.15, load_kwh=0.35)
+        s.overnight = 7 <= i < 19
+        slots.append(s)
+    p = Params(arbitrage=True, max_charge_kw=5.0, max_discharge_kw=5.0, capacity_kwh=18.0, deep_overnight=False)
+    assert min(optimise(slots, 80.0, p)["soc"][7:19]) >= 74.5          # the band's bottom holds overnight too
+    p = Params(arbitrage=True, max_charge_kw=5.0, max_discharge_kw=5.0, capacity_kwh=18.0)
+    assert min(optimise(slots, 80.0, p)["soc"][7:19]) < 60              # on (default): one deeper sale
