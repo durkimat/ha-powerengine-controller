@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.3 (beta)
+
+### Behaviour changes
+- **The arbitrage band's bottom is a hard floor outside the fixed overnight window.** Selling there never takes
+  the battery below *Arbitrage band: bottom* (75%): the refill might rely on optional smart-charge slots that EDF
+  can withdraw, and the band keeps enough in the battery if it does. Inside the overnight window, where the refill
+  is guaranteed, selling may still go deeper when it pays (down to the reserve plus 10%). Before, the band was only
+  a 2p/kWh cost everywhere, which a 15p sale easily outweighed, so the plan sold down to ~35% in the middle of a
+  daytime smart slot.
+
 ## 0.9.2 (beta)
 
 ### Behaviour changes

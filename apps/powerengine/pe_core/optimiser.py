@@ -35,6 +35,14 @@ def slot_target(s: Slot, p: Params) -> float:
     return p.buffer_target if car_cheap_charge(s, p) and not s.overnight else grid_target(p)
 
 
+def sell_floor(s: Slot, p: Params) -> float:
+    """How low a sale may take the battery. Inside the fixed overnight window the refill is guaranteed, so down to
+    the reserve plus a margin; anywhere else the refill may depend on optional smart-charge slots that EDF can
+    withdraw, so selling stops at the arbitrage band's bottom (a hard limit there, for safety)."""
+    floor = p.min_reserve_soc + p.arbitrage_keep_soc
+    return floor if s.overnight else max(floor, p.arbitrage_min_soc)
+
+
 def band_penalty(a: str, lv: float, end: float, p: Params) -> float:
     """GBP for the part of an arbitrage move outside the band: selling below its bottom, or grid-charging above
     its top."""
@@ -114,8 +122,8 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
             for a in acts:
                 ps = PlanSlot(s, a, "", target_soc=slot_target(s, p))
                 end = step(ps, float(lv), p)
-                if a == EXPORT and end < p.min_reserve_soc + p.arbitrage_keep_soc - 1e-6:
-                    continue                           # a sale never takes the battery near the reserve
+                if a == EXPORT and end < sell_floor(s, p) - 1e-6:
+                    continue                           # below the band only where the refill is guaranteed
                 k = KIND[a]
                 total = ps.cost + nxt[min(LEVELS - 1, max(0, round(end)))][k]
                 if wear and end < lv:

@@ -122,8 +122,10 @@ SETTING_TEXT = {
                                "Arbitrage runs only if, per kWh exported, export price − purchase price ÷ losses − "
                                "wear is at least this."),
     "arbitrage_min_soc": ("Arbitrage band: bottom", "%",
-                          "A guide for repeated arbitrage cycles, not a limit: selling below it is allowed when it "
-                          "still pays after the outside-band cost and the forecast load is still covered."),
+                          "Outside the fixed overnight window, arbitrage never sells below this: a refill then may "
+                          "depend on optional smart-charge slots that can be withdrawn. Inside the overnight window, "
+                          "where the refill is guaranteed, selling may go lower when it still pays after the "
+                          "outside-band cost."),
     "arbitrage_max_soc": ("Arbitrage band: top", "%",
                           "With arbitrage on, routine cheap top-ups (smart-charge slots included) stop here, out of "
                           "the full zone that wears the battery fastest. A forecast shortfall, or a sale that pays "
