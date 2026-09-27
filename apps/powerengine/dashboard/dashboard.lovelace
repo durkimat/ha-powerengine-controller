@@ -72,6 +72,8 @@ views:
             battery:
               energy: 18000
               shutdown_soc: 12
+              # PowerEngine's battery power is + discharging; this card animates it the other way unless inverted
+              invert_power: true
             solar:
               mppts: 1
             load:
