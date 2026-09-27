@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.2 (beta)
+
+### Behaviour changes
+- None. Plan and Plan history charts: charging is green and selling red; the battery level is a bold blue line
+  (its plan or alternative a light blue one); the kWh axis is grey; charge and sell blocks are more see-through and
+  solar export more solid, so solar export shows through.
+
 ## 0.9.1 (beta)
 
 ### Behaviour changes
