@@ -53,6 +53,7 @@ class Params:
     arbitrage_max_soc: float = 90.0   # ...and routine cheap top-ups stop here with arbitrage on (%)
     arbitrage_band_penalty_p: float = 2.0   # extra p/kWh counted when arbitrage goes outside the band
     arbitrage_keep_soc: float = 10.0  # hard: reach the refill with at least the reserve plus this (%)
+    deep_overnight: bool = True       # inside the fixed overnight window, arbitrage may sell below the band's bottom
     switch_cost_p: float = 5.0        # optimiser: cost of changing the inverter's timed windows (EEPROM wear), p
     taper: tuple = ()                 # learned: ((soc_from, fraction of the charge rate), ...) near full
 
@@ -556,6 +557,7 @@ def params_from(cfg, readings=None) -> Params:
         fuse_kw=s.get("main_fuse_a", 60) * 0.230 * 0.9,
         fill_when_cheap=bool(f.get("fill_when_cheap", True)),
         arbitrage=bool(f.get("arbitrage", False)),
+        deep_overnight=bool(f.get("deep_overnight", True)),
         arbitrage_min_soc=s.get("arbitrage_min_soc", 75),
         arbitrage_max_soc=s.get("arbitrage_max_soc", 90),
         arbitrage_band_penalty_p=s.get("arbitrage_band_penalty_p", 2.0),

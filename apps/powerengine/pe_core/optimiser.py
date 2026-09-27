@@ -64,7 +64,7 @@ def sell_floor(s: Slot, p: Params) -> float:
     the reserve plus a margin; anywhere else the refill may depend on optional smart-charge slots that EDF can
     withdraw, so selling stops at the arbitrage band's bottom (a hard limit there, for safety)."""
     floor = p.min_reserve_soc + p.arbitrage_keep_soc
-    return floor if s.overnight else max(floor, p.arbitrage_min_soc)
+    return floor if s.overnight and p.deep_overnight else max(floor, p.arbitrage_min_soc)
 
 
 def band_penalty(a: str, lv: float, end: float, p: Params, overnight: bool = False) -> float:
@@ -74,7 +74,7 @@ def band_penalty(a: str, lv: float, end: float, p: Params, overnight: bool = Fal
     if not p.arbitrage or not p.arbitrage_band_penalty_p:
         return 0.0
     kwh = 0.0
-    if a == EXPORT and end < lv and overnight:
+    if a == EXPORT and end < lv and overnight and p.deep_overnight:
         return 0.0
     if a == EXPORT and end < lv:
         kwh = max(0.0, min(lv, p.arbitrage_min_soc) - end) / 100 * p.capacity_kwh
