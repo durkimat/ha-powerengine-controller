@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.25 (beta)
+
+### Behaviour changes
+- None.
+
+### Dashboard (#114, from the Trial tab)
+- **Monitoring:** the energy flow is now the **Sunsynk Power Flow Card**, including the car, with a row of needle
+  gauges below it: battery (charging ← → discharging), grid (export ← → import), solar, house and battery %.
+  Install *Sunsynk Power Flow Card* from HACS if you haven't (Power Flow Card Plus is no longer used).
+- **Plan:** hovering or tapping a half-hour on the plan chart now also shows **Action**: what PowerEngine plans then,
+  and why. Units are shown for every value.
+- The Trial tab is gone.
+
 ## 0.9.24 (beta)
 
 ### Behaviour changes
