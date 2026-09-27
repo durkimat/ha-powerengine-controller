@@ -2,6 +2,11 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.33 (beta)
+
+### Behaviour changes
+- None. Card-only fix (Check meter moved under Grid and house); version kept in step with the card.
+
 ## 0.9.32 (beta)
 
 ### Behaviour changes
