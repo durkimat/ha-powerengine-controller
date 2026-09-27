@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.9.4 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.9.5 (beta; Passive by default, Active available)
 
 ---
 
@@ -151,7 +151,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.9.4 starting
+PowerEngine 0.9.5 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -436,13 +436,29 @@ later is the same one step.
 - **Inverter clock:** checked every 10 minutes. While live it's synced weekly, and within 10 minutes if it's a
   minute or more out (including when the clocks change, since the inverter doesn't adjust for daylight saving).
 
-### Supervised inverter test
+### Supervised inverter tests
 
-Config tab, below the config card, admins only. **This writes to the inverter** when you start it. Pause for testing
-first (above), pick Hold, Grid charge, Force discharge or Self-Use for 1 to 10 minutes, tick the box and start. It
-writes the settings, reads them back after 10 seconds, records battery power and SoC each minute, then returns the
-inverter to Self-Use and reads that back. *Stop and revert* ends it early. The window it sets ends two minutes after
-the test, so a restart can't leave it running. Result: `sensor.pe_diag_test_write`.
+**Tests** tab (right of Config), admins only. **These write to the inverter** when you start one. Turn on *Pause
+control* first (it's at the top of the tab), pick a test, read its instructions (what it does, what to watch for
+on the inverter screen, what PowerEngine checks), tick the box and start. *Stop and revert* ends it early.
+Result and a timeline: `sensor.pe_diag_test_write`, shown on the card.
+
+**Timed windows** (the method PowerEngine uses today; EEPROM-backed): Hold, Grid charge, Force discharge or
+Self-Use for 1 to 10 minutes. It writes the settings, reads them back after 10 seconds, records battery power
+and SoC each minute, then returns the inverter to Self-Use and reads that back. The window it sets ends two minutes
+after the test, so a restart can't leave it running.
+
+**RAM remote control** (Solis register 43135 with the power in 43136/43129, via SolaX Modbus's *Battery control
+override* entities): checks whether the inverter can be driven without writing the timed windows at all. Each closes
+the timed windows first and switches remote control Off at the end, samples battery and grid power every 30 s and
+gives a verdict:
+- *RC force charge* / *RC force discharge*: **worked** if the battery charged/discharged at 60% or more of the power
+  asked.
+- *RC hold*: force charge at 0 W; **worked** if the battery stayed within 300 W of zero (run it with some house
+  load).
+- *RC failsafe*: force charges for 2 minutes, then reloads SolaX Modbus so the command stops being re-sent
+  (without writing Off) and watches for the inverter to drop it by itself. **reverted** (with the time) is what a
+  safe fallback needs; allow up to 35 minutes, since the inverter's RC timeout is reported as 5 to 30 minutes.
 
 ---
 

@@ -11,9 +11,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from .decide import FORCE_DISCHARGE, GRID_CHARGE, HOLD, SELF_USE, Decision
+from .rctest import RC_TESTS
 
 ACTIONS = {"hold": HOLD, "charge": GRID_CHARGE, "discharge": FORCE_DISCHARGE, "self_use": SELF_USE}
 MAX_MINUTES = 10
+MAX_MINUTES_RC = 15
+MAX_MINUTES_FAILSAFE = 35            # the RC failsafe test watches for the inverter's own timeout (up to 30 min)
 MAX_POWER_W = 6000
 
 
@@ -22,7 +25,7 @@ def validate(data: dict, guards: list[str], missing: list[str], running: bool) -
     if running:
         return None, "a test is already running"
     action = str(data.get("action", ""))
-    if action not in ACTIONS:
+    if action not in ACTIONS and action not in RC_TESTS:
         return None, f"unknown action '{action}'"
     if data.get("confirm") is not True:
         return None, "not confirmed"
@@ -34,15 +37,17 @@ def validate(data: dict, guards: list[str], missing: list[str], running: bool) -
         minutes = int(data.get("minutes", 5))
     except (TypeError, ValueError):
         return None, "minutes must be a whole number"
-    if not 1 <= minutes <= MAX_MINUTES:
-        return None, f"minutes must be 1 to {MAX_MINUTES}"
+    top = MAX_MINUTES_FAILSAFE if action == "rc_failsafe" else MAX_MINUTES_RC if action in RC_TESTS else MAX_MINUTES
+    low = 4 if action == "rc_failsafe" else 1
+    if not low <= minutes <= top:
+        return None, f"minutes must be {low} to {top}"
     power = data.get("power_w")
     if power is not None:
         try:
             power = float(power)
         except (TypeError, ValueError):
             return None, "power_w must be a number"
-        if not 0 < power <= MAX_POWER_W:
+        if not (0 <= power if action == "rc_hold" else 0 < power) or power > MAX_POWER_W:
             return None, f"power_w must be up to {MAX_POWER_W}"
     return {"action": action, "minutes": minutes, "power_w": power}, None
 
@@ -67,6 +72,8 @@ class TestRun:
         self.status = "running"          # running -> reverting -> passed | failed | stopped
         self.steps: list[dict] = []
         self.problems: list[str] = []
+        self.verdict: str | None = None     # RC tests: worked / no effect / reverted / ...
+        self.explanation = ""
 
     def step(self, when: datetime, what: str, **details) -> None:
         self.steps.append({"time": when.isoformat(timespec="seconds"), "what": what, **details})
@@ -81,4 +88,5 @@ class TestRun:
     def as_dict(self) -> dict:
         return {"action": self.req.get("action"), "minutes": self.req.get("minutes"),
                 "power_w": self.req.get("power_w"), "started": self.started.isoformat(timespec="seconds"),
-                "problems": self.problems, "steps": self.steps[-20:]}
+                "verdict": self.verdict, "explanation": self.explanation,
+                "problems": self.problems, "steps": self.steps[-40:]}

@@ -1279,5 +1279,19 @@ views:
           # Predbat <-> PowerEngine switch (needs docs/ha/powerengine_handover.yaml installed as a package)
           - type: custom:powerengine-handover-card
           - type: custom:powerengine-config-card
-          # supervised inverter test (admin only; refused unless the handover guards are safe)
+  - title: Tests
+    path: tests
+    icon: mdi:test-tube
+    panel: true
+    cards:
+      - type: vertical-stack
+        cards:
+          # supervised inverter tests (admin only; refused unless the handover guards are safe and PowerEngine is
+          # paused): timed windows (current method) and the Solis RAM remote-control registers
+          - type: custom:powerengine-toggle-card
+            title: Pause control (must be on to run a test)
+            entity: switch.pe_ctl_pause
+            name: Pause control
+            icon_on: mdi:pause-circle
+            icon_off: mdi:play-circle-outline
           - type: custom:powerengine-test-card
