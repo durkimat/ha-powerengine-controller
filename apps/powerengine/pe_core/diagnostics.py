@@ -55,3 +55,21 @@ def save_copy(folder: str, stamp: str, bundle: dict) -> str:
         except OSError:
             pass
     return path
+
+
+# Home Assistant's recorder skips state attributes over 16 KiB (logging a warning each time), so history of that
+# sensor is lost; the live state is unaffected. Published attributes are measured so this shows up before HA's log.
+ATTR_LIMIT = 16384
+ATTR_WARN = 15000
+
+
+def track_attr_size(sizes: dict, key: str, size: int) -> bool:
+    """Record a published attribute payload's size; True the first time `key` goes past ATTR_WARN."""
+    was = sizes.get(key, {"last": 0, "peak": 0})
+    sizes[key] = {"last": size, "peak": max(size, was["peak"])}
+    return size > ATTR_WARN and was["peak"] <= ATTR_WARN
+
+
+def largest_attrs(sizes: dict, n: int = 8) -> list[dict]:
+    rows = sorted(sizes.items(), key=lambda kv: -kv[1]["peak"])[:n]
+    return [{"sensor": k, "last_bytes": v["last"], "peak_bytes": v["peak"], "limit_bytes": ATTR_LIMIT} for k, v in rows]

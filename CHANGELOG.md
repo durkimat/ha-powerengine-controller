@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.34 (beta)
+
+### Behaviour changes
+- None.
+
+### Diagnostics
+- Every sensor's published attributes are now measured. If one passes 15,000 bytes, PowerEngine logs a warning once.
+  Home Assistant stops recording a sensor's history above 16,384 bytes. The diagnostics export lists the largest
+  ones. As of today only the configuration catalogue is close (about 15.4 KB); the next largest is about 10.6 KB.
+
 ## 0.9.33 (beta)
 
 ### Behaviour changes
