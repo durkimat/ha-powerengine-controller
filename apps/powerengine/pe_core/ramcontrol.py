@@ -62,7 +62,11 @@ class Command:
         return out
 
 
-def command_for(action: str, power_w: float | None, max_charge_w: float, max_discharge_w: float) -> Command:
+def command_for(action: str, power_w: float | None, max_charge_w: float, max_discharge_w: float,
+                cap_w: float | None = None) -> Command:
+    """cap_w: the most the inverter accepts for the force powers (higher values are refused outright)."""
+    if cap_w:
+        max_charge_w, max_discharge_w = min(max_charge_w, cap_w), min(max_discharge_w, cap_w)
     if action == GRID_CHARGE:
         return Command(OPTION_CHARGE, int(round(min(power_w or max_charge_w, max_charge_w))))
     if action == HOLD:
