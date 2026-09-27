@@ -73,6 +73,7 @@ SAFETY = {
     "cold_release_c": (3.0, 0, 15),           # ...until the battery is this much warmer than the threshold
     "battery_temp_lag_h": (24.0, 1, 96),      # how long the battery takes to follow the outside temperature (h)
     "ram_refresh_min": (1.0, 0.5, 4.0),       # RAM remote control: re-send the command this often (min)
+    "ram_switch_cost_p": (0.5, 0, 100),       # optimiser: cost per switch with RAM remote control (no EEPROM wear)
     "damp_restart_min": (5.0, 1, 30),         # restart hold-off: no writes this long after a start or resume (min)
     "damp_burst_window_min": (10.0, 2, 60),   # burst damping: something written this recently counts as a burst
     "damp_burst_settle_min": (5.0, 1, 30),    # ...and then waits for the plan to be steady this long (min)
@@ -140,9 +141,13 @@ SETTING_TEXT = {
                                  "Extra cost counted for each kWh arbitrage moves outside the band. Higher keeps "
                                  "cycles inside it more strictly; 0 ignores the band."),
     "window_switch_cost_p": ("Window change cost", "p",
-                             "Counted by the optimiser each time the plan switches between self-use, charging and "
-                             "selling (each switch rewrites the inverter's timed windows, which wears its memory). "
-                             "Higher means fewer, longer charge and sell periods; 0 ignores it."),
+                             "With Timed windows: counted by the optimiser each time the plan switches between "
+                             "self-use, charging and selling (each switch rewrites the inverter's timed windows, which "
+                             "wears its memory). Higher means fewer, longer charge and sell periods; 0 ignores it."),
+    "ram_switch_cost_p": ("RAM switch cost", "p",
+                          "With RAM remote control: the same, but a switch is only a temporary setting (no memory "
+                          "wear), so it's small: just enough to avoid pointless back-and-forth. Lower lets the plan "
+                          "take more short arbitrage cycles."),
     "max_writes_per_day": ("Daily write limit", "writes",
                            "Safety stop for inverter EEPROM wear: if PowerEngine's own writes today reach this, it "
                            "pauses control (inverter back to Self-Use) and notifies you. Resuming allows this many "
@@ -194,7 +199,8 @@ SETTING_SECTIONS = (
     ("axle", "Axle events", ("pre_axle_lookahead_h", "axle_margin_soc")),
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p")),
-    ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p", "ram_refresh_min")),
+    ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p", "ram_refresh_min",
+                                           "ram_switch_cost_p")),
     ("cold", "Cold battery", ("cold_caution_temp_c", "cold_charge_pct", "cold_release_c", "battery_temp_lag_h")),
     ("damping", "Dampening tuning", ("damp_restart_min", "damp_burst_window_min", "damp_burst_settle_min")),
     # (battery_location, a choice, is shown at the top of this section)

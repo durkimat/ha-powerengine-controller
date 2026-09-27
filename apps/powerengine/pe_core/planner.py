@@ -554,7 +554,8 @@ def params_from(cfg, readings=None) -> Params:
         arbitrage_min_soc=s.get("arbitrage_min_soc", 75),
         arbitrage_max_soc=s.get("arbitrage_max_soc", 90),
         arbitrage_band_penalty_p=s.get("arbitrage_band_penalty_p", 2.0),
-        switch_cost_p=s.get("window_switch_cost_p", 5.0),
+        switch_cost_p=(s.get("ram_switch_cost_p", 0.5) if cfg.system.get("control_method") == "ram_remote"
+                       else s.get("window_switch_cost_p", 5.0)),
         export_limit_kw=s.get("export_limit_kw", 6.0),
         wear_p=s.get("battery_wear_p", 2.0),
         min_margin_p=s.get("arbitrage_min_margin_p", 1.0),

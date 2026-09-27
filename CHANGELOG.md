@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.18 (beta)
+
+### Behaviour changes
+- **Cheaper switches with RAM remote control.** With the Control method set to RAM remote control, the optimiser
+  counts *RAM switch cost* (default 0.5p) per switch between Self-Use, charging and selling instead of the
+  *Window change cost* (5p), since a switch is only a temporary setting there. The plan can then take short
+  arbitrage cycles it used to pass up. Timed windows keep the 5p cost. Both are on the Config tab under Inverter
+  control.
+
 ## 0.9.17 (beta)
 
 ### Behaviour changes
