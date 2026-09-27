@@ -101,7 +101,8 @@ def _starts_in(w: tuple, now_local: datetime) -> timedelta | None:
     return start - now_local
 
 
-def assign(wanted: list[Period], programmed: list[tuple], now_local: datetime) -> list[tuple]:
+def assign(wanted: list[Period], programmed: list[tuple], now_local: datetime,
+           pressing: set[int] | None = None) -> list[tuple]:
     """New contents of the SLOTS windows of one kind, changing as little as possible:
 
     - a window already programmed for a period is kept: exactly, within the tolerance for periods more than NEAR
@@ -109,7 +110,9 @@ def assign(wanted: list[Period], programmed: list[tuple], now_local: datetime) -
       doesn't matter, so it isn't moved forward every half-hour);
     - only periods starting within AHEAD are programmed; later ones wait until they're that close (so a plan that
       changes its mind about tomorrow afternoon doesn't rewrite the inverter overnight);
-    - windows for later times that the plan no longer wants are left alone until they're within AHEAD, then closed.
+    - windows for later times that the plan no longer wants are left alone until they're within AHEAD, then closed;
+    - a new window goes, where there's a choice, into a slot whose update button is being pressed anyway
+      (`pressing`: slots the other kind is changing), since one press sends that slot's charge AND discharge times.
     """
     wanted = wanted[:SLOTS]
     result: list[tuple | None] = [None] * SLOTS
@@ -136,7 +139,8 @@ def assign(wanted: list[Period], programmed: list[tuple], now_local: datetime) -
         return d is not None and d > AHEAD
     for w in todo:                     # into the free slot needing the fewest changed values (fewest writes)
         free = [i for i in range(SLOTS) if result[i] is None]
-        i = min(free, key=lambda k: (later(k), sum(1 for x, y in zip(programmed[k], w, strict=True) if x != y), k))
+        i = min(free, key=lambda k: (later(k), (k + 1) not in (pressing or set()),
+                                     sum(1 for x, y in zip(programmed[k], w, strict=True) if x != y), k))
         result[i] = w
     return [r if r is not None else (tuple(programmed[k]) if later(k) else CLOSED) for k, r in enumerate(result)]
 
@@ -184,9 +188,13 @@ def desired_state(pers: list[Period], have: dict, now_local: datetime, current_a
     """key -> value wanted for all six windows, both currents and the storage mode."""
     from .control import SELF_USE_MODE
     want: dict = {"storage_mode": SELF_USE_MODE}
+    pressing: set[int] = set()                  # slots whose update button will be pressed (1-based)
     for kind in ("charge", "discharge"):
-        slots = assign([p for p in pers if p.kind == kind], programmed(have, kind), now_local)
+        before = programmed(have, kind)
+        slots = assign([p for p in pers if p.kind == kind], before, now_local, pressing)
         for n, w in enumerate(slots, start=1):
+            if tuple(w) != tuple(before[n - 1]):
+                pressing.add(n)
             for role, v in zip(TIME_KEYS[kind], w, strict=True):
                 want[f"{role}#{n}"] = v
     cur_kind = kind_of(current_action) if current_action else None

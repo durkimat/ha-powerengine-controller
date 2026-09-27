@@ -172,3 +172,32 @@ def test_selling_stays_in_the_band_unless_the_refill_is_guaranteed():
     assert sell_floor(night[0], p) == p.min_reserve_soc + p.arbitrage_keep_soc
     res = optimise(night + day[16:], 90.0, p, wear=0.02)
     assert min(res["soc"][:14]) < 70                                      # guaranteed refill: deeper is allowed
+
+
+def test_one_button_press_per_slot_and_new_windows_share_a_pressed_slot():
+    """Each update button sends its slot's charge AND discharge times in one write, so a charge and a discharge
+    change in the same slot cost one press, and a new window goes into a slot that's being pressed anyway."""
+    start = NOW                                                   # 21:00
+    acts = [EXPORT, EXPORT, GRID_CHARGE, GRID_CHARGE] + [SELF_USE] * 8
+    pers = periods(plan_of(acts, start), start, LON)
+    # charge slot 2 already has an unwanted later window; discharge slots 1 and 3 are free
+    have: dict = {}
+    for kind in ("charge", "discharge"):
+        for n in (1, 2, 3):
+            for role in ("start_hour", "start_minute", "end_hour", "end_minute"):
+                have[f"timed_{kind}_{role}#{n}"] = 0
+    for role, v in zip(("start_hour", "start_minute", "end_hour", "end_minute"), (21, 30, 22, 0), strict=True):
+        have[f"timed_charge_{role}#2"] = v                     # due within AHEAD and no longer wanted: closed
+    want = desired_state(pers, have, start, EXPORT, None, 52.0, 4800, 4800)
+    ws = writes_for(want, have)
+    buttons = sorted(w.role for w in ws if w.kind == "button")
+    assert len(buttons) == len(set(buttons))                   # never twice for one slot
+    changed = {int(w.role.split("#")[1]) for w in ws if "#" in w.role and w.kind == "number"}
+    assert buttons == [f"timed_update_button#{n}" for n in sorted(changed)]
+    assert len(buttons) == 2, buttons                          # slot 2 (charge closes) + the new pair's slot
+
+
+def test_new_discharge_window_prefers_a_slot_being_pressed():
+    near = Period("discharge", NOW.replace(hour=21, minute=30), NOW.replace(hour=22), EXPORT)
+    assert assign([near], [CLOSED, CLOSED, CLOSED], NOW, pressing={3}) == [CLOSED, CLOSED, (21, 30, 22, 0)]
+    assert assign([near], [CLOSED, CLOSED, CLOSED], NOW) == [(21, 30, 22, 0), CLOSED, CLOSED]
