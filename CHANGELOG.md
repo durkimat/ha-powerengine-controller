@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.9 (beta)
+
+### Behaviour changes
+- **New windows share a slot's update where they can.** Each of the inverter's three update buttons sends that
+  slot's charge *and* discharge times in one write. When a new charge or discharge window needs a free slot,
+  PowerEngine now prefers a slot whose button is being pressed anyway for the other kind, so a new charge window
+  and a new discharge window usually cost one press rather than two. (Already the case: one press per slot per
+  change, never one per window; the currents are separate single writes shared by all three slots.)
+
 ## 0.9.8 (beta)
 
 ### Behaviour changes
