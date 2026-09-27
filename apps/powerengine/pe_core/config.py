@@ -43,13 +43,13 @@ MODES = ("passive", "active")
 FORECAST_SOURCES = ("none", "solcast_site", "scaled")
 FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
             "free_power_days", "tariff_simulator", "optimised_plan", "learn_taper", "learn_reserve", "learn_export",
-            "learn_car", "cold_caution", "cold_learning")
+            "learn_car", "cold_caution", "cold_learning", "damp_restart", "damp_bursts")
 LEGACY_FEATURES = ("use_learned",)          # 0.8.0's single switch, replaced by one per figure: ignored if saved
 FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
                     "arbitrage": False, "axle": True,
                     "free_power_days": True, "tariff_simulator": True, "optimised_plan": True,
                     "learn_taper": True, "learn_reserve": True, "learn_export": True, "learn_car": True,
-                    "cold_caution": True, "cold_learning": True}
+                    "cold_caution": True, "cold_learning": True, "damp_restart": True, "damp_bursts": False}
 # name: (default, min, max) -- numeric safety settings, all validated
 SAFETY = {
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
@@ -72,6 +72,9 @@ SAFETY = {
     "cold_charge_pct": (50, 10, 100),         # ...at this share of the normal charge rate (%)
     "cold_release_c": (3.0, 0, 15),           # ...until the battery is this much warmer than the threshold
     "battery_temp_lag_h": (24.0, 1, 96),      # how long the battery takes to follow the outside temperature (h)
+    "damp_restart_min": (5.0, 1, 30),         # restart hold-off: no writes this long after a start or resume (min)
+    "damp_burst_window_min": (10.0, 2, 60),   # burst damping: something written this recently counts as a burst
+    "damp_burst_settle_min": (5.0, 1, 30),    # ...and then waits for the plan to be steady this long (min)
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage"}
 # system settings chosen from a list: key -> (config-page section, ((value, label), ...))
@@ -153,6 +156,15 @@ SETTING_TEXT = {
     "battery_temp_lag_h": ("Battery warm-up time", "h",
                            "Used when Battery location is Custom: how long the battery takes to follow the outside "
                            "temperature (24 h garage, 6 h outside, 72 h indoors)."),
+    "damp_restart_min": ("Restart hold-off", "min",
+                         "With Restart hold-off on: after PowerEngine starts, or control resumes or goes live, "
+                         "nothing is written for this long. The inverter keeps running the windows already set."),
+    "damp_burst_window_min": ("Burst window", "min",
+                              "With Burst damping on: a change to a slot, current or the mode written within this "
+                              "long is treated as part of a burst."),
+    "damp_burst_settle_min": ("Burst settle time", "min",
+                              "With Burst damping on: a change within a burst waits until the plan has been steady "
+                              "for this long, so several quick changes become one write."),
     "battery_location": ("Battery location", "",
                          "Where the battery is, which sets how quickly it follows the outside temperature: how long "
                          "a cold spell takes to chill it, and to warm it back up."),
@@ -172,6 +184,7 @@ SETTING_SECTIONS = (
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p")),
     ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p")),
     ("cold", "Cold battery", ("cold_caution_temp_c", "cold_charge_pct", "cold_release_c", "battery_temp_lag_h")),
+    ("damping", "Dampening tuning", ("damp_restart_min", "damp_burst_window_min", "damp_burst_settle_min")),
     # (battery_location, a choice, is shown at the top of this section)
 )
 

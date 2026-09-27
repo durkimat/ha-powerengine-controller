@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.12 (beta)
+
+### Behaviour changes
+- **Restart hold-off (on by default).** For 5 minutes after PowerEngine starts, or control resumes or goes Active,
+  nothing is written to the inverter: the plan and its inputs settle first, and the inverter keeps running the
+  windows already set. Changes driven by safety (an Axle event, free power, the car charging, the minimum reserve)
+  never wait; pausing still returns the inverter to Self-Use at once.
+
+### New
+- **Dampening tuning** section on the config page: *Restart hold-off* (on) with its time, and *Burst damping* (off
+  for now, to evaluate after a few steady days): the first change to a window slot, current or the mode goes straight
+  through, and another change to the same thing within the burst window (10 min) waits until the plan has been
+  steady for the settle time (5 min), so a burst of changes becomes one write. The Health tab shows how many changes
+  were held back today; the control preview shows why writes are being held.
+
 ## 0.9.11 (beta)
 
 ### Behaviour changes
