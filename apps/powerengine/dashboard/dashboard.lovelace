@@ -909,6 +909,9 @@ views:
               {%- endif %}
 
               Running PowerEngine {{ states('sensor.pe_diag_version') }} since {{ as_timestamp(states('sensor.pe_diag_started'), 0) | timestamp_custom('%a %d %b %H:%M') }} · heartbeat {{ relative_time(as_datetime(states('sensor.pe_diag_heartbeat'))) if states('sensor.pe_diag_heartbeat') not in ['unknown', 'unavailable'] else 'missing' }} ago
+          # one-file diagnostics export for uploading when there's no shell (admin only)
+          - type: custom:powerengine-diagnostics-card
+            grid_options: {columns: full}
       - type: grid
         column_span: 3
         cards:

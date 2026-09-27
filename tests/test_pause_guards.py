@@ -418,3 +418,34 @@ def test_writes_today_summary():
     assert s["recent"][0] == {"time": "08:00:03", "setting": "update charge discharge times", "change": "pressed",
                               "why": "three windows: grid_charge (plan)"}
     assert s["recent"][1]["change"] == "0 → 100"
+
+
+def test_diagnostics_export(app, tmp_path):
+    import os
+    events = []
+    app.fire_event = lambda ev, **kw: events.append((ev, kw))
+    app._save_path = lambda: str(tmp_path / "state.json")
+    app._user_name = lambda data: "tester"
+    app.journal = types.SimpleNamespace(entries=[
+        {"t": "2020-01-01T00:00:00+00:00", "entity": "x", "value": 1, "before": 0, "why": "old"},
+        {"t": datetime.now(timezone.utc).isoformat(timespec="seconds"), "entity": "number.a", "value": 1,
+         "before": 0, "why": "now"}])
+    app._on_diag_request("pe_diag_request", {"id": "abc"}, {})
+    ev, kw = events[-1]
+    assert ev == "pe_diag_bundle" and kw["id"] == "abc"
+    b = kw["bundle"]
+    assert b["app"]["version"] and [e["why"] for e in b["journal"]] == ["now"]
+    assert "error" in b["writes"] or isinstance(b["writes"], dict)
+    assert kw["saved"] and os.path.exists(kw["saved"])
+    for i in range(7):
+        from pe_core.diagnostics import save_copy
+        save_copy(str(tmp_path / "diagnostics"), f"2026010{i}", {"i": i})
+    assert len(os.listdir(tmp_path / "diagnostics")) == 5
+
+
+def test_log_ring_keeps_recent_lines():
+    from pe_core.diagnostics import LogRing
+    r = LogRing(3)
+    for i in range(5):
+        r.add(datetime(2026, 9, 27, tzinfo=timezone.utc), "INFO", f"line {i}")
+    assert [x["msg"] for x in r.lines] == ["line 2", "line 3", "line 4"]

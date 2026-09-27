@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.7 (beta)
+
+### Behaviour changes
+- None.
+
+### New
+- **Diagnostics export** on the Health tab (admins): one JSON file with the settings, the inverter write log (48 h),
+  the plan, PowerEngine's recent log lines, live entity states (PowerEngine's, the mapped inputs and the inverter
+  controls) and 24 h of battery, grid and mode history. Download, Share or Copy it, then upload it when there's no
+  shell to pull files. Account numbers, serials and similar attributes are removed. A copy of the app's part is kept
+  in `/homeassistant/powerengine/diagnostics/` (last 5).
+
 ## 0.9.6 (beta)
 
 ### Behaviour changes
