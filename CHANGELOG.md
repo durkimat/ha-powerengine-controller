@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.5 (beta)
+
+### Behaviour changes
+- None to normal control. New supervised tests write to the inverter only when you start one.
+
+### New
+- **Tests tab** (right of Config) with the supervised tests moved there from Config, a *Pause control* switch, and
+  clear instructions per test: what it does, what to watch for on the inverter screen, and what PowerEngine checks.
+- **RAM remote-control tests** for the Solis *Battery control override* registers (43135, with power in
+  43136/43129): force charge, force discharge, hold (0 W force charge) and a failsafe test that stops the command
+  being re-sent (SolaX Modbus reload, no Off written) and times how long the inverter takes to drop it by itself.
+  Each samples battery and grid power every 30 s, checks the timed-window settings didn't change, and gives a
+  verdict. First step towards control without EEPROM writes (#101).
+- Test timelines now include grid power.
+
 ## 0.9.4 (beta)
 
 ### Behaviour changes

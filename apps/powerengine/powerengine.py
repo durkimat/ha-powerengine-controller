@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
 
-from pe_core import __version__, clock, testwrite
+from pe_core import __version__, clock, rctest, testwrite
 from pe_core import learn as learning
 from pe_core.activity import ActivityLog
 from pe_core.certainty import Certainty
@@ -1351,7 +1351,7 @@ class PowerEngine(hass.Hass):
     def _battery_now(self):
         try:
             r = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
-            return {"soc": r.battery_soc, "battery_w": r.battery_power}
+            return {"soc": r.battery_soc, "battery_w": r.battery_power, "grid_w": r.grid_power}
         except Exception:
             return {}
 
@@ -1377,7 +1377,26 @@ class PowerEngine(hass.Hass):
             self._publish_test()
             self.fire_event("pe_test_result", ok=False, message=f"Refused: {err}")
             return
+        rc = self._rc_entities() if req and req["action"] in rctest.RC_TESTS else {}
+        if req and not err and req["action"] in rctest.RC_TESTS:
+            gone = rctest.missing_roles(rc, req["action"])
+            opts = self.get_state(rc.get("rc_mode"), attribute="options") if rc.get("rc_mode") else None
+            if gone:
+                err = "remote-control entities not found in HA: " + ", ".join(gone)
+            elif isinstance(opts, list) and rctest.RC_TESTS[req["action"]] not in opts:
+                err = f"{rc['rc_mode']} has no '{rctest.RC_TESTS[req['action']]}' option"
+            if err:
+                self.log(f"Supervised test by {user} refused: {err}", level="WARNING")
+                self._test = testwrite.TestRun({"action": req["action"]}, now)
+                self._test.problems.append(err)
+                self._test.finish("refused")
+                self._publish_test()
+                self.fire_event("pe_test_result", ok=False, message=f"Refused: {err}")
+                return
         run = self._test = testwrite.TestRun(req, now)
+        if req["action"] in rctest.RC_TESTS:
+            self._rc_start(req, run, rc, now, user)
+            return
         p = self._control_params(self._last_readings) if getattr(self, "_last_readings", None) else None
         max_c, max_d = (p.max_charge_kw * 1000, p.max_discharge_kw * 1000) if p else (4800, 4800)
         now_local = now.astimezone(self.tz) if self.tz else now
@@ -1423,6 +1442,9 @@ class PowerEngine(hass.Hass):
 
     def _test_end(self, kwargs):
         run = self._test
+        if run.req.get("action") in rctest.RC_TESTS:
+            self._rc_end(kwargs)
+            return
         for handle in getattr(self, "_test_handles", []):
             try:
                 self.cancel_timer(handle)
@@ -1439,6 +1461,109 @@ class PowerEngine(hass.Hass):
         run.step(datetime.now(timezone.utc), "reverted to Self-Use", writes=[w.as_dict() for w in writes])
         self._publish_test()
         self.run_in(self._test_check, 10, phase="end", want=want, entities=entities, stopped=kwargs.get("stopped"))
+
+    # --- supervised remote-control (RC register) tests ------------------------------------------
+
+    def _rc_entities(self):
+        try:
+            ids = list((self.get_state() or {}).keys())
+        except Exception:
+            ids = []
+        return rctest.find_entities(ids)
+
+    def _rc_start(self, req, run, rc, now, user):
+        test = req["action"]
+        power = req["power_w"] = rctest.power_for(test, req.get("power_w"))
+        # the timed windows closed first, so they can't be what moves the battery
+        want = release()
+        windows, _ = self._control_entities(want)
+        have = {role: self.get_state(windows[role]) for role in want}
+        writes = writes_needed(want, have)
+        run.step(now, "before", **self._battery_now(), rc_entities=rc)
+        self._write_why = f"supervised RC test: {test} (timed windows closed first)"
+        self._write(writes, windows)
+        run.step(now, "timed windows closed", writes=[w.as_dict() for w in writes])
+        prole = "rc_discharge_power" if test == "rc_discharge" else "rc_charge_power"
+        option = rctest.RC_TESTS[test]
+        self._write_why = f"supervised RC test: {test}"
+        self._write([Write(prole, power, "number"), Write("rc_mode", option, "select")], rc)
+        run.step(now, f"remote control: {option} at {power} W")
+        self._rc = {"rc": rc, "prole": prole, "power": power, "want": want, "windows": windows,
+                    "stop_at": None, "samples": []}
+        self.log(f"Supervised RC test started by {user}: {test} at {power} W for {req['minutes']} min")
+        self._logbook(f"supervised RC test started by {user}: {test} for {req['minutes']} min")
+        self._publish_test()
+        self.fire_event("pe_test_result", ok=True, message=f"Test started: {test} for {req['minutes']} min")
+        self._test_handles = [self.run_in(self._rc_relatch, 5),
+                              self.run_every(self._rc_sample, f"now+{rctest.SAMPLE_S}", rctest.SAMPLE_S),
+                              self.run_in(self._rc_end, req["minutes"] * 60)]
+        if test == "rc_failsafe":
+            self._test_handles.append(self.run_in(self._rc_stop_resending, rctest.FAILSAFE_FORCE_S))
+
+    def _rc_relatch(self, kwargs):
+        """The power again after the force option: some firmware only takes the power once RC is on."""
+        if self._test_running():
+            rc = self._rc
+            self._write_why = "supervised RC test: power again after the force option"
+            self._write([Write(rc["prole"], rc["power"], "number")], rc["rc"])
+
+    def _rc_sample(self, kwargs):
+        if not self._test_running():
+            return
+        now = datetime.now(timezone.utc)
+        sample = {"time": now.isoformat(timespec="seconds"), **self._battery_now(),
+                  "rc": self.get_state(self._rc["rc"]["rc_mode"])}
+        self._rc["samples"].append(sample)
+        self._test.step(now, "reading", **{k: v for k, v in sample.items() if k != "time"})
+        self._publish_test()
+
+    def _rc_stop_resending(self, kwargs):
+        """rc_failsafe: stop SolaX Modbus re-sending the force command (reload it) without writing Off."""
+        if not self._test_running():
+            return
+        now = datetime.now(timezone.utc)
+        self._rc["stop_at"] = now.isoformat(timespec="seconds")
+        self.call_service("homeassistant/reload_config_entry", entity_id=self._rc["rc"]["rc_mode"])
+        self._test.step(now, "stopped re-sending (SolaX Modbus reloaded; Off NOT written) - watching for the "
+                             "inverter to drop the force charge by itself")
+        self._publish_test()
+
+    def _rc_end(self, kwargs):
+        run, rc = self._test, self._rc
+        for handle in getattr(self, "_test_handles", []):
+            try:
+                self.cancel_timer(handle)
+            except Exception:
+                pass
+        self._test_handles = []
+        run.status = "reverting"
+        self._write_why = "supervised RC test: end (remote control Off)"
+        self._write([Write("rc_mode", rctest.OPTION_OFF, "select")], rc["rc"])
+        run.step(datetime.now(timezone.utc), "remote control Off", **self._battery_now())
+        self._publish_test()
+        self.run_in(self._rc_finish, 15, stopped=kwargs.get("stopped"))
+
+    def _rc_finish(self, kwargs):
+        run, rc = self._test, self._rc
+        now = datetime.now(timezone.utc)
+        have = {role: self.get_state(rc["windows"][role]) for role in rc["want"]}
+        changed = readback_mismatches(rc["want"], have)
+        if changed:
+            run.problems.append("timed-window settings changed during the test: " + ", ".join(changed))
+        mode = self.get_state(rc["rc"]["rc_mode"])
+        if mode not in (rctest.OPTION_OFF, None):
+            run.problems.append(f"remote control still shows '{mode}' after switching Off")
+        run.verdict, run.explanation = rctest.judge(run.req["action"], rc["power"], rc["samples"], rc["stop_at"])
+        run.step(now, f"result: {run.verdict}", note=run.explanation, **self._battery_now())
+        good = run.verdict in ("worked", "reverted") and not run.problems
+        run.finish("stopped" if kwargs.get("stopped") else ("passed" if good else "failed"))
+        self.log(f"Supervised RC test {run.status}: {run.verdict} ({run.explanation})"
+                 + (f"; {run.problems}" if run.problems else ""), level="INFO" if good else "WARNING")
+        self._logbook(f"supervised RC test {run.status}: {run.verdict}")
+        self._notify("health", (f"test:{run.started.isoformat()}", f"PowerEngine RC test {run.status}",
+                                f"{run.req['action']}: {run.verdict} - {run.explanation}"
+                                + ("; " + "; ".join(run.problems) if run.problems else "")))
+        self._publish_test()
 
     def _publish_writes(self):
         try:
