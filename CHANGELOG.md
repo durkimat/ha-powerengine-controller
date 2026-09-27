@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.22 (beta)
+
+### Behaviour changes
+- None.
+
+### New
+- **Trial tab** (#114): side-by-side options for a clearer live picture and plan, to choose from:
+  - **A** the current flow card, tuned (coloured values, new flow-rate model);
+  - **B** the Sunsynk Power Flow Card (install *Sunsynk Power Flow Card* from HACS first);
+  - **C** needle gauges for battery (charging ← → discharging), grid (export ← → import), solar, house and battery %;
+  - **D** the last 30 minutes of house, battery, grid and solar power;
+  - **E** the plan chart with hover detail: each half-hour's planned action and the reason.
+  A line at the top shows PowerEngine's decision and the inverter command. The chosen views will move to the
+  Monitoring and Plan tabs, and the Trial tab will go.
+
 ## 0.9.21 (beta)
 
 ### Behaviour changes

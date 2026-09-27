@@ -64,7 +64,7 @@ def test_charts_have_a_phone_version():
     walk(d)
     desk = [c for q, c in pairs if "min-width" in q]
     phone = [c for q, c in pairs if "max-width" in q]
-    assert len(desk) == len(phone) == 5
+    assert len(desk) == len(phone) == 7
     for a, b in zip(desk, phone, strict=True):
         assert a["series"] == b["series"]
         assert sum(y.get("show", True) for y in b["yaxis"]) == 1
