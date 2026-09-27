@@ -28,6 +28,19 @@ DAILY_CAP = 6
 MIN_LEAD = timedelta(minutes=60)
 LOOKAHEAD = timedelta(hours=3)
 KEEP_DAYS = 30
+SETTLE = timedelta(minutes=15)       # after a start-up, or EDF's data being unavailable, before any request
+
+
+def half_hours(windows, after: datetime | None = None) -> set[str]:
+    """The half-hours (start ISO) covered by dispatch windows, optionally only those ending after `after`."""
+    out = set()
+    for w in windows:
+        t = w.start
+        while t < w.end:
+            if after is None or t + timedelta(minutes=30) > after:
+                out.add(t.isoformat())
+            t += timedelta(minutes=30)
+    return out
 
 
 def choose_time(options: list[str], current: str | None, now_local: datetime) -> str | None:
@@ -86,7 +99,8 @@ class SmartCharger:
 
     def _record(self, now: datetime, by: str, frm: str | None, to: str, dispatches, why: str = "") -> dict:
         a = {"time": now.isoformat(timespec="seconds"), "by": by, "from": frm, "to": to, "why": why,
-             "before": sorted(w.start.isoformat() for w in dispatches), "result": None, "gained": 0}
+             "before": sorted(w.start.isoformat() for w in dispatches),
+             "before_hh": sorted(half_hours(dispatches, now)), "result": None, "gained": 0, "lost": 0}
         if by == "would":
             a["result"] = "not sent (Passive)"
         self.attempts.append(a)
@@ -97,13 +111,18 @@ class SmartCharger:
     def resolve(self, now: datetime, dispatches) -> bool:
         """Settle attempts whose check time has come. Returns True if any changed."""
         changed = False
-        starts = {w.start.isoformat() for w in dispatches}
+        now_hh = half_hours(dispatches)
         for a in self.attempts:
             if a["result"] is None and now >= datetime.fromisoformat(a["time"]) + CHECK_AFTER:
-                new = starts - set(a["before"])
-                a["gained"], a["result"] = len(new), ("slots" if new else "none")
+                if "before_hh" in a:                       # net half-hours: new ones gained, planned ones lost
+                    before = {h for h in a["before_hh"] if datetime.fromisoformat(h) + timedelta(minutes=30) > now}
+                    gained, lost = len(now_hh - before), len(before - now_hh)
+                else:                                      # older records: new start times only
+                    gained, lost = len({w.start.isoformat() for w in dispatches} - set(a["before"])), 0
+                a["gained"], a["lost"] = gained, lost
+                a["result"] = "slots" if gained > lost else ("lost slots" if lost > gained else "none")
                 if a["by"] == "powerengine":
-                    self.backoff = 0 if new else min(self.backoff + 1, len(BACKOFF_MIN) - 1)
+                    self.backoff = 0 if gained > lost else min(self.backoff + 1, len(BACKOFF_MIN) - 1)
                 changed = True
         return changed
 
@@ -111,9 +130,13 @@ class SmartCharger:
         self._record(now, "other", frm, to, dispatches)
 
     def step(self, now: datetime, now_local: datetime, worth: tuple[bool, str], options: list[str],
-             current: str | None, dispatches, active: bool) -> dict | None:
-        """The request to make now, if any: {"to": "HH:MM", ...}. Records it (as "would" when not active)."""
+             current: str | None, dispatches, active: bool, settled: bool = True) -> dict | None:
+        """The request to make now, if any: {"to": "HH:MM", ...}. Records it (as "would" when not active).
+        Nothing while not `settled` (just started, or EDF's data was recently unavailable: an empty slot list
+        then may just mean it hasn't loaded yet, and a request would make EDF re-plan for nothing)."""
         ok, why = worth
+        if not settled:
+            return None
         if not ok:
             if why == "car not plugged in":
                 self.backoff, self.next_allowed = 0, None
@@ -143,7 +166,7 @@ class SmartCharger:
         since = (now - timedelta(days=days)).isoformat()
         recent = [a for a in self.attempts if a["time"] >= since]
         def rate(by: str) -> dict:
-            xs = [a for a in recent if a["by"] == by and a["result"] in ("slots", "none")]
+            xs = [a for a in recent if a["by"] == by and a["result"] in ("slots", "none", "lost slots")]
             won = sum(1 for a in xs if a["result"] == "slots")
             return {"tries": len(xs), "won": won, "rate": round(won / len(xs) * 100) if xs else None}
         rows = []
@@ -152,7 +175,7 @@ class SmartCharger:
             lt = t.astimezone(tz) if tz else t
             rows.append({"when": lt.strftime("%a %d %b %H:%M"), "by": a["by"],
                          "change": f"{a['from'] or '?'} → {a['to']}", "result": a["result"] or "waiting",
-                         "gained": a["gained"], "why": a.get("why", "")})
+                         "gained": a["gained"], "lost": a.get("lost", 0), "why": a.get("why", "")})
         return {"days": days, "powerengine": rate("powerengine"), "other": rate("other"),
                 "would_today": sum(1 for a in recent if a["by"] == "would"
                                    and a["time"][:10] == now.date().isoformat()),

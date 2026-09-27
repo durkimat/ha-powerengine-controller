@@ -55,7 +55,7 @@ def test_success_resets_back_off_and_external_changes_are_scored():
     assert a and a["result"] is None
     new = [Window(T0 + timedelta(hours=3), T0 + timedelta(hours=4), -3)]
     sc.resolve(T0 + timedelta(minutes=16), new)
-    assert sc.attempts[-1]["result"] == "slots" and sc.attempts[-1]["gained"] == 1 and sc.backoff == 0
+    assert sc.attempts[-1]["result"] == "slots" and sc.attempts[-1]["gained"] == 2 and sc.backoff == 0
     sc.observe_external(T0 + timedelta(hours=2), "07:00", "10:00", new)
     sc.resolve(T0 + timedelta(hours=2, minutes=20), new)
     s = sc.summary(T0 + timedelta(hours=3))
@@ -67,3 +67,26 @@ def test_passive_records_would_requests_without_waiting_for_results():
     sc = SmartCharger()
     a = sc.step(T0, T0.replace(tzinfo=None), (True, "x"), OPTS, "11:00", [], active=False)
     assert a["by"] == "would" and a["result"].startswith("not sent")
+
+
+def test_a_request_that_loses_planned_slots_counts_as_lost():
+    sc = SmartCharger()
+    before = [Window(T0 + timedelta(hours=4), T0 + timedelta(hours=6), -7)]           # 4 half-hours planned
+    sc.step(T0, T0.replace(tzinfo=None), (True, "x"), OPTS, "11:00", before, active=True)
+    after = [Window(T0 + timedelta(hours=5), T0 + timedelta(hours=5, minutes=30), -3)]  # EDF re-planned: 1 left
+    sc.resolve(T0 + timedelta(minutes=16), after)
+    a = sc.attempts[-1]
+    assert (a["result"], a["gained"], a["lost"]) == ("lost slots", 0, 3) and sc.backoff == 1
+    assert sc.summary(T0 + timedelta(hours=1))["powerengine"] == {"tries": 1, "won": 0, "rate": 0}
+
+
+def test_no_request_until_settled():
+    sc = SmartCharger()
+    assert sc.step(T0, T0.replace(tzinfo=None), (True, "x"), OPTS, "11:00", [], active=True, settled=False) is None
+    assert not sc.attempts
+
+
+def test_half_hours():
+    from pe_core.smartcharge import half_hours
+    w = [Window(T0, T0 + timedelta(hours=1), -1)]
+    assert len(half_hours(w)) == 2 and len(half_hours(w, T0 + timedelta(minutes=40))) == 1

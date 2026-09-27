@@ -477,3 +477,20 @@ def test_mid_slot_replan_keeps_the_running_action_on_a_near_tie():
     kept = optimise(slots, 50.0, Params(arbitrage=True), prev_action="hold", stick=10.0)   # huge: always keep
     assert kept["actions"][0] == "hold" and T0
     assert free["actions"][0] in ("self_use", "hold", "grid_charge", "export")
+
+
+def test_smart_requests_wait_to_settle_after_start(app):
+    from datetime import timedelta
+    app.cfg = parse_config({**GUARDED, "inputs": {**app.cfg.raw["inputs"],
+                                                  "smart_dispatches": {"entity": "binary_sensor.edf_dispatching"}}})
+    t = datetime(2026, 9, 27, 20, 0, tzinfo=timezone.utc)
+    app.states["binary_sensor.edf_dispatching"] = "off"
+    assert not app._smart_settled(t, "07:00")                       # just started
+    assert not app._smart_settled(t + timedelta(minutes=10), "07:00")
+    assert app._smart_settled(t + timedelta(minutes=16), "07:00")
+    app.states["binary_sensor.edf_dispatching"] = "unavailable"     # EDF integration restarting
+    assert not app._smart_settled(t + timedelta(minutes=17), "07:00")
+    app.states["binary_sensor.edf_dispatching"] = "off"
+    assert not app._smart_settled(t + timedelta(minutes=18), "07:00")
+    assert app._smart_settled(t + timedelta(minutes=34), "07:00")
+    assert not app._smart_settled(t + timedelta(minutes=35), "unavailable")
