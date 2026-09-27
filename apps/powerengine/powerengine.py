@@ -65,7 +65,7 @@ from pe_core.planner import make_plan, params_from, plan_entity_states, slot_cer
 from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue, is_forbidden_control
-from pe_core.schedule import desired_state, periods, settled, slot_entities, urgent, writes_for
+from pe_core.schedule import desired_state, forecast_writes, periods, settled, slot_entities, urgent, writes_for
 from pe_core.simhistory import History, months_wanted, parse_upload
 from pe_core.simjob import SimContext, SimStore
 from pe_core.simjob import run as sim_run
@@ -814,6 +814,18 @@ class PowerEngine(hass.Hass):
                 extra["optimiser"] = compare(self.plan, optimise(slots, r.battery_soc, p, wear=p.wear_p / 100), p)
             except Exception as err:
                 self.log(f"Optimiser comparison failed: {err!r}", level="WARNING")
+        try:                                              # the writes the plan implies, for the plan chart
+            sm = self._slot_map()
+            if sm and self.plan is not None:
+                ents = self._slot_keys(sm)
+                have = {k: self.get_state(e) for k, e in ents.items() if e and "update_button" not in k}
+                pc = self._control_params(r)
+                now_local = r.now.astimezone(self.tz) if self.tz else r.now
+                wf = forecast_writes(self.plan.slots, now_local, self.tz, have, BATTERY_VOLTS,
+                                     pc.max_charge_kw * 1000, pc.max_discharge_kw * 1000)
+                extra["writes_forecast"], extra["writes_forecast_24h"] = wf, sum(wf.values())
+        except Exception as err:
+            self.log(f"Could not forecast inverter writes: {err!r}", level="WARNING")
         for key, (state, attrs) in plan_entity_states(self.plan, extra).items():
             self._publish_if_changed(key, state, attrs)
 

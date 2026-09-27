@@ -201,3 +201,19 @@ def test_new_discharge_window_prefers_a_slot_being_pressed():
     near = Period("discharge", NOW.replace(hour=21, minute=30), NOW.replace(hour=22), EXPORT)
     assert assign([near], [CLOSED, CLOSED, CLOSED], NOW, pressing={3}) == [CLOSED, CLOSED, (21, 30, 22, 0)]
     assert assign([near], [CLOSED, CLOSED, CLOSED], NOW) == [(21, 30, 22, 0), CLOSED, CLOSED]
+
+
+def test_forecast_writes_counts_real_writes_per_half_hour():
+    from pe_core.schedule import forecast_writes
+    start = NOW                                                    # 21:00: sell 22:00-23:00, charge 23:00-00:00
+    acts = [SELF_USE, SELF_USE, EXPORT, EXPORT, GRID_CHARGE, GRID_CHARGE] + [SELF_USE] * 6
+    plan = plan_of(acts, start)
+    have = {f"timed_{k}_{r}#{n}": 0 for k in ("charge", "discharge") for n in (1, 2, 3)
+            for r in ("start_hour", "start_minute", "end_hour", "end_minute")}
+    have.update({"timed_charge_current": 0, "timed_discharge_current": 0, "storage_mode": "Self-Use"})
+    f = forecast_writes(plan, start, LON, have, 52.0, 4800, 4800)
+    assert f and all(n > 0 for n in f.values())
+    first = min(f)
+    assert first.startswith("2026-09-24T20:00")                  # 21:00 local: programme the coming windows
+    assert sum(f.values()) <= 8                                  # a simple evening: a handful, not dozens
+    assert forecast_writes(plan, start, LON, have, 52.0, 4800, 4800) == f
