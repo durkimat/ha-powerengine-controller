@@ -50,3 +50,18 @@ def test_held_count():
     d.count_held("2026-09-27")
     d.count_held("2026-09-27")
     assert d.held == {"2026-09-27": 2}
+
+
+def test_restart_hold_off_works_before_the_config_is_loaded():
+    """0.9.12 called it at the very start of initialize(), before self.cfg existed, and the app failed to start."""
+    import sys
+    import types
+    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
+    hassapi.Hass = type("Hass", (), {})
+    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
+        sys.modules.setdefault(name, types.ModuleType(name))
+    sys.modules.setdefault("appdaemon.plugins.hass.hassapi", hassapi)
+    import powerengine
+    a = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
+    a._damp_restart(T)                                   # no self.cfg yet: must not raise
+    assert a.damper.hold_until == T + timedelta(minutes=5)

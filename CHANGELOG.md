@@ -2,6 +2,12 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.13 (beta)
+
+### Behaviour changes
+- **Fix: 0.9.12 didn't start.** The restart hold-off was set up before the config was loaded, which stopped the app
+  starting (no entities, dashboard blank). No other changes.
+
 ## 0.9.12 (beta)
 
 ### Behaviour changes
