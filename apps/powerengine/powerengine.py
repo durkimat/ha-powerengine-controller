@@ -88,6 +88,7 @@ REPLAN_SECONDS = 300
 HISTORY_DAYS = 14
 BACKFILL_DAYS = 14
 RECHECK_SECONDS = 300
+BUTTON_DELAY_S = 3                # apply the inverter's window times this long after writing them (see _press_buttons)
 INPUT_GRACE_SECONDS = 600         # inputs missing: keep the inverter's programmed windows this long before releasing
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
@@ -1129,19 +1130,52 @@ class PowerEngine(hass.Hass):
             except Exception:                         # no data folder (tests): write without a journal
                 journal = None
         why = getattr(self, "_write_why", "") or "control"
+        numbers, buttons = [], []
         for w in writes:
             eid = entities.get(w.role)
             if not eid or is_forbidden_control(eid):
                 continue
+            if w.kind == "button":
+                buttons.append(eid)
+                continue
             if journal is not None:
-                journal.add(now, eid, w.value, None if w.kind == "button" else self.get_state(eid), why)
+                journal.add(now, eid, w.value, self.get_state(eid), why)
             if w.kind == "number":
                 self.call_service("number/set_value", entity_id=eid, value=w.value)
+                numbers.append((eid, w.value))
             elif w.kind == "select":
                 self.call_service("select/select_option", entity_id=eid, option=w.value)
-            elif w.kind == "button":
-                self.call_service("button/press", entity_id=eid)
             self.writes.own(self._today())          # 'observed' is counted by the state listener
+        if buttons:
+            # The Solis "update times" button sends the window entities' current values to the inverter. Pressed at
+            # once, it can go before the new values have landed and send the old ones (the inverter then runs one
+            # change behind), so press it once they read back, a few seconds later.
+            args = {"buttons": buttons, "numbers": numbers, "why": why, "tries": 1}
+            if numbers:
+                self.run_in(self._press_buttons, BUTTON_DELAY_S, **args)
+            else:
+                self._press_buttons(args)            # nothing to wait for (e.g. the clock sync button)
+        try:
+            if journal is not None:
+                journal.save(now)
+        except OSError as err:
+            self.log(f"Could not save the write journal: {err!r}", level="WARNING")
+
+    def _press_buttons(self, kwargs):
+        pending = [eid for eid, v in kwargs["numbers"] if str(self.get_state(eid)) not in (str(v), f"{v}.0")]
+        if pending and kwargs["tries"] < 4:
+            self.run_in(self._press_buttons, BUTTON_DELAY_S, **dict(kwargs, tries=kwargs["tries"] + 1))
+            return
+        if pending:
+            self.log(f"Window values not confirmed before applying them ({pending}); applying anyway",
+                     level="WARNING")
+        now = datetime.now(timezone.utc)
+        journal = getattr(self, "journal", None)
+        for eid in kwargs["buttons"]:
+            self.call_service("button/press", entity_id=eid)
+            self.writes.own(self._today())
+            if journal is not None:
+                journal.add(now, eid, None, None, kwargs["why"])
         try:
             if journal is not None:
                 journal.save(now)
@@ -1151,7 +1185,7 @@ class PowerEngine(hass.Hass):
     def _execute(self, writes, entities, attempt=1):
         """Active mode, pause and leaving Active. Write, then verify."""
         self._write(writes, entities)
-        self.run_in(self._verify_writes, 6, writes=[w.as_dict() for w in writes if w.kind != "button"],
+        self.run_in(self._verify_writes, 15, writes=[w.as_dict() for w in writes if w.kind != "button"],
                     entities=entities, attempt=attempt)
 
     def _verify_writes(self, kwargs):

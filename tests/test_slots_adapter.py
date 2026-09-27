@@ -24,6 +24,13 @@ def _with_slots(a):
     return a
 
 
+def press(a):
+    """Run the delayed 'apply windows' button presses (they wait for the values to land)."""
+    for cb, kw in [t for t in a.timers if getattr(t[0], "__name__", "") == "_press_buttons"]:
+        a.timers.remove((cb, kw))
+        cb(kw)
+
+
 def test_slots_programme_the_night_and_then_stay_quiet(app):  # noqa: F811
     a = _with_slots(app)
     now = datetime(2026, 9, 24, 22, 0, tzinfo=UTC)
@@ -32,6 +39,8 @@ def test_slots_programme_the_night_and_then_stay_quiet(app):  # noqa: F811
     r = type("R", (), {"now": now})()
     a._params = lambda readings=None: __import__("pe_core.planner", fromlist=["Params"]).Params()
     a._control(r, Decision(EXPORT, "plan", "sell"))
+    assert not any(c == "button/press" for c, _ in a.calls)       # not before the values have landed
+    press(a)
     first = [c for c in a.calls]
     assert any(s == "button/press" for s, _ in first)
     assert a.published[-1][2]["strategy"] == "slots"
@@ -45,6 +54,7 @@ def test_pause_closes_all_three_slots(app):  # noqa: F811
     a = _with_slots(app)
     a.states["number.timed_charge_start_hour_3"] = 23
     a._release()
+    press(a)
     assert a.states["number.timed_charge_start_hour_3"] == 0
     assert ("button/press", {"entity_id": "button.timed_update_button_3"}) in a.calls
 

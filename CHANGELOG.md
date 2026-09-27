@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.1 (beta)
+
+### Behaviour changes
+- **The inverter's "update times" button is pressed a few seconds after the new window times, not with them.** The
+  Solis button sends the window entities' current values to the inverter. Sent in the same burst, it could go
+  before the new values had landed and send the previous ones, so the inverter ran one change behind the plan.
+  Last night that looks to be why the battery sold from 00:30 while PowerEngine was holding it: the inverter still
+  had an earlier discharge window. The button now waits until the new values read back (up to about 12 s), and
+  the read-back check runs after that.
+
 ## 0.9.0 (beta)
 
 ### Behaviour changes
