@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.17 (beta)
+
+### Behaviour changes
+- **A full car no longer blocks arbitrage in later smart slots.** When the car is plugged in but the charger reports
+  the charge complete (Zappi "Completed"), PowerEngine no longer assumes the car will draw power in coming EDF
+  slots, so those slots are planned as cheap house slots (charge and sell), not "charge the battery with the car".
+  Before, only the rest of a slot already running was freed. If the car does start charging, the car-charging rule
+  takes over at once (the battery holds or charges; it never feeds the car).
+
 ## 0.9.16 (beta)
 
 ### Behaviour changes

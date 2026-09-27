@@ -195,11 +195,14 @@ def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | No
         return r.import_rate, True
 
     def _car_expected(r, s: datetime) -> bool:
-        """Will the car draw power in this smart slot? Not if it's unplugged, nor for the rest of a dispatch that's
-        already running while the car isn't charging (it has finished or stopped; the slot is still cheap)."""
+        """Will the car draw power in this smart slot? Not if it's unplugged, nor if the charger reports the charge
+        complete, nor for the rest of a dispatch that's already running while the car isn't charging (it has finished
+        or stopped; the slot is still cheap). If the car does start, the car-charging rule takes over at once."""
         state = r.ev_state()
         if state == "unplugged":
             return False
+        if state == "plugged_in" and "complet" in str(getattr(r, "ev_status", "") or "").lower():
+            return False                  # the charger says the charge is complete (car full): it won't draw
         if state == "plugged_in":
             win = next((w for w in r.dispatches if w.start <= s < w.end), None)
             if win is not None and win.start <= r.now:

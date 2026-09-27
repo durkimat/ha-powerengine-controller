@@ -112,11 +112,16 @@ def test_car_finished_mid_dispatch_frees_the_rest_of_it():
     r.ev_plug = "Charging"
     assert all(s.car_expected for s in build_slots(r, [], None, BST) if s.smart_slot)
     r.ev_plug = "EV Connected"                     # plugged in, not charging: finished
+    r.ev_status = "Paused"                         # (charger not reporting the charge complete)
     slots = build_slots(r, [], None, BST)
     now_slots = [s for s in slots if s.smart_slot and s.start < s0 + timedelta(hours=4)]
     later = [s for s in slots if s.smart_slot and s.start >= s0 + timedelta(hours=20)]
     assert now_slots and not any(s.car_expected for s in now_slots) and all(s.car_kw == 0 for s in now_slots)
     assert later and all(s.car_expected for s in later)
+    r.ev_status = "Completed"                      # the charger says the car is full: later slots are free too
+    slots = build_slots(r, [], None, BST)
+    assert not any(s.car_expected for s in slots if s.smart_slot)
+    r.ev_status = "Paused"
     r.ev_plug = "EV Disconnected"
     assert not any(s.car_expected for s in build_slots(r, [], None, BST) if s.smart_slot)
     # the optimiser may sell in a smart slot the car has finished with
