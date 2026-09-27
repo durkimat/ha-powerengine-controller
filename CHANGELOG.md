@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.24 (beta)
+
+### Behaviour changes
+- None.
+
+### New
+- **Trial tab, B (Sunsynk flow): the car.** Shown as a load within the total. The card's load circle now uses a new
+  sensor, `sensor.pe_state_load_power` (house + car), with the car's own power as one of the loads in it.
+
 ## 0.9.23 (beta)
 
 ### Behaviour changes

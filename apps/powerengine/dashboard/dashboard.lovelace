@@ -1454,7 +1454,6 @@ views:
         cards:
           - type: heading
             heading: B · Sunsynk flow (HACS)
-          # kept to the documented minimum (the Solis example): extra options gave a configuration error
           - type: custom:sunsynk-power-flow-card
             grid_options: {columns: full}
             cardstyle: lite
@@ -1470,13 +1469,18 @@ views:
               mppts: 1
             load:
               show_daily: false
+              additional_loads: 1
+              load1_name: Car
+              load1_icon: mdi:car-electric
             grid:
               show_nonessential: false
             entities:
               battery_power_190: sensor.pe_state_battery_power
               battery_soc_184: sensor.pe_state_battery_soc
               grid_ct_power_172: sensor.pe_state_grid_power
-              essential_power: sensor.pe_state_house_power
+              # the load circle is the total (house + car); the car is shown as one of the loads within it
+              essential_power: sensor.pe_state_load_power
+              essential_load1: sensor.pe_state_ev_power
               pv1_power_186: sensor.pe_state_solar_power
       - type: grid
         cards:
