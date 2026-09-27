@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
 
-from pe_core import __version__, clock, rctest, testwrite
+from pe_core import __version__, clock, diagnostics, rctest, testwrite
 from pe_core import learn as learning
 from pe_core.activity import ActivityLog
 from pe_core.certainty import Certainty
@@ -198,6 +198,7 @@ class PowerEngine(hass.Hass):
 
         self.listen_event(self._on_save, SAVE_EVENT)
         self.listen_event(self._on_test, TEST_EVENT)
+        self.listen_event(self._on_diag_request, diagnostics.REQUEST_EVENT)
         self.listen_event(self._on_set_control, CONTROL_EVENT)
         self.listen_event(self._on_sim_history, "pe_sim_history")
         self.listen_event(self._on_sim_settings, "pe_sim_settings")
@@ -1984,6 +1985,49 @@ class PowerEngine(hass.Hass):
         self._last_checks = None
         self._evaluate()
         self._cycle({})
+
+    # --- diagnostics export ------------------------------------------------------------------------
+
+    def log(self, msg, *args, **kwargs):
+        """AppDaemon's log, also kept in a small in-memory ring for the diagnostics export."""
+        ring = self.__dict__.get("_log_ring")
+        if ring is None:
+            ring = self.__dict__["_log_ring"] = diagnostics.LogRing()
+        ring.add(datetime.now(timezone.utc), kwargs.get("level", "INFO"), msg)
+        return super().log(msg, *args, **kwargs)
+
+    def _diag_bundle(self, now):
+        s = diagnostics.safe
+        journal = getattr(self, "journal", None)
+        if journal is None:
+            journal = s(lambda: WriteJournal(os.path.join(os.path.dirname(self._save_path()), "write_journal.json")))
+        mode = getattr(self, "mode", None)
+        run = getattr(self, "_test", None)
+        return {
+            "app": {"version": __version__, "generated": now.isoformat(timespec="seconds"),
+                    "timezone": str(self.tz) if self.tz else None},
+            "mode": s(lambda: {"configured": mode.configured, "effective": mode.effective, "reason": mode.reason,
+                               "halted": bool(getattr(self, "_halted", False)),
+                               "cap_base": getattr(self, "_cap_base", 0)}) if mode else None,
+            "config": s(lambda: self.cfg.raw) if self.cfg else {"error": getattr(self, "cfg_error", "no config")},
+            "writes": s(lambda: self.writes.summary(self._today())),
+            "journal": s(lambda: diagnostics.recent_journal(journal.entries, now)),
+            "plan": s(lambda: plan_snapshot(self.plan, now - timedelta(hours=1), now + timedelta(hours=36)))
+            if getattr(self, "plan", None) is not None else None,
+            "test": run.as_dict() | {"status": run.status} if run is not None else None,
+            "log": list(getattr(self.__dict__.get("_log_ring"), "lines", [])),
+        }
+
+    def _on_diag_request(self, event_name, data, kwargs):
+        now = datetime.now(timezone.utc)
+        rid = str(data.get("id", ""))[:40]
+        bundle = self._diag_bundle(now)
+        stamp = (now.astimezone(self.tz) if self.tz else now).strftime("%Y%m%d-%H%M%S")
+        saved = diagnostics.safe(diagnostics.save_copy,
+                                 os.path.join(os.path.dirname(self._save_path()), "diagnostics"), stamp, bundle)
+        self.log(f"Diagnostics exported for {self._user_name(data)} ({saved if isinstance(saved, str) else saved})")
+        self.fire_event(diagnostics.BUNDLE_EVENT, id=rid, bundle=json.loads(json.dumps(bundle, default=str)),
+                        saved=saved if isinstance(saved, str) else None)
 
     def _user_name(self, data):
         ctx = (data.get("metadata") or {}).get("context") or data.get("context") or {}
