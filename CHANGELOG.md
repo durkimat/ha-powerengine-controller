@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.23 (beta)
+
+### Behaviour changes
+- None.
+
+### Fixes (Trial tab)
+- **B** Sunsynk flow: cut back to the documented minimum configuration (the extra options gave a configuration
+  error).
+- **D** Last 30 minutes: now HA's own history graph (the ApexCharts version stayed on "loading" at a 30-minute
+  span).
+
 ## 0.9.22 (beta)
 
 ### Behaviour changes
