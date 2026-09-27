@@ -476,6 +476,7 @@ views:
                     return Object.entries(w).map(([t, n]) => [new Date(t).getTime() + 900000, n]);
                 - entity: sensor.pe_plan
                   name: Action
+                  show: {legend_value: false}
                   yaxis_id: act
                   type: line
                   curve: stepline

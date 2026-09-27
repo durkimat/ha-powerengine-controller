@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.26 (beta)
+
+### Behaviour changes
+- **With arbitrage on, grid charging stays within the arbitrage band, except for the final top-up.** Charging from
+  the grid now stops at the band's top (90%) all day and through the night, and cycles stay inside the band. Only
+  the last half-hours of the fixed overnight window, just long enough to charge from the band's top to the
+  grid-charge target (100%) plus one to spare, may go above it, so the battery still starts the morning full for
+  the day (and winter) ahead. Free-power sessions still fill to 100%. Before, the top was only a 2p/kWh cost, so
+  evening cycles often ran up to 100%. Solar can still fill the battery above the band in the day.
+- The plan chart's legend no longer shows a meaningless value for *Action* (it's for the hover text).
+
 ## 0.9.25 (beta)
 
 ### Behaviour changes
