@@ -132,6 +132,8 @@ def entity_states(r: Readings | None, mode: ModeDecision, tz: tzinfo | None = No
                                                      "forecast_tomorrow_kwh": r.forecast_tomorrow_kwh})
     out["state_house_power"] = (num(r.house_power), {"including_car": num(r.house_power_raw)})
     out["state_ev_power"] = (num(r.ev_power), {})
+    total = None if r.house_power is None else r.house_power + (r.ev_power or 0)
+    out["state_load_power"] = (num(total), {"house": num(r.house_power), "car": num(r.ev_power)})
 
     nxt = r.next_rate_change()
     slot = r.current_dispatch()

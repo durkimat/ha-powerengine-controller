@@ -124,6 +124,7 @@ STATE_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "state_grid_power", "Grid power", {**POWER, "icon": "mdi:transmission-tower"}),
     EntityDef("sensor", "state_solar_power", "Solar power", {**POWER, "icon": "mdi:solar-power"}),
     EntityDef("sensor", "state_house_power", "House power", {**POWER, "icon": "mdi:home-lightning-bolt"}),
+    EntityDef("sensor", "state_load_power", "Total load (house + car)", {**POWER, "icon": "mdi:home-import-outline"}),
     EntityDef("sensor", "state_ev_power", "Car charging power", {**POWER, "icon": "mdi:car-electric"}),
     EntityDef("sensor", "state_import_rate", "Import rate", RATE),
     EntityDef("sensor", "state_export_rate", "Export rate", RATE),
