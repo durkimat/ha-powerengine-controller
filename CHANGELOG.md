@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.27 (beta)
+
+### Behaviour changes
+- **Overnight arbitrage is one deeper cycle, not many shallow ones.** Inside the fixed overnight window the refill is
+  guaranteed, so selling below the band's bottom no longer counts the outside-band cost there (down to the
+  reserve plus 10%, as before). The plan then sells once and refills once, instead of cycling 90↔75% several
+  times: the same energy and the same money (on a typical night the earnings were identical), with far fewer
+  switches. Outside the overnight window the band's bottom is still a hard floor, and the top of the band still
+  applies overnight until the final top-up.
+
 ## 0.9.26 (beta)
 
 ### Behaviour changes
