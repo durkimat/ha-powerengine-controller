@@ -1,6 +1,6 @@
 # PowerEngine dashboard: managed by the PowerEngine app.
 # This file is rewritten whenever PowerEngine is updated; local edits will be lost.
-# Needs: Power Flow Card Plus and ApexCharts Card (HACS). See docs/INSTALL.md, Step 5.
+# Needs: Sunsynk Power Flow Card and ApexCharts Card (HACS). See docs/INSTALL.md, Step 5.
 title: Power Engine
 views:
   - title: Monitoring
@@ -61,34 +61,90 @@ views:
         cards:
           - type: heading
             heading: Energy flow
-          - type: custom:power-flow-card-plus
+          - type: custom:sunsynk-power-flow-card
             grid_options: {columns: full}
-            watt_threshold: 1000
-            kw_decimals: 1
-            min_flow_rate: 1
-            max_flow_rate: 6
-            clickable_entities: true
-            display_zero_lines:
-              mode: transparency
-              transparency: 70
+            cardstyle: lite
+            show_solar: true
+            inverter:
+              model: solis
+              modern: false
+              autarky: "no"
+            battery:
+              energy: 18000
+              shutdown_soc: 12
+            solar:
+              mppts: 1
+            load:
+              show_daily: false
+              additional_loads: 1
+              load1_name: Car
+              load1_icon: mdi:car-electric
+            grid:
+              show_nonessential: false
             entities:
-              battery:
-                entity: sensor.pe_state_battery_power
-                state_of_charge: sensor.pe_state_battery_soc
-              grid:
-                entity: sensor.pe_state_grid_power
-              solar:
-                entity: sensor.pe_state_solar_power
-                display_zero_state: true
-              home:
-                entity: sensor.pe_state_house_power
-                override_state: true
-              individual:
-                - entity: sensor.pe_state_ev_power
-                  name: Car
-                  icon: mdi:car-electric
-                  display_zero: true
-                  display_zero_tolerance: 50
+              battery_power_190: sensor.pe_state_battery_power
+              battery_soc_184: sensor.pe_state_battery_soc
+              grid_ct_power_172: sensor.pe_state_grid_power
+              # the load circle is the total (house + car); the car is shown as one of the loads within it
+              essential_power: sensor.pe_state_load_power
+              essential_load1: sensor.pe_state_ev_power
+              pv1_power_186: sensor.pe_state_solar_power
+          - type: heading
+            heading: Gauges
+          - type: gauge
+            entity: sensor.pe_state_battery_power
+            name: Battery (← charging · discharging →)
+            needle: true
+            min: -5200
+            max: 5200
+            grid_options: {columns: 6}
+            segments:
+              - {from: -5200, color: "#43a047"}
+              - {from: -150, color: "#9e9e9e"}
+              - {from: 150, color: "#fb8c00"}
+          - type: gauge
+            entity: sensor.pe_state_grid_power
+            name: Grid (← export · import →)
+            needle: true
+            min: -6000
+            max: 12000
+            grid_options: {columns: 6}
+            segments:
+              - {from: -6000, color: "#43a047"}
+              - {from: -150, color: "#9e9e9e"}
+              - {from: 150, color: "#e53935"}
+          - type: gauge
+            entity: sensor.pe_state_solar_power
+            name: Solar
+            needle: true
+            min: 0
+            max: 6000
+            grid_options: {columns: 6}
+            segments:
+              - {from: 0, color: "#9e9e9e"}
+              - {from: 150, color: "#f9a825"}
+          - type: gauge
+            entity: sensor.pe_state_house_power
+            name: House
+            needle: true
+            min: 0
+            max: 10000
+            grid_options: {columns: 6}
+            segments:
+              - {from: 0, color: "#90caf9"}
+              - {from: 3000, color: "#fb8c00"}
+              - {from: 7000, color: "#e53935"}
+          - type: gauge
+            entity: sensor.pe_state_battery_soc
+            name: Battery
+            needle: true
+            min: 0
+            max: 100
+            grid_options: {columns: full}
+            segments:
+              - {from: 0, color: "#e53935"}
+              - {from: 20, color: "#fb8c00"}
+              - {from: 40, color: "#43a047"}
       - type: grid
         cards:
           - type: heading
@@ -235,7 +291,32 @@ views:
               apex_config:
                 chart: {height: 380}
                 legend: {show: true}
-                tooltip: {shared: true}
+                tooltip:
+                  shared: true
+                  y:
+                    formatter: &plan_hover_formatter |
+                      EVAL:function(val, opts) {
+                        const w = opts && opts.w, i = opts ? opts.seriesIndex : -1;
+                        const name = w && w.config.series[i] ? w.config.series[i].name : "";
+                        if (val === null || val === undefined) return "–";
+                        if (name === "Action") {
+                          const labels = ["Self-use", "Hold", "Grid charge", "Sell", "Force discharge"];
+                          let text = labels[Math.round(val)] || String(val);
+                          try {
+                            const t = w.globals.seriesX[i][opts.dataPointIndex];
+                            const ha = document.querySelector("home-assistant");
+                            const st = ha && ha.hass && ha.hass.states["sensor.pe_plan"];
+                            const win = ((st && st.attributes.windows) || []).find(
+                              (x) => new Date(x.start).getTime() <= t && t < new Date(x.end).getTime());
+                            if (win && win.reason) text += ": " + win.reason;
+                          } catch (e) { /* no reason available */ }
+                          return text;
+                        }
+                        if (name === "Battery" || name === "Alt plan") return Math.round(val) + "%";
+                        if (name === "Planned writes") return Math.round(val) + " writes";
+                        if (name === "Price") return (Math.round(val * 100) / 100) + "p";
+                        return (Math.round(val * 100) / 100) + " kWh";
+                      }
               yaxis:
                 # each axis is drawn in the colour of what it measures
                 - id: soc
@@ -268,6 +349,11 @@ views:
                   min: 0
                   max: 12
                   decimals: 0
+                # the plan's action for each half-hour, invisible: it's there for the hover text
+                - id: act
+                  show: false
+                  min: 0
+                  max: 40
               series: &chart_plan_series
                 - entity: sensor.pe_plan
                   name: Battery
@@ -388,6 +474,20 @@ views:
                   data_generator: |
                     const w = entity.attributes.writes_forecast || {};
                     return Object.entries(w).map(([t, n]) => [new Date(t).getTime() + 900000, n]);
+                - entity: sensor.pe_plan
+                  name: Action
+                  yaxis_id: act
+                  type: line
+                  curve: stepline
+                  color: "#8e24aa"
+                  stroke_width: 0
+                  opacity: 0
+                  extend_to: false
+                  # invisible: it's there for the hover text (action and reason for each half-hour)
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const code = {self_use: 0, hold: 1, grid_charge: 2, export: 3, force_discharge: 4};
+                    return s.t.map((t, i) => [new Date(t).getTime() + 900000, code[s.action[i]] ?? 0]);
           - type: conditional
             grid_options: {columns: full, rows: auto}
             conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
@@ -398,8 +498,8 @@ views:
               span: {"start": "minute"}
               now: {"show": true, "label": "Now"}
               header: {"show": true, "title": "Next 18 hours", "show_states": false}
-              apex_config: {"chart": {"height": 420, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
-              yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#1565c0", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#757575", "fontSize": "10px"}}}, "show": false}, {"id": "writes", "min": 0, "max": 12, "decimals": 0, "show": false}]
+              apex_config: {"chart": {"height": 420, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "y": {"formatter": *plan_hover_formatter}}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
+              yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#1565c0", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#757575", "fontSize": "10px"}}}, "show": false}, {"id": "writes", "min": 0, "max": 12, "decimals": 0, "show": false}, {"id": "act", "min": 0, "max": 40, "show": false}]
               series: *chart_plan_series
       - type: grid
         column_span: 3
@@ -1386,336 +1486,3 @@ views:
             icon_on: mdi:pause-circle
             icon_off: mdi:play-circle-outline
           - type: custom:powerengine-test-card
-  - title: Trial
-    path: trial
-    icon: mdi:flask-outline
-    type: sections
-    max_columns: 3
-    sections:
-      # Trial layouts for #114 (clearer live energy flow and plan view). Compare them, then the chosen ones move
-      # to Monitoring and Plan and this tab goes.
-      - type: grid
-        column_span: 3
-        cards:
-          - type: markdown
-            grid_options: {columns: full}
-            content: |-
-              **Trial views** for a clearer live picture (backlog #114). Compare **A** (the current flow card, tuned), **B** (Sunsynk Power Flow Card: install it from HACS first, *Sunsynk Power Flow Card*), **C** (needle gauges) and **D** (the last 30 minutes), plus **E**, the plan chart with hover detail. Tell Claude which to keep.
-          - type: markdown
-            grid_options: {columns: full}
-            content: |-
-              {%- set m = states.sensor.pe_state_control_method %}
-              {%- set d = states('sensor.pe_state_decision') %}
-              **PowerEngine now:** {{ d | replace('_', '-') }} · **inverter:** {{ m.state if m else '–' }}{% if m and m.attributes.method == 'ram_remote' %} · command **{{ m.attributes.command }}** · {{ {'ok': 'following', 'waiting': 'responding', 'not following': '⚠ not following', 'n/a': 'Self-Use'}[m.attributes.following] | default(m.attributes.following) }}{% endif %}
-      - type: grid
-        cards:
-          - type: heading
-            heading: A · Flow (tuned)
-          - type: custom:power-flow-card-plus
-            grid_options: {columns: full}
-            w_decimals: 0
-            kw_decimals: 1
-            watt_threshold: 1000
-            use_new_flow_rate_model: true
-            max_expected_power: 6000
-            min_expected_power: 50
-            min_flow_rate: 0.8
-            max_flow_rate: 6
-            clickable_entities: true
-            display_zero_lines:
-              mode: transparency
-              transparency: 70
-            entities:
-              battery:
-                entity: sensor.pe_state_battery_power
-                state_of_charge: sensor.pe_state_battery_soc
-                color_circle: true
-                color_value: true
-                color_state_of_charge_value: true
-              grid:
-                entity: sensor.pe_state_grid_power
-                color_circle: true
-                color_value: true
-              solar:
-                entity: sensor.pe_state_solar_power
-                display_zero_state: true
-                color_value: true
-              home:
-                entity: sensor.pe_state_house_power
-                override_state: true
-                color_icon: solar
-              individual:
-                - entity: sensor.pe_state_ev_power
-                  name: Car
-                  icon: mdi:car-electric
-                  display_zero: true
-                  display_zero_tolerance: 50
-      - type: grid
-        cards:
-          - type: heading
-            heading: B · Sunsynk flow (HACS)
-          - type: custom:sunsynk-power-flow-card
-            grid_options: {columns: full}
-            cardstyle: lite
-            show_solar: true
-            inverter:
-              model: solis
-              modern: false
-              autarky: "no"
-            battery:
-              energy: 18000
-              shutdown_soc: 12
-            solar:
-              mppts: 1
-            load:
-              show_daily: false
-              additional_loads: 1
-              load1_name: Car
-              load1_icon: mdi:car-electric
-            grid:
-              show_nonessential: false
-            entities:
-              battery_power_190: sensor.pe_state_battery_power
-              battery_soc_184: sensor.pe_state_battery_soc
-              grid_ct_power_172: sensor.pe_state_grid_power
-              # the load circle is the total (house + car); the car is shown as one of the loads within it
-              essential_power: sensor.pe_state_load_power
-              essential_load1: sensor.pe_state_ev_power
-              pv1_power_186: sensor.pe_state_solar_power
-      - type: grid
-        cards:
-          - type: heading
-            heading: C · Gauges
-          - type: gauge
-            entity: sensor.pe_state_battery_power
-            name: Battery (← charging · discharging →)
-            needle: true
-            min: -5200
-            max: 5200
-            grid_options: {columns: 6}
-            segments:
-              - {from: -5200, color: "#43a047"}
-              - {from: -150, color: "#9e9e9e"}
-              - {from: 150, color: "#fb8c00"}
-          - type: gauge
-            entity: sensor.pe_state_grid_power
-            name: Grid (← export · import →)
-            needle: true
-            min: -6000
-            max: 12000
-            grid_options: {columns: 6}
-            segments:
-              - {from: -6000, color: "#43a047"}
-              - {from: -150, color: "#9e9e9e"}
-              - {from: 150, color: "#e53935"}
-          - type: gauge
-            entity: sensor.pe_state_solar_power
-            name: Solar
-            needle: true
-            min: 0
-            max: 6000
-            grid_options: {columns: 6}
-            segments:
-              - {from: 0, color: "#9e9e9e"}
-              - {from: 150, color: "#f9a825"}
-          - type: gauge
-            entity: sensor.pe_state_house_power
-            name: House
-            needle: true
-            min: 0
-            max: 10000
-            grid_options: {columns: 6}
-            segments:
-              - {from: 0, color: "#90caf9"}
-              - {from: 3000, color: "#fb8c00"}
-              - {from: 7000, color: "#e53935"}
-          - type: gauge
-            entity: sensor.pe_state_battery_soc
-            name: Battery
-            needle: true
-            min: 0
-            max: 100
-            grid_options: {columns: full}
-            segments:
-              - {from: 0, color: "#e53935"}
-              - {from: 20, color: "#fb8c00"}
-              - {from: 40, color: "#43a047"}
-      - type: grid
-        column_span: 3
-        cards:
-          - type: heading
-            heading: D · Last 30 minutes
-          # HA's own history graph (the ApexCharts version stuck on "loading" at a 30-minute span)
-          - type: history-graph
-            grid_options: {columns: full, rows: auto}
-            hours_to_show: 0.5
-            entities:
-              - entity: sensor.pe_state_house_power
-                name: House
-              - entity: sensor.pe_state_battery_power
-                name: Battery (+ discharging)
-              - entity: sensor.pe_state_grid_power
-                name: Grid (+ importing)
-              - entity: sensor.pe_state_solar_power
-                name: Solar
-      - type: grid
-        column_span: 3
-        cards:
-          - type: heading
-            heading: E · Plan with hover detail
-          - type: markdown
-            grid_options: {columns: full}
-            content: |-
-              Hover (or tap) a half-hour: besides the usual values, **Action** shows what PowerEngine plans then and why.
-          - type: conditional
-            grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
-            card:
-              type: custom:apexcharts-card
-              grid_options: {columns: full, rows: auto}
-              graph_span: 24h
-              span: {start: minute}
-              now: {show: true, label: Now}
-              header: {show: true, title: "Next 24 hours", show_states: false}
-              apex_config:
-                chart: {height: 360}
-                legend: {show: true}
-                tooltip:
-                  shared: true
-                  y:
-                    formatter: &plan_hover_formatter |
-                      EVAL:function(val, opts) {
-                        const w = opts && opts.w, i = opts ? opts.seriesIndex : -1;
-                        const name = w && w.config.series[i] ? w.config.series[i].name : "";
-                        if (val === null || val === undefined) return "–";
-                        if (name === "Action") {
-                          const labels = ["Self-use", "Hold", "Grid charge", "Sell", "Force discharge"];
-                          let text = labels[Math.round(val)] || String(val);
-                          try {
-                            const t = w.globals.seriesX[i][opts.dataPointIndex];
-                            const ha = document.querySelector("home-assistant");
-                            const st = ha && ha.hass && ha.hass.states["sensor.pe_plan"];
-                            const win = ((st && st.attributes.windows) || []).find(
-                              (x) => new Date(x.start).getTime() <= t && t < new Date(x.end).getTime());
-                            if (win && win.reason) text += ": " + win.reason;
-                          } catch (e) { /* no reason available */ }
-                          return text;
-                        }
-                        if (name === "Battery" || name === "Alt plan") return Math.round(val) + "%";
-                        if (name === "Price") return (Math.round(val * 100) / 100) + "p";
-                        return (Math.round(val * 100) / 100) + " kWh";
-                      }
-              yaxis:
-                - id: soc
-                  min: 0
-                  max: 100
-                  decimals: 0
-                  apex_config:
-                    title: {text: "Battery %", style: {color: "#1565c0"}}
-                    labels: {style: {colors: "#1565c0"}}
-                - id: price
-                  opposite: true
-                  min: 0
-                  decimals: 0
-                  apex_config:
-                    title: {text: "Import price p/kWh", style: {color: "#fb8c00"}}
-                    labels: {style: {colors: "#fb8c00"}}
-                - id: kwh
-                  opposite: true
-                  min: 0
-                  decimals: 1
-                  apex_config:
-                    title: {text: "kWh per half-hour", style: {color: "#757575"}}
-                    labels: {style: {colors: "#757575"}}
-                - id: act
-                  show: false
-                  min: 0
-                  max: 40
-              series: &chart_plan_hover_series
-                - entity: sensor.pe_plan
-                  name: Battery
-                  yaxis_id: soc
-                  type: line
-                  color: "#1565c0"
-                  stroke_width: 4
-                  extend_to: false
-                  data_generator: |
-                    const s = entity.attributes.series || {t: []};
-                    return s.t.map((t, i) => [new Date(t).getTime() + 1800000, s.soc[i]]);
-                - entity: sensor.pe_plan
-                  name: Price
-                  yaxis_id: price
-                  type: line
-                  curve: stepline
-                  color: "#fb8c00"
-                  stroke_width: 2
-                  extend_to: false
-                  data_generator: |
-                    const s = entity.attributes.series || {t: []};
-                    return s.t.map((t, i) => [new Date(t).getTime(), s.price_p[i]]);
-                - entity: sensor.pe_plan
-                  name: Charge
-                  yaxis_id: kwh
-                  type: area
-                  curve: stepline
-                  opacity: 0.45
-                  stroke_width: 1
-                  color: "#43a047"
-                  extend_to: false
-                  data_generator: |
-                    const s = entity.attributes.series || {t: []};
-                    const pts = s.t.map((t, i) => [new Date(t).getTime(), s.charge_kwh[i]]);
-                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
-                    return pts;
-                - entity: sensor.pe_plan
-                  name: Export
-                  yaxis_id: kwh
-                  type: area
-                  curve: stepline
-                  opacity: 0.45
-                  stroke_width: 1
-                  color: "#e53935"
-                  extend_to: false
-                  data_generator: |
-                    const s = entity.attributes.series || {t: []};
-                    const pts = s.t.map((t, i) => [new Date(t).getTime(), s.discharge_kwh[i]]);
-                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
-                    return pts;
-                - entity: sensor.pe_plan
-                  name: Action
-                  yaxis_id: act
-                  type: line
-                  curve: stepline
-                  color: "#8e24aa"
-                  stroke_width: 0
-                  opacity: 0
-                  extend_to: false
-                  # invisible: it's there for the hover text (action and reason for each half-hour)
-                  data_generator: |
-                    const s = entity.attributes.series || {t: []};
-                    const code = {self_use: 0, hold: 1, grid_charge: 2, export: 3, force_discharge: 4};
-                    return s.t.map((t, i) => [new Date(t).getTime() + 900000, code[s.action[i]] ?? 0]);
-          - type: conditional
-            grid_options: {columns: full, rows: auto}
-            conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
-            card:
-              type: custom:apexcharts-card
-              grid_options: {columns: full, rows: auto}
-              graph_span: 12h
-              span: {start: minute}
-              now: {show: true, label: Now}
-              header: {show: true, title: "Next 12 hours", show_states: false}
-              apex_config:
-                chart: {height: 380, parentHeightOffset: 0}
-                legend: {show: true, position: top, horizontalAlign: left, fontSize: 11px}
-                grid: {padding: {left: 4, right: 18}}
-                tooltip:
-                  shared: true
-                  y:
-                    formatter: *plan_hover_formatter
-              yaxis:
-                - {id: soc, min: 0, max: 100, decimals: 0, apex_config: {labels: {style: {colors: "#1565c0", fontSize: 10px}}}}
-                - {id: price, opposite: true, min: 0, decimals: 0, show: false}
-                - {id: kwh, opposite: true, min: 0, decimals: 1, show: false}
-                - {id: act, min: 0, max: 40, show: false}
-              series: *chart_plan_hover_series
