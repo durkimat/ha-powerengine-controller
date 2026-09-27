@@ -65,3 +65,35 @@ def test_restart_hold_off_works_before_the_config_is_loaded():
     a = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
     a._damp_restart(T)                                   # no self.cfg yet: must not raise
     assert a.damper.hold_until == T + timedelta(minutes=5)
+
+
+def test_shadows_measure_what_each_setting_saves():
+    from zoneinfo import ZoneInfo
+
+    from test_schedule import plan_of
+
+    from pe_core.damping import SHADOWS, Shadow, week_summary
+    from pe_core.decide import EXPORT, SELF_USE
+    from pe_core.schedule import periods
+    lon = ZoneInfo("Europe/London")
+    start = datetime(2026, 9, 27, 21, 0, tzinfo=lon)
+    have = {f"timed_{k}_{r}#{n}": 0 for k in ("charge", "discharge") for n in (1, 2, 3)
+            for r in ("start_hour", "start_minute", "end_hour", "end_minute")}
+    have.update({"timed_charge_current": 0, "timed_discharge_current": 0, "storage_mode": "Self-Use"})
+    sh = {k: Shadow(*v) for k, v in SHADOWS.items()}
+    for s in sh.values():
+        s.damper.restarted(start, 5)
+    counts: dict = {}
+    sell_now = plan_of([EXPORT] * 2 + [SELF_USE] * 6, start)
+    idle = plan_of([SELF_USE] * 8, start)
+    for i in range(0, 20):                             # the plan flips between selling now and not every 2 minutes
+        now = start + timedelta(minutes=i)
+        plan, act = (sell_now, EXPORT) if (i // 2) % 2 == 0 else (idle, SELF_USE)
+        pers = periods(plan, now, lon, act)
+        for k, s in sh.items():
+            n = s.step(now, now, pers, act, None, "plan", have, 52.0, 4800, 4800, "2026-09-27", 10, 5)
+            counts.setdefault(k, {}).setdefault("2026-09-27", 0)
+            counts[k]["2026-09-27"] += n
+    w = week_summary(counts, ["2026-09-27"])
+    assert w["none"] > w["restart"] >= w["both"], w
+    assert w["saved_restart"] == w["none"] - w["restart"] and w["saved_bursts"] == w["restart"] - w["both"]

@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.14 (beta)
+
+### Behaviour changes
+- None.
+
+### New
+- **Dampening is measured.** Alongside the real inverter, PowerEngine runs the same plan and decisions on three
+  virtual inverters (no dampening, restart hold-off only, and both) and counts the writes each would make. The
+  Health tab's *Inverter writes today* shows the last 7 days: writes with no dampening, and what the restart
+  hold-off saved and burst damping saved (or would have saved while off). The same summary appears in the
+  config page's Dampening tuning section.
+- A start-up test now runs PowerEngine's whole start-up against a stand-in AppDaemon, so a fault like 0.9.12's
+  is caught before release.
+
 ## 0.9.13 (beta)
 
 ### Behaviour changes

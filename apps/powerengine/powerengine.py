@@ -1096,6 +1096,25 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Control step failed: {err!r}", level="WARNING")
 
+    def _shadows(self):
+        sh = getattr(self, "_damp_shadows", None)
+        if sh is None:
+            sh = self._damp_shadows = {k: damping.Shadow(*v) for k, v in damping.SHADOWS.items()}
+        return sh
+
+    def _shadow_damping(self, now, now_local, pers, decision, have, p):
+        """Measure the dampening settings: run the three shadow inverters and count their writes (Active only)."""
+        try:
+            sft, day = self.cfg.safety, self._today()
+            for kind, sh in self._shadows().items():
+                n = sh.step(now, now_local, pers, decision.action, decision.power_w, decision.rule, have,
+                            BATTERY_VOLTS, p.max_charge_kw * 1000, p.max_discharge_kw * 1000, str(day),
+                            float(sft.get("damp_burst_window_min", 10)), float(sft.get("damp_burst_settle_min", 5)))
+                if n:
+                    self.writes.would(day, n, kind)
+        except Exception as err:
+            self.log(f"Could not measure dampening: {err!r}", level="WARNING")
+
     def _damp_restart(self, now):
         if not hasattr(self, "damper"):
             self.damper = damping.Damper()
@@ -1105,6 +1124,8 @@ class PowerEngine(hass.Hass):
         except (TypeError, ValueError):
             mins = 5.0
         self.damper.restarted(now, mins)
+        for sh in self._shadows().values():
+            sh.damper.restarted(now, mins)
 
     def _damp(self, now, writes, want, decision):
         """Dampening tuning (config page): the writes to make now, or none while held back."""
@@ -1171,6 +1192,8 @@ class PowerEngine(hass.Hass):
                     writes = []                          # only later windows change: wait for the plan to settle
             else:
                 self._pending_want = None
+            if self.mode.effective == "active" and not missing:
+                self._shadow_damping(r.now, now_local, pers, decision, have, p)
             if self.mode.effective == "active" and writes and not missing:
                 wanted = writes
                 writes = self._damp(r.now, writes, want, decision)
@@ -1651,6 +1674,12 @@ class PowerEngine(hass.Hass):
             if self.cfg:
                 s["damping"] = {"restart": bool(self.cfg.features.get("damp_restart", True)),
                                 "bursts": bool(self.cfg.features.get("damp_bursts", False))}
+                try:
+                    today = datetime.fromisoformat(str(self._today())).date()
+                    days = [(today - timedelta(days=i)).isoformat() for i in range(6, -1, -1)]
+                    s["damping_week"] = damping.week_summary(self.writes.data, days)
+                except Exception:
+                    pass
             try:
                 s["observed"] = self.writes.summary(self._today())["observed"]["today"]
             except Exception:
