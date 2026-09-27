@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.10 (beta)
+
+### Behaviour changes
+- None.
+
+### New
+- **Planned writes on the plan chart:** purple bars along the bottom of the Plan tab's chart show how many inverter
+  writes the plan implies at each coming half-hour, if it runs as it stands (real writes only: update-button
+  presses, currents, mode). Below the Actions table: the total for the next 24 hours and today's count so far.
+  It's an estimate: replans, the settle delay and mid-slot changes aren't modelled.
+
 ## 0.9.9 (beta)
 
 ### Behaviour changes

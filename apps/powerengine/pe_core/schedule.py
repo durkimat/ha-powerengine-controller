@@ -261,3 +261,30 @@ def settled(pending: tuple | None, want: dict, now: datetime) -> tuple[bool, tup
     if pending is None or pending[0] != key:
         return False, (key, now)
     return now - pending[1] >= SETTLE, pending
+
+
+def forecast_writes(plan_slots, now_local: datetime, tz, have: dict, volts: float, max_charge_w: float,
+                    max_discharge_w: float, hours: float = 24) -> dict[str, int]:
+    """Inverter writes the plan implies at each coming half-hour if it runs as planned: {half-hour start (ISO):
+    writes}, from what's programmed now. An estimate: replans, the settle delay and mid-slot changes aren't
+    modelled. Counts real writes only (update-button presses, currents, mode), as the write counter does."""
+    from .journal import is_staged
+    virt, out = dict(have), {}
+    limit = now_local + timedelta(hours=hours)
+    for i, ps in enumerate(plan_slots):
+        start = ps.slot.start.astimezone(tz)
+        if start + timedelta(minutes=30) <= now_local:
+            continue
+        if start > limit:
+            break
+        at = max(start + timedelta(seconds=30), now_local)
+        want = desired_state(periods(plan_slots[i:], at, tz, ps.action), virt, at, ps.action, None, volts,
+                             max_charge_w, max_discharge_w)
+        writes = writes_for(want, virt)
+        n = sum(1 for w in writes if not is_staged(w.role))
+        for w in writes:
+            if w.kind != "button":
+                virt[w.role] = w.value
+        if n:
+            out[ps.slot.start.isoformat()] = n
+    return out

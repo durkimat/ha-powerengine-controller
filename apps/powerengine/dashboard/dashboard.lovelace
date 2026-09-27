@@ -255,6 +255,12 @@ views:
                     title: {text: "kWh per half-hour (solar, load, charge, export)", style: {color: "#757575"}}
                     labels: {style: {colors: "#757575"}}
                     axisBorder: {show: true, color: "#757575", width: 3}
+                # planned inverter writes: short bars along the bottom (hidden axis, 0-12 so they stay low)
+                - id: writes
+                  show: false
+                  min: 0
+                  max: 12
+                  decimals: 0
               series: &chart_plan_series
                 - entity: sensor.pe_plan
                   name: Battery
@@ -363,6 +369,18 @@ views:
                     const pts = s.t.map((t, i) => [new Date(t).getTime(), e[i] ?? 0]);
                     if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
                     return pts;
+                - entity: sensor.pe_plan
+                  name: Planned writes
+                  yaxis_id: writes
+                  unit: "writes"
+                  type: column
+                  color: "#8e24aa"
+                  opacity: 0.9
+                  extend_to: false
+                  # inverter writes the plan implies at each half-hour (estimate; real writes only)
+                  data_generator: |
+                    const w = entity.attributes.writes_forecast || {};
+                    return Object.entries(w).map(([t, n]) => [new Date(t).getTime() + 900000, n]);
           - type: conditional
             grid_options: {columns: full, rows: auto}
             conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
@@ -374,7 +392,7 @@ views:
               now: {"show": true, "label": "Now"}
               header: {"show": true, "title": "Next 18 hours", "show_states": false}
               apex_config: {"chart": {"height": 420, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
-              yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#1565c0", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#757575", "fontSize": "10px"}}}, "show": false}]
+              yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#1565c0", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#757575", "fontSize": "10px"}}}, "show": false}, {"id": "writes", "min": 0, "max": 12, "decimals": 0, "show": false}]
               series: *chart_plan_series
       - type: grid
         column_span: 3
@@ -389,6 +407,11 @@ views:
               {%- for w in state_attr('sensor.pe_plan', 'windows') or [] %}
               | {{ (w.day ~ ' ') if w.day }}{{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}** | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
               {%- endfor %}
+              {%- set wf = state_attr('sensor.pe_plan', 'writes_forecast_24h') %}
+              {%- if wf is not none %}
+
+              **Planned inverter writes, next 24 h: {{ wf }}** (purple bars on the chart; an estimate if the plan runs as it stands, not counting replans). Today so far: {{ states('sensor.pe_diag_writes_today') }}.
+              {%- endif %}
   - title: Plan history
     path: history
     icon: mdi:history
