@@ -2312,6 +2312,7 @@ class PowerEngine(hass.Hass):
             "test": run.as_dict() | {"status": run.status} if run is not None else None,
             "smart_requests": s(lambda: self.smart.attempts[-40:]) if getattr(self, "smart", None) else None,
             "smart_slots": s(lambda: self.slots.summary(now, tz=self.tz)) if getattr(self, "slots", None) else None,
+            "attribute_sizes": s(lambda: diagnostics.largest_attrs(self.__dict__.get("_attr_sizes", {}))),
             "log": list(getattr(self.__dict__.get("_log_ring"), "lines", [])),
         }
 
@@ -2391,7 +2392,14 @@ class PowerEngine(hass.Hass):
     def _publish_state(self, key, state, attributes=None):
         self._publish(f"powerengine/{key}/state", str(state))
         if attributes is not None:
-            self._publish(f"powerengine/{key}/attributes", attributes)
+            payload = attributes if isinstance(attributes, str) else json.dumps(attributes, default=str)
+            size = len(payload.encode("utf-8"))
+            sizes = self.__dict__.setdefault("_attr_sizes", {})
+            if diagnostics.track_attr_size(sizes, key, size):
+                self.log(f"sensor.pe_{key}: attributes are {size} bytes, near Home Assistant's "
+                         f"{diagnostics.ATTR_LIMIT}-byte limit (over it, HA stops recording this sensor's history)",
+                         level="WARNING")
+            self._publish(f"powerengine/{key}/attributes", payload)
 
     def _beat(self, kwargs):
         self._publish_state("diag_heartbeat", datetime.now(timezone.utc).isoformat(timespec="seconds"))
