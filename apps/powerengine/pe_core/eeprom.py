@@ -123,6 +123,7 @@ class WriteLog:
     def _add(self, kind: str, day: date, n: int = 1) -> None:
         if n <= 0:
             return
+        self.data.setdefault(kind, {})
         key = day.isoformat()
         self.data[kind][key] = self.data[kind].get(key, 0) + n
         self.data["since"] = self.data["since"] or key
@@ -156,7 +157,8 @@ class WriteLog:
         if not self.path or not (self._dirty or force):
             return
         cutoff = (date.today() - timedelta(days=400)).isoformat()
-        for kind in ("observed", "would", "would_block", "would_slots", "own"):
+        for kind in ("observed", "would", "would_block", "would_slots", "own", "damp_none", "damp_restart",
+                     "damp_both"):
             self.data[kind] = {d: n for d, n in self.data.get(kind, {}).items() if d >= cutoff}
         tmp = self.path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:

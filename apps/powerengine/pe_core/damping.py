@@ -86,3 +86,50 @@ class Damper:
     def wrote(self, now: datetime, writes) -> None:
         for k in write_keys(writes):
             self.last_write[k] = now
+
+
+class Shadow:
+    """A virtual inverter run alongside the real one with a given dampening setting, to measure what each setting
+    saves: it follows the same plan and decisions, the same settle rule for later windows, and counts the real writes
+    (update-button presses, currents, mode) it would make."""
+
+    def __init__(self, restart: bool, bursts: bool):
+        self.restart, self.bursts = restart, bursts
+        self.damper = Damper()
+        self.virt: dict | None = None
+        self.pending: tuple | None = None
+
+    def step(self, now: datetime, now_local: datetime, pers, action: str, power_w, rule: str | None, have: dict,
+             volts: float, max_charge_w: float, max_discharge_w: float, day: str, window_min: float,
+             settle_min: float) -> int:
+        from .journal import is_staged
+        from .schedule import desired_state, settled, urgent, writes_for
+        if self.virt is None:
+            self.virt = dict(have)
+        want = desired_state(pers, self.virt, now_local, action, power_w, volts, max_charge_w, max_discharge_w)
+        writes = writes_for(want, self.virt)
+        if writes and not urgent(writes, want, self.virt, now_local):
+            ok, self.pending = settled(self.pending, want, now)
+            if not ok:
+                writes = []
+        else:
+            self.pending = None
+        writes = self.damper.filter(now, day, writes, want, rule, self.restart, self.bursts, window_min, settle_min)
+        for w in writes:
+            if w.kind != "button":
+                self.virt[w.role] = w.value
+        if writes:
+            self.damper.wrote(now, writes)
+        return sum(1 for w in writes if not is_staged(w.role))
+
+
+SHADOWS = {"damp_none": (False, False), "damp_restart": (True, False), "damp_both": (True, True)}
+
+
+def week_summary(counts: dict[str, dict[str, int]], days: list[str]) -> dict:
+    """Modelled writes over `days` with no dampening, restart hold-off only, and both; and what each saves."""
+    tot = {k: sum(counts.get(k, {}).get(d, 0) for d in days) for k in SHADOWS}
+    return {"days": len(days), "none": tot["damp_none"], "restart": tot["damp_restart"], "both": tot["damp_both"],
+            "saved_restart": tot["damp_none"] - tot["damp_restart"],
+            "saved_bursts": tot["damp_restart"] - tot["damp_both"],
+            "since": min((d for k in SHADOWS for d, n in counts.get(k, {}).items() if d in days), default=None)}
