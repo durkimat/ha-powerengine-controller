@@ -62,3 +62,15 @@ def test_arbitrage_stays_in_the_band_and_only_the_final_top_up_goes_to_full():
     soc = opt["soc"]
     assert max(soc[:16]) <= 90.5, soc                      # evening cycles and most of the night: within the band
     assert soc[18] >= 99.0, soc                            # full when the overnight window ends
+
+
+def test_overnight_arbitrage_is_one_deeper_cycle_not_many_shallow_ones():
+    t0 = T0.replace(hour=19)
+    slots = []
+    for i in range(24):
+        s = Slot(t0 + i * SLOT, CHEAP if i < 19 else PEAK, 0.15, load_kwh=0.35)
+        s.overnight = 7 <= i < 19
+        slots.append(s)
+    p = Params(arbitrage=True, max_charge_kw=5.0, max_discharge_kw=5.0, capacity_kwh=18.0, switch_cost_p=0.5)
+    night = optimise(slots, 80.0, p)["actions"][7:19]
+    assert sum(1 for x, y in zip(night, night[1:], strict=False) if x != y) <= 3, night

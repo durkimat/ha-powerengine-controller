@@ -67,12 +67,15 @@ def sell_floor(s: Slot, p: Params) -> float:
     return floor if s.overnight else max(floor, p.arbitrage_min_soc)
 
 
-def band_penalty(a: str, lv: float, end: float, p: Params) -> float:
-    """GBP for the part of an arbitrage move outside the band: selling below its bottom, or grid-charging above
-    its top."""
+def band_penalty(a: str, lv: float, end: float, p: Params, overnight: bool = False) -> float:
+    """GBP for the part of an arbitrage move outside the band: selling below its bottom (not inside the fixed
+    overnight window, where the refill is guaranteed: one deeper sale and one refill beat many shallow cycles), or
+    grid-charging above its top."""
     if not p.arbitrage or not p.arbitrage_band_penalty_p:
         return 0.0
     kwh = 0.0
+    if a == EXPORT and end < lv and overnight:
+        return 0.0
     if a == EXPORT and end < lv:
         kwh = max(0.0, min(lv, p.arbitrage_min_soc) - end) / 100 * p.capacity_kwh
     elif a == GRID_CHARGE and end > lv:
@@ -160,7 +163,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
                     total += stick                     # mid-slot: keep what the inverter is already doing
                 if wear and end < lv:
                     total += (lv - end) / 100 * cap * wear
-                total += band_penalty(a, float(lv), end, p)   # overnight too: cycle inside the band, fill last
+                total += band_penalty(a, float(lv), end, p, s.overnight)
                 if p.arbitrage and end > p.arbitrage_max_soc:
                     # sitting above the band costs a little (wear): sell or use the top first, fill it last
                     total += (end - p.arbitrage_max_soc) / 100 * cap * HIGH_DWELL
