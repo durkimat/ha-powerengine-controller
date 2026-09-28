@@ -38,7 +38,8 @@ class Params:
     target_soc: float = 100.0         # normal grid-charge target
     cheap_cap_p: float = 10.0         # normal charging only at or below this price
     axle_kw: float = 4.0
-    axle_value: float = 1.00          # GBP/kWh exported during an Axle event
+    axle_value: float = 1.00          # GBP/kWh Axle pays for export during an event
+    axle_plus_export: bool = True     # the supplier's export rate is paid on top (EDF: £1 + 15p)
     axle_enabled: bool = True
     free_enabled: bool = True
     hold_for_car: bool = True         # car in house load: don't let the battery feed it
@@ -227,7 +228,7 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
     export_price = s.export if s.export is not None else 0.0
     ps.grid_import, ps.grid_export = imp, exp + axle_export
     ps.battery_export = battery_export
-    ps.cost = imp * price - exp * export_price - axle_export * p.axle_value
+    ps.cost = imp * price - exp * export_price - axle_export * axle_rate(p, export_price)
     ps.soc_start = soc
     ps.soc_end = stored / cap * 100
     return ps.soc_end
@@ -243,7 +244,7 @@ def simulate(slots: list[PlanSlot], soc: float, p: Params) -> float:
 
 def _default(s: Slot, p: Params, tz) -> PlanSlot:
     if p.axle_enabled and s.axle:
-        return PlanSlot(s, FORCE_DISCHARGE, "Axle event: export for £1/kWh")
+        return PlanSlot(s, FORCE_DISCHARGE, f"Axle event: export for {axle_words(p, s.export)}")
     if p.free_enabled and s.free:
         return PlanSlot(s, GRID_CHARGE, "free-electricity session: fill the battery", target_soc=100.0)
     cheap = s.price is not None and s.price * 100 <= p.cheap_cap_p
@@ -259,6 +260,20 @@ def _default(s: Slot, p: Params, tz) -> PlanSlot:
     return PlanSlot(s, SELF_USE, "the battery covers the house")
 
 
+def axle_rate(p: Params, export: float | None) -> float:
+    """GBP per kWh exported during an Axle event: Axle's payment, plus the export rate when the supplier pays it too."""
+    return p.axle_value + ((export or 0.0) if p.axle_plus_export else 0.0)
+
+
+def axle_words(p: Params, export: float | None) -> str:
+    """'£1.15/kWh (£1 Axle + 15p export)' or '£1/kWh'."""
+    total = axle_rate(p, export)
+    pounds = f"£{total:.2f}".replace(".00", "")
+    if p.axle_plus_export and export:
+        return f"{pounds}/kWh (£{p.axle_value:g} Axle + {export * 100:g}p export)"
+    return f"{pounds}/kWh"
+
+
 def _first_problem(plan: list[PlanSlot], p: Params, start: int, eff2: float):
     """(index, value GBP/kWh, kind) of the first avoidable shortfall at or after `start`."""
     for i in range(start, len(plan)):
@@ -268,7 +283,7 @@ def _first_problem(plan: list[PlanSlot], p: Params, start: int, eff2: float):
             wanted = p.axle_kw * DT_H
             delivered = (ps.soc_start - ps.soc_end) / 100 * p.capacity_kwh * p.efficiency
             if delivered < wanted - 0.01:
-                return i, p.axle_value, "axle"
+                return i, axle_rate(p, ps.slot.export), "axle"
         if ps.action == SELF_USE and ps.grid_import > 0.01 and at_floor and ps.slot.price is not None:
             return i, ps.slot.price, "import"
     return None
@@ -435,7 +450,8 @@ def _rules_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None
         c = plan[best]
         when = _when(plan[i].slot.start, now, tz)
         if kind == "axle":
-            reason = f"top up for the Axle event at {when} (charging at {_p(c.slot.price)} to earn £1/kWh)"
+            reason = (f"top up for the Axle event at {when} (charging at {_p(c.slot.price)} to earn "
+                      f"{axle_words(p, plan[i].slot.export)})")
             target = 100.0
         else:
             reason = f"cheapest time ({_p(c.slot.price)}) to avoid buying at {_p(value)} from {when}"
@@ -553,6 +569,7 @@ def params_from(cfg, readings=None) -> Params:
         cheap_cap_p=s["cheap_threshold_p"],
         axle_kw=min(4.0, max_dis),
         axle_enabled=bool(f.get("axle")),
+        axle_plus_export=bool(f.get("axle_plus_export", True)),
         free_enabled=bool(f.get("free_power_days")),
         hold_for_car=bool(cfg.system.get("house_load_includes_ev", True)),
         fuse_kw=s.get("main_fuse_a", 60) * 0.230 * 0.9,

@@ -100,3 +100,13 @@ def test_optimiser_charges_the_battery_in_a_cheap_car_slot():
     res = optimise(slots, 50.0, p)
     assert res["actions"][:4] == [GRID_CHARGE] * 4
     assert max(res["soc"][:4]) <= 90.5                                   # to the top-up level, not beyond
+
+
+def test_axle_export_earns_axle_plus_the_export_rate():
+    from pe_core.planner import axle_rate, axle_words
+    p = params_from(CFG)
+    assert p.axle_plus_export is True
+    assert axle_rate(p, 0.15) == pytest.approx(1.15)
+    assert axle_words(p, 0.15) == "£1.15/kWh (£1 Axle + 15p export)"
+    off = params_from(parse_config({"features": {"axle_plus_export": False}}))
+    assert axle_rate(off, 0.15) == 1.0 and axle_words(off, 0.15) == "£1/kWh"

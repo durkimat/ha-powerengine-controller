@@ -140,8 +140,10 @@ def test_events_are_kept_out_of_the_everyday_layers():
     records, _ = run(CASES[:1] + [(axle, Rates(PEAK, PEAK, CHEAP, EXP, False))])
     s = day_summary(records, complete=False)
     ev = s["events"]["axle"]
-    assert ev["kwh"] == pytest.approx(2.0) and ev["gross"] == pytest.approx(2.0)
-    assert 0 < ev["net"] < 2.0
+    assert ev["kwh"] == pytest.approx(2.0) and ev["gross"] == pytest.approx(2.0 * (1.0 + EXP))   # £1 + export
+    assert 0 < ev["net"] < ev["gross"]
+    only_axle, _ = run([(axle, Rates(PEAK, PEAK, CHEAP, EXP, False))], axle_plus_export=False)
+    assert day_summary(only_axle, complete=False)["events"]["axle"]["gross"] == pytest.approx(2.0)
     only_night, _ = run(CASES[:1])
     assert s["s0"] == day_summary(only_night, complete=False)["s0"]
 

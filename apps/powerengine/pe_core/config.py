@@ -44,14 +44,15 @@ FORECAST_SOURCES = ("none", "solcast_site", "scaled")
 FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
             "free_power_days", "tariff_simulator", "optimised_plan", "learn_taper", "learn_reserve", "learn_export",
             "learn_car", "cold_caution", "cold_learning", "damp_restart", "damp_bursts", "deep_overnight",
-            "use_check_meter")
+            "use_check_meter", "axle_plus_export")
 LEGACY_FEATURES = ("use_learned",)          # 0.8.0's single switch, replaced by one per figure: ignored if saved
 FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
                     "arbitrage": False, "axle": True,
                     "free_power_days": True, "tariff_simulator": True, "optimised_plan": True,
                     "learn_taper": True, "learn_reserve": True, "learn_export": True, "learn_car": True,
                     "cold_caution": True, "cold_learning": True, "damp_restart": True, "damp_bursts": False,
-                    "deep_overnight": True, "use_check_meter": True}
+                    "deep_overnight": True, "use_check_meter": True,
+                    "axle_plus_export": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 SAFETY = {
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)

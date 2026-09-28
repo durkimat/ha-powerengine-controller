@@ -110,7 +110,9 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
 
     # 1. Axle event in progress
     if f.get("axle") and r.axle_state() == "active":
-        return Decision(FORCE_DISCHARGE, "axle_active", "Axle event in progress (paid £1/kWh exported)",
+        extra = (f" + {r.export_rate * 100:g}p export" if f.get("axle_plus_export", True) and r.export_rate
+                 else "")
+        return Decision(FORCE_DISCHARGE, "axle_active", f"Axle event in progress (paid £1{extra} per kWh exported)",
                         power_w=min(AXLE_POWER_W_DEFAULT, max_dis))
 
     # With a plan, live overrides first (Axle now, free power now, car charging now), then the plan.
