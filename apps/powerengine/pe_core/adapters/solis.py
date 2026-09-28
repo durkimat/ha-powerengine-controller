@@ -42,6 +42,7 @@ class SolisInverter:
     """Translates decisions into Solis timed-window settings. See module docstring."""
 
     name = "solis"
+    card_model = "solis"       # the Sunsynk Power Flow Card's "inverter: model:" key for this brand
 
     TIME_ROLES_1 = ("timed_charge_start_hour", "timed_charge_start_minute", "timed_charge_end_hour",
                     "timed_charge_end_minute", "timed_discharge_start_hour", "timed_discharge_start_minute",

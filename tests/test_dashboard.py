@@ -91,3 +91,81 @@ def test_monitoring_mode_tile_is_coloured_by_state():
     assert all(c.get("visibility") for c in modes)
     text = yaml.safe_dump(d["views"][0])
     assert "history-graph" not in text                     # history lives on its own tab
+
+
+
+def _plant(id, name, enabled=True):
+    from pe_core.config import SolarPlant
+    return SolarPlant(id=id, name=name, power={}, energy_today={}, enabled=enabled)
+
+
+def test_energy_flow_card_matches_shipped_default():
+    """One plant, 18000 Wh, 12% reserve, an EV, solis: byte-identical to the card shipped in dashboard.lovelace."""
+    from pe_core.dashboard import SOURCE, energy_flow_card
+    text = open(SOURCE).read()
+    lines = text.split("\n")
+    begin = next(i for i, ln in enumerate(lines) if ln.strip().startswith("# BEGIN energy-flow"))
+    end = next(i for i, ln in enumerate(lines) if ln.strip() == "# END energy-flow")
+    shipped = "\n".join(lines[begin + 1:end])
+    card = energy_flow_card([_plant("main", "Main")], 18000, 12, True, "solis").rstrip("\n")
+    assert card == shipped
+
+
+def test_energy_flow_card_no_solar_plants():
+    from pe_core.dashboard import energy_flow_card
+    card = energy_flow_card([], 18000, 12, False, "solis")
+    assert "show_solar: false" in card
+    assert "mppts" not in card
+    assert "additional_loads: 0" in card
+    assert "load1_name" not in card
+    assert "essential_load1" not in card
+
+
+def test_energy_flow_card_two_plants_with_ev():
+    from pe_core.dashboard import energy_flow_card
+    plants = [_plant("roof", "Roof"), _plant("shed", "Shed")]
+    card = energy_flow_card(plants, 10000, 15, True, "solis")
+    assert "mppts: 2" in card
+    assert 'pv1_name: "Roof"' in card
+    assert 'pv2_name: "Shed"' in card
+    assert "pv1_power_186: sensor.pe_state_solar_roof_power" in card
+    assert "pv2_power_187: sensor.pe_state_solar_shed_power" in card
+    assert "sensor.pe_state_solar_power" not in card
+    assert "load1_name: Car" in card
+    assert "essential_load1: sensor.pe_state_ev_power" in card
+
+
+def test_energy_flow_card_caps_panels_at_five():
+    from pe_core.dashboard import energy_flow_card
+    plants = [_plant(f"p{i}", f"Plant {i}") for i in range(6)]
+    card = energy_flow_card(plants, 18000, 12, False, "solis")
+    assert "mppts: 5" in card
+    assert "1 more plant feeds the total only" in card
+    assert "pv5_power_113: sensor.pe_state_solar_p4_power" in card
+    assert "p5_power" not in card
+
+
+def test_energy_flow_card_disabled_plants_excluded():
+    from pe_core.dashboard import energy_flow_card
+    plants = [_plant("main", "Main"), _plant("off", "Off", enabled=False)]
+    card = energy_flow_card(plants, 18000, 12, False, "solis")
+    assert "mppts: 1" in card
+    assert "pv1_power_186: sensor.pe_state_solar_power" in card
+    assert "off" not in card
+
+
+def test_sync_dashboard_splices_card_and_writes_only_on_change(tmp_path):
+    from pe_core.dashboard import energy_flow_card, sync_dashboard
+    target = tmp_path / "powerengine" / "dashboard.yaml"
+    card = energy_flow_card([_plant("main", "Main")], 18000, 12, True, "solis")
+    assert sync_dashboard(str(target), card=card) is True
+    first = target.read_text()
+    assert sync_dashboard(str(target), card=card) is False
+    assert target.read_text() == first
+
+    card2 = energy_flow_card([_plant("roof", "Roof"), _plant("shed", "Shed")], 10000, 15, False, "solis")
+    assert sync_dashboard(str(target), card=card2) is True
+    updated = target.read_text()
+    assert updated != first
+    assert "pv2_power_187: sensor.pe_state_solar_shed_power" in updated
+    assert "# BEGIN energy-flow" in updated and "# END energy-flow" in updated

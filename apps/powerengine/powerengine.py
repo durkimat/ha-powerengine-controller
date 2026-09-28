@@ -35,7 +35,7 @@ from pe_core.config import (
 from pe_core.control import KINDS, Write, readback_mismatches, release, writes_needed
 from pe_core.costbook import MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
-from pe_core.dashboard import sync_dashboard
+from pe_core.dashboard import energy_flow_card, sync_dashboard
 from pe_core.decide import cheap_limit, decide
 from pe_core.eeprom import BlockWriteModel, WriteLog, WriteModel
 from pe_core.energy import Recorder
@@ -49,7 +49,10 @@ from pe_core.entities import (
     ONLINE,
     PAUSE_TOPIC,
     discovery_payload,
+    entity_removal_messages,
     removal_messages,
+    solar_plant_entity,
+    solar_plant_id_from_entity,
     validate_definitions,
 )
 from pe_core.equipment import EquipmentSettings
@@ -155,6 +158,7 @@ class PowerEngine(hass.Hass):
 
         for ent in ENTITIES:
             self._publish(ent.discovery_topic, discovery_payload(ent, __version__))
+        self._sync_solar_entities()
         self._ui_defaults()
         self._publish(AVAILABILITY_TOPIC, ONLINE)
         self._publish_state("diag_version", __version__)
@@ -198,6 +202,7 @@ class PowerEngine(hass.Hass):
         self._slots_last = None
         self.smart = SmartCharger(os.path.join(os.path.dirname(self._save_path()), "costs", "smart_requests.json"))
         self._our_write, self._last_readings = None, None
+        self._dashboard_readings_synced = False
         self._watch_ready_by()
         self.costbook, self._months, self.measured = None, [], None
         try:
@@ -449,6 +454,9 @@ class PowerEngine(hass.Hass):
             self._control(readings, decision)
         for key, (state, attrs) in entity_states(readings, self.mode, self.tz, decision, self._since).items():
             self._publish_if_changed(key, state, attrs)
+        if not self._dashboard_readings_synced and getattr(self, "_last_readings", None) is not None:
+            self._dashboard_readings_synced = True     # now the real capacity, not the 18000 Wh fallback
+            self._sync_dashboard()
 
     # --- cost accounting -------------------------------------------------------------
 
@@ -2339,10 +2347,39 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Could not evaluate health: {err!r}", level="WARNING")
 
+    def _sync_solar_entities(self):
+        """Discover a power sensor for each enabled solar plant, and retire any no longer enabled (plants
+        removed or disabled since the last time this ran). HA's own state, not a file PowerEngine keeps, is
+        the record of what's currently published (the same lookup RAM remote control uses for its entities)."""
+        if self.cfg is None or self.mqtt is None:
+            return
+        wanted = {p.id: p.name for p in self.cfg.solar_plants if p.enabled}
+        try:
+            ids = list((self.get_state() or {}).keys())
+        except Exception:
+            ids = []
+        published = {pid for pid in (solar_plant_id_from_entity(e) for e in ids) if pid}
+        for pid, name in wanted.items():
+            ent = solar_plant_entity(pid, name)
+            self._publish(ent.discovery_topic, discovery_payload(ent, __version__))
+        for pid in published - set(wanted):
+            for topic, payload in entity_removal_messages(solar_plant_entity(pid, "")):
+                self._publish(topic, payload)
+
+    def _energy_flow_card(self):
+        plants = self.cfg.solar_plants if self.cfg else ()
+        if self.cfg is not None and getattr(self, "_last_readings", None) is not None:
+            capacity_wh = round(self._control_params(self._last_readings).capacity_kwh * 1000 / 100) * 100
+        else:
+            capacity_wh = 18000
+        reserve_soc = self.cfg.safety.get("min_reserve_soc", 12) if self.cfg else 12
+        has_ev = bool(self._role_entity("ev_charge_power")) if self.cfg else False
+        return energy_flow_card(plants, capacity_wh, reserve_soc, has_ev, self._inverter().card_model)
+
     def _sync_dashboard(self):
         target = os.path.join(os.path.dirname(self._save_path()), "dashboard.yaml")
         try:
-            if sync_dashboard(target):
+            if sync_dashboard(target, card=self._energy_flow_card()):
                 self.log(f"Dashboard updated: {target} (refresh the PowerEngine dashboard to see it)")
         except OSError as err:
             self.log(f"Could not write the dashboard file {target}: {err}", level="WARNING")
@@ -2436,6 +2473,8 @@ class PowerEngine(hass.Hass):
             self._measure(revalue=False)                   # republish which capacity is in use
         self._last_checks = None
         self._evaluate()
+        self._sync_solar_entities()
+        self._sync_dashboard()
         self._cycle({})
 
     # --- diagnostics export ------------------------------------------------------------------------

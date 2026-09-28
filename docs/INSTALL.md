@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.9.50 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.9.51 (beta; Passive by default, Active available)
 
 ---
 
@@ -165,7 +165,7 @@ sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
 Expected (before any configuration):
 
 ```
-PowerEngine 0.9.50 starting
+PowerEngine 0.9.51 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 Published NN entities under the PowerEngine device
@@ -237,6 +237,10 @@ read-only.
 
 - The dashboard is managed: edits to `dashboard.yaml` are overwritten on the
   next update. To customise, copy the cards into a dashboard of your own.
+- The Energy flow card (Monitoring tab) is generated from your configured solar plant(s): one panel per
+  enabled plant (up to five), or a single total if you have none configured or just one. It regenerates
+  whenever you save the Config tab, so manual edits inside its generated block in `dashboard.yaml` are
+  replaced the same way the rest of the file is.
 
 ---
 

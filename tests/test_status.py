@@ -29,8 +29,10 @@ def test_events_in_summary():
 def test_entity_states_cover_every_state_entity():
     from pe_core.entities import STATE_ENTITIES
     out = entity_states(read(CONFIG, get_state(), NOW), PASSIVE, BST)
-    assert {e.key for e in STATE_ENTITIES} - {"state_decision", "state_activity", "state_control_method",
-                                              "state_status"} == set(out)
+    # plus one dynamic sensor per configured solar plant (main, garage), not in the static STATE_ENTITIES list
+    assert ({e.key for e in STATE_ENTITIES} - {"state_decision", "state_activity", "state_control_method",
+                                              "state_status"}
+            | {"state_solar_main_power", "state_solar_garage_power"}) == set(out)
     assert out["state_import_rate"][1]["pence"] == 30.28
     assert out["state_ev"][0] == "Plugged in"
     assert out["state_smart_charge"][0] == "Next slot 21:00"
