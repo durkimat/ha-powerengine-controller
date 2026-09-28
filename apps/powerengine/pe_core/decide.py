@@ -200,4 +200,9 @@ def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bo
         return Decision(HOLD, "plan", "Axle event due now per the plan, but not started yet: holding charge")
     if ps.action == SELF_USE and soc <= s["min_reserve_soc"]:
         return Decision(HOLD, "reserve", f"battery at its {s['min_reserve_soc']:.0f}% minimum reserve")
+    if ps.action == GRID_CHARGE and ps.target_soc is not None and soc >= ps.target_soc:
+        # the plan charges only up to its target and lets the grid cover the house for the rest of the half-hour;
+        # without this the inverter kept charging (RAM control: 63% -> 82% against a 76% target, 28 Sep 2026)
+        return Decision(HOLD, "plan", f"reached the {ps.target_soc:.0f}% charge target for this half-hour: "
+                        "holding until the next one", target_soc=ps.target_soc)
     return Decision(ps.action, "plan", ps.reason, target_soc=ps.target_soc)

@@ -60,6 +60,16 @@ def test_decision_follows_plan():
     assert d.rule == "plan" and d.action == GRID_CHARGE and ("cheapest" in d.reason or "top up" in d.reason)
 
 
+def test_grid_charge_stops_at_the_slot_target():
+    plan = _plan_with_first(0.05)
+    ps = plan.slots[0]
+    assert ps.action == GRID_CHARGE and ps.target_soc is not None
+    below = decide(R(battery_soc=ps.target_soc - 1, import_rate=0.05), CFG, plan=plan)
+    assert below.action == GRID_CHARGE
+    reached = decide(R(battery_soc=ps.target_soc, import_rate=0.05), CFG, plan=plan)
+    assert reached.action == HOLD and "target" in reached.reason
+
+
 def test_live_car_charging_overrides_plan():
     plan = _plan_with_first(0.30)
     d = decide(R(ev_power=7000, ev_plug="Charging"), CFG, plan=plan)
