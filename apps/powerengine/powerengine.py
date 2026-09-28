@@ -19,7 +19,7 @@ from pe_core import __version__, clock, damping, diagnostics, gridcheck, ramcont
 from pe_core import learn as learning
 from pe_core.activity import ActivityLog
 from pe_core.certainty import Certainty
-from pe_core.checks import OK, check, summarise
+from pe_core.checks import OK, blocking, check, degraded, summarise
 from pe_core.config import (
     DEFAULT_PATHS,
     LOCATION_LAG_H,
@@ -52,7 +52,15 @@ from pe_core.entities import (
     validate_definitions,
 )
 from pe_core.equipment import EquipmentSettings
-from pe_core.forecast import LoadProfile, build_slots, house_only_means, parse_history, profile_from_means
+from pe_core.forecast import (
+    LoadProfile,
+    build_slots,
+    half_hour_means,
+    house_only_means,
+    meter_corrected,
+    parse_history,
+    profile_from_means,
+)
 from pe_core.health import overall, plan_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_day, chosen_plan, day_view
@@ -156,6 +164,7 @@ class PowerEngine(hass.Hass):
         self.activity = ActivityLog(saved if isinstance(saved, list) else None)
         self.profile: LoadProfile | None = None
         self._hist_means: dict = {}
+        self._hist_fixed: set = set()
         self.loadstore = LoadStore(os.path.join(os.path.dirname(self._save_path()), "load_history.json"))
         try:
             n = self.loadstore.load()
@@ -245,7 +254,15 @@ class PowerEngine(hass.Hass):
                 checks[role.key] = check(role, spec, state)
             if uses_battery_pair(self.cfg) and "battery_power" in self.cfg.inputs:
                 checks["battery_power"] = (OK, "Not used: the charging and discharging sensors are mapped")
-        missing = [k for k in required if checks.get(k, ("unmapped", ""))[0] != OK]
+        missing = blocking(checks, required)
+        down = degraded(checks, required)
+        if bool(down) != bool(getattr(self, "_degraded", [])):
+            if down:
+                self.log(f"Car charger inputs unavailable ({', '.join(down)}); control carries on with the car "
+                         "assumed not charging", level="WARNING")
+            else:
+                self.log("Car charger inputs back")
+        self._degraded = down
         self._watch_inputs(checks, required)
         guards, absent = guard_status(self.cfg, self._guard_state) if self.cfg is not None else ([], [])
         self._note_absent_guards(absent)
@@ -723,9 +740,11 @@ class PowerEngine(hass.Hass):
             except Exception:
                 return None
         now = datetime.now(timezone.utc)
-        self._hist_job = {"now": now, "days": list(range(HISTORY_DAYS, 0, -1)), "errors": 0,
-                          "ids": {"house": house, "car": car}, "units": {"house": unit(house), "car": unit(car)},
-                          "rows": {"house": [], "car": []}}
+        ids = {"house": house, "car": car, "grid": None, "check": None}
+        if self.cfg.features.get("use_check_meter", True) and self._role_entity("grid_power_reference"):
+            ids["grid"], ids["check"] = self._role_entity("grid_power"), self._role_entity("grid_power_reference")
+        self._hist_job = {"now": now, "days": list(range(HISTORY_DAYS, 0, -1)), "errors": 0, "ids": ids,
+                          "units": {k: unit(e) for k, e in ids.items()}, "rows": {k: [] for k in ids}}
         self.run_in(self._learn_load_day, 1)
 
     def _history(self, eid, start, end):
@@ -741,7 +760,7 @@ class PowerEngine(hass.Hass):
             d = job["days"].pop(0)
             start = job["now"] - timedelta(days=d)
             end = start + timedelta(days=1)
-            for key in ("house", "car"):
+            for key in job["ids"]:
                 eid = job["ids"][key]
                 if not eid:
                     continue
@@ -756,6 +775,14 @@ class PowerEngine(hass.Hass):
         house_rows, car_rows = job["rows"]["house"], job["rows"]["car"]
         self._hist_means = house_only_means(house_rows, car_rows, job["now"],
                                             bool(self.cfg.system.get("house_load_includes_ev", True)))
+        self._hist_fixed = set()
+        if job["rows"].get("grid") and job["rows"].get("check"):
+            def signed(key, role):
+                flip = -1.0 if (self.cfg.inputs.get(role) or {}).get("invert") else 1.0
+                return half_hour_means([(t, flip * v) for t, v in job["rows"][key]], job["now"])
+            self._hist_means, self._hist_fixed = meter_corrected(
+                self._hist_means, signed("grid", "grid_power"), signed("check", "grid_power_reference"))
+            self.log(f"Load history: {len(self._hist_fixed)} half-hours corrected by the check meter")
         failed = f" ({job['errors']} day(s) failed)" if job["errors"] else ""
         self.log(f"Load history from HA: {len(house_rows)} house readings, {len(car_rows)} car readings "
                  f"-> {len(self._hist_means)} half-hours{failed}")
@@ -773,12 +800,13 @@ class PowerEngine(hass.Hass):
             gc = getattr(self, "_gridcheck", None)
             if gc is None:
                 gc = self._gridcheck = gridcheck.GridCheck()
-            gc.add(str(self._today()), r.now, r.battery_power, r.grid_power, r.grid_ref_power, r.grid_ref_at)
+            inv = r.grid_power_inverter
+            gc.add(str(self._today()), r.now, r.battery_power, inv, r.grid_ref_power, r.grid_ref_at)
             last = getattr(self, "_gridcheck_published", None)
             if last is None or (r.now - last).total_seconds() >= 60:
                 self._gridcheck_published = r.now
-                diff = None if r.grid_power is None else round(r.grid_power - r.grid_ref_power)
-                attrs = {"inverter_meter_w": r.grid_power, "reference_meter_w": r.grid_ref_power,
+                diff = None if inv is None else round(inv - r.grid_ref_power)
+                attrs = {"inverter_meter_w": inv, "reference_meter_w": r.grid_ref_power, "in_use": r.grid_source,
                          "battery_w": r.battery_power, "battery_state": gridcheck.battery_state(r.battery_power),
                          **gc.summary()}
                 self._publish_state("diag_grid_check", "unknown" if diff is None else diff, attrs)
@@ -796,7 +824,10 @@ class PowerEngine(hass.Hass):
                 self._rebuild_profile()
 
     def _rebuild_profile(self):
-        means = {**self._hist_means, **self.loadstore.means}
+        # PowerEngine's own record wins, except where the history was corrected by the check meter (the record from
+        # before the correction was live holds the uncorrected figure)
+        fixed = getattr(self, "_hist_fixed", set())
+        means = {**self._hist_means, **{s: w for s, w in self.loadstore.means.items() if s not in fixed}}
         if not means:
             return
         self.profile = profile_from_means(means, datetime.now(timezone.utc), self.tz)

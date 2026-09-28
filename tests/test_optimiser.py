@@ -87,3 +87,14 @@ def test_deeper_overnight_selling_can_be_switched_off():
     assert min(optimise(slots, 80.0, p)["soc"][7:19]) >= 74.5          # the band's bottom holds overnight too
     p = Params(arbitrage=True, max_charge_kw=5.0, max_discharge_kw=5.0, capacity_kwh=18.0)
     assert min(optimise(slots, 80.0, p)["soc"][7:19]) < 60              # on (default): one deeper sale
+
+
+def test_overnight_switches_cost_more_with_deeper_selling():
+    from pe_core.optimiser import CHARGE_K, DISCHARGE_K, HOLD_K, switch_cost
+    from pe_core.planner import Params
+    p = Params(arbitrage=True, deep_overnight=True, switch_cost_p=0.5, overnight_switch_cost_p=3.0)
+    assert switch_cost(CHARGE_K, DISCHARGE_K, p) == 0.005
+    assert switch_cost(CHARGE_K, DISCHARGE_K, p, overnight=True) == 0.03
+    assert switch_cost(HOLD_K, CHARGE_K, p, overnight=True) == 0.001          # hold <-> charge stays cheap
+    off = Params(arbitrage=True, deep_overnight=False, switch_cost_p=0.5, overnight_switch_cost_p=3.0)
+    assert switch_cost(CHARGE_K, DISCHARGE_K, off, overnight=True) == 0.005

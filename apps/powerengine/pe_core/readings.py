@@ -38,6 +38,8 @@ class Readings:
     grid_power: float | None = None      # W, + importing
     grid_ref_power: float | None = None  # W, + importing: a second meter, for the cross-check only
     grid_ref_at: datetime | None = None  # when the second meter last reported
+    grid_power_inverter: float | None = None  # W, the inverter's own meter (grid_power may be the check meter)
+    grid_source: str = "inverter"        # "inverter" | "check meter"
     house_power: float | None = None     # W, house only (car removed)
     house_power_raw: float | None = None
     house_includes_ev: bool = True       # the inverter's house load includes the car charger
@@ -139,6 +141,9 @@ def parse_time(value: Any) -> datetime | None:
     return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
 
 
+CHECK_METER_MAX_AGE_S = 180        # an older check-meter reading isn't used (the inverter's meter is, uncorrected)
+
+
 def _power_w(state: State | None, invert: bool = False) -> float | None:
     if not state:
         return None
@@ -237,6 +242,17 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None) -> Readi
         except ValueError:
             r.grid_ref_at = None
     r.house_power_raw = _power_w(state("house_load_power"))
+    r.grid_power_inverter = r.grid_power
+    fresh = r.grid_ref_at is not None and abs((now - r.grid_ref_at).total_seconds()) <= CHECK_METER_MAX_AGE_S
+    if (cfg.features.get("use_check_meter", True) and fresh and r.grid_ref_power is not None
+            and r.grid_power is not None):
+        # the check meter is trusted over the inverter's (28 Sep 2026: the Solis meter read ~16% high both ways,
+        # so its house load read high while charging and low while selling). The inverter's house load is its
+        # meter plus its own AC flow, so correct it by the same difference.
+        delta = r.grid_power - r.grid_ref_power
+        r.grid_power, r.grid_source = r.grid_ref_power, "check meter"
+        if r.house_power_raw is not None:
+            r.house_power_raw = max(0.0, r.house_power_raw - delta)
     r.ev_power = _power_w(state("ev_charge_power"))
     r.house_includes_ev = bool(cfg.system.get("house_load_includes_ev", True))
     if r.house_power_raw is not None:

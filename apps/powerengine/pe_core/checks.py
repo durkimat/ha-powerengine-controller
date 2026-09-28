@@ -91,9 +91,35 @@ def check(role: Role, spec: dict[str, Any] | None, state: dict[str, Any] | None,
     return OK, "OK"
 
 
+# Required inputs whose brief outage doesn't stop control: the car charger's readings come from a cloud service
+# (myenergi) that blips; control carries on with the car assumed not charging. Unmapped still counts as missing.
+DEGRADABLE_GROUPS = frozenset({"ev"})
+DEGRADED = (UNAVAILABLE, STALE)
+
+
+def degradable(key: str) -> bool:
+    from .roles import ROLE_BY_KEY
+    role = ROLE_BY_KEY.get(key)
+    return role is not None and role.group in DEGRADABLE_GROUPS
+
+
+def blocking(results: dict[str, tuple[str, str]], required: list[str]) -> list[str]:
+    """Required inputs that stop control now (a degradable one only when unmapped, missing or wrong)."""
+    out = []
+    for k in required:
+        status = results.get(k, (UNMAPPED, ""))[0]
+        if status != OK and not (status in DEGRADED and degradable(k)):
+            out.append(k)
+    return out
+
+
+def degraded(results: dict[str, tuple[str, str]], required: list[str]) -> list[str]:
+    return [k for k in required if degradable(k) and results.get(k, (UNMAPPED, ""))[0] in DEGRADED]
+
+
 def summarise(results: dict[str, tuple[str, str]], required: list[str]) -> str:
     """Overall mapping state: 'ok', 'incomplete' (required inputs missing/bad) or 'warnings'."""
-    if any(results.get(k, (UNMAPPED, ""))[0] != OK for k in required):
+    if blocking(results, required):
         return "incomplete"
     if any(status not in (OK, UNMAPPED) for status, _ in results.values()):
         return "warnings"
