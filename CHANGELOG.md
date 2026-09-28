@@ -2,6 +2,29 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.54 (beta)
+
+### Behaviour changes
+- None to control. Cost reporting only: past days are re-valued once after updating (cost method 6).
+
+### Costs page, clearer
+- **Tap a column** in the savings waterfall to see its full name and exact value. The old hover tooltip didn't
+  work on phones.
+- **"Everyday cost" is now "Day-to-day cost"**, with a key under the chart explaining every column, left to right.
+- **The headline** says what you paid first, then the day-to-day comparison with a self-use battery and with no
+  solar or battery.
+- **Special events table** split into columns:
+  - Axle kWh;
+  - what Axle paid you;
+  - what that energy was worth otherwise;
+  - Axle net;
+  - free power;
+  - day-to-day energy (metered);
+  - the standing charge, on its own, so it no longer hides in the everyday figure.
+- **Axle net is fairer:** the energy an event uses is now costed at the overnight rate the battery is refilled at
+  (with its losses), and solar at the export rate. Before, grid-charged energy was costed at the peak rate, which
+  made Axle look worth less than it is.
+
 ## 0.9.53 (beta)
 
 ### Behaviour changes

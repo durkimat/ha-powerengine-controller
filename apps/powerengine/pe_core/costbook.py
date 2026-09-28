@@ -173,7 +173,7 @@ class CostBook:
             local = start.astimezone(self.tz) if self.tz else start
             self.last_event = {"type": v["event"], "date": local.date().isoformat(), "time": local.strftime("%H:%M"),
                                "kwh": round(v["event_kwh"], 2), "gross": round(v["event_gross"], 2),
-                               "net": round(v["event_net"], 2)}
+                               "energy": round(v.get("event_energy", 0.0), 2), "net": round(v["event_net"], 2)}
 
     # --- plan snapshots (for plan-vs-actual) ------------------------------------------------
     def save_plan_snapshot(self, day: date, snapshot: dict) -> None:
@@ -295,13 +295,20 @@ class CostBook:
             s = self.summary(d, today)
             if s:
                 key = d.strftime("%Y-%m")
-                mo = by.setdefault(key, {"month": key, "actual": 0.0, "s0": 0.0, "axle_net": 0.0,
-                                         "free_power_net": 0.0, "event_metered": 0.0, "days": 0})
+                mo = by.setdefault(key, {"month": key, "actual": 0.0, "standing": 0.0, "s0": 0.0,
+                                         "axle_kwh": 0.0, "axle_gross": 0.0, "axle_energy": 0.0, "axle_net": 0.0,
+                                         "free_power_kwh": 0.0, "free_power_net": 0.0, "event_metered": 0.0,
+                                         "days": 0})
                 mo["actual"] += s["actual"]
+                mo["standing"] += s.get("standing", 0.0)
                 mo["s0"] += s["s0"]
                 mo["days"] += 1
                 for kind, e in s["events"].items():
                     mo[f"{kind}_net"] = mo.get(f"{kind}_net", 0.0) + e["net"]
+                    mo[f"{kind}_kwh"] = mo.get(f"{kind}_kwh", 0.0) + e["kwh"]
+                    if kind == "axle":
+                        mo["axle_gross"] += e["gross"]
+                        mo["axle_energy"] += e.get("energy", 0.0)
                     mo["event_metered"] += e["metered"]
             d += timedelta(days=1)
         return [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in m.items()} for m in by.values()]

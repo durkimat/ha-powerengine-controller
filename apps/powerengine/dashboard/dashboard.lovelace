@@ -890,13 +890,13 @@ views:
               {%- if p and p.days %}
               {%- set paid = (p.steps[-1].value) | float(0) %}
               {%- set has_axle = 'Axle' in p.steps[-1].label %}
-              {%- set everyday = sv(p.steps, 'Everyday cost') | float(0) %}
+              {%- set everyday = sv(p.steps, 'Day-to-day cost') | float(0) %}
               {%- set carry = sv(p.steps, 'Battery carry-over') | float(0) %}
               {%- set pe_step = sv(p.steps, 'PowerEngine') | float(0) %}
               {%- set self_use = everyday - pe_step %}
               {%- set no_batt = sv(p.steps, 'No solar or battery') | float(0) %}
 
-              **{{ label }}: you paid {{ gbp(paid) }}{{ " (after Axle's payments)" if has_axle else "" }}** (everyday, adjusted for battery carry-over {{ gbp(carry) }}). A battery on plain self-use would have cost {{ gbp(self_use) }}; with no solar or battery {{ gbp(no_batt) }}. PowerEngine saved {{ gbp(self_use - everyday) }} on top of the hardware.
+              **{{ label }}: you paid {{ gbp(paid) }}**{{ " after Axle's payments" if has_axle else "" }}. Day-to-day cost {{ gbp(everyday) }}: with a battery on plain self-use it would have been {{ gbp(self_use) }}, with no solar or battery {{ gbp(no_batt) }}. **PowerEngine saved {{ gbp(self_use - everyday) }}** on top of the hardware.
               {%- endif %}
               {%- endmacro %}
               {%- set periods = state_attr('sensor.pe_cost_waterfall', 'periods') or {} %}
@@ -915,6 +915,17 @@ views:
             grid_options: {columns: full}
             entity: sensor.pe_cost_waterfall
             period: week
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              **Reading the chart, left to right**
+              - **No solar or battery:** what the period would have cost buying every kWh from the grid (including the standing charge).
+              - **Solar, Tariff, Self-use battery:** what your solar, your EDF tariff's cheap rates and a battery left on the inverter's default setting would each have saved.
+              - **PowerEngine:** what PowerEngine saved on top of that, by choosing when to charge, discharge and export.
+              - **Day-to-day cost:** the result, a subtotal of your normal half-hours. It leaves out the two items that follow, so days can be compared like for like.
+              - **Carry-over:** energy bought for later (a cost) or used from earlier (a credit). For example, charging at 7p tonight for tomorrow.
+              - **Axle:** Axle and free-power events. Negative means money in: Axle's £1/kWh plus EDF's export payment.
+              - **You paid:** the real total for the period, after Axle's payments.
       - type: grid
         column_span: 3
         cards:
@@ -1035,13 +1046,19 @@ views:
               No Axle or free-power events recorded yet.
               {%- endif %}
 
-              | Month | Axle (net) | Free power (net) | Everyday actual |
-              |---|{{ a }}|{{ a }}|{{ a }}|
+              | Month | Axle kWh | Axle paid you | Energy it used | Axle net | Free power | Day-to-day energy (metered) | Standing charge |
+              |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
               {%- for m in (state_attr('sensor.pe_event_months', 'months') or []) | reverse %}
-              | {{ as_timestamp(m.month ~ '-01') | timestamp_custom('%b %Y') }} | {{ gbp(m.axle_net) }} | {{ gbp(m.free_power_net) }} | {{ gbp(m.actual) }} |
+              | {{ as_timestamp(m.month ~ '-01') | timestamp_custom('%b %Y') }} | {{ '%.1f' | format(m.axle_kwh | default(0) | float(0)) }} | {{ gbp(m.axle_gross) }} | {{ gbp(m.axle_energy) }} | **{{ gbp(m.axle_net) }}** | {{ gbp(m.free_power_net) }} | {{ gbp((m.actual | float(0)) - (m.standing | default(0) | float(0))) }} | {{ gbp(m.standing) }} |
               {%- endfor %}
 
-              Axle and free-power half-hours are kept out of the daily layers above so rare, large events don't distort them. Net value is what the event added: Axle kWh × (£1 from Axle + your export rate from EDF), less what that energy was worth (its cost in the battery, or the export rate the solar would have earned anyway); free power is the kWh used × the rate that would otherwise have applied.
+              - **Axle paid you:** kWh exported in Axle events × (£1 from Axle + EDF's export rate).
+              - **Energy it used:** what that energy was worth otherwise. Battery energy is costed at the overnight rate it's refilled at, including the battery's losses. Solar is costed at the export rate it would have earned anyway.
+              - **Axle net:** the difference, what the events really added.
+              - **Free power:** kWh used in free-power sessions × the rate you'd otherwise have paid.
+              - **Day-to-day energy (metered):** the meter's cost for all the other half-hours, without the standing charge (shown next to it). This is the metered figure, before the carry-over adjustment used in the chart.
+
+              Events are kept out of the day-to-day figures so rare, large payments don't distort them.
       - type: grid
         column_span: 3
         cards:
