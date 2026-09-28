@@ -12,7 +12,7 @@ import json
 import os
 from datetime import date, datetime, timedelta
 
-from .costs import METHOD_VERSION, SimDefault, day_summary, process, steps
+from .costs import METHOD_VERSION, SimDefault, day_summary, process, steps, waterfall
 from .energy import FLOW_VERSION, HalfHour
 from .ledger import Ledger
 from .readings import Readings
@@ -265,21 +265,21 @@ class CostBook:
         return out
 
     # --- reporting ----------------------------------------------------------------------
-    def summary(self, day: date, today: date) -> dict | None:
+    def summary(self, day: date, today: date, *, scenario_params: dict | None = None) -> dict | None:
         records = self.day_records(day)
         if not records:
             return None
         complete = day < today
         standing = next((x.get("standing") for x in reversed(records) if x.get("standing") is not None), None)
-        s = day_summary(records, standing_per_day=standing, complete=complete)
+        s = day_summary(records, standing_per_day=standing, complete=complete, **(scenario_params or {}))
         s["date"] = day.isoformat()
         s["steps"] = [[name, round(val, 2)] for name, val in steps(s)]
         return s
 
-    def recent(self, today: date, days: int = SHOW_DAYS) -> list[dict]:
+    def recent(self, today: date, days: int = SHOW_DAYS, *, scenario_params: dict | None = None) -> list[dict]:
         out = []
         for i in range(days, -1, -1):
-            s = self.summary(today - timedelta(days=i), today)
+            s = self.summary(today - timedelta(days=i), today, scenario_params=scenario_params)
             if s:
                 out.append(s)
         return out
@@ -307,9 +307,23 @@ class CostBook:
         return [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in m.items()} for m in by.values()]
 
 
-def cost_entity_states(book: CostBook, today: date, months: list[dict] | None = None) -> dict:
-    """key -> (state, attributes) for the cost_* and event_* entities."""
-    days = book.recent(today)
+WATERFALL_PERIODS = ("yesterday", "week", "month", "days30")
+WATERFALL_WINDOW_DAYS = 31   # enough for the 'days30' period, whatever SHOW_DAYS (cost_days) is
+
+
+def _step_value(period: dict, label: str) -> float:
+    return next((s["value"] for s in period["steps"] if s["label"] == label), 0.0)
+
+
+def cost_entity_states(book: CostBook, today: date, months: list[dict] | None = None,
+                       scenario_params: dict | None = None) -> dict:
+    """key -> (state, attributes) for the cost_* and event_* entities.
+
+    scenario_params (capacity, eff, floor_soc, max_kw, includes_ev): when given, cost_days's daily summaries
+    also carry each day's what-if scenarios (see costs.day_scenarios), and cost_waterfall is published from
+    them; without it (no config yet) both fall back to their old, scenario-free shape.
+    """
+    days = book.recent(today, scenario_params=scenario_params)
     today_s = next((d for d in days if d["date"] == today.isoformat()), None)
     past = [d for d in days if d["complete"]]
     yesterday = past[-1] if past else None
@@ -318,7 +332,7 @@ def cost_entity_states(book: CostBook, today: date, months: list[dict] | None = 
     ev = book.last_event
     tm = this_month or {}
     month_events = round(tm.get("axle_net", 0.0) + tm.get("free_power_net", 0.0), 2)
-    return {
+    out = {
         "cost_today": (today_s["actual"] if today_s else "unknown", today_s or {}),
         # against no solar or battery (S0), with any Axle/free-power event value added back
         "cost_saved_today": (round(today_s["s0"] - today_s["actual"] + sum(e.get("net", 0.0) for e in
@@ -330,6 +344,12 @@ def cost_entity_states(book: CostBook, today: date, months: list[dict] | None = 
         "event_last": (ev["net"] if ev else "unknown", ev or {}),
         "event_months": (month_events, {"months": months or []}),
     }
+    if scenario_params is not None:
+        # up to 31 days of summaries for the waterfall, independent of however many cost_days shows (SHOW_DAYS)
+        wf_days = book.recent(today, days=WATERFALL_WINDOW_DAYS, scenario_params=scenario_params)
+        periods = {p: waterfall(wf_days, p) for p in WATERFALL_PERIODS}
+        out["cost_waterfall"] = (-_step_value(periods["yesterday"], "PowerEngine"), {"periods": periods})
+    return out
 
 
 def battery_parameters(halves: list[dict], eff: float, configured_kwh: float, enough_days: bool) -> dict:

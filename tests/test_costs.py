@@ -188,6 +188,37 @@ def test_cost_book_records_values_and_summarises(tmp_path):
     assert states["cost_days"][1]["days"][-1]["date"] == T0.date().isoformat()
 
 
+def test_cost_waterfall_entity_only_with_scenario_params(tmp_path):
+    from pe_core.costbook import CostBook, cost_entity_states
+    rates = day_rates(T0) + day_rates(T0 + timedelta(days=1))
+    book = CostBook(str(tmp_path), UTC)
+    rec = Recorder()
+    t = T0 + timedelta(hours=1)
+    for i in range(48 * 2):                          # a full day, so it counts as complete
+        r = R(t + timedelta(seconds=30 * i), grid_power=1000, battery_power=0, house_power=1000,
+              import_rate=CHEAP, rates=rates, battery_soc=50)
+        hh = rec.add(r)
+        if hh:
+            book.add(hh, r, capacity=18, eff=0.95, floor_soc=12, max_kw=4.8, includes_ev=True)
+    today = T0.date() + timedelta(days=1)
+
+    without = cost_entity_states(book, today, [])
+    assert "cost_waterfall" not in without
+    assert "scenarios" not in without["cost_days"][1]["days"][0]
+
+    sp = {"capacity": 18, "eff": 0.95, "floor_soc": 12, "max_kw": 4.8, "includes_ev": True}
+    with_sp = cost_entity_states(book, today, [], sp)
+    assert "cost_waterfall" in with_sp
+    state, attrs = with_sp["cost_waterfall"]
+    assert isinstance(state, (int, float))
+    periods = attrs["periods"]
+    assert set(periods) == {"yesterday", "week", "month", "days30"}
+    for p in periods.values():
+        assert p["steps"][0]["label"] == "No solar or battery"
+        assert p["steps"][-1]["label"] == "You paid"
+    assert "scenarios" in with_sp["cost_days"][1]["days"][0]
+
+
 # --- backfill from history -----------------------------------------------------------------
 
 def _rows(points, unit=None):
@@ -379,3 +410,173 @@ def test_export_rate_falls_back_to_the_current_one(tmp_path):
         json.dump(records, fh)
     book.revalue(capacity=18, eff=0.95, floor_soc=12, max_kw=4.8, includes_ev=True)
     assert book.day_records(T0.date())[0]["v"]["exp"] == 0.15
+
+
+# --- day_scenarios and waterfall (#162) -------------------------------------------------
+
+def _scenario_records(cases, **kw):
+    """[{**raw_record, "v": process(...)}, ...] — day_scenarios needs both the raw flows and the valued 'v'."""
+    lg, sim, out = Ledger(), SimDefault(), []
+    for r, rt in cases:
+        v = process(r, rt, lg, sim, capacity=18, eff=0.95, floor_soc=12, max_kw=4.8, includes_ev=True, **kw)
+        out.append({**r, "v": v})
+    return out
+
+
+RT1 = Rates(0.20, 0.30, 0.07, 0.15, False)
+
+
+def test_day_scenarios_hand_computed_two_half_hours():
+    from pe_core.costs import day_scenarios
+    # hh1: 1 kWh of solar exactly covers the house, no grid; hh2: 1 kWh house from the grid
+    r1 = rec(s_h=1.0, soc_start=50, soc_end=50)
+    r2 = rec(g_h=1.0, soc_start=50, soc_end=50)
+    records = _scenario_records([(r1, RT1), (r2, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0)
+    assert sc["none"] == pytest.approx(0.60)            # 2 kWh house x standard (0.30)
+    assert sc["solar"] == pytest.approx(0.30)            # hh1 self-covered; hh2 needs 1 kWh x standard
+    assert sc["tariff"] == pytest.approx(0.20)           # hh2's 1 kWh x actual (0.20)
+    assert sc["self_use"] == pytest.approx(0.0)          # the seeded battery (5 kWh) covers hh2's need exactly
+    assert sc["actual"] == pytest.approx(0.20)           # metered: 1 kWh import x actual
+    assert sc["actual_adj"] == sc["actual"]              # soc unchanged over the day: no carry
+    assert sc["carry"] == pytest.approx(0.0)
+    assert sc["paid"] == pytest.approx(sc["actual"])
+    assert sc["ref_rate"] == pytest.approx(0.07)
+    assert sc["self_use_adj"] == pytest.approx(0.08, abs=0.001)   # battery ran down: carried value added back
+
+
+def test_day_scenarios_three_half_hours_with_standing():
+    from pe_core.costs import day_scenarios
+    r1 = rec(s_h=0.5, g_h=0.5, soc_start=50, soc_end=50)   # 1 kWh house, half from solar
+    r2 = rec(g_h=1.0, soc_start=50, soc_end=50)            # 1 kWh house, all from the grid
+    r3 = rec(s_h=2.0, soc_start=50, soc_end=50)            # 2 kWh house, entirely solar (no need, no surplus)
+    records = _scenario_records([(r1, RT1), (r2, RT1), (r3, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=1.0)
+    assert sc["none"] == pytest.approx((1.0 + 1.0 + 2.0) * 0.30 + 1.0)     # 4 kWh house x std + standing
+    assert sc["tariff"] == pytest.approx(0.5 * 0.20 + 1.0 * 0.20 + 1.0)   # only the grid-covered need is priced
+    assert sc["actual"] == pytest.approx(0.5 * 0.20 + 1.0 * 0.20 + 1.0)   # only r1, r2 import
+
+
+def test_day_scenarios_carry_adjustment():
+    from pe_core.costs import day_scenarios
+    r1 = rec(s_h=1.0, soc_start=50, soc_end=50)
+    r2 = rec(g_h=1.0, soc_start=50, soc_end=60)    # battery ends the day 1 kWh fuller (10% of 10 kWh)
+    records = _scenario_records([(r1, RT1), (r2, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0)
+    expected_carry = round(1.0 * 0.07 / 0.95, 2)
+    assert sc["carry"] == pytest.approx(expected_carry, abs=0.001)
+    assert sc["actual_adj"] == pytest.approx(sc["actual"] - sc["carry"], abs=0.01)
+
+
+def test_day_scenarios_events_excluded_and_metered():
+    from pe_core.costs import day_scenarios
+    r1 = rec(s_h=1.0, soc_start=50, soc_end=50)
+    r_axle = rec(b_e=1.0, soc_start=50, soc_end=50)
+    r_axle["axle"] = True
+    records = _scenario_records([(r1, RT1), (r_axle, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0)
+    assert sc["none"] == pytest.approx(0.30)             # only r1's 1 kWh house counted
+    assert sc["tariff"] == pytest.approx(0.0)             # r1: solar covers the load exactly
+    # the axle half-hour's own metered value (it exports 1 kWh, earning the export rate) sits in events_metered
+    assert sc["events_metered"] == pytest.approx(-1.0 * 0.15, abs=0.001)
+
+
+def test_day_scenarios_self_use_respects_capacity():
+    from pe_core.costs import day_scenarios
+    # near-full battery (9.5 of 10 kWh) sees a huge surplus: it can only take (10-9.5)/eff before hitting capacity
+    r1 = rec(s_e=5.0, soc_start=95, soc_end=95)
+    records = _scenario_records([(r1, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0)
+    into = (10 - 9.5) / 0.95
+    expected = round(-(5.0 - into) * 0.15, 2)
+    assert sc["self_use"] == pytest.approx(expected, abs=0.01)
+
+
+def test_day_scenarios_self_use_respects_floor():
+    from pe_core.costs import day_scenarios
+    # near-floor battery (13% of 10 kWh, floor 12%) can only give up (1.3-1.2)*eff before hitting the floor
+    r1 = rec(g_h=5.0, soc_start=13, soc_end=13, grid_import=5.0)
+    records = _scenario_records([(r1, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0)
+    out = (1.3 - 1.2) * 0.95
+    expected = round((5.0 - out) * 0.20, 2)
+    assert sc["self_use"] == pytest.approx(expected, abs=0.01)
+
+
+def test_day_scenarios_car_costed_flat_when_not_holding_for_ev():
+    from pe_core.costs import day_scenarios
+    r = rec(g_c=2.0, soc_start=50, soc_end=50, grid_import=2.0)
+    records = _scenario_records([(r, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0)
+    car_flat = round(2.0 * 0.20, 2)      # act, not ovn or std: same figure in every scenario
+    assert sc["none"] == car_flat
+    assert sc["solar"] == car_flat
+    assert sc["tariff"] == car_flat
+    assert sc["self_use"] == car_flat
+
+
+# --- waterfall -----------------------------------------------------------------------------
+
+def _day(date, complete=True, **scenarios):
+    base = {"none": 0.0, "solar": 0.0, "tariff": 0.0, "self_use_adj": 0.0, "actual_adj": 0.0,
+            "carry": 0.0, "events_metered": 0.0, "paid": 0.0}
+    base.update(scenarios)
+    return {"date": date, "complete": complete, "scenarios": base}
+
+
+def test_waterfall_steps_chain_exactly():
+    from pe_core.costs import waterfall
+    days = [
+        _day("2026-09-21", none=10.111, solar=7.222, tariff=6.333, self_use_adj=4.444, actual_adj=3.111,
+             carry=0.501, events_metered=0.0, paid=3.612),
+        _day("2026-09-22", none=12.126, solar=8.111, tariff=7.001, self_use_adj=5.501, actual_adj=4.201,
+             carry=-0.201, events_metered=1.0, paid=5.0),
+    ]
+    w = waterfall(days, "week")
+    assert w["days"] == 2 and w["from"] == "2026-09-21" and w["to"] == "2026-09-22"
+    running = 0.0
+    for s in w["steps"]:
+        running = s["value"] if s["kind"] in ("total", "subtotal") else round(running + s["value"], 2)
+    assert running == w["steps"][-1]["value"]
+    total_paid = round(sum(d["scenarios"]["paid"] for d in days), 2)
+    assert w["steps"][-1]["value"] == pytest.approx(total_paid, abs=0.01)
+    labels = [s["label"] for s in w["steps"]]
+    assert labels[0] == "No solar or battery" and labels[-1] == "You paid"
+    assert "Everyday cost" in labels
+
+
+def test_waterfall_omits_events_step_when_zero():
+    from pe_core.costs import waterfall
+    days = [_day("2026-09-21", none=10, solar=8, tariff=7, self_use_adj=5, actual_adj=4, carry=0.2,
+                events_metered=0.0, paid=4.2)]
+    w = waterfall(days, "yesterday")
+    labels = [s["label"] for s in w["steps"]]
+    assert "Axle & free power" not in labels
+    assert labels[-1] == "You paid" and w["steps"][-1]["value"] == pytest.approx(4.2)
+
+
+def test_waterfall_negative_total_is_a_day_you_earned_money():
+    from pe_core.costs import waterfall
+    days = [_day("2026-09-21", none=5, solar=1, tariff=0, self_use_adj=-2, actual_adj=-3, carry=0.0,
+                events_metered=0.0, paid=-3.0)]
+    w = waterfall(days, "yesterday")
+    assert w["steps"][-1]["value"] == pytest.approx(-3.0)
+
+
+def test_waterfall_periods_select_the_right_days():
+    from pe_core.costs import waterfall
+    days = [_day(f"2026-08-{d:02d}", paid=float(d)) for d in range(20, 32)]           # spills into August
+    days += [_day(f"2026-09-{d:02d}", paid=float(d)) for d in range(1, 26)]           # 1..25 Sept, complete
+    days.append(_day("2026-09-26", complete=False, paid=99))                         # today: never counted
+    assert waterfall(days, "yesterday")["days"] == 1
+    assert waterfall(days, "yesterday")["to"] == "2026-09-25"
+    assert waterfall(days, "week")["days"] == 7
+    assert waterfall(days, "days30")["days"] == 30
+    month = waterfall(days, "month")
+    assert month["days"] == 25 and month["from"] == "2026-09-01" and month["to"] == "2026-09-25"
+
+
+def test_waterfall_unknown_period_raises():
+    from pe_core.costs import waterfall
+    with pytest.raises(ValueError):
+        waterfall([_day("2026-09-21", paid=1.0)], "fortnight")

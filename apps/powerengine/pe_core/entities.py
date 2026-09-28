@@ -161,6 +161,7 @@ COST_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "cost_today", "Cost today", MONEY),
     EntityDef("sensor", "cost_saved_today", "Saved today", MONEY),
     EntityDef("sensor", "cost_days", "Daily costs", MONEY),
+    EntityDef("sensor", "cost_waterfall", "Savings waterfall", {**MONEY, "icon": "mdi:chart-waterfall"}),
     EntityDef("sensor", "cost_simulator", "Tariff simulator", {"icon": "mdi:scale-balance"}),
     EntityDef("sensor", "cost_simulator_year", "Tariff simulator (year, heat pump)", {"icon": "mdi:scale-balance"}),
     EntityDef("sensor", "event_last", "Last special event", {**MONEY, "icon": "mdi:star-outline"}),
