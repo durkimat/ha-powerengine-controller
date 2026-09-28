@@ -46,6 +46,37 @@ SCENARIOS = {
     "windows_limit": {
         "overrides": {"system": {"control_method": "timed_windows"}}, "end": "2026-09-28T03:25:00+00:00",
     },
+    # a supervised timed-window test, paused first (tests are refused while Active), run to its end
+    "windows_test": {
+        "overrides": WINDOWS, "start": "2026-09-27T19:30:00+00:00", "end": "2026-09-27T20:05:00+00:00",
+        "events": [
+            ("2026-09-27T19:31:00+00:00", ("pause", True)),
+            ("2026-09-27T19:33:00+00:00", ("test", {"action": "charge", "minutes": 3, "confirm": True})),
+        ],
+    },
+    # a supervised RC test (remote control), paused first, at its minimum minutes, run to its end
+    "ram_rctest": {
+        "overrides": RAM, "start": "2026-09-27T19:30:00+00:00", "end": "2026-09-27T20:05:00+00:00",
+        "events": [
+            ("2026-09-27T19:31:00+00:00", ("pause", True)),
+            ("2026-09-27T19:33:00+00:00", ("test", {"action": "rc_discharge", "minutes": 1, "confirm": True})),
+        ],
+    },
+    # as above, but stopped part-way through by the card
+    "ram_rctest_stop": {
+        "overrides": RAM, "start": "2026-09-27T19:30:00+00:00", "end": "2026-09-27T20:05:00+00:00",
+        "events": [
+            ("2026-09-27T19:31:00+00:00", ("pause", True)),
+            ("2026-09-27T19:33:00+00:00", ("test", {"action": "rc_discharge", "minutes": 5, "confirm": True})),
+            ("2026-09-27T19:35:00+00:00", ("test", {"action": "stop"})),
+        ],
+    },
+    # the inverter clock reads 5 minutes off: PowerEngine (Active, timed windows) syncs it
+    "clock_sync": {
+        "overrides": WINDOWS, "start": "2026-09-27T19:30:00+00:00", "end": "2026-09-27T20:05:00+00:00",
+        "events": [("2026-09-27T19:31:00+00:00", ("set", "sensor.solis_rtc", "2026-09-27T19:36:00+00:00"))],
+        "clock_step": True,
+    },
 }
 
 
@@ -67,7 +98,8 @@ def test_replay_matches_the_recording(name, monkeypatch, tmp_path):
     fixture = json.loads(FIXTURE.read_text())
     spec = SCENARIOS[name]
     got = Replay(fixture, tmp_path / "powerengine", powerengine, spec.get("overrides"),
-                start=spec.get("start"), end=spec.get("end"), events=spec.get("events")).run()
+                start=spec.get("start"), end=spec.get("end"), events=spec.get("events"),
+                clock_step=spec.get("clock_step", False)).run()
     got = json.loads(json.dumps(got, default=str))
     golden = HERE / f"expected_{name}.json"
     if os.environ.get("PE_REPLAY_UPDATE") or not golden.exists():

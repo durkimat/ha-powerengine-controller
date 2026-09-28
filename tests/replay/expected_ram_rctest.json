@@ -1,0 +1,230 @@
+[
+{
+"t": "2026-09-27T19:30:00+00:00",
+"decision": [
+"export",
+"plan",
+null,
+null
+]
+},
+{
+"t": "2026-09-27T19:30:00+00:00",
+"plan": "EssssCCECCECCECCECCECsssssHHHHHH",
+"soc": [
+75,
+70,
+89,
+90,
+75,
+89,
+84,
+83
+]
+},
+{
+"t": "2026-09-27T19:30:00+00:00",
+"warning": "[info] PowerEngine x.y.z starting"
+},
+{
+"t": "2026-09-27T19:30:00+00:00",
+"warning": "[info] RAM remote control takes over: timed windows closed, then left alone"
+},
+{
+"t": "2026-09-27T19:30:00+00:00",
+"warning": "[info] RAM remote control: Force discharge at 5000 W"
+},
+{
+"t": "2026-09-27T19:31:00+00:00",
+"event": [
+"pause",
+true
+]
+},
+{
+"t": "2026-09-27T19:31:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Off"
+},
+{
+"t": "2026-09-27T19:31:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T19:31:00+00:00",
+"warning": "[info] RAM remote control Off (leaving Active (paused))"
+},
+{
+"t": "2026-09-27T19:31:00+00:00",
+"warning": "[info] RAM remote control: Off (Self-Use)"
+},
+{
+"t": "2026-09-27T19:31:00+00:00",
+"warning": "[info] Leaving Active (paused: Paused from the dashboard: the inverter is back on Self-Use and PowerEngine makes no changes until you resume.); returning the inverter to Self-Use"
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"event": [
+"test",
+{
+"action": "rc_discharge",
+"minutes": 1,
+"confirm": true
+}
+]
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 2000
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T19:34:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 2000
+},
+{
+"t": "2026-09-27T19:34:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Off"
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"decision": [
+"self_use",
+"plan",
+null,
+null
+]
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"plan": "sssssCECCECCECCECCECCssssssssssC",
+"soc": [
+88,
+82,
+90,
+75,
+89,
+90,
+85,
+84
+]
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"svc": "persistent_notification/create"
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"warning": "Supervised RC test failed: inconclusive (no battery power readings)"
+},
+{
+"t": "2026-09-27T19:45:00+00:00",
+"decision": [
+"export",
+"plan",
+null,
+null
+]
+},
+{
+"t": "2026-09-27T19:45:00+00:00",
+"plan": "EssssCCECCECCECCECCECsssssHHHHHH",
+"soc": [
+75,
+70,
+89,
+90,
+75,
+89,
+84,
+83
+]
+},
+{
+"t": "2026-09-27T19:45:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T19:46:00+00:00",
+"warning": "Load history from HA was empty; retrying in an hour. PowerEngine's own load record is still used."
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"plan": "EssssCCECCECCECCECCECsssssHHHHHH",
+"soc": [
+77,
+72,
+89,
+90,
+75,
+89,
+84,
+83
+]
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"plan": "EssssCCECCECCECCECCECsssssHHHHHH",
+"soc": [
+75,
+70,
+89,
+90,
+75,
+89,
+84,
+83
+]
+},
+{
+"t": "2026-09-27T20:00:00+00:00",
+"decision": [
+"self_use",
+"plan",
+null,
+null
+]
+},
+{
+"t": "2026-09-27T20:00:00+00:00",
+"plan": "ssssEEECCCCEEECCCCCCssssssssCCCC",
+"soc": [
+88,
+69,
+66,
+61,
+86,
+99,
+94,
+95
+]
+},
+{
+"t": "2026-09-27T20:00:00+00:00",
+"svc": "logbook/log"
+}
+]

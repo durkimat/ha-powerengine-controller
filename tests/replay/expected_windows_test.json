@@ -1,0 +1,225 @@
+[
+{
+"t": "2026-09-27T19:30:00+00:00",
+"decision": [
+"self_use",
+"plan",
+null,
+null
+]
+},
+{
+"t": "2026-09-27T19:30:00+00:00",
+"plan": "sssssCCCCCCCCCCCCCCCCsssssHHHHHH",
+"soc": [
+89,
+83,
+90,
+90,
+90,
+90,
+85,
+85
+]
+},
+{
+"t": "2026-09-27T19:30:00+00:00",
+"warning": "[info] PowerEngine x.y.z starting"
+},
+{
+"t": "2026-09-27T19:31:00+00:00",
+"event": [
+"pause",
+true
+]
+},
+{
+"t": "2026-09-27T19:31:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T19:31:00+00:00",
+"warning": "[info] Leaving Active (paused: Paused from the dashboard: the inverter is back on Self-Use and PowerEngine makes no changes until you resume.); returning the inverter to Self-Use"
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"event": [
+"test",
+{
+"action": "charge",
+"minutes": 3,
+"confirm": true
+}
+]
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours",
+"value": 20
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 32
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 20
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 38
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T19:34:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"plan": "sssssCCCCCCCCCCCCCCCCsssssHHHHHH",
+"soc": [
+88,
+82,
+90,
+90,
+90,
+90,
+85,
+85
+]
+},
+{
+"t": "2026-09-27T19:36:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours",
+"value": 0
+},
+{
+"t": "2026-09-27T19:36:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-27T19:36:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-27T19:36:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-27T19:37:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T19:37:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T19:37:00+00:00",
+"svc": "persistent_notification/create"
+},
+{
+"t": "2026-09-27T19:45:00+00:00",
+"plan": "sssssCCCCCCCCCCCCCCCCsssssHHHHHH",
+"soc": [
+89,
+83,
+90,
+90,
+90,
+90,
+85,
+85
+]
+},
+{
+"t": "2026-09-27T19:46:00+00:00",
+"warning": "Load history from HA was empty; retrying in an hour. PowerEngine's own load record is still used."
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"decision": [
+"export",
+"plan",
+null,
+null
+]
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"plan": "EssssCCCCCCCCCCCCCCCCsssssHHHHHH",
+"soc": [
+77,
+71,
+90,
+90,
+90,
+90,
+85,
+85
+]
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"decision": [
+"self_use",
+"plan",
+null,
+null
+]
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"plan": "sssssCCCCCCCCCCCCCCCCsssssHHHHHH",
+"soc": [
+89,
+83,
+90,
+90,
+90,
+90,
+85,
+85
+]
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T20:00:00+00:00",
+"plan": "ssssEEEECCCCEEECCCCCssssssssssss",
+"soc": [
+88,
+68,
+36,
+62,
+59,
+99,
+94,
+95
+]
+}
+]
