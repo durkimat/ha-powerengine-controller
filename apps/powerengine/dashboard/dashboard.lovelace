@@ -27,61 +27,48 @@ views:
             icon_on: mdi:pause-circle
             icon_off: mdi:play-circle-outline
             grid_options: {columns: full, rows: 1}
-          # Mode, coloured by state: green Active, orange Paused, blue Passive, red when blocked (not configured,
-          # inputs not ready, or Active asked for but refused)
+          # Mode, coloured: green Active, orange Paused, blue Passive, red Blocked (not configured, inputs not
+          # ready, or Active refused) or Stopped (inverter writes couldn't be confirmed)
           - type: tile
-            entity: sensor.pe_state_operation_mode
+            entity: sensor.pe_state_status
             name: Mode
             color: green
-            grid_options: {columns: 4}
+            grid_options: {columns: 3}
             visibility:
               - condition: state
-                entity: sensor.pe_state_operation_mode
-                state: active
+                entity: sensor.pe_state_status
+                state: Active
           - type: tile
-            entity: sensor.pe_state_operation_mode
+            entity: sensor.pe_state_status
             name: Mode
             color: orange
-            grid_options: {columns: 4}
+            grid_options: {columns: 3}
             visibility:
               - condition: state
-                entity: sensor.pe_state_operation_mode
-                state: paused
+                entity: sensor.pe_state_status
+                state: Paused
           - type: tile
-            entity: sensor.pe_state_operation_mode
+            entity: sensor.pe_state_status
             name: Mode
             color: blue
-            grid_options: {columns: 4}
+            grid_options: {columns: 3}
             visibility:
               - condition: state
-                entity: sensor.pe_state_operation_mode
-                state: passive
-              - condition: state
-                entity: sensor.pe_cfg_operation_mode
-                state_not: active
+                entity: sensor.pe_state_status
+                state: Passive
           - type: tile
-            entity: sensor.pe_state_operation_mode
+            entity: sensor.pe_state_status
             name: Mode
             color: red
-            grid_options: {columns: 4}
+            grid_options: {columns: 3}
             visibility:
-              - condition: or
-                conditions:
-                  - condition: state
-                    entity: sensor.pe_state_operation_mode
-                    state_not: [active, paused, passive]
-                  - condition: and
-                    conditions:
-                      - condition: state
-                        entity: sensor.pe_state_operation_mode
-                        state: passive
-                      - condition: state
-                        entity: sensor.pe_cfg_operation_mode
-                        state: active
+              - condition: state
+                entity: sensor.pe_state_status
+                state: [Blocked, Stopped]
           - type: tile
             entity: sensor.pe_state_control_method
             name: Inverter control
-            grid_options: {columns: 4}
+            grid_options: {columns: 3}
             tap_action:
               action: navigate
               navigation_path: health
@@ -90,7 +77,29 @@ views:
             entity: sensor.pe_diag_writes_today
             name: Writes today (real · sim)
             state_content: [state, simulated]
-            grid_options: {columns: 4}
+            grid_options: {columns: 3}
+            tap_action:
+              action: navigate
+              navigation_path: health
+          # against no solar or battery, with any Axle / free-power event value included (Costs tab for the detail)
+          - type: tile
+            entity: sensor.pe_cost_saved_today
+            name: Saved today
+            grid_options: {columns: 3}
+            tap_action:
+              action: navigate
+              navigation_path: costs
+          # only when the Health tab has something to say
+          - type: tile
+            entity: sensor.pe_diag_health
+            name: Health needs a look
+            icon: mdi:alert-circle-outline
+            color: red
+            grid_options: {columns: full}
+            visibility:
+              - condition: state
+                entity: sensor.pe_diag_health
+                state_not: ok
             tap_action:
               action: navigate
               navigation_path: health
@@ -109,6 +118,9 @@ views:
               {%- for e in shown %}
               {%- if loop.first %}
               **{{ e.hhmm }} · {{ e.text }}**
+              {%- set nx = states('sensor.pe_plan_next') %}
+              {%- if nx not in ['unknown', 'unavailable', '', 'no change planned'] %}
+              <br>Next: {{ nx }}{% endif %}
               {% if shown | count > 1 %}
               <small>Earlier today:</small>
               {% endif %}
@@ -245,24 +257,6 @@ views:
               {% set t = state_attr('sensor.pe_state_solar_power', 'forecast_today_kwh') %}
               {% set m = state_attr('sensor.pe_state_solar_power', 'forecast_tomorrow_kwh') %}
               **Solar forecast** today {{ t if t is not none else '–' }} kWh · tomorrow {{ m if m is not none else '–' }} kWh
-      - type: grid
-        column_span: 3
-        cards:
-          - type: heading
-            heading: PowerEngine health
-            heading_style: subtitle
-          - type: tile
-            entity: sensor.pe_diag_heartbeat
-            name: Heartbeat
-            grid_options: {columns: 4}
-          - type: tile
-            entity: binary_sensor.pe_diag_config_ok
-            name: Config OK
-            grid_options: {columns: 4}
-          - type: tile
-            entity: sensor.pe_diag_version
-            name: Version
-            grid_options: {columns: 4}
   - title: Plan
     path: plan
     icon: mdi:calendar-clock
@@ -1079,6 +1073,18 @@ views:
       - type: grid
         column_span: 3
         cards:
+          - type: tile
+            entity: sensor.pe_diag_heartbeat
+            name: Heartbeat
+            grid_options: {columns: 4}
+          - type: tile
+            entity: binary_sensor.pe_diag_config_ok
+            name: Config OK
+            grid_options: {columns: 4}
+          - type: tile
+            entity: sensor.pe_diag_version
+            name: Version
+            grid_options: {columns: 4}
           - type: markdown
             grid_options: {columns: full}
             content: |-

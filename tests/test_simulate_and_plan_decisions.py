@@ -110,3 +110,16 @@ def test_axle_export_earns_axle_plus_the_export_rate():
     assert axle_words(p, 0.15) == "£1.15/kWh (£1 Axle + 15p export)"
     off = params_from(parse_config({"features": {"axle_plus_export": False}}))
     assert axle_rate(off, 0.15) == 1.0 and axle_words(off, 0.15) == "£1/kWh"
+
+
+def test_next_text_merges_windows_and_skips_the_running_one():
+    from types import SimpleNamespace
+
+    from pe_core.planner import next_text
+    w = lambda a, f, t, day="": {"action": a, "from": f, "to": t, "day": day}  # noqa: E731
+    plan = SimpleNamespace(windows=[w("hold", "09:00", "14:00"), w("export", "14:00", "15:00"),
+                                    w("export", "15:00", "16:00"), w("self_use", "16:00", "23:30"),
+                                    w("grid_charge", "23:30", "05:00", "tomorrow")])
+    assert next_text(plan) == "sell 14:00–16:00, then self-use 16:00–23:30"
+    assert next_text(plan, n=3).endswith("charge 23:30–05:00 tomorrow")
+    assert next_text(None) == ""

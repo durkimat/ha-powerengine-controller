@@ -525,3 +525,17 @@ def test_simulated_writes_follow_the_dampening_setting(app):
     assert app._simulated_today() == 40
     app.writes.data = {}
     assert app._simulated_today() == 0
+
+
+def test_status_word_for_the_mode_tile(app):
+    from pe_core.modes import ModeDecision
+    cases = [(ModeDecision("active", "active", "x"), False, "Active"),
+             (ModeDecision("active", "paused", "x"), False, "Paused"),
+             (ModeDecision("passive", "passive", "x"), False, "Passive"),
+             (ModeDecision("active", "passive", "refused"), False, "Blocked"),
+             (ModeDecision("active", "unconfigured", "inputs"), False, "Blocked"),
+             (ModeDecision("active", "active", "x"), True, "Stopped")]
+    for mode, halted, word in cases:
+        app.mode, app._halted, app.published = mode, halted, []
+        app._publish_status()
+        assert app.published[-1][:2] == ("state_status", word), (mode, halted)

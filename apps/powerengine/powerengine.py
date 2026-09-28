@@ -297,6 +297,7 @@ class PowerEngine(hass.Hass):
         self._publish_state("state_operation_mode", mode.effective,
                             {"reason": mode.reason, "guards": guards or "all safe", "paused": paused,
                              "guards_absent": absent})
+        self._publish_status()
         self._publish_state("map_config", overall, {
             "config": self.cfg.raw if self.cfg else {},
             "checks": {k: {"status": s, "message": m} for k, (s, m) in checks.items()},
@@ -1551,6 +1552,7 @@ class PowerEngine(hass.Hass):
             self._execute([Write(w["role"], w["value"], w["kind"]) for w in bad], kwargs["entities"], attempt=2)
             return
         self._halted = True                              # no more writes until AppDaemon restarts
+        self._publish_status()
         self.log("Inverter writes could not be confirmed; control stopped until restart", level="WARNING")
         self._notify("health", ("control:verify", "PowerEngine: inverter writes not confirmed",
                                 "Settings written to the inverter didn't read back correctly twice. Check the "
@@ -2489,6 +2491,24 @@ class PowerEngine(hass.Hass):
                          f"{diagnostics.ATTR_LIMIT}-byte limit (over it, HA stops recording this sensor's history)",
                          level="WARNING")
             self._publish(f"powerengine/{key}/attributes", payload)
+
+    def _publish_status(self):
+        """The Monitoring page's Mode tile: one word, coloured by the dashboard. Stopped (writes couldn't be confirmed)
+        and Blocked (not configured, inputs not ready, or Active refused) are both shown red."""
+        mode = getattr(self, "mode", None)
+        if mode is None:
+            return
+        if getattr(self, "_halted", False):
+            word, why = "Stopped", "Inverter writes couldn't be confirmed; control stopped until AppDaemon restarts."
+        elif mode.effective == "active":
+            word, why = "Active", mode.reason
+        elif mode.effective == "paused":
+            word, why = "Paused", mode.reason
+        elif mode.effective == "passive" and mode.configured != "active":
+            word, why = "Passive", mode.reason
+        else:
+            word, why = "Blocked", mode.reason
+        self._publish_state("state_status", word, {"reason": why, "mode": mode.effective})
 
     def _beat(self, kwargs):
         self._publish_state("diag_heartbeat", datetime.now(timezone.utc).isoformat(timespec="seconds"))

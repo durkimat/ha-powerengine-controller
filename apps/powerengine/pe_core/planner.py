@@ -621,6 +621,28 @@ def slot_certainty_rows(slots: list[Slot], tz=None) -> list[dict]:
     return out
 
 
+NEXT_WORDS = {SELF_USE: "self-use", GRID_CHARGE: "charge", HOLD: "hold", FORCE_DISCHARGE: "Axle export",
+              EXPORT: "sell"}
+
+
+def next_text(plan: Plan | None, n: int = 2) -> str:
+    """'sell 16:00–19:00, then charge 23:30–05:00 tomorrow': the next changes after the running one, windows with
+    the same action run together."""
+    if plan is None or not plan.windows:
+        return ""
+    merged: list[dict] = []
+    for w in plan.windows:
+        if merged and merged[-1]["action"] == w["action"]:
+            merged[-1] = {**merged[-1], "to": w["to"]}
+        else:
+            merged.append(dict(w))
+    parts = []
+    for w in merged[1:1 + n]:
+        day = f" {w['day']}" if w.get("day") else ""
+        parts.append(f"{NEXT_WORDS.get(w['action'], w['action'])} {w['from']}–{w['to']}{day}")
+    return ", then ".join(parts)
+
+
 def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
     """key -> (state, attributes) for the plan_* entities."""
     if plan is None:
@@ -651,6 +673,7 @@ def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
     return {
         "plan": (plan.made_at.isoformat(timespec="seconds"), attrs),
         "plan_headline": (text[:254], {"text": text}),
+        "plan_next": ((next_text(plan) or "no change planned")[:254], {}),
         "plan_next_mode": (nxt["action"] if nxt else "none", {"reason": nxt["reason"] if nxt else None}),
         "plan_next_start": (nxt["start"] if nxt else "unknown", {}),
         "plan_next_target_soc": (nxt["target_soc"] if nxt and nxt["target_soc"] is not None else "unknown", {}),

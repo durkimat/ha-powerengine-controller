@@ -115,6 +115,7 @@ RATE = {"unit_of_measurement": "GBP/kWh", "state_class": "measurement", "icon": 
 
 STATE_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "state_summary", "Status", {"icon": "mdi:text-box-outline"}),
+    EntityDef("sensor", "state_status", "Mode (at a glance)", {"icon": "mdi:power-settings"}),
     EntityDef("sensor", "state_decision", "Decision",
               {"icon": "mdi:head-cog-outline", "device_class": "enum",
                "options": ["self_use", "grid_charge", "hold", "force_discharge", "export", "none"]}),
@@ -139,6 +140,7 @@ STATE_ENTITIES: tuple[EntityDef, ...] = (
 PLAN_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "plan", "Plan", {"device_class": "timestamp", "icon": "mdi:calendar-clock"}),
     EntityDef("sensor", "plan_headline", "Plan headline", {"icon": "mdi:text-box-outline"}),
+    EntityDef("sensor", "plan_next", "Next in the plan", {"icon": "mdi:arrow-right-circle-outline"}),
     EntityDef("sensor", "plan_next_mode", "Next planned mode",
               {"icon": "mdi:skip-next-outline", "device_class": "enum",
                "options": ["self_use", "grid_charge", "hold", "force_discharge", "export", "none"]}),
@@ -154,6 +156,7 @@ MONEY = {"unit_of_measurement": "GBP", "icon": "mdi:cash", "suggested_display_pr
 
 COST_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "cost_today", "Cost today", MONEY),
+    EntityDef("sensor", "cost_saved_today", "Saved today", MONEY),
     EntityDef("sensor", "cost_days", "Daily costs", MONEY),
     EntityDef("sensor", "cost_simulator", "Tariff simulator", {"icon": "mdi:scale-balance"}),
     EntityDef("sensor", "cost_simulator_year", "Tariff simulator (year, heat pump)", {"icon": "mdi:scale-balance"}),

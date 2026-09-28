@@ -86,7 +86,7 @@ def test_every_page_says_what_it_is():
 def test_monitoring_mode_tile_is_coloured_by_state():
     d = yaml.safe_load(open(SOURCE).read())
     top = d["views"][0]["sections"][0]["cards"]
-    modes = [c for c in top if c.get("entity") == "sensor.pe_state_operation_mode"]
+    modes = [c for c in top if c.get("entity") == "sensor.pe_state_status"]
     assert sorted(c["color"] for c in modes) == ["blue", "green", "orange", "red"]
     assert all(c.get("visibility") for c in modes)
     text = yaml.safe_dump(d["views"][0])
