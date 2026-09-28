@@ -9,6 +9,7 @@ views:
     type: sections
     # page title: on a phone only the tab icons show, so say which page this is
     header:
+      layout: start
       card:
         type: markdown
         text_only: true
@@ -257,6 +258,7 @@ views:
     type: sections
     # page title: on a phone only the tab icons show, so say which page this is
     header:
+      layout: start
       card:
         type: markdown
         text_only: true
@@ -548,6 +550,7 @@ views:
     type: sections
     # page title: on a phone only the tab icons show, so say which page this is
     header:
+      layout: start
       card:
         type: markdown
         text_only: true
@@ -841,6 +844,7 @@ views:
     type: sections
     # page title: on a phone only the tab icons show, so say which page this is
     header:
+      layout: start
       card:
         type: markdown
         text_only: true
@@ -1054,6 +1058,7 @@ views:
     type: sections
     # page title: on a phone only the tab icons show, so say which page this is
     header:
+      layout: start
       card:
         type: markdown
         text_only: true
@@ -1416,6 +1421,7 @@ views:
     type: sections
     # page title: on a phone only the tab icons show, so say which page this is
     header:
+      layout: start
       card:
         type: markdown
         text_only: true
@@ -1510,32 +1516,47 @@ views:
   - title: Config
     path: config
     icon: mdi:cog
-    panel: true
-    cards:
-      - type: vertical-stack
+    type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Configuration"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
         cards:
-          - type: heading   # page title (on a phone only the tab icons show)
-            heading: Configuration
-            heading_style: title
           # Predbat <-> PowerEngine switch (needs docs/ha/powerengine_handover.yaml installed as a package)
           - type: custom:powerengine-handover-card
+            grid_options: {columns: full}
           - type: custom:powerengine-config-card
+            grid_options: {columns: full}
   - title: Tests
     path: tests
     icon: mdi:test-tube
-    panel: true
-    cards:
-      - type: vertical-stack
+    type: sections
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Tests"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
         cards:
-          - type: heading   # page title (on a phone only the tab icons show)
-            heading: Tests
-            heading_style: title
           # supervised inverter tests (admin only; refused unless the handover guards are safe and PowerEngine is
           # paused): timed windows (current method) and the Solis RAM remote-control registers
           - type: custom:powerengine-toggle-card
+            grid_options: {columns: full}
             title: Pause control (must be on to run a test)
             entity: switch.pe_ctl_pause
             name: Pause control
             icon_on: mdi:pause-circle
             icon_off: mdi:play-circle-outline
           - type: custom:powerengine-test-card
+            grid_options: {columns: full}
