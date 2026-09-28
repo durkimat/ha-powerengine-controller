@@ -1052,10 +1052,10 @@ views:
           - type: markdown
             grid_options: {columns: full}
             content: |-
-              These layers attribute one day's actual cost, piece by piece, for checking; they are not alternatives to compare against each other (see "Where the savings came from" above for that).
-
               {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
               {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
+              These layers attribute one day's actual cost, piece by piece, for checking; they are not alternatives to compare against each other (see "Where the savings came from" above for that).
+
               | Day | No solar/battery | Solar | Smart | Battery (default) | Battery control | Arbitrage | Carried in battery | Actual | Unexplained |
               |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
               {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse %}
