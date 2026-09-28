@@ -237,6 +237,10 @@ read-only.
 
 - The dashboard is managed: edits to `dashboard.yaml` are overwritten on the
   next update. To customise, copy the cards into a dashboard of your own.
+- The Energy flow card (Monitoring tab) is generated from your configured solar plant(s): one panel per
+  enabled plant (up to five), or a single total if you have none configured or just one. It regenerates
+  whenever you save the Config tab, so manual edits inside its generated block in `dashboard.yaml` are
+  replaced the same way the rest of the file is.
 
 ---
 

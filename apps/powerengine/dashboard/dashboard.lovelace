@@ -148,6 +148,7 @@ views:
         cards:
           - type: heading
             heading: Energy flow
+          # BEGIN energy-flow (generated from your configuration; edits here are replaced)
           - type: custom:sunsynk-power-flow-card
             grid_options: {columns: full}
             cardstyle: lite
@@ -178,6 +179,7 @@ views:
               essential_power: sensor.pe_state_load_power
               essential_load1: sensor.pe_state_ev_power
               pv1_power_186: sensor.pe_state_solar_power
+          # END energy-flow
       - type: grid
         cards:
           - type: heading

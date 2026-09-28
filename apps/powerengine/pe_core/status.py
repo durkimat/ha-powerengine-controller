@@ -130,6 +130,8 @@ def entity_states(r: Readings | None, mode: ModeDecision, tz: tzinfo | None = No
     out["state_solar_power"] = (num(r.solar_power), {"plants": {k: num(v) for k, v in r.solar_by_plant.items()},
                                                      "forecast_today_kwh": r.forecast_today_kwh,
                                                      "forecast_tomorrow_kwh": r.forecast_tomorrow_kwh})
+    for pid, p in r.solar_by_plant.items():             # one sensor per enabled plant, for the Energy flow card
+        out[f"state_solar_{pid}_power"] = (num(p), {})
     out["state_house_power"] = (num(r.house_power), {"including_car": num(r.house_power_raw)})
     out["state_ev_power"] = (num(r.ev_power), {})
     total = None if r.house_power is None else r.house_power + (r.ev_power or 0)

@@ -233,15 +233,40 @@ def discovery_payload(ent: EntityDef, version: str) -> dict[str, Any]:
     return payload
 
 
+def entity_removal_messages(ent: EntityDef) -> list[tuple[str, str]]:
+    """(topic, payload) pairs that delete one entity and its retained state."""
+    msgs = [(ent.discovery_topic, ""), (ent.state_topic, ""), (ent.attributes_topic, "")]
+    if "command_topic" in ent.options:                            # retained UI preference
+        msgs.append((ent.options["command_topic"], ""))
+    return msgs
+
+
 def removal_messages() -> list[tuple[str, str]]:
     """(topic, payload) pairs that delete every entity and its retained state."""
     msgs: list[tuple[str, str]] = []
     for ent in ENTITIES:
-        msgs += [(ent.discovery_topic, ""), (ent.state_topic, ""), (ent.attributes_topic, "")]
-        if "command_topic" in ent.options:                       # retained UI preference
-            msgs.append((ent.options["command_topic"], ""))
+        msgs += entity_removal_messages(ent)
     msgs.append((AVAILABILITY_TOPIC, ""))
     return msgs
+
+
+def solar_plant_entity(plant_id: str, name: str) -> EntityDef:
+    """The per-plant solar power sensor for one enabled solar plant (not in ENTITIES: published/retired
+    dynamically as `cfg.solar_plants` changes; see PowerEngine._sync_solar_entities)."""
+    return EntityDef("sensor", f"state_solar_{plant_id}_power", f"Solar power ({name})",
+                     {**POWER, "icon": "mdi:solar-power"})
+
+
+SOLAR_PLANT_PREFIX, SOLAR_PLANT_SUFFIX = "sensor.pe_state_solar_", "_power"
+
+
+def solar_plant_id_from_entity(entity_id: str) -> str | None:
+    """The plant id encoded in a per-plant solar power sensor's entity id, or None if it isn't one (including
+    the total, sensor.pe_state_solar_power, which has no id in between)."""
+    if not (entity_id.startswith(SOLAR_PLANT_PREFIX) and entity_id.endswith(SOLAR_PLANT_SUFFIX)):
+        return None
+    pid = entity_id[len(SOLAR_PLANT_PREFIX):-len(SOLAR_PLANT_SUFFIX)]
+    return pid or None
 
 
 def validate_definitions(entities: tuple[EntityDef, ...] = ENTITIES) -> None:
