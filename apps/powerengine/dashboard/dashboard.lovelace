@@ -7,6 +7,12 @@ views:
     path: monitoring
     icon: mdi:lightning-bolt
     type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      card:
+        type: markdown
+        text_only: true
+        content: "## Monitoring"
     max_columns: 3
     sections:
       - type: grid
@@ -249,6 +255,12 @@ views:
     path: plan
     icon: mdi:calendar-clock
     type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      card:
+        type: markdown
+        text_only: true
+        content: "## Plan"
     max_columns: 3
     sections:
       - type: grid
@@ -534,6 +546,12 @@ views:
     path: history
     icon: mdi:history
     type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      card:
+        type: markdown
+        text_only: true
+        content: "## Plan history"
     max_columns: 3
     sections:
       - type: grid
@@ -821,6 +839,12 @@ views:
     path: costs
     icon: mdi:cash-multiple
     type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      card:
+        type: markdown
+        text_only: true
+        content: "## Costs"
     max_columns: 3
     sections:
       - type: grid
@@ -1028,6 +1052,12 @@ views:
     path: health
     icon: mdi:stethoscope
     type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      card:
+        type: markdown
+        text_only: true
+        content: "## Health"
     max_columns: 3
     sections:
       - type: grid
@@ -1384,6 +1414,12 @@ views:
     path: simulator
     icon: mdi:scale-balance
     type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      card:
+        type: markdown
+        text_only: true
+        content: "## Simulator"
     max_columns: 3
     sections:
       - type: grid
@@ -1478,6 +1514,9 @@ views:
     cards:
       - type: vertical-stack
         cards:
+          - type: heading   # page title (on a phone only the tab icons show)
+            heading: Configuration
+            heading_style: title
           # Predbat <-> PowerEngine switch (needs docs/ha/powerengine_handover.yaml installed as a package)
           - type: custom:powerengine-handover-card
           - type: custom:powerengine-config-card
@@ -1488,6 +1527,9 @@ views:
     cards:
       - type: vertical-stack
         cards:
+          - type: heading   # page title (on a phone only the tab icons show)
+            heading: Tests
+            heading_style: title
           # supervised inverter tests (admin only; refused unless the handover guards are safe and PowerEngine is
           # paused): timed windows (current method) and the Solis RAM remote-control registers
           - type: custom:powerengine-toggle-card

@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.40 (beta)
+
+### Behaviour changes
+- None.
+
+### Dashboard
+- Every page now starts with its title (Monitoring, Plan, Plan history, Costs, Health, Simulator, Configuration,
+  Tests), because on a phone only the tab icons show.
+
 ## 0.9.39 (beta)
 
 ### Behaviour changes
