@@ -2,6 +2,33 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.52 (beta)
+
+### Behaviour changes
+- None to control. Cost reporting and the Costs page only.
+
+### Costs page (#162)
+- **Whole-day scenarios.** Each day is now costed five ways, using the same measured house, car and solar:
+  - no solar or battery;
+  - solar only;
+  - plus your EDF tariff;
+  - plus a battery on plain self-use (simulated);
+  - PowerEngine (what you actually paid).
+
+  Unlike the old S0–S4 steps, these can be compared directly with what you paid.
+- **Where the savings came from:** a waterfall chart for yesterday, 7 days, this month or 30 days. It starts from
+  "no solar or battery" and steps down through solar, the tariff, a self-use battery and PowerEngine to your
+  everyday cost. It then adds the battery carry-over and Axle (including Axle's £1/kWh payments) to reach what you
+  paid.
+- **Battery carry-over:** charging tonight for tomorrow no longer makes today look dear. The day's change in
+  battery charge is valued at the overnight rate, with the metered figure shown alongside. Axle and free-power
+  events are kept out of it.
+- A headline for yesterday, the last 7 days and this month, and a plain table of what each scenario assumes.
+- The old cost-layer and energy tables are under **Detail and checks**. They attribute one day's cost for checking
+  and aren't alternatives to compare.
+- The page title no longer shows "Costs" twice.
+- Past days are recalculated once after updating (cost method 5).
+
 ## 0.9.51 (beta)
 
 ### Behaviour changes

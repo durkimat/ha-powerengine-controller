@@ -749,6 +749,12 @@ class PowerEngine(hass.Hass):
                 "max_kw": p.max_discharge_kw, "includes_ev": p.hold_for_car, "axle_value": p.axle_value,
                 "axle_plus_export": p.axle_plus_export}
 
+    def _scenario_params(self):
+        """The subset of _cost_params() that pe_core.costs.day_scenarios() (via day_summary) understands."""
+        p = self._cost_params()
+        return {"capacity": p["capacity"], "eff": p["eff"], "floor_soc": p["floor_soc"],
+                "max_kw": p["max_kw"], "includes_ev": p["includes_ev"], "axle_value": p["axle_value"]}
+
     def _backfill(self, kwargs):
         """Fill recent days that PowerEngine didn't record (or only partly) from HA history, one day per callback."""
         if self.costbook is None or self.cfg is None:
@@ -825,7 +831,8 @@ class PowerEngine(hass.Hass):
     def _publish_costs(self):
         if self.costbook is None or getattr(self, "mqtt", None) is None or not hasattr(self, "_published"):
             return
-        for key, (state, attrs) in cost_entity_states(self.costbook, self._today(), self._months).items():
+        sp = self._scenario_params() if self.cfg is not None else None
+        for key, (state, attrs) in cost_entity_states(self.costbook, self._today(), self._months, sp).items():
             self._publish_if_changed(key, state, attrs)
 
     def _logbook(self, message):
