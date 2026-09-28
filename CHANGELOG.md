@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.41 (beta)
+
+### Behaviour changes
+- None.
+
+### Dashboard
+- Page titles are left-aligned, the same size on every page.
+- Configuration and Tests now use the same layout as the other pages (sections, up to three columns wide) instead
+  of stretching across the whole screen.
+
 ## 0.9.40 (beta)
 
 ### Behaviour changes
