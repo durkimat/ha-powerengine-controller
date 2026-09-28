@@ -27,44 +27,95 @@ views:
             icon_on: mdi:pause-circle
             icon_off: mdi:play-circle-outline
             grid_options: {columns: full, rows: 1}
-          - type: markdown
-            grid_options: {columns: full}
-            content: |-
-              {% set t = state_attr('sensor.pe_state_summary', 'text') or states('sensor.pe_state_summary') %}
-              {% set parts = t.split('. ', 1) %}
-              **{{ parts[0] }}**{% if parts | count > 1 %} {{ parts[1] }}{% endif %}
-              {% if states('sensor.pe_state_operation_mode') == 'paused' or states('sensor.pe_cfg_operation_mode') == 'active' %}
-              <br>*{{ state_attr('sensor.pe_state_operation_mode', 'reason') }}*{% endif %}
+          # Mode, coloured by state: green Active, orange Paused, blue Passive, red when blocked (not configured,
+          # inputs not ready, or Active asked for but refused)
           - type: tile
             entity: sensor.pe_state_operation_mode
             name: Mode
+            color: green
             grid_options: {columns: 4}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_operation_mode
+                state: active
           - type: tile
-            entity: sensor.pe_state_decision
-            name: Decision
+            entity: sensor.pe_state_operation_mode
+            name: Mode
+            color: orange
             grid_options: {columns: 4}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_operation_mode
+                state: paused
           - type: tile
-            entity: sensor.pe_state_battery_soc
-            name: Battery
+            entity: sensor.pe_state_operation_mode
+            name: Mode
+            color: blue
             grid_options: {columns: 4}
-            features:
-              - type: bar-gauge
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_operation_mode
+                state: passive
+              - condition: state
+                entity: sensor.pe_cfg_operation_mode
+                state_not: active
+          - type: tile
+            entity: sensor.pe_state_operation_mode
+            name: Mode
+            color: red
+            grid_options: {columns: 4}
+            visibility:
+              - condition: or
+                conditions:
+                  - condition: state
+                    entity: sensor.pe_state_operation_mode
+                    state_not: [active, paused, passive]
+                  - condition: and
+                    conditions:
+                      - condition: state
+                        entity: sensor.pe_state_operation_mode
+                        state: passive
+                      - condition: state
+                        entity: sensor.pe_cfg_operation_mode
+                        state: active
           - type: tile
             entity: sensor.pe_state_control_method
             name: Inverter control
-            grid_options: {columns: 6}
+            grid_options: {columns: 4}
             tap_action:
               action: navigate
               navigation_path: health
           # real EEPROM writes · simulated: what timed windows would have written today on the same plan
           - type: tile
             entity: sensor.pe_diag_writes_today
-            name: Writes today (real · simulated)
+            name: Writes today (real · sim)
             state_content: [state, simulated]
-            grid_options: {columns: 6}
+            grid_options: {columns: 4}
             tap_action:
               action: navigate
               navigation_path: health
+          # today's decisions, newest first: the top line is what PowerEngine is doing now
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set m = states('sensor.pe_state_operation_mode') %}
+              {%- if m != 'active' %}*{{ state_attr('sensor.pe_state_operation_mode', 'reason') }}*
+              {% endif %}
+              {%- set entries = state_attr('sensor.pe_state_activity', 'entries') or [] %}
+              {%- set today = now().strftime('%Y-%m-%d') %}
+              {%- set todays = entries | selectattr('time', 'search', '^' ~ today) | list %}
+              {%- set shown = todays if todays else entries[:1] %}
+              {%- if not shown %}No decisions yet.{% endif %}
+              {%- for e in shown %}
+              {%- if loop.first %}
+              **{{ e.hhmm }} · {{ e.text }}**
+              {% if shown | count > 1 %}
+              <small>Earlier today:</small>
+              {% endif %}
+              {%- else %}
+              - {{ e.hhmm }} {{ e.text }}
+              {%- endif %}
+              {%- endfor %}
       - type: grid
         column_span: 2
         cards:
@@ -100,8 +151,32 @@ views:
               essential_power: sensor.pe_state_load_power
               essential_load1: sensor.pe_state_ev_power
               pv1_power_186: sensor.pe_state_solar_power
+      - type: grid
+        cards:
           - type: heading
-            heading: Gauges
+            heading: Now
+          - type: markdown
+            content: |-
+              {% set imp = state_attr('sensor.pe_state_import_rate', 'pence') %}
+              {% set until = state_attr('sensor.pe_state_import_rate', 'until') %}
+              {% set nxt = state_attr('sensor.pe_state_import_rate', 'next_rate_pence') %}
+              {% set exp = state_attr('sensor.pe_state_export_rate', 'pence') %}
+              **Import** {{ imp if imp is not none else '–' }}p
+              {%- if state_attr('sensor.pe_state_import_rate', 'in_smart_slot') %} (smart slot){% endif %}
+              {%- if until and nxt is not none %}, then {{ nxt }}p from {{ until }}{% endif %}
+
+              **Export** {{ exp if exp is not none else '–' }}p
+          - type: gauge
+            entity: sensor.pe_state_battery_soc
+            name: Battery charge
+            needle: true
+            min: 0
+            max: 100
+            grid_options: {columns: full}
+            segments:
+              - {from: 0, color: "#e53935"}
+              - {from: 20, color: "#fb8c00"}
+              - {from: 40, color: "#43a047"}
           - type: gauge
             entity: sensor.pe_state_battery_power
             name: Battery
@@ -153,32 +228,6 @@ views:
               - {from: 0, color: "#90caf9"}
               - {from: 3000, color: "#fb8c00"}
               - {from: 7000, color: "#e53935"}
-          - type: gauge
-            entity: sensor.pe_state_battery_soc
-            name: Battery
-            needle: true
-            min: 0
-            max: 100
-            grid_options: {columns: full}
-            segments:
-              - {from: 0, color: "#e53935"}
-              - {from: 20, color: "#fb8c00"}
-              - {from: 40, color: "#43a047"}
-      - type: grid
-        cards:
-          - type: heading
-            heading: Now
-          - type: markdown
-            content: |-
-              {% set imp = state_attr('sensor.pe_state_import_rate', 'pence') %}
-              {% set until = state_attr('sensor.pe_state_import_rate', 'until') %}
-              {% set nxt = state_attr('sensor.pe_state_import_rate', 'next_rate_pence') %}
-              {% set exp = state_attr('sensor.pe_state_export_rate', 'pence') %}
-              **Import** {{ imp if imp is not none else '–' }}p
-              {%- if state_attr('sensor.pe_state_import_rate', 'in_smart_slot') %} (smart slot){% endif %}
-              {%- if until and nxt is not none %}, then {{ nxt }}p from {{ until }}{% endif %}
-
-              **Export** {{ exp if exp is not none else '–' }}p
           - type: tile
             entity: sensor.pe_state_ev
             name: Car
@@ -196,46 +245,6 @@ views:
               {% set t = state_attr('sensor.pe_state_solar_power', 'forecast_today_kwh') %}
               {% set m = state_attr('sensor.pe_state_solar_power', 'forecast_tomorrow_kwh') %}
               **Solar forecast** today {{ t if t is not none else '–' }} kWh · tomorrow {{ m if m is not none else '–' }} kWh
-      - type: grid
-        column_span: 3
-        cards:
-          - type: heading
-            heading: Activity
-          - type: markdown
-            grid_options: {columns: full}
-            content: |-
-              {% set entries = state_attr('sensor.pe_state_activity', 'entries') or [] %}
-              {%- if entries | count == 0 %}No decisions yet.{% endif %}
-              {%- for e in entries[:8] %}
-              - **{{ e.hhmm }}** {{ e.text }}
-              {%- endfor %}
-      - type: grid
-        column_span: 3
-        cards:
-          - type: heading
-            heading: Last 24 hours
-          - type: history-graph
-            grid_options: {columns: full}
-            hours_to_show: 24
-            entities:
-              - entity: sensor.pe_state_solar_power
-                name: Solar
-              - entity: sensor.pe_state_house_power
-                name: House
-              - entity: sensor.pe_state_battery_power
-                name: Battery (+ discharging)
-              - entity: sensor.pe_state_grid_power
-                name: Grid (+ importing)
-              - entity: sensor.pe_state_ev_power
-                name: Car
-          - type: history-graph
-            grid_options: {columns: full}
-            hours_to_show: 24
-            entities:
-              - entity: sensor.pe_state_battery_soc
-                name: Battery % (real)
-              - entity: sensor.pe_state_sim_soc
-                name: Battery % (PowerEngine simulated)
       - type: grid
         column_span: 3
         cards:
