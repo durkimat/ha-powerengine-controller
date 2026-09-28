@@ -50,12 +50,19 @@ def _hour_key(t) -> str | None:
     return dt.strftime("%Y-%m-%dT%H")
 
 
-def parse_upload(stats: dict, entities: dict[str, list[str]]) -> dict[str, dict[str, float]]:
+def parse_upload(stats: dict, entities: dict[str, list[str]],
+                 prefer_first: tuple[str, ...] | list[str] = ()) -> dict[str, dict[str, float]]:
     """{role: {utc hour: kWh}} from a recorder/statistics_during_period result, summing entities per role
-    (e.g. several solar plants)."""
+    (e.g. several solar plants). For roles in `prefer_first` the entities are alternatives instead: each hour
+    comes from the first one that has it (a check meter, then the inverter's own figure)."""
     out: dict[str, dict[str, float]] = {r: {} for r in ROLES}
     for role, eids in entities.items():
         if role not in out:
+            continue
+        if role in prefer_first:
+            for eid in reversed(eids):                    # later ones first, so earlier ones overwrite them
+                one = parse_upload({eid: stats.get(eid)}, {role: [eid]})[role]
+                out[role].update(one)
             continue
         for eid in eids:
             for row in stats.get(eid) or []:

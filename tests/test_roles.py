@@ -37,7 +37,7 @@ def test_catalogue_fits_in_ha_attribute_limit():
     # HA's recorder stores attributes as compact JSON and skips any over 16 KiB
     for part in (catalogue(), settings_catalogue()):            # published on two sensors
         size = len(json.dumps(part, separators=(",", ":"), ensure_ascii=False))
-        assert size < 15800, size      # HA's limit is 16384; split the catalogue before it gets closer
+        assert size < 15500, size      # HA's limit is 16384
 
 
 @pytest.mark.parametrize("eid,forbidden", [
@@ -52,3 +52,10 @@ def test_forbidden_controls(eid, forbidden):
 def test_battery_limits_default_to_agreed_values():
     assert ROLE_BY_KEY["battery_max_charge_power"].suggest_static == 4800
     assert ROLE_BY_KEY["battery_max_discharge_power"].suggest_static == 4800
+
+
+def test_catalogue_leaves_out_groups_and_has_the_check_meter_counters():
+    cat = catalogue()
+    assert "groups" not in cat and all("group" not in r for r in cat["roles"])
+    keys = {r["key"] for r in cat["roles"]}
+    assert {"grid_power_reference", "grid_import_today_check", "grid_export_today_check"} <= keys

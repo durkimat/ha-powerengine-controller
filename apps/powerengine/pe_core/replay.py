@@ -19,6 +19,7 @@ STEP = timedelta(seconds=30)
 
 # roles the cost book needs from history (attribute roles are fetched with attributes)
 COST_ROLES = ("battery_soc", "battery_power", "battery_charge_power", "battery_discharge_power", "grid_power",
+              "grid_power_reference",
               "house_load_power", "ev_charge_power", "ev_plug_status",
               "import_rate_now", "export_rate", "standing_charge", "axle_event_active", "free_power_active")
 ATTRIBUTE_ROLES = ("import_rates_today",)
@@ -34,6 +35,7 @@ def flow_id(cfg: Config) -> str:
     used = {k: cfg.inputs.get(k) for k in COST_ROLES}
     used["plants"] = [p.power for p in cfg.solar_plants if p.enabled]
     used["includes_ev"] = bool(cfg.system.get("house_load_includes_ev", True))
+    used["check_meter"] = bool(cfg.features.get("use_check_meter", True))
     digest = hashlib.sha1(json.dumps(used, sort_keys=True, default=str).encode()).hexdigest()[:8]
     return f"{FLOW_VERSION}-{digest}"
 
@@ -73,8 +75,8 @@ class Timeline:
         i = bisect_right(self.times, t) - 1
         if i < 0:
             return None
-        _, state, attrs = self.points[i]
-        return {"state": state, "attributes": {**self.attrs, **(attrs or {})}}
+        when, state, attrs = self.points[i]
+        return {"state": state, "attributes": {**self.attrs, **(attrs or {})}, "last_updated": when.isoformat()}
 
     def __len__(self) -> int:
         return len(self.points)

@@ -46,6 +46,7 @@ class Role:
 
     def as_dict(self) -> dict:
         d = asdict(self)
+        d.pop("group")                           # the card places roles by its own topic list; not needed
         if self.domains == ("sensor",):          # the card's default; left out to keep the catalogue small
             d.pop("domains")
         if self.required == "yes":               # likewise: the card treats a missing "required" as "yes"
@@ -111,6 +112,10 @@ ROLES: tuple[Role, ...] = (
          "energy", suggest=(r"^sensor\.solis_grid_import_today$",)),
     Role("grid_export_today", "grid", "Grid export today", "Energy exported today, for costs and losses.",
          "energy", suggest=(r"^sensor\.solis_grid_export_today$",)),
+    Role("grid_import_today_check", "grid", "Check meter import today", "Preferred over the inverter's figure.",
+         "energy", required="no", suggest=(r"^sensor\.myenergi_.*_grid_import_today$",)),
+    Role("grid_export_today_check", "grid", "Check meter export today", "Preferred over the inverter's figure.",
+         "energy", required="no", suggest=(r"^sensor\.myenergi_.*_grid_export_today$",)),
     Role("house_load_power", "grid", "House load", "Household consumption (the car is subtracted if included).",
          "power", suggest=(r"^sensor\.solis_house_load$",)),
     Role("house_load_today", "grid", "House load today", "Household energy used today, for costs and losses.",
@@ -235,8 +240,6 @@ def is_forbidden_control(entity_id: str) -> bool:
 
 
 def catalogue() -> dict:
-    """Compact, JSON-safe catalogue for the config card."""
-    return {
-        "groups": [{"key": k, "label": label} for k, label in GROUPS],
-        "roles": [r.as_dict() for r in ROLES],
-    }
+    """Compact, JSON-safe catalogue for the config card (published as sensor attributes: HA's recorder skips any
+    over 16 KiB, so role groups are left out; the card places roles by its own topics)."""
+    return {"roles": [r.as_dict() for r in ROLES]}

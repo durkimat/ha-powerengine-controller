@@ -142,3 +142,14 @@ def test_run_with_history_and_heat_pump(tmp_path):
 def test_parse_upload_compact_pairs():
     out = parse_upload({"sensor.a": [[1758326400000, 1.25]]}, {"house": ["sensor.a"]})
     assert out["house"] == {"2025-09-20T00": 1.25}
+
+
+def test_grid_energy_prefers_the_check_meter_hour_by_hour():
+    from pe_core.simhistory import parse_upload
+    h1, h2 = 1758326400000, 1758330000000
+    stats = {"sensor.zappi_import": [[h1, 1.0]], "sensor.solis_import": [[h1, 1.2], [h2, 2.4]]}
+    ents = {"grid_import": ["sensor.zappi_import", "sensor.solis_import"]}
+    out = parse_upload(stats, ents, prefer_first=("grid_import",))["grid_import"]
+    assert sorted(out.values()) == [1.0, 2.4]          # the Zappi where it has the hour, else the inverter
+    summed = parse_upload(stats, ents)["grid_import"]
+    assert sorted(summed.values()) == [2.2, 2.4]       # without the preference they'd be added up

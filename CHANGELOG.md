@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.37 (beta)
+
+### Behaviour changes
+- **Check meter energy counters.** Two new optional inputs under Grid and house, *Check meter import today* and
+  *Check meter export today* (suggested: the Zappi's `grid_import_today` / `grid_export_today`). With *Use the check
+  meter* on, they're preferred over the inverter's counters for the simulator's history import, hour by hour, with
+  the inverter's figures filling any hours the check meter doesn't have.
+- **Past cost days are rebuilt with the check meter.** The daily cost record now reads the check meter from HA
+  history too (it already did live since 0.9.36), and days recorded before are re-measured where history allows,
+  so past import/export no longer carry the Solis meter's ~16% overstatement.
+
+### Other
+- The configuration catalogue no longer carries role groups (the card places roles by its own topics). That takes it
+  from about 15.6 KB to 14.5 KB, well under Home Assistant's 16 KB attribute limit.
+
 ## 0.9.36 (beta)
 
 ### Behaviour changes
