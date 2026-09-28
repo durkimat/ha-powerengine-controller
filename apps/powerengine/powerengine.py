@@ -401,15 +401,21 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Cost accounting failed for {hh.start.isoformat()}: {err!r}", level="WARNING")
 
-    def _params(self, readings=None):
-        """Planner/simulation parameters, with the measured battery efficiency once there is enough data."""
+    def _params(self, readings=None, conversion=True):
+        """Planner/simulation parameters, with the measured battery efficiency once there is enough data.
+
+        conversion=False leaves out the learned inverter conversion losses: the cost accounting values the battery's
+        own flows, where the round trip measured from them is the right one."""
         p = params_from(self.cfg, readings)
         m = getattr(self, "measured", None)
         if m and m.get("measured") and m.get("efficiency") and use_measured(self.cfg, "battery_round_trip"):
             p = dataclasses.replace(p, efficiency=m["efficiency"])
         if m and m.get("capacity_measured") and m.get("capacity_kwh") and use_measured(self.cfg, "battery_capacity"):
             p = dataclasses.replace(p, capacity_kwh=m["capacity_kwh"])
-        return dataclasses.replace(p, **self._learned_overrides(p))
+        over = self._learned_overrides(p)
+        if not conversion:
+            over.pop("efficiency", None)
+        return dataclasses.replace(p, **over)
 
     def _control_params(self, readings=None):
         """What the inverter is asked for: the configured rates (the learned ones only shape the plan, so the
@@ -431,6 +437,14 @@ class PowerEngine(hass.Hass):
         f = self.cfg.features
         if f.get("learn_taper", True) and lr.taper:
             out["taper"] = lr.taper
+        if f.get("learn_taper", True) and lr.dtaper:
+            out["dtaper"] = lr.dtaper
+        if f.get("learn_conversion", True) and lr.charge_conv and lr.discharge_conv:
+            # the battery's own one-way efficiency (measured or configured) times the inverter's AC/DC conversion
+            # each way: grid-to-grid, which is what arbitrage really gets
+            eff = p.efficiency * (lr.charge_conv * lr.discharge_conv) ** 0.5
+            if 0.7 <= eff <= 1.0:
+                out["efficiency"] = round(eff, 4)
         if f.get("learn_reserve", True) and lr.reserve_soc is not None \
                 and p.min_reserve_soc < lr.reserve_soc <= p.min_reserve_soc + 15:
             out["min_reserve_soc"] = lr.reserve_soc                    # only ever raises the floor
@@ -551,6 +565,12 @@ class PowerEngine(hass.Hass):
                  lr.discharge_samples, f"{used.max_discharge_kw:.2f} kW"),
                 ("Charge taper near full", "none", ", ".join(f"{int(a)}%+: {b:.0%}" for a, b in lr.taper) or None,
                  "", lr.taper_samples, ", ".join(f"{int(a)}%+: {b:.0%}" for a, b in used.taper) or "none"),
+                ("Discharge taper near empty", "none",
+                 ", ".join(f"<{int(a)}%: {b:.0%}" for a, b in lr.dtaper) or None, "", lr.dtaper_samples,
+                 ", ".join(f"<{int(a)}%: {b:.0%}" for a, b in used.dtaper) or "none"),
+                ("Inverter conversion (charge / sell)", "not counted",
+                 f"{lr.charge_conv:.0%} / {lr.discharge_conv:.0%}" if lr.charge_conv and lr.discharge_conv else None,
+                 "", lr.conv_samples, f"round trip {used.efficiency ** 2:.0%} grid to grid"),
                 ("Reserve (where discharge stops)", f"{p.min_reserve_soc:g}%", lr.reserve_soc, "%",
                  lr.reserve_samples, f"{used.min_reserve_soc:g}%"),
                 ("Export limit", f"{p.export_limit_kw:g} kW", lr.export_kw, "kW", lr.export_samples,
@@ -619,7 +639,7 @@ class PowerEngine(hass.Hass):
             self.log(f"Could not measure losses: {err!r}", level="WARNING")
 
     def _cost_params(self):
-        p = self._params()
+        p = self._params(conversion=False)
         return {"capacity": p.capacity_kwh, "eff": p.efficiency, "floor_soc": p.min_reserve_soc,
                 "max_kw": p.max_discharge_kw, "includes_ev": p.hold_for_car, "axle_value": p.axle_value,
                 "axle_plus_export": p.axle_plus_export}
@@ -2289,7 +2309,7 @@ class PowerEngine(hass.Hass):
     def _reload(self):
         """Re-read config.yaml in place and republish status (no app restart)."""
         self._temps_at = None                              # cold settings may have changed: recompute soon
-        p_before = self._params() if self.cfg is not None else None
+        p_before = self._params(conversion=False) if self.cfg is not None else None
         self.cfg_error = None
         try:
             self.cfg, self.cfg_path = load_config(self.paths)
@@ -2304,7 +2324,7 @@ class PowerEngine(hass.Hass):
                 self.log("Cost inputs changed; recent days will be rebuilt from HA history")
                 self.run_in(self._backfill, 30)
             else:
-                p_after = self._params()
+                p_after = self._params(conversion=False)
                 if p_before is not None and (abs(p_after.capacity_kwh - p_before.capacity_kwh) > 0.05
                                              or abs(p_after.efficiency - p_before.efficiency) > 0.001):
                     n = self.costbook.revalue(**self._cost_params())      # e.g. 'use measured' toggled

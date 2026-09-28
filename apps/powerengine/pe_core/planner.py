@@ -58,6 +58,7 @@ class Params:
     switch_cost_p: float = 5.0        # optimiser: cost of changing the inverter's timed windows (EEPROM wear), p
     overnight_switch_cost_p: float = 3.0  # with deep_overnight: at least this per full switch inside the window, p
     taper: tuple = ()                 # learned: ((soc_from, fraction of the charge rate), ...) near full
+    dtaper: tuple = ()                # learned: ((below soc, fraction of the discharge rate), ...) near empty
 
     @property
     def buffer_target(self) -> float:
@@ -159,6 +160,19 @@ def charge_limit_kw(s: Slot, p: Params, soc: float | None = None) -> float:
     return kw
 
 
+def discharge_limit_kw(p: Params, soc: float | None = None, dt_h: float = DT_H) -> float:
+    """The battery's own discharge rate for a slot starting at `soc`: the rate, slowed as the battery runs low
+    (learned discharge taper, judged at the slot's midpoint at full rate)."""
+    kw = p.max_discharge_kw
+    if soc is None or not p.dtaper:
+        return kw
+    mid = soc - 50.0 * kw * dt_h / max(p.capacity_kwh, 0.1)
+    for below, frac in p.dtaper:
+        if mid < below:
+            kw = min(kw, p.max_discharge_kw * frac)
+    return kw
+
+
 def grid_charge_kw(s: Slot, p: Params, dt_h: float = DT_H, soc: float | None = None) -> float:
     """Battery grid-charge power allowed in this slot: the battery's charge rate, reduced to keep total import under
     the fuse.
@@ -198,14 +212,14 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
         flow = net + into
         imp, exp = max(0.0, flow), max(0.0, -flow)
     elif ps.action == EXPORT:
-        room_kw = min(p.max_discharge_kw, p.export_limit_kw + max(0.0, net) / dt_h)
+        room_kw = min(discharge_limit_kw(p, soc, dt_h), p.export_limit_kw + max(0.0, net) / dt_h)
         out = min(room_kw * dt_h, max(0.0, stored - floor) * p.efficiency)
         stored -= out / p.efficiency
         flow = net - out                                # the battery covers the house first, the rest is sold
         imp, exp = max(0.0, flow), max(0.0, -flow)
         battery_export = min(exp, out)
     elif ps.action == FORCE_DISCHARGE:
-        out = min(p.axle_kw * dt_h, max(0.0, stored - floor) * p.efficiency)
+        out = min(min(p.axle_kw, discharge_limit_kw(p, soc, dt_h)) * dt_h, max(0.0, stored - floor) * p.efficiency)
         stored -= out / p.efficiency
         flow = net - out                                # + import, - export
         imp = max(0.0, flow)
@@ -216,7 +230,7 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
     else:                                               # SELF_USE or HOLD
         if net > 0:
             if ps.action == SELF_USE:
-                out = min(net, p.max_discharge_kw * dt_h, max(0.0, stored - floor) * p.efficiency)
+                out = min(net, discharge_limit_kw(p, soc, dt_h) * dt_h, max(0.0, stored - floor) * p.efficiency)
                 stored -= out / p.efficiency
                 imp = net - out
             else:

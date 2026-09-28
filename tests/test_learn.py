@@ -261,3 +261,38 @@ def test_own_outside_sensor_wins(tmp_path):
     assert w.series(T0, T0) == {T0: 1.0}
     w.save()
     assert Weather(str(tmp_path / "w.json"), 51.75, -0.34).series(T0, T0) == {T0: 1.0}
+
+
+def sell(kw, soc, i=0, house=0.3, ac_share=0.93):
+    """A full-rate sale: kw from the battery, ac_share of it reaching house + grid."""
+    out = kw / 2
+    return half(i, cmd="export", cmd_kw=4.8, battery_out=out, soc_start=soc[0], soc_end=soc[1], house=house,
+                grid_export=out * ac_share - house, grid_import=0.0)
+
+
+def test_discharge_taper_near_empty():
+    hs = [sell(4.8, (80, 67), i=i) for i in range(8)]                  # full rate higher up
+    hs += [sell(4.4, (42, 30), i=20 + i) for i in range(4)]            # midpoint 36: below 40
+    hs += [sell(4.1, (25, 14), i=40 + i) for i in range(4)]            # midpoint 19.5: below 20
+    lr = learn(hs)
+    assert lr.max_discharge_kw == 4.8
+    assert lr.dtaper == ((40.0, 0.92), (20.0, 0.85)) and lr.dtaper_samples == 8
+
+
+def test_discharge_limit_in_the_plan():
+    from pe_core.planner import discharge_limit_kw
+    p = Params(max_discharge_kw=4.8, capacity_kwh=18, dtaper=((40.0, 0.92), (20.0, 0.85)))
+    assert discharge_limit_kw(p, 80) == 4.8
+    assert discharge_limit_kw(p, 45) == 4.8 * 0.92          # midpoint ~38 at full rate
+    assert discharge_limit_kw(p, 24) == 4.8 * 0.85
+    assert discharge_limit_kw(Params(max_discharge_kw=4.8), 20) == 4.8
+
+
+def test_conversion_efficiency_each_way():
+    hs = [sell(4.8, (80, 67), i=i) for i in range(6)]
+    for i in range(6):                                     # 5.3 kW from the grid for 4.77 kW into the battery
+        hs.append(half(20 + i, cmd="grid_charge", cmd_kw=4.8, battery_in=4.77 / 2, soc_start=40, soc_end=53,
+                       grid_import=(5.3 + 0.6) / 2, house=0.3))
+    lr = learn(hs)
+    assert lr.charge_conv == 0.9 and lr.discharge_conv == 0.93 and lr.conv_samples == 12
+    assert learn(hs[:6]).charge_conv is None                # needs both directions
