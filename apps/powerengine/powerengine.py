@@ -32,7 +32,7 @@ from pe_core.config import (
     use_measured,
     uses_battery_pair,
 )
-from pe_core.control import KINDS, Write, desired, readback_mismatches, release, writes_needed
+from pe_core.control import KINDS, Write, readback_mismatches, release, writes_needed
 from pe_core.costbook import MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import sync_dashboard
@@ -1748,26 +1748,23 @@ class PowerEngine(hass.Hass):
 
     def _clock_step(self, kwargs):
         try:
-            eid = self._role_entity("inverter_clock") if self.cfg else None
+            eid, button = self._inverter().clock_entities()
             if not eid:
                 return
-            st = self.get_state(eid, attribute="all") or {}
-            read_at = st.get("last_updated") or st.get("last_changed")
-            read_at = datetime.fromisoformat(read_at) if read_at else None
-            drift = clock.drift_seconds(st.get("state"), read_at, self.tz)
+            now = datetime.now(timezone.utc)
+            status = self._inverter().clock_status(now, self.tz)
+            drift = status["drift"]
             old = getattr(self, "_clock_drift", None)
             self._clock_drift = drift
-            button = self._role_entity("inverter_clock_sync")
-            synced = clock.last_sync(self.get_state(button), self.tz) if button else None
-            now = datetime.now(timezone.utc)
-            due = clock.sync_due(drift, synced, now)
+            synced, due = status["synced"], status["due"]
             self._publish_if_changed("diag_inverter_clock", drift if drift is not None else "unknown", {
-                "inverter_time": st.get("state"), "last_sync": synced.isoformat(timespec="seconds") if synced else None,
+                "inverter_time": status["inverter_time"],
+                "last_sync": synced.isoformat(timespec="seconds") if synced else None,
                 "sync_due": due, "sync_button": button})
             if due and button and self.mode.effective == "active" and not self._test_running():
                 self.log(f"Syncing the inverter clock ({due}; drift {drift} s)")
                 self._write_why = "clock sync"
-                self._write([Write("inverter_clock_sync", None, "button")], {"inverter_clock_sync": button})
+                self._write([self._inverter().clock_sync_write()], {"inverter_clock_sync": button})
                 self._logbook(f"inverter clock synced ({due}, was {drift} s out)")
             if (clock.finding(old) is None) != (clock.finding(drift) is None):
                 self._health()
@@ -1799,7 +1796,7 @@ class PowerEngine(hass.Hass):
                 self.log(f"Supervised test stopped by {user}")
                 self._test_end({"stopped": True})
             return
-        req_roles = list(release()) + ["timed_charge_current", "timed_discharge_current"]
+        req_roles = self._inverter().test_roles()
         entities, missing = self._control_entities(req_roles) if self.cfg else ({}, ["config"])
         guards = guard_problems(self.cfg, self._guard_state) if self.cfg else ["no config"]
         req, err = testwrite.validate(data, guards, missing, self._test_running())
@@ -1815,12 +1812,7 @@ class PowerEngine(hass.Hass):
             return
         rc = self._rc_entities() if req and req["action"] in rctest.RC_TESTS else {}
         if req and not err and req["action"] in rctest.RC_TESTS:
-            gone = rctest.missing_roles(rc, req["action"])
-            opts = self.get_state(rc.get("rc_mode"), attribute="options") if rc.get("rc_mode") else None
-            if gone:
-                err = "remote-control entities not found in HA: " + ", ".join(gone)
-            elif isinstance(opts, list) and rctest.RC_TESTS[req["action"]] not in opts:
-                err = f"{rc['rc_mode']} has no '{rctest.RC_TESTS[req['action']]}' option"
+            err = self._inverter().rc_test_problem(rc, req["action"])
             if err:
                 self.log(f"Supervised test by {user} refused: {err}", level="WARNING")
                 self._test = testwrite.TestRun({"action": req["action"]}, now)
@@ -1836,9 +1828,8 @@ class PowerEngine(hass.Hass):
         p = self._control_params(self._last_readings) if getattr(self, "_last_readings", None) else None
         max_c, max_d = (p.max_charge_kw * 1000, p.max_discharge_kw * 1000) if p else (4800, 4800)
         now_local = now.astimezone(self.tz) if self.tz else now
-        want = desired(testwrite.decision(req), now_local, testwrite.end_time(now_local, req["minutes"]),
-                       BATTERY_VOLTS, max_c, max_d)
-        have = {role: self.get_state(entities[role]) for role in want}
+        want = self._inverter().test_window(req, now_local, max_c, max_d)
+        have = self._inverter().read({role: entities[role] for role in want})
         writes = writes_needed(want, have)
         run.step(now, "before", **self._battery_now(), settings=have)
         self._write_why = f"supervised test: {req['action']}"
@@ -1910,16 +1901,15 @@ class PowerEngine(hass.Hass):
         # the timed windows closed first, so they can't be what moves the battery
         want = release()
         windows, _ = self._control_entities(want)
-        have = {role: self.get_state(windows[role]) for role in want}
+        have = self._inverter().read({role: windows[role] for role in want})
         writes = writes_needed(want, have)
         run.step(now, "before", **self._battery_now(), rc_entities=rc)
         self._write_why = f"supervised RC test: {test} (timed windows closed first)"
         self._write(writes, windows)
         run.step(now, "timed windows closed", writes=[w.as_dict() for w in writes])
-        prole = "rc_discharge_power" if test == "rc_discharge" else "rc_charge_power"
-        option = rctest.RC_TESTS[test]
+        prole, option, rc_writes = self._inverter().rc_test_writes(test, power)
         self._write_why = f"supervised RC test: {test}"
-        self._write([Write(prole, power, "number"), Write("rc_mode", option, "select")], rc)
+        self._write(rc_writes, rc)
         run.step(now, f"remote control: {option} at {power} W")
         self._rc = {"rc": rc, "prole": prole, "power": power, "want": want, "windows": windows,
                     "stop_at": None, "samples": []}
@@ -1971,7 +1961,7 @@ class PowerEngine(hass.Hass):
         self._test_handles = []
         run.status = "reverting"
         self._write_why = "supervised RC test: end (remote control Off)"
-        self._write([Write("rc_mode", rctest.OPTION_OFF, "select")], rc["rc"])
+        self._write([self._inverter().ram_off_command().writes()[0]], rc["rc"])
         run.step(datetime.now(timezone.utc), "remote control Off", **self._battery_now())
         self._publish_test()
         self.run_in(self._rc_finish, 15, stopped=kwargs.get("stopped"))

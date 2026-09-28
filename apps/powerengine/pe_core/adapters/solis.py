@@ -13,14 +13,16 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from .. import ramcontrol
-from ..control import KINDS, SELF_USE_MODE, desired, window_end, writes_needed
+from .. import clock, ramcontrol
+from ..control import KINDS, SELF_USE_MODE, Write, desired, window_end, writes_needed
 from ..control import release as _rolling_release
 from ..decide import SELF_USE, Decision
 from ..journal import is_staged
-from ..rctest import OPTION_OFF, find_entities
+from ..rctest import OPTION_OFF, RC_TESTS, find_entities, missing_roles
 from ..schedule import desired_state, slot_entities
 from ..schedule import writes_for as _slot_writes_for
+from ..testwrite import decision as _test_decision
+from ..testwrite import end_time as _test_end_time
 from .base import ControlMethod, HomeAssistant, InverterCapabilities
 from .registry import register
 
@@ -118,6 +120,52 @@ class SolisInverter:
         if kind == "select":
             return "select/select_option", {"option": value}
         return "number/set_value", {"value": value}
+
+    # --- supervised test writes -------------------------------------------------------------
+
+    def test_roles(self) -> list[str]:
+        """Every control role a supervised test (timed-window or RC) needs mapped."""
+        return list(_rolling_release()) + ["timed_charge_current", "timed_discharge_current"]
+
+    def test_window(self, req: dict, now_local: datetime, max_c: float, max_d: float) -> dict:
+        """The timed-window settings for a supervised (non-RC) test."""
+        return desired(_test_decision(req), now_local, _test_end_time(now_local, req["minutes"]), self.volts,
+                       max_c, max_d)
+
+    def rc_test_problem(self, rc: dict, action: str) -> str | None:
+        """Why an RC test can't start: entities not found, or the mode select doesn't offer the option."""
+        gone = missing_roles(rc, action)
+        if gone:
+            return "remote-control entities not found in HA: " + ", ".join(gone)
+        opts = self.ha.get_state(rc.get("rc_mode"), attribute="options") if rc.get("rc_mode") else None
+        if isinstance(opts, list) and RC_TESTS[action] not in opts:
+            return f"{rc['rc_mode']} has no '{RC_TESTS[action]}' option"
+        return None
+
+    def rc_test_writes(self, test: str, power: float) -> tuple[str, str, list]:
+        """(power role, option, writes) to start an RC test: the force power, then the mode."""
+        prole = "rc_discharge_power" if test == "rc_discharge" else "rc_charge_power"
+        option = RC_TESTS[test]
+        return prole, option, [Write(prole, power, "number"), Write("rc_mode", option, "select")]
+
+    # --- inverter clock ----------------------------------------------------------------------
+
+    def clock_entities(self) -> tuple[str | None, str | None]:
+        return self.role_entity("inverter_clock"), self.role_entity("inverter_clock_sync")
+
+    def clock_status(self, now: datetime, tz) -> dict:
+        """drift (s, + = inverter ahead), when it was last synced, whether a sync is due, and the raw reading."""
+        eid, button = self.clock_entities()
+        st = (self.ha.get_state(eid, attribute="all") or {}) if eid else {}
+        read_at = st.get("last_updated") or st.get("last_changed")
+        read_at = datetime.fromisoformat(read_at) if read_at else None
+        drift = clock.drift_seconds(st.get("state"), read_at, tz)
+        synced = clock.last_sync(self.ha.get_state(button), tz) if button else None
+        due = clock.sync_due(drift, synced, now)
+        return {"drift": drift, "synced": synced, "due": due, "inverter_time": st.get("state")}
+
+    def clock_sync_write(self) -> Write:
+        return Write("inverter_clock_sync", None, "button")
 
     # --- three-slot strategy ----------------------------------------------------------------
 

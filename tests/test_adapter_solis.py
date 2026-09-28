@@ -347,3 +347,108 @@ def test_verify_falls_back_to_role_entity_without_entities():
     ha = FakeHA({"number.a": "5"})
     inv = SolisInverter(ha, lambda role: {"a": "number.a"}.get(role))
     assert inv.verify([Write("a", 5, "number")], ha) == []
+
+
+# ---------------------------------------------------------------------------
+# supervised test writes / inverter clock (step 2c)
+# ---------------------------------------------------------------------------
+
+
+def test_test_roles_matches_release_plus_the_currents():
+    from pe_core.control import release as control_release
+    inv = SolisInverter(FakeHA(), lambda role: None)
+    assert inv.test_roles() == list(control_release()) + ["timed_charge_current", "timed_discharge_current"]
+
+
+def test_test_window_matches_desired_with_testwrite_decision_and_end_time():
+    from pe_core import testwrite
+    from pe_core.control import desired
+    inv = SolisInverter(FakeHA(), lambda role: None, volts=52.0)
+    req = {"action": "charge", "minutes": 5, "power_w": None}
+    got = inv.test_window(req, NOW, 4800, 4800)
+    want = desired(testwrite.decision(req), NOW, testwrite.end_time(NOW, req["minutes"]), 52.0, 4800, 4800)
+    assert got == want
+
+
+def test_rc_test_problem_missing_entities():
+    inv = SolisInverter(FakeHA(), lambda role: None)
+    assert inv.rc_test_problem({}, "rc_discharge") == \
+        "remote-control entities not found in HA: rc_mode, rc_discharge_power"
+
+
+def test_rc_test_problem_missing_option():
+    rc = {"rc_mode": "select.rc_mode", "rc_charge_power": "e", "rc_discharge_power": "e2"}
+
+    class HA2(FakeHA):
+        def get_state(self, entity_id=None, attribute=None):
+            if entity_id == "select.rc_mode" and attribute == "options":
+                return ["Off", "Force charge"]           # no "Force discharge"
+            return super().get_state(entity_id, attribute)
+
+    inv = SolisInverter(HA2(), lambda role: None)
+    assert inv.rc_test_problem(rc, "rc_discharge") == "select.rc_mode has no 'Force discharge' option"
+
+
+def test_rc_test_problem_none_when_everything_is_fine():
+    rc = {"rc_mode": "select.rc_mode", "rc_charge_power": "e", "rc_discharge_power": "e2"}
+
+    class HA2(FakeHA):
+        def get_state(self, entity_id=None, attribute=None):
+            if entity_id == "select.rc_mode" and attribute == "options":
+                return ["Off", "Force charge", "Force discharge"]
+            return super().get_state(entity_id, attribute)
+
+    inv = SolisInverter(HA2(), lambda role: None)
+    assert inv.rc_test_problem(rc, "rc_discharge") is None
+    assert inv.rc_test_problem(rc, "rc_charge") is None
+
+
+def test_rc_test_writes_discharge_and_charge():
+    from pe_core.control import Write
+    inv = SolisInverter(FakeHA(), lambda role: None)
+    prole, option, writes = inv.rc_test_writes("rc_discharge", 2000)
+    assert prole == "rc_discharge_power" and option == "Force discharge"
+    assert writes == [Write("rc_discharge_power", 2000, "number"), Write("rc_mode", "Force discharge", "select")]
+    prole, option, writes = inv.rc_test_writes("rc_hold", 0)
+    assert prole == "rc_charge_power" and option == "Force charge"
+
+
+def test_ram_off_writes_equals_the_plain_off_write():
+    from pe_core.control import Write
+    from pe_core.rctest import OPTION_OFF
+    inv = SolisInverter(FakeHA(), lambda role: None)
+    assert inv.ram_off_command().writes()[0] == Write("rc_mode", OPTION_OFF, "select")
+
+
+def test_clock_entities_from_role_entity():
+    roles = {"inverter_clock": "sensor.solis_rtc", "inverter_clock_sync": "button.solis_sync_rtc"}
+    inv = SolisInverter(FakeHA(), lambda role: roles.get(role))
+    assert inv.clock_entities() == ("sensor.solis_rtc", "button.solis_sync_rtc")
+
+
+def test_clock_status_reports_drift_and_sync_due():
+    from datetime import timezone
+    roles = {"inverter_clock": "sensor.solis_rtc", "inverter_clock_sync": "button.solis_sync_rtc"}
+    now = datetime(2026, 9, 27, 19, 31, tzinfo=timezone.utc)
+    ha = FakeHA()
+    ha.states["sensor.solis_rtc"] = {"state": "2026-09-27T19:36:00+00:00",
+                                     "last_updated": "2026-09-27T19:31:00+00:00",
+                                     "last_changed": "2026-09-27T19:31:00+00:00"}
+    ha.states["button.solis_sync_rtc"] = "2026-09-20T00:00:00+00:00"
+    inv = SolisInverter(ha, lambda role: roles.get(role))
+    status = inv.clock_status(now, None)
+    assert status["drift"] == 300.0
+    assert status["due"] == "drift"
+    assert status["inverter_time"] == "2026-09-27T19:36:00+00:00"
+
+
+def test_clock_status_no_entity_means_no_drift():
+    inv = SolisInverter(FakeHA(), lambda role: None)
+    status = inv.clock_status(NOW, None)
+    assert status["drift"] is None and status["inverter_time"] is None
+
+
+def test_clock_sync_write_is_the_sync_button():
+    from pe_core.control import Write
+    inv = SolisInverter(FakeHA(), lambda role: None)
+    assert inv.clock_sync_write() == Write("inverter_clock_sync", None, "button")
