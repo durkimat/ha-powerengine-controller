@@ -1332,7 +1332,7 @@ class PowerEngine(hass.Hass):
         method = (self.cfg.system.get("control_method") if self.cfg else None) or "timed_windows"
         self._ram_fallback = None
         if method == "ram_remote":
-            gone = [r for r in ("rc_mode", "rc_charge_power", "rc_discharge_power") if not self._rc_entities().get(r)]
+            gone = self._inverter().rc_missing(self._rc_entities())
             if gone:
                 self._ram_fallback = "remote-control entities not found: " + ", ".join(gone)
                 self._notify("health", ("control:ram_missing", "PowerEngine: using timed windows",
@@ -1359,9 +1359,9 @@ class PowerEngine(hass.Hass):
         try:
             ram, rc, now = self._ram(), self._rc_entities(), r.now
             p = self._control_params(r)
-            want = ramcontrol.command_for(decision.action, decision.power_w, p.max_charge_kw * 1000,
-                                          p.max_discharge_kw * 1000,
-                                          float(self.cfg.safety.get("ram_max_power_w", 5000)))
+            want = self._inverter().ram_command(decision.action, decision.power_w, p.max_charge_kw * 1000,
+                                                p.max_discharge_kw * 1000,
+                                                float(self.cfg.safety.get("ram_max_power_w", 5000)))
             active = self.mode.effective == "active"
             if self._test_running():
                 ram.forget()                                   # the test drives remote control itself
@@ -1433,7 +1433,8 @@ class PowerEngine(hass.Hass):
         eid = self._rc_entities().get(kwargs["role"])
         if eid and self.mode.effective == "active":
             try:
-                self.call_service("number/set_value", entity_id=eid, value=kwargs["watts"])
+                service, data = self._inverter().service_for(Write(kwargs["role"], kwargs["watts"], "number"))
+                self.call_service(service, entity_id=eid, **data)
             except Exception as err:
                 self.log(f"RAM remote control: could not re-send {eid}: {err!r}", level="WARNING")
 
@@ -1451,10 +1452,8 @@ class PowerEngine(hass.Hass):
             try:
                 if why == "change" and journal is not None:
                     journal.add(now, eid, w.value, self.get_state(eid), f"RAM remote control: {want.text()}")
-                if w.kind == "select":
-                    self.call_service("select/select_option", entity_id=eid, option=w.value)
-                else:
-                    self.call_service("number/set_value", entity_id=eid, value=w.value)
+                service, data = self._inverter().service_for(w)
+                self.call_service(service, entity_id=eid, **data)
             except Exception as err:
                 ok = False
                 self._ram().errors += 1
@@ -1475,8 +1474,8 @@ class PowerEngine(hass.Hass):
         self._ram().forget()
         if rc.get("rc_mode"):
             self.log(f"RAM remote control Off ({reason})")
-            self._ram_send([ramcontrol.Command(rctest.OPTION_OFF).writes()[0]], rc, "change",
-                           ramcontrol.Command(rctest.OPTION_OFF))
+            cmd = self._inverter().ram_off_command()
+            self._ram_send([cmd.writes()[0]], rc, "change", cmd)
 
     def _mid_slot_stick(self, now):
         """A replan part-way through a half-hour (not in its first two minutes, when the plan's next half-hour takes
@@ -1575,11 +1574,10 @@ class PowerEngine(hass.Hass):
                 continue
             if journal is not None:
                 journal.add(now, eid, w.value, self.get_state(eid), why)
+            service, data = self._inverter().service_for(w)
+            self.call_service(service, entity_id=eid, **data)
             if w.kind == "number":
-                self.call_service("number/set_value", entity_id=eid, value=w.value)
                 numbers.append((eid, w.value))
-            elif w.kind == "select":
-                self.call_service("select/select_option", entity_id=eid, option=w.value)
             if self._inverter().write_storage(w) != "staged":  # window times only sent by the update button
                 self.writes.own(self._today())      # 'observed' is counted by the state listener
         if buttons:
@@ -1904,17 +1902,7 @@ class PowerEngine(hass.Hass):
 
     def _rc_entities(self):
         """SolaX Modbus's remote-control entities, found by name (looked up at most every 10 minutes)."""
-        now = datetime.now(timezone.utc)
-        cached = getattr(self, "_rc_cache", None)
-        if cached and now - cached[0] < timedelta(minutes=10) and len(cached[1]) == 3:
-            return cached[1]
-        try:
-            ids = list((self.get_state() or {}).keys())
-        except Exception:
-            ids = []
-        found = rctest.find_entities(ids)
-        self._rc_cache = (now, found)
-        return found
+        return self._inverter().rc_entities(datetime.now(timezone.utc))
 
     def _rc_start(self, req, run, rc, now, user):
         test = req["action"]
