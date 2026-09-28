@@ -101,7 +101,7 @@ Plan doc: "PowerEngine: making it generic" (Claude Docs). Phase 0 restructures t
 behaviour change:
 
 0. Replay safety net. **Done** (PR #152).
-1. Adapter interfaces and neutral vocabulary, with no code moved. **In review** (branch adapter-interfaces).
+1. Adapter interfaces and neutral vocabulary, with no code moved. **Done** (`pe_core/adapters`; built by a Sonnet sub-agent, reviewed).
 2. Solis inverter adapter (timed windows, RAM control, tests/clock). Needs a night's running and an export.
 3. EDF tariff adapter (Kraken rates, smart slots/dispatches, Axle as a grid event).
 4. Zappi EV adapter (plug/charge states, car-full detection, check meter).
