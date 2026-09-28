@@ -91,6 +91,19 @@ def house_only_means(house: list[tuple[datetime, float]], car: list[tuple[dateti
     return {s: max(0.0, w - max(0.0, c.get(s, 0.0))) for s, w in h.items()}
 
 
+def meter_corrected(house_means: dict[datetime, float], inverter_grid: dict[datetime, float],
+                    check_grid: dict[datetime, float]) -> tuple[dict[datetime, float], set[datetime]]:
+    """House-load half-hour means corrected by a check meter: the inverter's house load is its grid meter plus its
+    own AC flow, so a grid meter error shows up in it one for one. Half-hours without both meters stay as they were.
+    Returns (means, the half-hours corrected)."""
+    out, fixed = dict(house_means), set()
+    for s, w in house_means.items():
+        if s in inverter_grid and s in check_grid:
+            out[s] = max(0.0, w - (inverter_grid[s] - check_grid[s]))
+            fixed.add(s)
+    return out, fixed
+
+
 def build_load_profile(house: list[tuple[datetime, float]], car: list[tuple[datetime, float]] | None,
                        now: datetime, tz, subtract_car: bool = True) -> LoadProfile:
     """Recency-weighted weekday/weekend half-hour profile of house-only load."""

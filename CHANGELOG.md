@@ -2,6 +2,25 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.36 (beta)
+
+### Behaviour changes
+- **The check meter is used for grid power** (new option *Use the check meter*, on by default, under Grid and house).
+  While the check meter (the Zappi's grid CT) is reporting, PowerEngine uses it for grid import/export. It corrects
+  the inverter's house load by the same difference, because the inverter's house load is its own meter plus its AC
+  flow. On 28 Sep the Solis meter read about 16% high both ways. That made the house load about 0.9 kW too high while
+  charging and read 0 while selling. If the check meter goes quiet for 3 minutes, the inverter's meter is used again.
+  The learned usage profile is corrected too: the 14 days of history are adjusted half-hour by half-hour from both
+  meters' history, and replace PowerEngine's own uncorrected record where they overlap.
+- **Car charger inputs no longer stop control when they drop out.** The myenergi readings come from a cloud service;
+  when they briefly go unavailable, PowerEngine carries on with the car assumed not charging and logs it, instead
+  of handing the inverter back to Self-Use (it did for 2.5 minutes at 03:01 on 28 Sep). If they're unmapped or
+  missing altogether they still count as not ready, and a long outage still notifies after 15 minutes.
+- **Overnight switch cost** (new setting under Selling, 3p): with deeper selling overnight, each switch between
+  charging and selling inside the fixed overnight window counts at least this in the plan. At 3p it only settles
+  near-ties. Two cycles overnight usually trade more energy than one (about 30p a night more on 28 Sep's prices),
+  so a single deep cycle takes about 10p here, or a battery wear figure of about 4p/kWh.
+
 ## 0.9.35 (beta)
 
 ### Behaviour changes

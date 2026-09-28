@@ -106,14 +106,23 @@ EARLY_BIAS = 5e-4                     # GBP per kWh per half-hour of delay, in t
 FULL_PENALTY = 1.0                    # GBP per kWh short of the target at the end of the fixed overnight window
 
 
-def switch_cost(prev: int, new: int, p: Params) -> float:
+def switch_cost(prev: int, new: int, p: Params, overnight: bool = False) -> float:
     """GBP for changing what the inverter's timed windows do (EEPROM writes): a full switch between self-use,
-    charging and discharging costs the setting; hold <-> charge only changes the current (a fifth of it)."""
-    if prev == new or not p.switch_cost_p:
+    charging and discharging costs the setting; hold <-> charge only changes the current (a fifth of it).
+
+    Inside the fixed overnight window with deeper selling on, a full switch costs at least the overnight switch
+    cost: the refill is guaranteed there, so one deep sale earns about the same as several shallow cycles, and the
+    fewer switches win (28 Sep 2026: two cycles overnight where one would do)."""
+    if prev == new:
+        return 0.0
+    base = p.switch_cost_p
+    if overnight and p.deep_overnight and p.arbitrage:
+        base = max(base, p.overnight_switch_cost_p)
+    if not base:
         return 0.0
     if {prev, new} == {HOLD_K, CHARGE_K}:
         return p.switch_cost_p / 500
-    return p.switch_cost_p / 100
+    return base / 100
 
 
 def window_ends(slots: list[Slot]) -> list[bool]:
@@ -175,7 +184,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
             for kp in range(K):
                 best, best_a = None, SELF_USE
                 for total, a, k in options:
-                    v = total + switch_cost(kp, k, p)
+                    v = total + switch_cost(kp, k, p, s.overnight)
                     if best is None or v < best - 1e-9:
                         best, best_a = v, a
                 row[lv][kp], pick[lv][kp] = best, best_a

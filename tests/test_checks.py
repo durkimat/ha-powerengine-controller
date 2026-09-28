@@ -83,3 +83,16 @@ def test_slow_settings_are_never_stale():
     for key in ("battery_soh", "inverter_min_soc"):
         assert check(ROLE_BY_KEY[key], {"entity": "sensor.x"}, st, now)[0] == OK
     assert check(ROLE_BY_KEY["battery_soc"], {"entity": "sensor.x"}, st, now)[0] == "stale"
+
+
+def test_car_inputs_unavailable_do_not_block_control():
+    from pe_core.checks import UNAVAILABLE, UNMAPPED, blocking, degraded, summarise
+    results = {"battery_soc": ("ok", ""), "ev_plug_status": (UNAVAILABLE, "unavailable"),
+               "ev_charge_power": (UNMAPPED, "Not set")}
+    req = ["battery_soc", "ev_plug_status", "ev_charge_power"]
+    assert blocking(results, req) == ["ev_charge_power"]                 # unmapped still blocks
+    assert degraded(results, req) == ["ev_plug_status"]
+    results["ev_charge_power"] = (UNAVAILABLE, "unavailable")
+    assert blocking(results, req) == [] and summarise(results, req) == "warnings"
+    results["battery_soc"] = (UNAVAILABLE, "unavailable")
+    assert blocking(results, req) == ["battery_soc"]                     # the inverter's own inputs still block

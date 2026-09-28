@@ -55,6 +55,7 @@ class Params:
     arbitrage_keep_soc: float = 10.0  # hard: reach the refill with at least the reserve plus this (%)
     deep_overnight: bool = True       # inside the fixed overnight window, arbitrage may sell below the band's bottom
     switch_cost_p: float = 5.0        # optimiser: cost of changing the inverter's timed windows (EEPROM wear), p
+    overnight_switch_cost_p: float = 3.0  # with deep_overnight: at least this per full switch inside the window, p
     taper: tuple = ()                 # learned: ((soc_from, fraction of the charge rate), ...) near full
 
     @property
@@ -562,6 +563,7 @@ def params_from(cfg, readings=None) -> Params:
         arbitrage_max_soc=s.get("arbitrage_max_soc", 90),
         arbitrage_band_penalty_p=s.get("arbitrage_band_penalty_p", 2.0),
         switch_cost_p=s.get("ram_switch_cost_p", 0.5) if ram else s.get("window_switch_cost_p", 5.0),
+        overnight_switch_cost_p=s.get("overnight_switch_cost_p", 3.0),
         export_limit_kw=s.get("export_limit_kw", 6.0),
         wear_p=s.get("battery_wear_p", 2.0),
         min_margin_p=s.get("arbitrage_min_margin_p", 1.0),

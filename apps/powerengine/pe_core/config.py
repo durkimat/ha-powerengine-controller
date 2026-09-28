@@ -43,14 +43,15 @@ MODES = ("passive", "active")
 FORECAST_SOURCES = ("none", "solcast_site", "scaled")
 FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
             "free_power_days", "tariff_simulator", "optimised_plan", "learn_taper", "learn_reserve", "learn_export",
-            "learn_car", "cold_caution", "cold_learning", "damp_restart", "damp_bursts", "deep_overnight")
+            "learn_car", "cold_caution", "cold_learning", "damp_restart", "damp_bursts", "deep_overnight",
+            "use_check_meter")
 LEGACY_FEATURES = ("use_learned",)          # 0.8.0's single switch, replaced by one per figure: ignored if saved
 FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
                     "arbitrage": False, "axle": True,
                     "free_power_days": True, "tariff_simulator": True, "optimised_plan": True,
                     "learn_taper": True, "learn_reserve": True, "learn_export": True, "learn_car": True,
                     "cold_caution": True, "cold_learning": True, "damp_restart": True, "damp_bursts": False,
-                    "deep_overnight": True}
+                    "deep_overnight": True, "use_check_meter": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 SAFETY = {
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
@@ -76,6 +77,7 @@ SAFETY = {
     "ram_refresh_min": (1.0, 0.5, 4.0),       # RAM remote control: re-send the command this often (min)
     "ram_switch_cost_p": (0.5, 0, 100),       # optimiser: cost per switch with RAM remote control (no EEPROM wear)
     "ram_max_power_w": (5000, 500, 10000),    # RAM remote control: the most the inverter accepts (W)
+    "overnight_switch_cost_p": (3.0, 0, 100),  # deeper selling overnight: cost per charge/sell switch there (p)
     "damp_restart_min": (5.0, 1, 30),         # restart hold-off: no writes this long after a start or resume (min)
     "damp_burst_window_min": (10.0, 2, 60),   # burst damping: something written this recently counts as a burst
     "damp_burst_settle_min": (5.0, 1, 30),    # ...and then waits for the plan to be steady this long (min)
@@ -151,6 +153,10 @@ SETTING_TEXT = {
                         "With RAM remote control: the highest force charge/discharge power the inverter accepts. "
                         "A higher value is refused and the inverter keeps its previous power (yours accepts 5000 W, "
                         "not 5200 W). PowerEngine never asks for more than this."),
+    "overnight_switch_cost_p": ("Overnight switch cost", "p",
+                                "With deeper selling overnight: the cost counted for each switch between charging and "
+                                "selling inside the fixed overnight window. Higher favours one deep sale and one "
+                                "refill over several shallow cycles that earn about the same."),
     "ram_switch_cost_p": ("RAM switch cost", "p",
                           "With RAM remote control: the same, but a switch is only a temporary setting (no memory "
                           "wear), so it's small: just enough to avoid pointless back-and-forth. Lower lets the plan "
@@ -205,7 +211,7 @@ SETTING_SECTIONS = (
     ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
     ("axle", "Axle events", ("pre_axle_lookahead_h", "axle_margin_soc")),
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
-                                "arbitrage_max_soc", "arbitrage_band_penalty_p")),
+                                "arbitrage_max_soc", "arbitrage_band_penalty_p", "overnight_switch_cost_p")),
     ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p", "ram_refresh_min",
                                            "ram_switch_cost_p", "ram_max_power_w")),
     ("cold", "Cold battery", ("cold_caution_temp_c", "cold_charge_pct", "cold_release_c", "battery_temp_lag_h")),
