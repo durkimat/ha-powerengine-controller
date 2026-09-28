@@ -26,7 +26,8 @@ from dataclasses import dataclass
 from .ledger import Ledger
 from .tariff import Rates
 
-METHOD_VERSION = 3        # 3: export rate falls back to your current one when history had none
+METHOD_VERSION = 4        # 3: export rate falls back to your current one when history had none
+                          # 4: Axle exports also earn the export rate (EDF pays it on top of Axle's £1)
 # daily energy totals (kWh) shown for checking against the inverter's own counters
 ENERGY_KEYS = ("grid_import", "grid_export", "solar", "house", "car", "battery_in", "battery_out", "b_e",
                "unallocated_src", "unallocated_sink", "correction_kwh")
@@ -55,7 +56,8 @@ def _basis(lots) -> float:
 
 
 def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: float, eff: float,
-            floor_soc: float, max_kw: float, includes_ev: bool, axle_value: float = 1.0) -> dict:
+            floor_soc: float, max_kw: float, includes_ev: bool, axle_value: float = 1.0,
+            axle_plus_export: bool = True) -> dict:
     """Value one half-hour. Updates the ledger and the default-battery simulation. Returns the record's values."""
     rte = eff * eff
     act, std, ovn, exp = rt.actual, rt.standard, rt.overnight, rt.export
@@ -122,8 +124,10 @@ def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: 
     if event == "axle":
         exported = k["b_e"] + k["s_e"]
         out["event_kwh"] = exported
-        out["event_gross"] = exported * axle_value
-        out["event_net"] = exported * axle_value - _basis(used_e) - k["s_e"] * exp
+        per_kwh = axle_value + (exp if axle_plus_export else 0.0)   # Axle's payment, plus the supplier's export rate
+        out["event_gross"] = exported * per_kwh
+        # what the event added: less the battery energy's cost, and the export rate the solar would have earned anyway
+        out["event_net"] = exported * per_kwh - _basis(used_e) - k["s_e"] * exp
     elif event == "free_power":
         out["event_kwh"] = rec.get("grid_import") or 0.0
         out["event_gross"] = out["event_net"] = out["event_kwh"] * std

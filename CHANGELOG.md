@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.38 (beta)
+
+### Behaviour changes
+- **Axle exports are valued at Axle's £1/kWh plus the export rate** (new option *Axle also earns the export rate*,
+  on by default, under Axle events): EDF pays its normal 15p on the same export, so an Axle kWh is worth £1.15.
+  - Planning counts the full £1.15 when deciding whether to top up before an event.
+  - Plan and decision text reads "£1.15/kWh (£1 Axle + 15p export)" instead of "£1/kWh".
+  - Event figures on the Costs page: *gross* is kWh × £1.15. *Net* now adds the 15p the battery energy earns; exported
+    solar is still credited with Axle's £1 only, since it would have earned the 15p anyway.
+  - Past days are re-valued once on start (cost method 4), so earlier Axle events are corrected too.
+
 ## 0.9.37 (beta)
 
 ### Behaviour changes

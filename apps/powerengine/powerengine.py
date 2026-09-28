@@ -621,7 +621,8 @@ class PowerEngine(hass.Hass):
     def _cost_params(self):
         p = self._params()
         return {"capacity": p.capacity_kwh, "eff": p.efficiency, "floor_soc": p.min_reserve_soc,
-                "max_kw": p.max_discharge_kw, "includes_ev": p.hold_for_car, "axle_value": p.axle_value}
+                "max_kw": p.max_discharge_kw, "includes_ev": p.hold_for_car, "axle_value": p.axle_value,
+                "axle_plus_export": p.axle_plus_export}
 
     def _backfill(self, kwargs):
         """Fill recent days that PowerEngine didn't record (or only partly) from HA history, one day per callback."""

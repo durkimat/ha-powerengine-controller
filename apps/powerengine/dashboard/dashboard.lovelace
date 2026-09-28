@@ -1002,7 +1002,7 @@ views:
               | {{ as_timestamp(m.month ~ '-01') | timestamp_custom('%b %Y') }} | {{ gbp(m.axle_net) }} | {{ gbp(m.free_power_net) }} | {{ gbp(m.actual) }} |
               {%- endfor %}
 
-              Axle and free-power half-hours are kept out of the daily layers above so rare, large events don't distort them. Net value is what the event added: Axle kWh × £1, less what that energy was worth (its cost in the battery, or the export rate); free power is the kWh used × the rate that would otherwise have applied.
+              Axle and free-power half-hours are kept out of the daily layers above so rare, large events don't distort them. Net value is what the event added: Axle kWh × (£1 from Axle + your export rate from EDF), less what that energy was worth (its cost in the battery, or the export rate the solar would have earned anyway); free power is the kWh used × the rate that would otherwise have applied.
       - type: grid
         column_span: 3
         cards:

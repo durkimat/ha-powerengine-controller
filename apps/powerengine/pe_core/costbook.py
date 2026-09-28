@@ -93,7 +93,8 @@ class CostBook:
             del self.cheap_history[day]
 
     def add(self, hh: HalfHour, r: Readings, *, capacity: float, eff: float, floor_soc: float, max_kw: float,
-            includes_ev: bool, axle_value: float = 1.0, keep_existing: bool = False) -> dict | None:
+            includes_ev: bool, axle_value: float = 1.0, axle_plus_export: bool = True,
+            keep_existing: bool = False) -> dict | None:
         """Value a completed half-hour and store it. Returns the stored record, or None if it can't be valued.
 
         keep_existing: don't replace a half-hour already fully recorded (a backfill never overwrites a full live
@@ -108,7 +109,8 @@ class CostBook:
             return None
         rec = hh.as_dict()
         rec["v"] = process(rec, rt, self.ledger, self.sim, capacity=capacity, eff=eff, floor_soc=floor_soc,
-                           max_kw=max_kw, includes_ev=includes_ev, axle_value=axle_value)
+                           max_kw=max_kw, includes_ev=includes_ev, axle_value=axle_value,
+                           axle_plus_export=axle_plus_export)
         day = self._local_day(hh.start)
         records = self.day_records(day)
         rec["fv"] = self.flow_id
@@ -134,7 +136,7 @@ class CostBook:
         return out
 
     def revalue(self, *, capacity: float, eff: float, floor_soc: float, max_kw: float, includes_ev: bool,
-                axle_value: float = 1.0) -> int:
+                axle_value: float = 1.0, axle_plus_export: bool = True) -> int:
         """Re-value every stored half-hour in time order with a fresh ledger and simulation.
 
         Needed after a backfill (older half-hours arrived after newer ones) or a change of method. Smart slots are
@@ -156,7 +158,8 @@ class CostBook:
                     v = {**v, "exp": self.export_fallback}     # rebuilt before the export rate had any history
                 rt = reclassify(start, v, window, self.tz)
                 rec["v"] = process(rec, rt, self.ledger, self.sim, capacity=capacity, eff=eff, floor_soc=floor_soc,
-                                   max_kw=max_kw, includes_ev=includes_ev, axle_value=axle_value)
+                                   max_kw=max_kw, includes_ev=includes_ev, axle_value=axle_value,
+                           axle_plus_export=axle_plus_export)
                 self._note_event(rec)
                 n += 1
             _write_json(path, records)
