@@ -2,6 +2,22 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.47 (beta)
+
+### Behaviour changes
+- None to control.
+
+### Dashboard: Monitoring tidied
+- **Mode** is coloured by state: green Active, orange Paused, blue Passive, red when blocked (not configured, inputs
+  not ready, or Active asked for but refused by a guard).
+- The status box and the Activity list are merged. The top line (bold) is what PowerEngine is doing now, with
+  today's earlier decisions listed below it, so it grows through the day. The mode's reason shows above it when not
+  Active. The activity log now keeps 48 entries (was 20), enough for a busy day.
+- **Now** holds the battery charge gauge plus the battery, grid, solar and house gauges, above the car, smart-charge,
+  Axle and free-power tiles. The separate Battery % and Decision tiles are gone (the gauge and the activity's top
+  line say the same).
+- The *Last 24 hours* graphs are removed; the Plan history tab covers them.
+
 ## 0.9.46 (beta)
 
 ### Behaviour changes

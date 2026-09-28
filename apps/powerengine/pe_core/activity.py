@@ -6,7 +6,7 @@ from datetime import datetime, tzinfo
 
 from .decide import Decision
 
-MAX_ENTRIES = 20
+MAX_ENTRIES = 48                 # a busy arbitrage day has 30-40 changes; the Monitoring page shows today's
 
 
 class ActivityLog:
