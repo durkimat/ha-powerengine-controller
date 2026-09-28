@@ -23,6 +23,10 @@ null
 ]
 },
 {
+"t": "2026-09-27T15:00:00+00:00",
+"warning": "[info] PowerEngine x.y.z starting"
+},
+{
 "t": "2026-09-27T15:02:00+00:00",
 "plan": "sssssssssssssssssssssssssCCCCCss",
 "soc": [
@@ -3655,6 +3659,13 @@ null
 },
 {
 "t": "2026-09-28T03:15:00+00:00",
+"event": [
+"self-pause",
+true
+]
+},
+{
+"t": "2026-09-28T03:15:00+00:00",
 "plan": "EECCCCsssssssCCCCCCCCEssssssFFss",
 "soc": [
 60,
@@ -3673,23 +3684,73 @@ null
 },
 {
 "t": "2026-09-28T03:15:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T03:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T03:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T03:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T03:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T03:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T03:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T03:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T03:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_3",
+"value": 0
+},
+{
+"t": "2026-09-28T03:15:00+00:00",
 "warning": "Daily write limit reached (60 writes, limit 60); pausing control"
+},
+{
+"t": "2026-09-28T03:15:00+00:00",
+"warning": "[info] Leaving Active (paused: Paused from the dashboard: the inverter is back on Self-Use and PowerEngine makes no changes until you resume.); returning the inverter to Self-Use"
 },
 {
 "t": "2026-09-28T03:16:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
 },
 {
-"t": "2026-09-28T03:17:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:18:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:19:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
+"t": "2026-09-28T03:16:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
 },
 {
 "t": "2026-09-28T03:20:00+00:00",
@@ -3704,161 +3765,5 @@ null
 74,
 53
 ]
-},
-{
-"t": "2026-09-28T03:20:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:21:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:22:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:23:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:24:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:25:00+00:00",
-"plan": "EECCCCsssssssCCCCCCCCEssssssFFss",
-"soc": [
-65,
-91,
-96,
-94,
-94,
-94,
-74,
-53
-]
-},
-{
-"t": "2026-09-28T03:25:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:26:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:27:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:28:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:29:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:30:00+00:00",
-"plan": "ECCCCsssssssCCCCCCCCEssssssFFsss",
-"soc": [
-68,
-100,
-95,
-94,
-94,
-79,
-71,
-41
-]
-},
-{
-"t": "2026-09-28T03:30:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:31:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:32:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:33:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:34:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:35:00+00:00",
-"plan": "ECCCCsssssssCCCCCCCCEssssssFFsss",
-"soc": [
-70,
-100,
-95,
-94,
-94,
-79,
-71,
-41
-]
-},
-{
-"t": "2026-09-28T03:35:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:36:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:37:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:38:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:39:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:40:00+00:00",
-"plan": "ECCCCsssssssCCCCCCCCEssssssFFsss",
-"soc": [
-72,
-100,
-95,
-94,
-94,
-79,
-71,
-41
-]
-},
-{
-"t": "2026-09-28T03:40:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:41:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:42:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:43:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
-},
-{
-"t": "2026-09-28T03:44:00+00:00",
-"warning": "Daily write limit reached (60 writes, limit 60); pausing control"
 }
 ]

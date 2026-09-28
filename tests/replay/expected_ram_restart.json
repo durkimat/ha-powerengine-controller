@@ -23,6 +23,18 @@ null
 ]
 },
 {
+"t": "2026-09-27T20:00:00+00:00",
+"warning": "[info] PowerEngine x.y.z starting"
+},
+{
+"t": "2026-09-27T20:00:00+00:00",
+"warning": "[info] RAM remote control takes over: timed windows closed, then left alone"
+},
+{
+"t": "2026-09-27T20:00:00+00:00",
+"warning": "[info] RAM remote control: Off (Self-Use)"
+},
+{
 "t": "2026-09-27T20:15:00+00:00",
 "plan": "ssssCECCECCECCECCECCssssssssssCC",
 "soc": [
@@ -90,6 +102,10 @@ null
 "svc": "number/set_value",
 "entity_id": "number.solis_inverter_battery_control_override_discharge_power",
 "value": 5000
+},
+{
+"t": "2026-09-27T20:20:00+00:00",
+"warning": "[info] RAM remote control: Force discharge at 5000 W"
 },
 {
 "t": "2026-09-27T20:21:00+00:00",
@@ -307,6 +323,10 @@ null
 "option": "Off"
 },
 {
+"t": "2026-09-27T20:30:00+00:00",
+"warning": "[info] RAM remote control: Off (Self-Use)"
+},
+{
 "t": "2026-09-27T20:35:00+00:00",
 "plan": "sEsEEECCCCCEEECCCCCssssssssCCCCC",
 "soc": [
@@ -441,6 +461,18 @@ null
 "option": "Off"
 },
 {
+"t": "2026-09-27T21:10:00+00:00",
+"warning": "[info] PowerEngine x.y.z starting"
+},
+{
+"t": "2026-09-27T21:10:00+00:00",
+"warning": "[info] RAM remote control takes over: timed windows closed, then left alone"
+},
+{
+"t": "2026-09-27T21:10:00+00:00",
+"warning": "[info] RAM remote control: Off (Self-Use)"
+},
+{
 "t": "2026-09-27T21:15:00+00:00",
 "plan": "sEEECCCEEEECCCCCCCsssssssCCCCCCC",
 "soc": [
@@ -516,6 +548,10 @@ null
 "svc": "number/set_value",
 "entity_id": "number.solis_inverter_battery_control_override_discharge_power",
 "value": 5000
+},
+{
+"t": "2026-09-27T21:30:00+00:00",
+"warning": "[info] RAM remote control: Force discharge at 5000 W"
 },
 {
 "t": "2026-09-27T21:31:00+00:00",
@@ -959,6 +995,10 @@ null
 "value": 0
 },
 {
+"t": "2026-09-27T21:50:00+00:00",
+"warning": "[info] RAM remote control: Hold (force charge at 0 W)"
+},
+{
 "t": "2026-09-27T21:51:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_inverter_battery_control_override_charge_power",
@@ -1170,6 +1210,10 @@ null
 "svc": "number/set_value",
 "entity_id": "number.solis_inverter_battery_control_override_discharge_power",
 "value": 5000
+},
+{
+"t": "2026-09-27T22:00:00+00:00",
+"warning": "[info] RAM remote control: Force discharge at 5000 W"
 },
 {
 "t": "2026-09-27T22:01:00+00:00",

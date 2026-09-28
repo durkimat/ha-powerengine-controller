@@ -8,6 +8,7 @@ battery, grid and house readings play back as they were), so this checks what Po
 from __future__ import annotations
 
 import json
+import re
 import sys
 import types
 from datetime import datetime, timedelta, timezone
@@ -17,7 +18,11 @@ import yaml
 
 HERE = Path(__file__).parent
 STEP = timedelta(seconds=60)
+VERSION = r"\b\d+\.\d+\.\d+\b"             # masked in logged lines, so releases don't change the record
 PLAN_SLOTS = 32                      # half-hours of each plan kept in the record
+# INFO log lines worth recording (control changes), besides every warning
+LOGGED_INFO = ("PowerEngine ", "Leaving Active", "RAM remote control", "Inputs back", "Writes held",
+               "Controller switch", "Car charger inputs")
 
 
 class Clock:
@@ -48,6 +53,7 @@ def _fake_appdaemon():
             self.warnings: list[str] = []
             self.fired: list[tuple] = []
             self.rejected: set[str] = set()
+            self.pending_pause: str | None = None
             self.args = {}
 
         # --- states
@@ -123,11 +129,18 @@ def _fake_appdaemon():
             return "Europe/London"
 
         def get_plugin_api(self, name):
-            return types.SimpleNamespace(mqtt_publish=lambda *a, **k: None)
+            return types.SimpleNamespace(mqtt_publish=self._mqtt_publish)
+
+        def _mqtt_publish(self, topic, payload=None, *a, **k):
+            """PowerEngine sets its own pause switch over MQTT (the daily write limit): the replay applies it."""
+            if str(topic).endswith("/ctl_pause/set"):
+                self.pending_pause = str(payload)
 
         def log(self, msg, *a, level="INFO", **k):
             if level in ("WARNING", "ERROR"):
                 self.warnings.append(f"{Clock.now.isoformat()} {msg}")
+            elif any(str(msg).startswith(p) for p in LOGGED_INFO):
+                self.warnings.append(f"{Clock.now.isoformat()} [info] {re.sub(VERSION, 'x.y.z', str(msg))}")
 
     return Hass
 
@@ -273,7 +286,7 @@ class Replay:
         old.terminate()
         new = self.powerengine.PowerEngine()
         new.args = old.args
-        for attr in ("states", "calls", "warnings", "fired", "timers", "rejected"):
+        for attr in ("states", "calls", "warnings", "fired", "timers", "rejected", "pending_pause"):
             setattr(new, attr, getattr(old, attr))
         self.app = new
         self.app.initialize()
@@ -299,6 +312,12 @@ class Replay:
             if n % 5 == 0:
                 self.app._evaluate()
             self.app._cycle({})
+            if self.app.pending_pause is not None:          # the app paused itself (daily write limit)
+                on = self.app.pending_pause.upper() == "ON"
+                self.app.pending_pause = None
+                self.app.set_fake("switch.pe_ctl_pause", "on" if on else "off")
+                self.record.append({"t": Clock.now.isoformat(), "event": ["self-pause", on]})
+                self.app._evaluate()
             self._snap(last)
             t += STEP
         return self.record

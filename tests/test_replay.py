@@ -44,7 +44,7 @@ SCENARIOS = {
     },
     # the default (real) daily write limit: hits it and pauses (shortened to just past the limit, not the full night)
     "windows_limit": {
-        "overrides": {"system": {"control_method": "timed_windows"}}, "end": "2026-09-28T03:45:00+00:00",
+        "overrides": {"system": {"control_method": "timed_windows"}}, "end": "2026-09-28T03:25:00+00:00",
     },
 }
 
