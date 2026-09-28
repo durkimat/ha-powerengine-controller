@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 REQUEST_EVENT = "pe_diag_request"
 BUNDLE_EVENT = "pe_diag_bundle"
 LOG_LINES = 400
+LOG_RECENT, LOG_WARNINGS, LOG_WIDTH = 35, 20, 170     # published on sensor.pe_diag_log
 JOURNAL_HOURS = 48
 KEEP_FILES = 5
 
@@ -28,6 +29,41 @@ class LogRing:
 
     def add(self, when: datetime, level: str, msg) -> None:
         self.lines.append({"t": when.isoformat(timespec="seconds"), "level": level or "INFO", "msg": str(msg)[:600]})
+        self.changed = True
+
+    changed = False
+
+    def load(self, path: str) -> None:
+        """Lines saved before a restart come first (the file is kept beside the config)."""
+        try:
+            with open(path, encoding="utf-8") as fh:
+                old = json.load(fh)
+        except (OSError, ValueError):
+            return
+        keep = list(self.lines)
+        self.lines.clear()
+        for x in (old if isinstance(old, list) else [])[-self.lines.maxlen:]:
+            if isinstance(x, dict) and "t" in x:
+                self.lines.append(x)
+        self.lines.extend(keep)
+
+    def save(self, path: str) -> None:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(list(self.lines), fh, separators=(",", ":"))
+        os.replace(tmp, path)
+        self.changed = False
+
+    def published(self, recent: int = LOG_RECENT, warnings: int = LOG_WARNINGS, width: int = LOG_WIDTH) -> dict:
+        """For the Health tab's log card, kept well under HA's 16 KB attribute limit: the latest lines of any level
+        and the latest warnings, newest first."""
+        def short(x):
+            return {"t": x["t"], "l": x.get("level", "INFO")[:1], "m": str(x.get("msg", ""))[:width]}
+        lines = list(self.lines)
+        warn = [x for x in lines if x.get("level") in ("WARNING", "ERROR")]
+        return {"recent": [short(x) for x in reversed(lines[-recent:])],
+                "warnings": [short(x) for x in reversed(warn[-warnings:])],
+                "warning_count": len(warn)}
 
 
 def recent_journal(entries: list[dict], now: datetime, hours: int = JOURNAL_HOURS) -> list[dict]:
