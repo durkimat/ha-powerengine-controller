@@ -13,7 +13,8 @@
 # (Self-Use) and supervised tests are allowed. Un-pause to go live again.
 # The legacy automations are no longer a choice: both handovers keep them off.
 #
-# Also here: restart AppDaemon when a new PowerEngine version is installed (or PowerEngine stops), and restart
+# Also here: a one-button update (latest app and card from HACS, then restart AppDaemon); restart AppDaemon when a
+# new PowerEngine version is installed (or PowerEngine stops); and restart
 # Predbat if it didn't connect after a Home Assistant restart. Everything is named "PowerEngine - ..." so it's easy
 # to find. Entity IDs are unchanged from earlier versions (only the names changed).
 
@@ -97,6 +98,77 @@ script:
           message: >-
             PowerEngine is Passive (inverter windows closed, still planning and costing) and Predbat is out of
             read-only, so it takes over at its next update. The legacy automations stay off.
+
+  # One button (Configuration page): install the latest PowerEngine app and card from HACS, then restart AppDaemon
+  # so the new app (and its dashboard) is loaded. Finds HACS's update entities for PowerEngine by name.
+  powerengine_update:
+    alias: PowerEngine - Update to the latest release
+    icon: mdi:update
+    mode: single
+    sequence:
+      - variables:
+          updates: >-
+            {{ integration_entities('hacs') | select('match', 'update\\.') | select('search', 'powerengine')
+               | list }}
+          app: "{{ updates | reject('search', 'card') | first | default('') }}"
+      - if:
+          - condition: template
+            value_template: "{{ updates | count == 0 }}"
+        then:
+          - action: persistent_notification.create
+            data:
+              notification_id: powerengine_update
+              title: PowerEngine update
+              message: >-
+                No HACS update entities for PowerEngine were found. In HACS, check both PowerEngine repositories are
+                downloaded, and under Settings > Entities that their update entities are enabled.
+          - stop: No PowerEngine update entities
+      - action: homeassistant.update_entity         # ask HACS for the latest release now
+        target:
+          entity_id: "{{ updates }}"
+        continue_on_error: true
+      - delay: "00:00:05"
+      - variables:
+          pending: "{{ updates | select('is_state', 'on') | list }}"
+      - if:
+          - condition: template
+            value_template: "{{ pending | count > 0 }}"
+        then:
+          - action: update.install
+            target:
+              entity_id: "{{ pending }}"
+          - wait_template: "{{ pending | select('is_state', 'on') | list | count == 0 }}"
+            timeout: "00:05:00"
+            continue_on_timeout: true
+          - delay: "00:00:20"                          # let HACS finish writing the files
+      - variables:
+          installed: "{{ state_attr(app, 'installed_version') | string | replace('v', '') if app else '' }}"
+      - if:
+          - condition: template
+            value_template: "{{ installed != '' and installed != states('sensor.pe_diag_version') }}"
+        then:
+          - action: hassio.addon_restart
+            data:
+              addon: a0d7b954_appdaemon
+          - wait_template: "{{ states('sensor.pe_diag_version') == installed }}"
+            timeout: "00:03:00"
+            continue_on_timeout: true
+      - action: persistent_notification.create
+        data:
+          notification_id: powerengine_update
+          title: PowerEngine update
+          message: >-
+            {%- if installed and states('sensor.pe_diag_version') == installed %}
+            PowerEngine {{ installed }} is running.
+            {%- elif installed %}
+            PowerEngine {{ installed }} is installed but {{ states('sensor.pe_diag_version') }} is still running:
+            check the AppDaemon log.
+            {%- else %}
+            Updates checked.
+            {%- endif %}
+            {{ 'Nothing new to install.' if pending | count == 0 else 'Installed: ' ~ (pending | map('state_attr',
+            'title') | join(', ')) ~ '.' }} Refresh the browser (or reopen the app) so the dashboard loads the
+            matching card.
 
 automation:
   - alias: PowerEngine - Battery controller switch
@@ -202,6 +274,10 @@ automation:
     triggers:
       - trigger: event
         event_type: pe_update_installed
+    conditions:                    # the update button restarts AppDaemon itself
+      - condition: state
+        entity_id: script.powerengine_update
+        state: "off"
     actions:
       - delay: "00:00:30"          # let HACS finish writing the files
       - action: hassio.addon_restart

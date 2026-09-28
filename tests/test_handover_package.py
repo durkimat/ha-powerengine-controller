@@ -46,7 +46,8 @@ def test_selector_uses_own_scripts_only():
     text = PKG.read_text()
     assert "predbat_handover_to_" not in text
     assert "Legacy automations" not in text
-    assert set(_load()["script"]) == {"battery_handover_to_powerengine", "battery_handover_to_predbat"}
+    assert set(_load()["script"]) == {"battery_handover_to_powerengine", "battery_handover_to_predbat",
+                                      "powerengine_update"}
 
 
 def test_everything_is_named_powerengine():
@@ -61,3 +62,13 @@ def test_ids_unchanged_and_new_automations_present():
     assert ids[:2] == ["battery_controller_selector", "powerengine_watchdog"]
     new = {"powerengine_restart_after_update", "powerengine_restart_if_stopped", "powerengine_restart_predbat"}
     assert new <= set(ids)
+
+
+def test_update_script_installs_then_restarts_and_the_auto_restart_stands_aside():
+    pkg = _load()
+    seq = pkg["script"]["powerengine_update"]["sequence"]
+    text = str(seq)
+    assert "update.install" in text and "hassio.addon_restart" in text and "a0d7b954_appdaemon" in text
+    assert text.index("update.install") < text.index("hassio.addon_restart")
+    auto = next(a for a in pkg["automation"] if a["id"] == "powerengine_restart_after_update")
+    assert auto["conditions"][0]["entity_id"] == "script.powerengine_update"
