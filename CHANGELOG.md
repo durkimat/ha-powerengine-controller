@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.35 (beta)
+
+### Behaviour changes
+- **Grid charging stops at the half-hour's target.** Once the battery reaches the target the plan set for this
+  half-hour, PowerEngine holds (the grid covers the house) until the next half-hour, as the plan assumed. Before this
+  it kept charging to the end of the half-hour: overnight on 28 Sep it charged to 82% against a 76% target. With timed
+  windows this can cost one extra write (the charge current set to 0) when a target is reached part-way through.
+
+### Fixes
+- Attribute sizes are now measured as Home Assistant stores them (compact JSON). The earlier figure was about 6% high,
+  so the configuration catalogue was reported at 16.6 KB when it's about 15.6 KB.
+
 ## 0.9.34 (beta)
 
 ### Behaviour changes

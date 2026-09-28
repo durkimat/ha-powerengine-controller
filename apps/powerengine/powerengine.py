@@ -2393,7 +2393,11 @@ class PowerEngine(hass.Hass):
         self._publish(f"powerengine/{key}/state", str(state))
         if attributes is not None:
             payload = attributes if isinstance(attributes, str) else json.dumps(attributes, default=str)
-            size = len(payload.encode("utf-8"))
+            try:                                  # measured as HA's recorder stores it: compact JSON, UTF-8
+                compact = json.dumps(json.loads(payload), separators=(",", ":"), ensure_ascii=False)
+            except ValueError:
+                compact = payload
+            size = len(compact.encode("utf-8"))
             sizes = self.__dict__.setdefault("_attr_sizes", {})
             if diagnostics.track_attr_size(sizes, key, size):
                 self.log(f"sensor.pe_{key}: attributes are {size} bytes, near Home Assistant's "
