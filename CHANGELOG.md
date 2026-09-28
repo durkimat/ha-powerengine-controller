@@ -2,6 +2,24 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.42 (beta)
+
+### Behaviour changes
+- None to control.
+
+### Updating
+- **One-button update.** Configuration now shows the running version and the installed/available versions of the
+  app and card, with an **Update** button. It runs a new script in the handover package,
+  `script.powerengine_update`, which:
+  1. asks HACS for the latest releases;
+  2. installs whichever of the app and card have an update;
+  3. restarts AppDaemon if the app changed, and waits for the new version to report in;
+  4. leaves a notification saying what's running (refresh the browser for the new card).
+  The dashboard updates itself when the new app starts. Needs the updated `docs/ha/powerengine_handover.yaml` in
+  `/config/packages/`, and HACS's update entities for both repositories enabled.
+- The automatic restart after an update stands aside while the button's script is running, so AppDaemon isn't
+  restarted twice.
+
 ## 0.9.41 (beta)
 
 ### Behaviour changes
