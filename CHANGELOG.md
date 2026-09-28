@@ -2,6 +2,22 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.48 (beta)
+
+### Behaviour changes
+- None to control.
+
+### Dashboard: Monitoring
+- **Next:** under the current decision, the plan's next two changes, e.g. "sell 16:00–19:00, then charge 23:30–05:00
+  tomorrow" (new `sensor.pe_plan_next`).
+- **Saved today** tile: today's saving against no solar or battery, with any Axle or free-power event value
+  included (new `sensor.pe_cost_saved_today`); tap for the Costs tab.
+- **Health needs a look:** a red tile that only appears when the Health tab has findings; tap to open it. The
+  heartbeat, config-OK and version tiles moved to the Health tab.
+- **Mode** now reads from `sensor.pe_state_status`: Active (green), Paused (orange), Passive (blue), Blocked or
+  **Stopped** (red). Stopped is new: control stopped because inverter writes couldn't be confirmed, which until now
+  only showed in the log while the tile still said Active.
+
 ## 0.9.47 (beta)
 
 ### Behaviour changes

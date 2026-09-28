@@ -320,6 +320,10 @@ def cost_entity_states(book: CostBook, today: date, months: list[dict] | None = 
     month_events = round(tm.get("axle_net", 0.0) + tm.get("free_power_net", 0.0), 2)
     return {
         "cost_today": (today_s["actual"] if today_s else "unknown", today_s or {}),
+        # against no solar or battery (S0), with any Axle/free-power event value added back
+        "cost_saved_today": (round(today_s["s0"] - today_s["actual"] + sum(e.get("net", 0.0) for e in
+                                   (today_s.get("events") or {}).values()), 2) if today_s else "unknown",
+                             {"cost": today_s["actual"], "without_solar_or_battery": today_s["s0"]} if today_s else {}),
         "cost_days": (yesterday["actual"] if yesterday else "unknown",
                       {"days": days, "method": METHOD_VERSION,
                        "ledger_kwh": round(book.ledger.kwh, 2), "ledger_value": round(book.ledger.value, 2)}),
