@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.46 (beta)
+
+### Behaviour changes
+- None to control.
+
+### Updating
+- **The Update button now makes HACS check GitHub first.** HACS only looks for new releases every few hours, so the
+  button found nothing new straight after a release. It's now a PowerEngine card: it asks HACS to refresh both
+  PowerEngine repositories (admins only), then runs the update script. It shows progress, and offers *Reload page*
+  once the new version is running.
+
 ## 0.9.45 (beta)
 
 ### Behaviour changes
