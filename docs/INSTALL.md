@@ -24,6 +24,20 @@ You need:
 Tested with: Solis hybrid inverter via the SolaX Modbus integration, Fox ESS
 batteries, Solcast, myenergi Zappi, EDF (edf_energy) tariff, Axle VPP.
 
+> **Inverter wear: read this first.** PowerEngine re-plans every few minutes, so it changes what the inverter does
+> far more often than a fixed daily schedule. On inverters driven through **EEPROM-backed settings** (Solis timed
+> charge/discharge windows, and similar on other brands), every change is a write to memory with a limited life.
+> Even with the daily write limit, dampening and paired writes, we still saw 60–110 writes a day on timed windows.
+> - **Use a RAM (temporary) control method if your inverter has one.** On Solis that's *RAM remote control*
+>   (Config → Inverter control → Control method), tested with the supervised tests first. It writes nothing to
+>   EEPROM, and the inverter falls back to Self-Use by itself if PowerEngine stops.
+> - **EEPROM-only inverters may not suit a dynamic plan.** If yours has no RAM method, keep arbitrage off, raise
+>   the window change cost, set a low daily write limit, and watch *Inverter writes today* on the Health tab for
+>   the first weeks. If the writes stay high, a fixed schedule (or Predbat's) may be kinder to the inverter.
+> - **Firmware matters.** The same model can offer different control methods on different firmware (on Solis, RAM
+>   remote control works on 420044; Remote Dispatch needs FB00 or later). Run the supervised tests on your own
+>   firmware before going Active.
+
 > **Terminal tip:** every command below runs **in HA's terminal** (the add-on),
 > not on your own computer. If you see `Unknown command: ha`, you're in the
 > wrong terminal.
@@ -443,6 +457,9 @@ later is the same one step.
 
 Config → Inverter control → **Control method**.
 
+**Use RAM remote control if your inverter supports it** (see *Inverter wear* at the top): run the RC tests on the
+Tests tab first, then switch. Timed windows remain the default only because they work on every Solis firmware.
+
 - **Timed windows** (default): PowerEngine programs the inverter's three charge and three discharge windows. They
   are stored in the inverter's EEPROM, so each change wears it (Health tab, *Inverter writes today*).
 - **RAM remote control:** PowerEngine sends Force charge / Force discharge / Off with a power through SolaX Modbus's
@@ -484,6 +501,11 @@ gives a verdict:
 ## Updating
 
 The dashboard updates itself with the app; refresh the browser after updating.
+
+**One button (0.9.42 or later, with the handover package):** Configuration → **Update**. It installs the latest app
+and card from HACS, restarts AppDaemon if the app changed, waits for the new version, and leaves a notification
+saying what's running. Then refresh the browser. It needs HACS's update entities for both repositories (enabled by
+default). Doing it by hand instead:
 
 1. HACS shows updates under *Settings → Updates*, with the version number.
    With the handover package installed (0.8.3 or later), AppDaemon restarts by itself about a minute after
