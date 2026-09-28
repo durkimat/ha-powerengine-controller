@@ -1535,7 +1535,7 @@ views:
             content: |-
               {%- set ups = integration_entities('hacs') | select('match', 'update\\.') | select('search', 'powerengine') | list %}
               **PowerEngine {{ states('sensor.pe_diag_version') }}** running
-              {%- for e in ups %} · {{ state_attr(e, 'title') or e }}: {{ state_attr(e, 'installed_version') }}{{ (' → **' ~ state_attr(e, 'latest_version') ~ '** available') if is_state(e, 'on') }}{%- endfor %}
+              {%- for e in ups %} · {{ 'card' if 'card' in e else 'app' }} {{ state_attr(e, 'installed_version') }}{{ (' → **' ~ state_attr(e, 'latest_version') ~ '** available') if is_state(e, 'on') }}{%- endfor %}
               {%- if not ups %} · HACS update entities not found{% endif %}
               {%- if not states.script.powerengine_update %}<br><small>The update button needs the handover package (docs/ha/powerengine_handover.yaml) from 0.9.42 or later.</small>{% endif %}
           - type: button

@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.43 (beta)
+
+### Behaviour changes
+- None.
+
+### Updating
+- The version line on Configuration names the app and the card instead of HACS's entity ids. The update script's
+  notification says which of them it installed (handover package; picked up at your next HA config sync).
+
 ## 0.9.42 (beta)
 
 ### Behaviour changes
