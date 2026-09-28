@@ -7,6 +7,7 @@ battery, grid and house readings play back as they were), so this checks what Po
 
 from __future__ import annotations
 
+import itertools
 import json
 import re
 import sys
@@ -23,6 +24,8 @@ PLAN_SLOTS = 32                      # half-hours of each plan kept in the recor
 # INFO log lines worth recording (control changes), besides every warning
 LOGGED_INFO = ("PowerEngine ", "Leaving Active", "RAM remote control", "Inputs back", "Writes held",
                "Controller switch", "Car charger inputs")
+
+HANDLES = itertools.count(1)          # run_in handles, unique across restarts (cancel_timer removes by handle)
 
 
 class Clock:
@@ -101,8 +104,9 @@ def _fake_appdaemon():
 
         # --- scheduling: run_in callbacks are run by the replay when due; the rest the replay drives itself
         def run_in(self, cb, delay, **kw):
-            self.timers.append((Clock.now + timedelta(seconds=float(delay)), cb, kw))
-            return len(self.timers)
+            handle = next(HANDLES)
+            self.timers.append((Clock.now + timedelta(seconds=float(delay)), cb, kw, handle))
+            return handle
 
         def run_every(self, *a, **k):
             return None
@@ -110,7 +114,7 @@ def _fake_appdaemon():
         run_daily = run_at = run_minutely = run_hourly = run_once = run_every
 
         def cancel_timer(self, handle, **kw):
-            return None
+            self.timers = [x for x in self.timers if x[3] != handle]
 
         def listen_state(self, *a, **k):
             return None
@@ -317,7 +321,7 @@ class Replay:
             self._process_events()
             due = [x for x in self.app.timers if x[0] <= t]
             self.app.timers = [x for x in self.app.timers if x[0] > t]
-            for _, cb, kw in sorted(due, key=lambda x: x[0]):
+            for _, cb, kw, _h in sorted(due, key=lambda x: x[0]):
                 cb(kw)
             n += 1
             if n % 5 == 0:
