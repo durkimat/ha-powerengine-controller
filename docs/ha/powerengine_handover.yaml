@@ -166,9 +166,9 @@ script:
             {%- else %}
             Updates checked.
             {%- endif %}
-            {{ 'Nothing new to install.' if pending | count == 0 else 'Installed: ' ~ (pending | map('state_attr',
-            'title') | join(', ')) ~ '.' }} Refresh the browser (or reopen the app) so the dashboard loads the
-            matching card.
+            {% if pending | count == 0 %}Nothing new to install.{% else %}Installed the
+            {% for e in pending %}{{ 'card' if 'card' in e else 'app' }}{{ ' and ' if not loop.last }}{% endfor %}.
+            {%- endif %} Refresh the browser (or reopen the app) so the dashboard loads the matching card.
 
 automation:
   - alias: PowerEngine - Battery controller switch
