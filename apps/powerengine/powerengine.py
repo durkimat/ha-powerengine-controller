@@ -2109,9 +2109,12 @@ class PowerEngine(hass.Hass):
         days = self.costbook.recorded_days()
         first = datetime.fromisoformat(days[0]).date() if days else None
         have = set(History(os.path.join(self._sim_folder(), "history")).months())
+        check = self.cfg.features.get("use_check_meter", True)
         ent = {"house": [self._role_entity("house_load_today")], "car": [self._role_entity("ev_energy_today")],
-               "grid_import": [self._role_entity("grid_import_today")],
-               "grid_export": [self._role_entity("grid_export_today")],
+               "grid_import": [self._role_entity("grid_import_today_check") if check else None,
+                               self._role_entity("grid_import_today")],
+               "grid_export": [self._role_entity("grid_export_today_check") if check else None,
+                               self._role_entity("grid_export_today")],
                "solar": [p.energy_today.get("entity") for p in self.cfg.solar_plants if p.enabled]}
         ent = {k: [e for e in v if e] for k, v in ent.items()}
         return {"months": [m for m in months_wanted(self._today(), first) if m not in have], "entities": ent,
@@ -2124,7 +2127,7 @@ class PowerEngine(hass.Hass):
         if month not in months_wanted(self._today(), None) or not req:
             self.log(f"Simulator: ignored history for '{month}'", level="WARNING")
             return
-        hours = parse_upload(data.get("stats") or {}, req["entities"])
+        hours = parse_upload(data.get("stats") or {}, req["entities"], prefer_first=("grid_import", "grid_export"))
         History(os.path.join(self._sim_folder(), "history")).save_month(month, hours, datetime.now(timezone.utc))
         n = len(hours.get("house", {}))
         self.log(f"Simulator: imported {month} from HA statistics ({n} hours of house load)")
