@@ -2,6 +2,24 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.39 (beta)
+
+### Behaviour changes
+- **Discharge slow-down near empty is learned** (part of *Learn: charge and discharge slow-down*). From full-rate
+  sales, PowerEngine measures how much of the discharge rate is reached in half-hours running below 40%, 30% and 20%.
+  Your battery runs at about 4.4 kW below 40% against 4.8–5.2 kW higher up. The plan then runs deep sales and
+  evening self-use at that speed. The learned discharge rate is also taken from above 40% now, so the slow tail no
+  longer drags it down.
+- **Inverter conversion losses are learned** (new *Learn: inverter conversion losses*, on). From full-rate
+  half-hours with no solar, it measures how much grid energy reaches the battery when charging and how much of the
+  battery's output reaches the house and grid when selling. The plan uses the battery's own round trip × both
+  conversions: the grid-to-grid efficiency that arbitrage actually gets. Until now the plan used only the battery's
+  own round trip (95.6%, measured at the battery); from 26–27 Sep the grid-to-grid figure looks nearer 80%. So
+  arbitrage is now only planned where it pays after all losses. Cost accounting keeps the battery's own round trip,
+  since it values the battery's own flows.
+- Both re-learn from recent half-hours, so they follow any change of inverter, battery or an added battery. Health
+  → Learned from use shows the figures, the samples, and the grid-to-grid round trip in use.
+
 ## 0.9.38 (beta)
 
 ### Behaviour changes

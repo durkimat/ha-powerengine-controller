@@ -7,6 +7,11 @@ temperature (``tb_c``). From those:
 - **Charge / discharge rate:** the median power actually reached when the full rate was asked for (below 90% charge,
   and not while the battery was cold). Before any such half-hours exist, the 98th percentile of all half-hours.
 - **Charge taper:** how much of that rate is reached from 90% and from 95% charge.
+- **Discharge taper:** how much of the discharge rate is reached as the battery runs low (below 40%, 30%, 20%):
+  many batteries limit their current there, so a deep sale is slower than a shallow one.
+- **Conversion efficiency:** how much of the grid energy used for charging reaches the battery, and how much of what
+  the battery gives reaches the house and grid (the inverter's AC/DC losses at full power), from half-hours with no
+  solar. With the battery's own round trip this gives the grid-to-grid efficiency that arbitrage really gets.
 - **Reserve:** the charge at which the battery stops supplying the house even though the house needs power.
 - **Export limit:** only when selling hits a ceiling below the battery's own rate (the grid limit, not the battery).
 - **Car charge rate:** the typical kW of a half-hour the car charged throughout.
@@ -32,6 +37,8 @@ MIN_COLD_SAMPLES = 3
 SLOW_RATIO = 0.8            # a charge half-hour at under 80% of the normal rate counts as slowed
 FULL_ASK = 0.9              # "the full rate was asked for": at least 90% of the configured rate
 TAPER_BANDS = (90.0, 95.0)
+DISCHARGE_BANDS = (40.0, 30.0, 20.0)   # (below this SoC, fraction of the rate): half-hours whose midpoint is below
+MIN_CONV_SAMPLES = 6
 
 
 def _kw(kwh: float | None, seconds: float) -> float:
@@ -67,6 +74,11 @@ class Learned:
     discharge_samples: int = 0
     taper: tuple[tuple[float, float], ...] = ()      # ((soc_from, fraction of the rate), ...)
     taper_samples: int = 0
+    dtaper: tuple[tuple[float, float], ...] = ()     # ((below soc, fraction of the discharge rate), ...), high first
+    dtaper_samples: int = 0
+    charge_conv: float | None = None                 # battery in / AC in, charging at full rate
+    discharge_conv: float | None = None              # AC out / battery out, selling at full rate
+    conv_samples: int = 0
     reserve_soc: float | None = None
     reserve_samples: int = 0
     export_kw: float | None = None
@@ -80,7 +92,7 @@ class Learned:
     notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
-        return {k: (list(map(list, v)) if k == "taper" else v) for k, v in self.__dict__.items()}
+        return {k: (list(map(list, v)) if k in ("taper", "dtaper") else v) for k, v in self.__dict__.items()}
 
 
 def learn(halves: list[dict], rated_charge_kw: float, rated_discharge_kw: float, reserve_soc: float,
@@ -104,10 +116,17 @@ def learn(halves: list[dict], rated_charge_kw: float, rated_discharge_kw: float,
         seen = [v for v in seen if v > 0.1]
         if len(seen) >= MIN_FALLBACK_SAMPLES:
             out.max_charge_kw, out.charge_samples = round(_p(seen, 0.98), 2), len(seen)
-    # --- discharge rate: full rate asked (selling), well above the reserve
+    # --- discharge rate: full rate asked (selling), above the low-charge taper zone
+    def selling(h: dict) -> bool:
+        return _asked_full(h, "export", rated_discharge_kw) or _asked_full(h, "force_discharge", rated_discharge_kw)
+
     asked = [_kw(h.get("battery_out"), h["seconds"]) for h in full
-             if _asked_full(h, "export", rated_discharge_kw) and h["soc_end"] > reserve_soc + 5]
+             if selling(h) and h["soc_end"] >= DISCHARGE_BANDS[0]]
     asked = [v for v in asked if v > 0.1]
+    if len(asked) < MIN_RATE_SAMPLES:                   # not enough above the taper zone yet: as before
+        asked = [_kw(h.get("battery_out"), h["seconds"]) for h in full
+                 if selling(h) and h["soc_end"] > reserve_soc + 5]
+        asked = [v for v in asked if v > 0.1]
     if len(asked) >= MIN_RATE_SAMPLES:
         out.max_discharge_kw, out.discharge_samples = round(median(asked), 2), len(asked)
     else:
@@ -128,6 +147,46 @@ def learn(halves: list[dict], rated_charge_kw: float, rated_discharge_kw: float,
             bands.append((lo, round(min(1.0, max(0.1, median(v))), 2)))
             out.taper_samples += len(v)
     out.taper = tuple(bands)
+
+    # --- discharge taper: fraction of the discharge rate reached in half-hours whose midpoint is in each low band
+    dbase = out.max_discharge_kw or rated_discharge_kw
+    dbands = []
+    for i, below in enumerate(DISCHARGE_BANDS):
+        lo = DISCHARGE_BANDS[i + 1] if i + 1 < len(DISCHARGE_BANDS) else reserve_soc
+        v = [_kw(h.get("battery_out"), h["seconds"]) / dbase for h in full
+             if selling(h) and lo <= (h["soc_start"] + h["soc_end"]) / 2 < below
+             and h["soc_end"] > reserve_soc + 0.5]      # still discharging at the end: not stopped by the reserve
+        if len(v) >= MIN_TAPER_SAMPLES:
+            dbands.append((below, round(min(1.0, max(0.1, median(v))), 2)))
+            out.dtaper_samples += len(v)
+    # a lower band never discharges faster than the one above it
+    for i in range(1, len(dbands)):
+        dbands[i] = (dbands[i][0], min(dbands[i][1], dbands[i - 1][1]))
+    out.dtaper = tuple(b for b in dbands if b[1] < 0.98)
+
+    # --- conversion efficiency (inverter AC/DC), full-rate half-hours with no solar
+    def dark(h: dict) -> bool:
+        return (h.get("solar") or 0.0) < 0.05
+
+    charge = []
+    for h in full:
+        if _asked_full(h, "grid_charge", rated_charge_kw) and dark(h) and h["soc_end"] < TAPER_BANDS[0]:
+            ac_in = (h.get("grid_import") or 0.0) - (h.get("grid_export") or 0.0) - (h.get("house") or 0.0) \
+                - (h.get("car") or 0.0)
+            if ac_in > 0.5 and (h.get("battery_in") or 0.0) > 0.5:
+                charge.append(h["battery_in"] / ac_in)
+    dis = []
+    for h in full:
+        if selling(h) and dark(h) and h["soc_end"] > reserve_soc + 0.5:
+            ac_out = (h.get("grid_export") or 0.0) - (h.get("grid_import") or 0.0) + (h.get("house") or 0.0) \
+                + (h.get("car") or 0.0)
+            if ac_out > 0.5 and (h.get("battery_out") or 0.0) > 0.5:
+                dis.append(ac_out / h["battery_out"])
+    charge = [c for c in charge if 0.6 <= c <= 1.0]
+    dis = [c for c in dis if 0.6 <= c <= 1.0]
+    if len(charge) >= MIN_CONV_SAMPLES and len(dis) >= MIN_CONV_SAMPLES:
+        out.charge_conv, out.discharge_conv = round(median(charge), 3), round(median(dis), 3)
+        out.conv_samples = len(charge) + len(dis)
 
     # --- reserve: the house needed power, the battery gave (almost) none, near the bottom, not held on purpose
     stops = [h["soc_end"] for h in full
