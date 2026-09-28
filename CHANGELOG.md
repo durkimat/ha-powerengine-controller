@@ -2,6 +2,23 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.50 (beta)
+
+### Behaviour changes
+- None. This release reorganises the inverter code so PowerEngine can later support other inverters. What it
+  does to your inverter should be exactly the same.
+
+### Under the hood (making PowerEngine generic, step 2)
+- Everything specific to the Solis inverter now sits in one place, a Solis "adapter". That covers timed windows,
+  RAM remote control, supervised tests and clock sync. The rest of PowerEngine asks the adapter what to write,
+  and keeps the safety rules itself: dampening, the daily write limit, read-back checks and the write journal.
+- The recorded-night replay test now also covers pause and resume, a restart mid-night, a failed read-back, the
+  daily write limit, supervised tests and clock sync. Every change above passed it unchanged.
+
+### Worth checking after updating
+- Control carries on as before (RAM remote control, writes today, the Next line). If anything looks different,
+  send a diagnostics export in the morning.
+
 ## 0.9.49 (beta)
 
 ### Behaviour changes
