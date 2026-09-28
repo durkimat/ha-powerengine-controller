@@ -1100,6 +1100,7 @@ class PowerEngine(hass.Hass):
                 self.writes.would(self._today(), len(ws), "would_slots")
             if r.now.minute % 10 == 0 and r.now.second < CYCLE_SECONDS:     # save every 10 minutes
                 self._publish_writes()
+                self._publish_writes_today()
         except Exception as err:
             self.log(f"Could not count inverter writes: {err!r}", level="WARNING")
 
@@ -1297,6 +1298,8 @@ class PowerEngine(hass.Hass):
                                             f"{round(r.battery_power or 0)} W (+ discharging) after 3 minutes "
                                             f"(power setting reads {pw}). Check the inverter and SolaX Modbus; "
                                             "switch the Control method back to Timed windows if it persists."))
+            if active and not self._test_running():
+                self._simulate_windows(r, decision, p)          # what timed windows would have written meanwhile
             sent = ram.sent
             self._publish_method("ram_remote", {
                 "command": sent.text() if sent and active else want.text() + (" (would send)" if not active else ""),
@@ -1309,6 +1312,27 @@ class PowerEngine(hass.Hass):
                 "writes": [w.as_dict() for w in want.writes()], "following": ram.follow})
         except Exception as err:
             self.log(f"RAM control step failed: {err!r}", level="WARNING")
+
+    def _simulate_windows(self, r, decision, p):
+        """While on RAM control: run the timed-window shadow inverters on the same plan and decisions, so the EEPROM
+        writes timed windows would have made are counted ('simulated' on the Writes today tile). The plan under RAM
+        switches more freely (lower switch cost), so this is an upper estimate for timed windows."""
+        slots = self._slot_map()
+        if not slots:
+            return
+        now_local = r.now.astimezone(self.tz) if self.tz else r.now
+        have = {k: self.get_state(e) for k, e in self._slot_keys(slots).items() if e and "update_button" not in k}
+        pers = periods(self.plan.slots if self.plan else [], now_local, self.tz, decision.action)
+        self._shadow_damping(r.now, now_local, pers, decision, have, p)
+
+    def _simulated_today(self) -> int | None:
+        """Timed-window writes today from the shadow inverter with your current dampening settings."""
+        if self.cfg is None:
+            return None
+        f = self.cfg.features
+        kind = ("damp_both" if f.get("damp_bursts", False) else "damp_restart") if f.get("damp_restart", True) \
+            else "damp_none"
+        return self.writes.data.get(kind, {}).get(self._today().isoformat(), 0)
 
     def _ram_relatch(self, kwargs):
         """The power once more, a few seconds after a change of command (see ramcontrol.Command.writes)."""
@@ -1924,6 +1948,8 @@ class PowerEngine(hass.Hass):
                 s["observed"] = self.writes.summary(self._today())["observed"]["today"]
             except Exception:
                 s["observed"] = None
+            s["method"] = self._control_method()
+            s["simulated"] = self._simulated_today()          # timed windows, same plan (shadow inverter)
             self._publish_state("diag_writes_today", s["writes"], s)
         except Exception as err:
             self.log(f"Could not publish today's writes: {err!r}", level="WARNING")

@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.44 (beta)
+
+### Behaviour changes
+- None to control: this only counts.
+
+### Diagnostics
+- **Simulated timed-window writes while on RAM control.** The virtual timed-window inverter (the one dampening
+  uses) now also runs while PowerEngine drives the inverter by RAM remote control. It follows the same plan and
+  decisions, so it counts the EEPROM writes timed windows would have made.
+  - The Monitoring tile is now **Writes today (real · simulated)**: real EEPROM writes, then the simulated count
+    using your dampening settings.
+  - Health → Inverter writes today explains it. The plan under RAM switches more freely (RAM switch cost 0.5p
+    against 5p for windows), so the simulated figure is an upper estimate of what a timed-window install would see.
+  - The dampening 7-day table keeps filling while on RAM control.
+
 ## 0.9.43 (beta)
 
 ### Behaviour changes

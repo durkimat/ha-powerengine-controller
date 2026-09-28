@@ -1,4 +1,5 @@
 """Pause, handover guards, leaving Active and supervised test writes (0.5.13)."""
+import dataclasses
 import sys
 import types
 from datetime import datetime, timezone
@@ -510,3 +511,17 @@ def test_no_mid_slot_stickiness_just_after_a_start(app):
     assert app._mid_slot_stick(t + timedelta(minutes=30)) > 0       # next half-hour: settled, sticky again
     app._started_at = t - timedelta(minutes=40)
     assert app._mid_slot_stick(t) > 0
+
+
+def test_simulated_writes_follow_the_dampening_setting(app):
+    from datetime import date
+    app._today = lambda: date(2026, 9, 28)
+    app.writes = types.SimpleNamespace(data={"damp_none": {"2026-09-28": 40}, "damp_restart": {"2026-09-28": 31},
+                                             "damp_both": {"2026-09-28": 22}})
+    assert app._simulated_today() == 31                        # restart hold-off on, bursts off (defaults)
+    app.cfg = dataclasses.replace(app.cfg, features={**app.cfg.features, "damp_bursts": True})
+    assert app._simulated_today() == 22
+    app.cfg = dataclasses.replace(app.cfg, features={**app.cfg.features, "damp_restart": False})
+    assert app._simulated_today() == 40
+    app.writes.data = {}
+    assert app._simulated_today() == 0
