@@ -103,6 +103,7 @@ behaviour change:
 0. Replay safety net. **Done** (PR #152).
 1. Adapter interfaces and neutral vocabulary, with no code moved. **Done** (`pe_core/adapters`; built by a Sonnet sub-agent, reviewed).
 2. Solis inverter adapter (timed windows, RAM control, tests/clock). Needs a night's running and an export.
+   2a (timed windows in `pe_core/adapters/solis.py`) done; 2b RAM control, 2c tests and clock to follow.
 3. EDF tariff adapter (Kraken rates, smart slots/dispatches, Axle as a grid event).
 4. Zappi EV adapter (plug/charge states, car-full detection, check meter).
 5. Solcast forecast adapter.
