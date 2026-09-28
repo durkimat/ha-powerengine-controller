@@ -11,6 +11,8 @@ from datetime import datetime
 PROBLEM, WARNING = "problem", "warning"
 
 
+LEDGER_SHARE = 0.10          # a ledger correction is flagged above 10% of the battery's daily throughput
+
 def _sum(recs: list[dict], key: str) -> float:
     return sum(r.get(key) or 0.0 for r in recs)
 
@@ -47,11 +49,18 @@ def data_findings(recs: list[dict], day: str) -> list[dict]:
                         "detail": "Destinations add up to more than the sources: a sensor may be double counting "
                                   "(e.g. the car included in house load but the setting says it isn't)."})
     corr = sum((r.get("v") or {}).get("correction_kwh", 0.0) for r in recs)
-    if abs(corr) > 3:
+    # against the day's battery throughput: a busy arbitrage day moves 30+ kWh, where 3 kWh is ordinary drift
+    if abs(corr) > max(3.0, LEDGER_SHARE * (b_in + b_out)):
         out.append({"level": WARNING, "title": f"{day}: battery ledger corrected by {corr:+.1f} kWh",
                     "detail": "The battery's state of charge moved differently from its measured power. Usually the "
                               "battery efficiency or capacity setting, or a slow battery-power sensor."})
     return out
+
+
+def finding_key(f: dict) -> str:
+    """Identifies one finding: the same title (which carries the day and the figure) is the same finding."""
+    import hashlib
+    return hashlib.sha1(f"{f.get('level')}|{f.get('title')}".encode()).hexdigest()[:10]
 
 
 def input_findings(checks: dict) -> list[dict]:

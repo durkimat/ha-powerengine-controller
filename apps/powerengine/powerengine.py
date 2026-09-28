@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
 
-from pe_core import __version__, clock, damping, diagnostics, gridcheck, ramcontrol, rctest, testwrite
+from pe_core import __version__, clock, damping, diagnostics, gridcheck, ramcontrol, rctest, releases, testwrite
 from pe_core import learn as learning
 from pe_core.activity import ActivityLog
 from pe_core.certainty import Certainty
@@ -139,6 +139,12 @@ class PowerEngine(hass.Hass):
             self.log(f"Loaded config from {self.cfg_path}: {len(self.cfg.inputs)} inputs, "
                      f"{len(self.cfg.solar_plants)} solar plant(s)")
 
+        try:                                           # the log from before this start (Health tab's log card)
+            self.__dict__.get("_log_ring") or self.log("PowerEngine log starts")
+            self._log_ring.load(self._log_path())
+        except Exception as err:
+            self.log(f"Could not read the saved log: {err!r}", level="WARNING")
+
         self.mqtt = self._mqtt_api()
         if self.mqtt is None:
             return
@@ -228,6 +234,9 @@ class PowerEngine(hass.Hass):
         self.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
         self.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
         self.run_every(self._check_update, "now+120", 60)        # a new version installed: ask HA to restart us
+        self.run_every(self._release_check, "now+60", 300)       # a new version released: straight from GitHub
+        self.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
+        self.listen_event(self._on_health_dismiss, "pe_health_dismiss")
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
@@ -235,6 +244,92 @@ class PowerEngine(hass.Hass):
     def terminate(self):
         if getattr(self, "mqtt", None) is not None:
             self._publish(AVAILABILITY_TOPIC, OFFLINE)
+        try:
+            self._log_ring.save(self._log_path())
+        except Exception:
+            pass
+
+    # --- PowerEngine's own log (Health tab) ------------------------------------------------
+
+    def _log_path(self):
+        return os.path.join(os.path.dirname(self._save_path()), "log.json")
+
+    def _log_step(self, kwargs):
+        ring = self.__dict__.get("_log_ring")
+        if ring is None or not ring.changed:
+            return
+        self._publish_state("diag_log", len(ring.lines), ring.published())
+        now = datetime.now(timezone.utc)
+        last = getattr(self, "_log_saved", None)
+        if last is None or (now - last).total_seconds() >= 300:
+            try:
+                ring.save(self._log_path())
+                self._log_saved = now
+            except OSError as err:
+                super().log(f"Could not save the log: {err}", level="WARNING")
+
+    # --- new releases, straight from GitHub (HACS only looks every few hours) ---------------------------
+
+    def _release_check(self, kwargs):
+        tags = self.__dict__.setdefault("_release_etags", {})
+        texts = self.__dict__.setdefault("_release_texts", {})
+        try:
+            for repo in (releases.APP_REPO, releases.CARD_REPO):
+                url = releases.raw_url(repo)
+                text, tags[url] = releases.fetch_text(url, tags.get(url) if texts.get(url) else None)
+                if text is not None:
+                    texts[url] = text
+            s = releases.summary(__version__, texts.get(releases.raw_url(releases.APP_REPO), ""),
+                                 texts.get(releases.raw_url(releases.CARD_REPO), ""))
+            s["checked"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            state = "available" if s["available"] else "up to date"
+            if s["available"] and getattr(self, "_release_seen", None) != s["latest"]:
+                self._release_seen = s["latest"]
+                self.log(f"New version {s['latest']} released (running {__version__}, {s['behind']} behind)")
+            self._publish_if_changed("diag_update", state, s)
+        except Exception as err:
+            now = datetime.now(timezone.utc)
+            last = getattr(self, "_release_err_at", None)
+            if last is None or (now - last).total_seconds() >= 3600:
+                self._release_err_at = now
+                self.log(f"Could not check GitHub for a new version: {err!r}", level="WARNING")
+
+    # --- Health findings: dismissed ones stay hidden (the same finding; a new one shows) ---------------
+
+    def _dismissed_path(self):
+        return os.path.join(os.path.dirname(self._save_path()), "health_dismissed.json")
+
+    def _dismissed(self) -> dict:
+        d = self.__dict__.get("_dismissed_cache")
+        if d is None:
+            try:
+                with open(self._dismissed_path(), encoding="utf-8") as fh:
+                    d = json.load(fh)
+            except (OSError, ValueError):
+                d = {}
+            self._dismissed_cache = d
+        return d
+
+    def _on_health_dismiss(self, event_name, data, kwargs):
+        key = str((data or {}).get("key", ""))[:20]
+        h = getattr(self, "_health_last", None) or {}
+        f = next((x for x in h.get("all_findings", []) if x.get("key") == key), None)
+        if f is None:
+            return
+        d = self._dismissed()
+        d[key] = {"title": f.get("title"), "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+        for k in [k for k, v in d.items() if v.get("at", "") < cutoff]:
+            del d[k]
+        try:
+            tmp = self._dismissed_path() + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(d, fh)
+            os.replace(tmp, self._dismissed_path())
+        except OSError as err:
+            self.log(f"Could not save the dismissed finding: {err}", level="WARNING")
+        self.log(f"Health: dismissed \"{f.get('title')}\" ({f.get('detail', '')[:120]})")
+        self._health()
 
     # --- mapping checks and mode -----------------------------------------------------
 
@@ -2263,8 +2358,17 @@ class PowerEngine(hass.Hass):
             f = clock.finding(getattr(self, "_clock_drift", None))
             if f:
                 h["findings"].append(f)
-                h["state"] = overall(h["findings"])
-            self._publish_state("diag_health", h["state"], h)
+            from pe_core.health import finding_key
+            for x in h["findings"]:
+                x["key"] = finding_key(x)
+            gone = self._dismissed()
+            h["all_findings"] = list(h["findings"])
+            h["findings"] = [x for x in h["findings"] if x["key"] not in gone]
+            h["dismissed"] = [{"title": v.get("title"), "at": v.get("at")}
+                              for v in sorted(gone.values(), key=lambda v: v.get("at", ""), reverse=True)[:5]]
+            h["state"] = overall(h["findings"])
+            self._health_last = h
+            self._publish_state("diag_health", h["state"], {k: v for k, v in h.items() if k != "all_findings"})
             self._notify("health", health_message(h))
         except Exception as err:
             self.log(f"Could not evaluate health: {err!r}", level="WARNING")

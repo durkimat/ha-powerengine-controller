@@ -2,6 +2,26 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.49 (beta)
+
+### Behaviour changes
+- None to control.
+
+### Health
+- **Dismiss** on each Health finding (admins). A dismissed finding stays hidden. A new or changed one shows again,
+  since each day's check has its own title. Dismissals are logged and listed under the findings. The red *Health
+  needs a look* tile on Monitoring goes away with the finding.
+- The battery-ledger check is fairer: it flags a correction over 3 kWh **or** 10% of the day's battery
+  throughput, whichever is larger (a busy arbitrage day moves 30+ kWh).
+- **PowerEngine log** card at the bottom of Health: warnings by default, or all recent lines, newest first. The log
+  is now saved across restarts (`log.json` beside the config) and still goes into the diagnostics export.
+
+### Updates
+- **New version check every 5 minutes, straight from GitHub** (HACS only looks every few hours). A blue *New
+  version available* tile appears on Monitoring and taps through to Configuration. There the update card says
+  which version is released and shows **what's new**: the changelog of every release since yours, newest first,
+  with older ones as links when there's a lot.
+
 ## 0.9.48 (beta)
 
 ### Behaviour changes
