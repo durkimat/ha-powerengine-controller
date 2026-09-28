@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.45 (beta)
+
+### Behaviour changes
+- **A full car no longer holds the battery through a smart slot.** If the latest EDF smart slot (run for at least 15
+  minutes in the last 12 hours) passed with the car plugged in but drawing nothing, the car is taken as full. Coming
+  smart slots are then planned as ordinary cheap time: arbitrage and charging allowed, no car load. Before this, a
+  slot that hadn't started yet was always assumed to feed the car, so on 28 Sep the plan held the battery through
+  EDF's 09:00–15:30 slot (6.99p) after two slots where the car drew nothing. If the car does start charging, the
+  car-charging rule holds the battery at once, and the next slot's evidence resets the assumption.
+
 ## 0.9.44 (beta)
 
 ### Behaviour changes

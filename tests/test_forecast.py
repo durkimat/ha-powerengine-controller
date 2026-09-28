@@ -185,3 +185,19 @@ def test_rest_of_a_running_dispatch_is_counted_at_its_price():
     later = [s for s in slots if s.smart_slot and s.start >= s0 + timedelta(hours=5)]
     assert running and all(s.certainty is None for s in running)
     assert later and all(s.certainty is not None for s in later)
+
+
+def test_idle_car_means_smart_slots_are_just_cheap_time():
+    import dataclasses
+    from datetime import timedelta
+
+    from pe_core.forecast import build_slots
+    from pe_core.readings import Readings, Window
+    now = datetime(2026, 9, 28, 7, 41, tzinfo=timezone.utc)
+    disp = [Window(now + timedelta(minutes=19), now + timedelta(hours=7), -45.5)]
+    base = Readings(now=now, battery_soc=90, import_rate=0.30, export_rate=0.15, ev_plug="Waiting for EV",
+                    ev_power=0, dispatches=disp)
+    slots = build_slots(base, None, None, timezone.utc)
+    assert any(s.smart_slot and s.car_expected for s in slots)
+    idle = build_slots(dataclasses.replace(base, car_idle=True), None, None, timezone.utc)
+    assert all(not s.car_expected for s in idle if s.smart_slot)

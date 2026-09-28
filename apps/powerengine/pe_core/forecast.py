@@ -216,6 +216,9 @@ def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | No
             return False
         if state == "plugged_in" and "complet" in str(getattr(r, "ev_status", "") or "").lower():
             return False                  # the charger says the charge is complete (car full): it won't draw
+        if state == "plugged_in" and getattr(r, "car_idle", False):
+            return False                  # it drew nothing in the last smart slot: full; if it starts, the
+                                          # car-charging rule holds the battery at once
         if state == "plugged_in":
             win = next((w for w in r.dispatches if w.start <= s < w.end), None)
             if win is not None and win.start <= r.now:
