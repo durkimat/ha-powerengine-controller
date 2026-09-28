@@ -753,7 +753,7 @@ class PowerEngine(hass.Hass):
         """The subset of _cost_params() that pe_core.costs.day_scenarios() (via day_summary) understands."""
         p = self._cost_params()
         return {"capacity": p["capacity"], "eff": p["eff"], "floor_soc": p["floor_soc"],
-                "max_kw": p["max_kw"], "includes_ev": p["includes_ev"]}
+                "max_kw": p["max_kw"], "includes_ev": p["includes_ev"], "axle_value": p["axle_value"]}
 
     def _backfill(self, kwargs):
         """Fill recent days that PowerEngine didn't record (or only partly) from HA history, one day per callback."""

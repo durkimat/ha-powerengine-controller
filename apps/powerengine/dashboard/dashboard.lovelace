@@ -888,14 +888,15 @@ views:
               {%- macro sv(steps, label) -%}{%- for s in steps if s.label == label -%}{{ s.value }}{%- endfor -%}{%- endmacro %}
               {%- macro headline(p, label) %}
               {%- if p and p.days %}
-              {%- set paid = sv(p.steps, 'You paid') | float(0) %}
+              {%- set paid = (p.steps[-1].value) | float(0) %}
+              {%- set has_axle = 'Axle' in p.steps[-1].label %}
               {%- set everyday = sv(p.steps, 'Everyday cost') | float(0) %}
               {%- set carry = sv(p.steps, 'Battery carry-over') | float(0) %}
               {%- set pe_step = sv(p.steps, 'PowerEngine') | float(0) %}
               {%- set self_use = everyday - pe_step %}
               {%- set no_batt = sv(p.steps, 'No solar or battery') | float(0) %}
 
-              **{{ label }}: you paid {{ gbp(paid) }}** (everyday, adjusted for battery carry-over {{ gbp(carry) }}). A battery on plain self-use would have cost {{ gbp(self_use) }}; with no solar or battery {{ gbp(no_batt) }}. PowerEngine saved {{ gbp(self_use - paid) }} on top of the hardware.
+              **{{ label }}: you paid {{ gbp(paid) }}{{ " (after Axle's payments)" if has_axle else "" }}** (everyday, adjusted for battery carry-over {{ gbp(carry) }}). A battery on plain self-use would have cost {{ gbp(self_use) }}; with no solar or battery {{ gbp(no_batt) }}. PowerEngine saved {{ gbp(self_use - everyday) }} on top of the hardware.
               {%- endif %}
               {%- endmacro %}
               {%- set periods = state_attr('sensor.pe_cost_waterfall', 'periods') or {} %}

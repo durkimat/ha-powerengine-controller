@@ -479,6 +479,36 @@ def test_day_scenarios_events_excluded_and_metered():
     assert sc["tariff"] == pytest.approx(0.0)             # r1: solar covers the load exactly
     # the axle half-hour's own metered value (it exports 1 kWh, earning the export rate) sits in events_metered
     assert sc["events_metered"] == pytest.approx(-1.0 * 0.15, abs=0.001)
+    # Axle's own £1/kWh payment on the exported kWh, off the meter entirely (on top of the export rate above)
+    assert sc["axle_income"] == pytest.approx(1.0 * 1.0, abs=0.001)
+    assert sc["paid"] == pytest.approx(sc["actual"] + sc["events_metered"] - sc["axle_income"], abs=0.001)
+
+
+def test_day_scenarios_axle_income_uses_the_configured_rate():
+    from pe_core.costs import day_scenarios
+    r1 = rec(s_h=1.0, soc_start=50, soc_end=50)
+    r_axle = rec(b_e=1.0, s_e=0.5, soc_start=50, soc_end=50)
+    r_axle["axle"] = True
+    records = _scenario_records([(r1, RT1), (r_axle, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0,
+                        axle_value=2.5)
+    # event_kwh is b_e + s_e (same basis as process()'s event_kwh), valued at the configured axle_value
+    assert sc["axle_income"] == pytest.approx(1.5 * 2.5, abs=0.001)
+
+
+def test_day_scenarios_carry_excludes_event_half_hours():
+    from pe_core.costs import day_scenarios
+    # an everyday half-hour with no real battery movement...
+    r1 = rec(s_h=1.0, soc_start=50, soc_end=50)
+    # ...and an Axle event half-hour that drains the battery hard (50% -> 30% of a 10 kWh battery = 2 kWh).
+    # that drain must never land in the everyday carry-over: it's the event's own business, already priced
+    # in events_metered/axle_income.
+    r_axle = rec(b_e=2.0, soc_start=50, soc_end=30)
+    r_axle["axle"] = True
+    records = _scenario_records([(r1, RT1), (r_axle, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0)
+    assert sc["carry"] == pytest.approx(0.0, abs=0.001)
+    assert sc["actual_adj"] == pytest.approx(sc["actual"], abs=0.001)
 
 
 def test_day_scenarios_self_use_respects_capacity():
@@ -519,7 +549,7 @@ def test_day_scenarios_car_costed_flat_when_not_holding_for_ev():
 
 def _day(date, complete=True, **scenarios):
     base = {"none": 0.0, "solar": 0.0, "tariff": 0.0, "self_use_adj": 0.0, "actual_adj": 0.0,
-            "carry": 0.0, "events_metered": 0.0, "paid": 0.0}
+            "carry": 0.0, "events_metered": 0.0, "axle_income": 0.0, "paid": 0.0}
     base.update(scenarios)
     return {"date": date, "complete": complete, "scenarios": base}
 
@@ -528,9 +558,9 @@ def test_waterfall_steps_chain_exactly():
     from pe_core.costs import waterfall
     days = [
         _day("2026-09-21", none=10.111, solar=7.222, tariff=6.333, self_use_adj=4.444, actual_adj=3.111,
-             carry=0.501, events_metered=0.0, paid=3.612),
+             carry=0.501, events_metered=0.0, axle_income=0.0, paid=3.612),
         _day("2026-09-22", none=12.126, solar=8.111, tariff=7.001, self_use_adj=5.501, actual_adj=4.201,
-             carry=-0.201, events_metered=1.0, paid=5.0),
+             carry=-0.201, events_metered=1.0, axle_income=0.4, paid=4.6),
     ]
     w = waterfall(days, "week")
     assert w["days"] == 2 and w["from"] == "2026-09-21" and w["to"] == "2026-09-22"
@@ -541,18 +571,40 @@ def test_waterfall_steps_chain_exactly():
     total_paid = round(sum(d["scenarios"]["paid"] for d in days), 2)
     assert w["steps"][-1]["value"] == pytest.approx(total_paid, abs=0.01)
     labels = [s["label"] for s in w["steps"]]
-    assert labels[0] == "No solar or battery" and labels[-1] == "You paid"
+    assert labels[0] == "No solar or battery" and labels[-1] == "You paid (after Axle payments)"
     assert "Everyday cost" in labels
+    assert "Axle & free power" in labels
 
 
 def test_waterfall_omits_events_step_when_zero():
     from pe_core.costs import waterfall
     days = [_day("2026-09-21", none=10, solar=8, tariff=7, self_use_adj=5, actual_adj=4, carry=0.2,
-                events_metered=0.0, paid=4.2)]
+                events_metered=0.0, axle_income=0.0, paid=4.2)]
     w = waterfall(days, "yesterday")
     labels = [s["label"] for s in w["steps"]]
     assert "Axle & free power" not in labels
     assert labels[-1] == "You paid" and w["steps"][-1]["value"] == pytest.approx(4.2)
+
+
+def test_waterfall_omits_axle_step_when_net_zero():
+    """events_metered and axle_income can cancel exactly (Axle paid, meter net nothing): still no step, no label."""
+    from pe_core.costs import waterfall
+    days = [_day("2026-09-21", none=10, solar=8, tariff=7, self_use_adj=5, actual_adj=4, carry=0.2,
+                events_metered=0.3, axle_income=0.3, paid=4.2)]
+    w = waterfall(days, "yesterday")
+    labels = [s["label"] for s in w["steps"]]
+    assert "Axle & free power" not in labels
+    # the step is hidden (nets to zero) but axle_income was still nonzero, so the label still says so
+    assert labels[-1] == "You paid (after Axle payments)"
+
+
+def test_waterfall_labels_you_paid_after_axle_when_axle_income_present():
+    from pe_core.costs import waterfall
+    days = [_day("2026-09-21", none=10, solar=8, tariff=7, self_use_adj=5, actual_adj=4, carry=0.2,
+                events_metered=1.0, axle_income=0.6, paid=4.6)]
+    w = waterfall(days, "yesterday")
+    assert w["steps"][-1]["label"] == "You paid (after Axle payments)"
+    assert w["steps"][-1]["value"] == pytest.approx(4.6, abs=0.01)
 
 
 def test_waterfall_negative_total_is_a_day_you_earned_money():

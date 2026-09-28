@@ -137,7 +137,7 @@ def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: 
 
 
 def day_scenarios(records: list[dict], *, capacity: float, eff: float, floor_soc: float, max_kw: float = 5.0,
-                  includes_ev: bool, standing: float = 0.0) -> dict:
+                  includes_ev: bool, standing: float = 0.0, axle_value: float = 1.0) -> dict:
     """Whole-day cost under five what-if scenarios, from the day's valued half-hours (adds to day_summary).
 
     none      every kWh from the grid: house at the standard rate, car at the overnight rate.
@@ -149,13 +149,17 @@ def day_scenarios(records: list[dict], *, capacity: float, eff: float, floor_soc
     actual    what the meters actually billed (as day_summary's 'actual', before standing).
 
     self_use and actual are then adjusted for the day's change in stored battery energy, valued at the day's
-    median overnight rate: charging tonight for tomorrow doesn't make today look artificially dear. 'carry' is
-    what that adjustment moved for actual; 'events_metered' is the metered cost of Axle/free-power half-hours
-    (which are excluded from the scenarios above, same as day_summary's layers); 'paid' adds it back to actual.
-    Every field is rounded to 2dp.
+    median overnight rate: charging tonight for tomorrow doesn't make today look artificially dear. The real
+    change used for 'actual_adj' is summed from each non-event half-hour's own soc move, so an event half-hour
+    that drains or fills the battery (Axle, say) never lands in the everyday carry-over. 'carry' is what that
+    adjustment moved for actual; 'events_metered' is the metered cost of Axle/free-power half-hours (excluded
+    from the scenarios above, same as day_summary's layers); 'axle_income' is Axle's own off-meter payment
+    (its £/kWh rate on the exported kWh of axle half-hours, on top of the metered export rate); 'paid' adds
+    events_metered back to actual and takes off axle_income. Every field is rounded to 2dp.
     """
     floor_kwh = floor_soc / 100 * capacity
-    none = solar_s = tariff_s = actual_raw = events_metered = self_use = 0.0
+    none = solar_s = tariff_s = actual_raw = events_metered = self_use = axle_income = 0.0
+    real_delta = 0.0
     ovn_rates: list[float] = []
     sim_kwh = None
     first_soc = next((r.get("soc_start") for r in records if r.get("soc_start") is not None), None)
@@ -167,8 +171,13 @@ def day_scenarios(records: list[dict], *, capacity: float, eff: float, floor_soc
         act, std, ovn, exp = v.get("act", 0.0), v.get("std", 0.0), v.get("ovn", 0.0), v.get("exp", 0.0)
         if v.get("event"):
             events_metered += (r.get("grid_import") or 0.0) * act - (r.get("grid_export") or 0.0) * exp
+            if v.get("event") == "axle":
+                axle_income += v.get("event_kwh", 0.0) * axle_value
             continue
         ovn_rates.append(ovn)
+        soc_start, soc_end = r.get("soc_start"), r.get("soc_end")
+        if soc_start is not None and soc_end is not None:
+            real_delta += (soc_end - soc_start) / 100 * capacity
         k = {f: r.get(f, 0.0) or 0.0 for f in ("s_h", "s_c", "s_b", "s_e", "b_h", "b_c", "b_e", "g_h", "g_c", "g_b")}
         house = k["s_h"] + k["b_h"] + k["g_h"]
         car = k["s_c"] + k["b_c"] + k["g_c"]
@@ -199,17 +208,8 @@ def day_scenarios(records: list[dict], *, capacity: float, eff: float, floor_soc
     ref_rate = statistics.median(ovn_rates) if ovn_rates else 0.0
     sim_end_kwh = sim_kwh if sim_kwh is not None else sim_start_kwh
 
-    def _real_kwh(rec, key):
-        soc = rec.get(key) if rec else None
-        return soc / 100 * capacity if soc is not None else None
-
-    real_start_kwh = _real_kwh(records[0] if records else None, "soc_start")
-    real_end_kwh = _real_kwh(records[-1] if records else None, "soc_end")
-
     sim_delta = (sim_end_kwh - sim_start_kwh) if (sim_start_kwh is not None and sim_end_kwh is not None) else 0.0
     self_use_adj = self_use - sim_delta * ref_rate / eff
-    have_real = real_start_kwh is not None and real_end_kwh is not None
-    real_delta = (real_end_kwh - real_start_kwh) if have_real else 0.0
     actual_adj = actual_raw - real_delta * ref_rate / eff
     carry = actual_raw - actual_adj
 
@@ -218,14 +218,15 @@ def day_scenarios(records: list[dict], *, capacity: float, eff: float, floor_soc
         "none": r2(none + standing), "solar": r2(solar_s + standing), "tariff": r2(tariff_s + standing),
         "self_use": r2(self_use + standing), "self_use_adj": r2(self_use_adj + standing),
         "actual": r2(actual_raw + standing), "actual_adj": r2(actual_adj + standing),
-        "carry": r2(carry), "events_metered": r2(events_metered), "paid": r2(actual_raw + standing + events_metered),
+        "carry": r2(carry), "events_metered": r2(events_metered), "axle_income": r2(axle_income),
+        "paid": r2(actual_raw + standing + events_metered - axle_income),
         "ref_rate": r2(ref_rate),
     }
 
 
 def day_summary(records: list[dict], standing_per_day: float | None = None, complete: bool = True, *,
                 capacity: float | None = None, eff: float | None = None, floor_soc: float | None = None,
-                max_kw: float = 5.0, includes_ev: bool | None = None) -> dict:
+                max_kw: float = 5.0, includes_ev: bool | None = None, axle_value: float = 1.0) -> dict:
     """Sum a day's valued half-hours into layers (GBP). Event half-hours are left out of the layers."""
     tot = dict.fromkeys(("s0", "solar", "smart", "battery", "s3a", "arbitrage", "stored", "actual"), 0.0)
     energy = dict.fromkeys(ENERGY_KEYS, 0.0)
@@ -263,7 +264,7 @@ def day_summary(records: list[dict], standing_per_day: float | None = None, comp
     }
     if capacity is not None:
         out["scenarios"] = day_scenarios(records, capacity=capacity, eff=eff, floor_soc=floor_soc, max_kw=max_kw,
-                                          includes_ev=includes_ev, standing=standing)
+                                          includes_ev=includes_ev, standing=standing, axle_value=axle_value)
     return out
 
 
@@ -302,7 +303,7 @@ def waterfall(days_summaries: list[dict], period: str) -> dict:
     else:
         raise ValueError(f"unknown period {period!r}")
 
-    fields = ("none", "solar", "tariff", "self_use_adj", "actual_adj", "carry", "events_metered")
+    fields = ("none", "solar", "tariff", "self_use_adj", "actual_adj", "carry", "events_metered", "axle_income")
     sums = dict.fromkeys(fields, 0.0)
     for d in chosen:
         sc = d["scenarios"]
@@ -318,7 +319,7 @@ def waterfall(days_summaries: list[dict], period: str) -> dict:
     r3 = r2(sums["self_use_adj"])
     r4 = r2(sums["actual_adj"])
     r5 = r2(sums["actual_adj"] + sums["carry"])
-    r6 = r2(sums["actual_adj"] + sums["carry"] + sums["events_metered"])
+    r6 = r2(sums["actual_adj"] + sums["carry"] + sums["events_metered"] - sums["axle_income"])
 
     steps_list = [
         {"label": "No solar or battery", "kind": "total", "value": r0},
@@ -329,9 +330,10 @@ def waterfall(days_summaries: list[dict], period: str) -> dict:
         {"label": "Everyday cost", "kind": "subtotal", "value": r4},
         {"label": "Battery carry-over", "kind": "step", "value": r2(r5 - r4)},
     ]
-    if round(sums["events_metered"], 2) != 0:
+    if round(sums["events_metered"] - sums["axle_income"], 2) != 0:
         steps_list.append({"label": "Axle & free power", "kind": "step", "value": r2(r6 - r5)})
-    steps_list.append({"label": "You paid", "kind": "total", "value": r6})
+    paid_label = "You paid (after Axle payments)" if round(sums["axle_income"], 2) > 0 else "You paid"
+    steps_list.append({"label": paid_label, "kind": "total", "value": r6})
 
     return {"period": period, "days": len(chosen), "from": chosen[0]["date"] if chosen else None,
             "to": chosen[-1]["date"] if chosen else None, "steps": steps_list}
