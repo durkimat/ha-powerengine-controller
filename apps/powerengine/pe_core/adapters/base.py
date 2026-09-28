@@ -17,8 +17,9 @@ from typing import Any, Protocol, runtime_checkable
 class HomeAssistant(Protocol):
     """The only door an adapter has into Home Assistant. Nothing here talks to AppDaemon directly."""
 
-    def get_state(self, entity_id: str, attribute: str | None = None) -> Any:
-        """Read an entity's state, or one of its attributes when `attribute` is given."""
+    def get_state(self, entity_id: str | None = None, attribute: str | None = None) -> Any:
+        """Read an entity's state, or one of its attributes when `attribute` is given. `entity_id=None` returns
+        every entity's state (AppDaemon's `get_state()` with no argument)."""
         ...
 
     def call_service(self, service: str, **data: Any) -> Any:

@@ -1,4 +1,5 @@
-"""Tests for the Solis inverter adapter (Phase 0, step 2a): timed-window translation, moved out of the app."""
+"""Tests for the Solis inverter adapter (Phase 0, steps 2a-2b): timed windows and RAM remote control, moved
+out of the app."""
 
 from __future__ import annotations
 
@@ -27,7 +28,9 @@ class FakeHA:
         self.states = dict(states or {})
         self.calls = []
 
-    def get_state(self, entity_id, attribute=None):
+    def get_state(self, entity_id=None, attribute=None):
+        if entity_id is None:
+            return dict(self.states)
         return self.states.get(entity_id)
 
     def call_service(self, service, **data):
@@ -236,6 +239,11 @@ def test_capabilities_lists_methods_actions_and_never_touch():
     assert caps.never_touch == ("Backup", "Off-Grid")
 
 
+def test_capabilities_ram_power_cap_comes_from_the_constructor():
+    inv = SolisInverter(FakeHA(), lambda role: None, ram_max_w=3500)
+    assert inv.capabilities().method("ram_remote").max_power_w == 3500
+
+
 def test_solis_inverter_satisfies_the_inverter_adapter_protocol():
     inv = SolisInverter(FakeHA(), lambda role: None)
     assert isinstance(inv, InverterAdapter)
@@ -245,3 +253,97 @@ def test_solis_inverter_satisfies_the_inverter_adapter_protocol():
 def test_registered_under_inverter_solis():
     factory = get("inverter", "solis")
     assert factory is SolisInverter
+
+
+# ---------------------------------------------------------------------------
+# RAM remote control (step 2b)
+# ---------------------------------------------------------------------------
+
+
+RC_ENTITIES = {
+    "rc_mode": "select.solis_battery_control_override",
+    "rc_charge_power": "number.solis_battery_control_override_charge_power",
+    "rc_discharge_power": "number.solis_battery_control_override_discharge_power",
+}
+
+
+def test_rc_entities_found_and_cached_when_all_three_are_present():
+    ha = FakeHA({eid: "0" for eid in RC_ENTITIES.values()})
+    inv = SolisInverter(ha, lambda role: None)
+    found = inv.rc_entities(NOW)
+    assert found == RC_ENTITIES
+    # even if entities later vanish from HA's state, the cache is kept for 10 minutes
+    ha.states.clear()
+    still = inv.rc_entities(NOW + timedelta(minutes=9))
+    assert still == RC_ENTITIES
+
+
+def test_rc_entities_rechecks_when_fewer_than_three_are_found():
+    partial = dict(list(RC_ENTITIES.items())[:2])
+    ha = FakeHA({eid: "0" for eid in partial.values()})
+    inv = SolisInverter(ha, lambda role: None)
+    first = inv.rc_entities(NOW)
+    assert first == partial
+    ha.states.update({RC_ENTITIES["rc_discharge_power"]: "0"})   # the third one appears
+    second = inv.rc_entities(NOW + timedelta(seconds=1))          # not cached: found only 2 last time
+    assert second == RC_ENTITIES
+
+
+def test_rc_entities_rechecks_after_ten_minutes_even_if_complete():
+    ha = FakeHA({eid: "0" for eid in RC_ENTITIES.values()})
+    inv = SolisInverter(ha, lambda role: None)
+    inv.rc_entities(NOW)
+    ha.states.clear()
+    ha.states[RC_ENTITIES["rc_mode"]] = "0"                       # only one left, past the 10-minute cache
+    found = inv.rc_entities(NOW + timedelta(minutes=10, seconds=1))
+    assert found == {"rc_mode": RC_ENTITIES["rc_mode"]}
+
+
+def test_rc_missing_lists_the_absent_roles():
+    inv = SolisInverter(FakeHA(), lambda role: None)
+    assert inv.rc_missing({}) == ["rc_mode", "rc_charge_power", "rc_discharge_power"]
+    assert inv.rc_missing({"rc_mode": "x"}) == ["rc_charge_power", "rc_discharge_power"]
+    assert inv.rc_missing(RC_ENTITIES) == []
+
+
+def test_ram_command_matches_ramcontrol_command_for():
+    from pe_core import ramcontrol
+    inv = SolisInverter(FakeHA(), lambda role: None)
+    got = inv.ram_command(GRID_CHARGE, 3000, 4800, 4800, 5000)
+    expected = ramcontrol.command_for(GRID_CHARGE, 3000, 4800, 4800, 5000)
+    assert got == expected
+
+
+def test_ram_off_command_is_off():
+    from pe_core.rctest import OPTION_OFF
+    inv = SolisInverter(FakeHA(), lambda role: None)
+    cmd = inv.ram_off_command()
+    assert cmd.option == OPTION_OFF and cmd.watts == 0
+
+
+def test_service_for_select_and_number():
+    from pe_core.control import Write
+    inv = SolisInverter(FakeHA(), lambda role: None)
+    assert inv.service_for(Write("storage_mode", "Self-Use", "select")) == \
+        ("select/select_option", {"option": "Self-Use"})
+    assert inv.service_for(Write("timed_charge_current", 90, "number")) == \
+        ("number/set_value", {"value": 90})
+
+
+def test_verify_uses_entities_for_slot_keys_when_given():
+    from pe_core.control import Write
+    ha = FakeHA({"number.slot2": "23"})
+    inv = SolisInverter(ha, lambda role: None)          # role_entity would find nothing for a slot-keyed role
+    writes = [Write("timed_charge_start_hour#2", 23, "number")]
+    entities = {"timed_charge_start_hour#2": "number.slot2"}
+    assert inv.verify(writes, ha, entities) == []
+    bad = [Write("timed_charge_start_hour#2", 7, "number")]
+    msgs = inv.verify(bad, ha, entities)
+    assert len(msgs) == 1 and "timed_charge_start_hour#2" in msgs[0]
+
+
+def test_verify_falls_back_to_role_entity_without_entities():
+    from pe_core.control import Write
+    ha = FakeHA({"number.a": "5"})
+    inv = SolisInverter(ha, lambda role: {"a": "number.a"}.get(role))
+    assert inv.verify([Write("a", 5, "number")], ha) == []

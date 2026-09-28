@@ -10,13 +10,15 @@ the inverter's registers should hold and what writes would get them there.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
+from .. import ramcontrol
 from ..control import KINDS, SELF_USE_MODE, desired, window_end, writes_needed
 from ..control import release as _rolling_release
 from ..decide import SELF_USE, Decision
 from ..journal import is_staged
+from ..rctest import OPTION_OFF, find_entities
 from ..schedule import desired_state, slot_entities
 from ..schedule import writes_for as _slot_writes_for
 from .base import ControlMethod, HomeAssistant, InverterCapabilities
@@ -44,13 +46,15 @@ class SolisInverter:
                     "timed_discharge_end_hour", "timed_discharge_end_minute", "timed_update_button")
 
     def __init__(self, ha: HomeAssistant, role_entity, volts: float = 52.0,
-                 max_charge_w: float = 6000, max_discharge_w: float = 6000):
+                 max_charge_w: float = 6000, max_discharge_w: float = 6000, ram_max_w: float = 5000):
         self.ha = ha
         self.role_entity = role_entity
         self.volts = volts
         self.max_charge_w = max_charge_w
         self.max_discharge_w = max_discharge_w
+        self.ram_max_w = ram_max_w
         self._slot_cache = None
+        self._rc_cache = None
 
     # --- reading ---------------------------------------------------------------------------
 
@@ -79,6 +83,41 @@ class SolisInverter:
     def read(self, entities: dict) -> dict:
         """Current state of `entities` (role/key -> entity id), skipping the update button (write-only)."""
         return {k: self.ha.get_state(e) for k, e in entities.items() if e and "update_button" not in k}
+
+    # --- RAM remote control -----------------------------------------------------------------
+
+    def rc_entities(self, now: datetime) -> dict:
+        """SolaX Modbus's remote-control entities, found by name (looked up at most every 10 minutes, kept only
+        once all three are found)."""
+        cached = self._rc_cache
+        if cached and now - cached[0] < timedelta(minutes=10) and len(cached[1]) == 3:
+            return cached[1]
+        try:
+            ids = list((self.ha.get_state() or {}).keys())
+        except Exception:
+            ids = []
+        found = find_entities(ids)
+        self._rc_cache = (now, found)
+        return found
+
+    def rc_missing(self, rc: dict) -> list[str]:
+        """Which of the three RC roles weren't found."""
+        return [r for r in ("rc_mode", "rc_charge_power", "rc_discharge_power") if not rc.get(r)]
+
+    def ram_command(self, action: str, power_w: float | None, max_charge_w: float, max_discharge_w: float,
+                    cap_w: float | None = None) -> ramcontrol.Command:
+        return ramcontrol.command_for(action, power_w, max_charge_w, max_discharge_w, cap_w)
+
+    def ram_off_command(self) -> ramcontrol.Command:
+        return ramcontrol.Command(OPTION_OFF)
+
+    def service_for(self, write) -> tuple[str, dict]:
+        """The HA service call for one write: select or number, never a button (RAM control has none)."""
+        kind = write.kind if hasattr(write, "kind") else write["kind"]
+        value = write.value if hasattr(write, "value") else write["value"]
+        if kind == "select":
+            return "select/select_option", {"option": value}
+        return "number/set_value", {"value": value}
 
     # --- three-slot strategy ----------------------------------------------------------------
 
@@ -113,7 +152,10 @@ class SolisInverter:
         state = self.ha.get_state(entity_id)
         return str(state) in (str(value), f"{value}.0")
 
-    def verify(self, writes: list, ha: HomeAssistant) -> list[str]:
+    def verify(self, writes: list, ha: HomeAssistant, entities: dict | None = None) -> list[str]:
+        """Read back `writes` from `ha`; return one message per mismatch. `entities` resolves a write's role to
+        its entity id (needed for slot keys like "timed_charge_start_hour#2"); without it, `role_entity` is used
+        (the rolling window's roles, which map onto entities directly)."""
         msgs = []
         for w in writes:
             role = w.role if hasattr(w, "role") else w["role"]
@@ -121,7 +163,7 @@ class SolisInverter:
             value = w.value if hasattr(w, "value") else w["value"]
             if kind == "button":
                 continue
-            entity = self.role_entity(role)
+            entity = entities.get(role) if entities is not None else self.role_entity(role)
             if not entity:
                 continue
             state = ha.get_state(entity)
@@ -140,7 +182,7 @@ class SolisInverter:
     def capabilities(self) -> InverterCapabilities:
         return InverterCapabilities(
             methods=(
-                ControlMethod(name="ram_remote", storage="ram", failsafe_min=5, max_power_w=5000),
+                ControlMethod(name="ram_remote", storage="ram", failsafe_min=5, max_power_w=self.ram_max_w),
                 ControlMethod(name="timed_windows", storage="eeprom", failsafe_min=None, max_power_w=None),
             ),
             actions=frozenset(KINDS) | {SELF_USE},
