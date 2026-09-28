@@ -27,9 +27,11 @@ from dataclasses import dataclass
 from .ledger import Ledger
 from .tariff import Rates
 
-METHOD_VERSION = 4        # 3: export rate falls back to your current one when history had none
+METHOD_VERSION = 6        # 3: export rate falls back to your current one when history had none
                           # 4: Axle exports also earn the export rate (EDF pays it on top of Axle's £1)
-                          # 5: adds day_scenarios() to each day summary (no change to the existing layers)
+                          # 5: not used (day_scenarios() is computed live from the records, no re-value needed)
+                          # 6: an Axle event's energy is costed at the overnight rate (battery, with losses) and the
+                          #    export rate (solar), not the ledger's basis, which values grid charging at the peak rate
 # daily energy totals (kWh) shown for checking against the inverter's own counters
 ENERGY_KEYS = ("grid_import", "grid_export", "solar", "house", "car", "battery_in", "battery_out", "b_e",
                "unallocated_src", "unallocated_sink", "correction_kwh")
@@ -128,11 +130,14 @@ def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: 
         out["event_kwh"] = exported
         per_kwh = axle_value + (exp if axle_plus_export else 0.0)   # Axle's payment, plus the supplier's export rate
         out["event_gross"] = exported * per_kwh
-        # what the event added: less the battery energy's cost, and the export rate the solar would have earned anyway
-        out["event_net"] = exported * per_kwh - _basis(used_e) - k["s_e"] * exp
+        # what the energy was worth otherwise: battery energy at the overnight rate it's refilled at (with the
+        # round-trip loss), solar at the export rate it would have earned anyway
+        out["event_energy"] = k["b_e"] / rte * ovn + k["s_e"] * exp
+        out["event_net"] = out["event_gross"] - out["event_energy"]
     elif event == "free_power":
         out["event_kwh"] = rec.get("grid_import") or 0.0
         out["event_gross"] = out["event_net"] = out["event_kwh"] * std
+        out["event_energy"] = 0.0
     return out
 
 
@@ -238,10 +243,12 @@ def day_summary(records: list[dict], standing_per_day: float | None = None, comp
         for key in ENERGY_KEYS:
             energy[key] += (v.get("correction_kwh", 0.0) if key == "correction_kwh" else (r.get(key) or 0.0))
         if v.get("event"):
-            e = events.setdefault(v["event"], {"kwh": 0.0, "gross": 0.0, "net": 0.0, "metered": 0.0})
+            e = events.setdefault(v["event"], {"kwh": 0.0, "gross": 0.0, "energy": 0.0, "net": 0.0,
+                                               "metered": 0.0})
             e["kwh"] += v.get("event_kwh", 0.0)
             e["gross"] += v.get("event_gross", 0.0)
             e["net"] += v.get("event_net", 0.0)
+            e["energy"] += v.get("event_energy", 0.0)
             e["metered"] += v.get("actual", 0.0)
             continue
         for key in tot:
@@ -287,7 +294,7 @@ def waterfall(days_summaries: list[dict], period: str) -> dict:
     CostBook.recent() returns them. period: 'yesterday', 'week' (last 7 complete days), 'month' (this calendar
     month's complete days so far, the month of the last day in days_summaries) or 'days30' (last 30 complete
     days). Steps: total 'No solar or battery', then 'Solar', 'EDF tariff', 'Battery on self-use', 'PowerEngine'
-    to the subtotal 'Everyday cost', then 'Battery carry-over' and (only if it moved money) 'Axle & free power'
+    to the subtotal 'Day-to-day cost', then 'Battery carry-over' and (only if it moved money) 'Axle & free power'
     to the total 'You paid'. Negative steps are savings.
     """
     complete = [d for d in days_summaries if d.get("complete") and d.get("scenarios")]
@@ -327,7 +334,7 @@ def waterfall(days_summaries: list[dict], period: str) -> dict:
         {"label": "EDF tariff", "kind": "step", "value": r2(r2v - r1)},
         {"label": "Battery on self-use", "kind": "step", "value": r2(r3 - r2v)},
         {"label": "PowerEngine", "kind": "step", "value": r2(r4 - r3)},
-        {"label": "Everyday cost", "kind": "subtotal", "value": r4},
+        {"label": "Day-to-day cost", "kind": "subtotal", "value": r4},
         {"label": "Battery carry-over", "kind": "step", "value": r2(r5 - r4)},
     ]
     if round(sums["events_metered"] - sums["axle_income"], 2) != 0:

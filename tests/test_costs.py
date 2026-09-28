@@ -148,6 +148,19 @@ def test_events_are_kept_out_of_the_everyday_layers():
     assert s["s0"] == day_summary(only_night, complete=False)["s0"]
 
 
+def test_axle_energy_is_costed_at_the_overnight_rate_with_losses_and_solar_at_export():
+    # 2 kWh from the battery and 1 kWh of solar exported in an Axle half-hour (Rates: actual, standard, overnight,
+    # export): the battery's energy is worth what refilling it costs at the overnight rate, through the round trip
+    axle = rec(b_e=2.0, s_e=1.0)
+    axle["axle"] = True
+    records, _ = run([(axle, Rates(PEAK, PEAK, CHEAP, EXP, False))])
+    ev = day_summary(records, complete=False)["events"]["axle"]
+    energy = 2.0 / (0.95 * 0.95) * CHEAP + 1.0 * EXP
+    assert ev["gross"] == pytest.approx(3.0 * (1.0 + EXP), abs=0.01)
+    assert ev["energy"] == pytest.approx(energy, abs=0.01)
+    assert ev["net"] == pytest.approx(3.0 * (1.0 + EXP) - energy, abs=0.01)
+
+
 def test_standing_charge_counts_once_per_complete_day():
     records, _ = run(CASES)
     s = day_summary(records, standing_per_day=0.57, complete=True)
@@ -572,7 +585,7 @@ def test_waterfall_steps_chain_exactly():
     assert w["steps"][-1]["value"] == pytest.approx(total_paid, abs=0.01)
     labels = [s["label"] for s in w["steps"]]
     assert labels[0] == "No solar or battery" and labels[-1] == "You paid (after Axle payments)"
-    assert "Everyday cost" in labels
+    assert "Day-to-day cost" in labels
     assert "Axle & free power" in labels
 
 
