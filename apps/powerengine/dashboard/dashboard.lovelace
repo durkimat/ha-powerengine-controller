@@ -56,9 +56,11 @@ views:
             tap_action:
               action: navigate
               navigation_path: health
+          # real EEPROM writes · simulated: what timed windows would have written today on the same plan
           - type: tile
             entity: sensor.pe_diag_writes_today
-            name: Writes today
+            name: Writes today (real · simulated)
+            state_content: [state, simulated]
             grid_options: {columns: 6}
             tap_action:
               action: navigate
@@ -1101,6 +1103,9 @@ views:
               **{{ w.state }} inverter write{{ '' if w.state | int == 1 else 's' }} by PowerEngine today** in {{ a.changes }} change{{ '' if a.changes == 1 else 's' }}{% if a.limit %} · daily limit {{ a.limit }} ({{ [a.limit - w.state | int, 0] | max }} left){% endif %}{% if a.observed is not none %} · {{ a.observed }} seen from all sources{% endif %}.
               {%- if a.staged %} Plus {{ a.staged }} window-time settings staged in HA (these only reach the inverter with the update button, so they aren't counted).{% endif %}
               {%- if a.ram %} {{ a.ram }} RAM remote-control change{{ '' if a.ram == 1 else 's' }} today (temporary settings, not counted).{% endif %}
+              {%- if a.simulated is not none and a.simulated is defined %}
+
+              **Simulated timed-window writes today: {{ a.simulated }}** — what the inverter's EEPROM would have taken if the same plan had been run on timed windows (with your dampening settings){{ '. You are on RAM control, so these were not written; the plan switches more freely under RAM, so treat this as an upper estimate' if a.method == 'ram_remote' else '' }}.{% endif %}
               {%- if a.damping is defined %} Dampening: restart hold-off {{ 'on' if a.damping.restart else 'off' }}, burst damping {{ 'on' if a.damping.bursts else 'off' }}{{ (' · ' ~ a.held ~ ' change' ~ ('' if a.held == 1 else 's') ~ ' held back today') if a.held else '' }}.{% endif %}
               {%- set dw = a.damping_week %}
               {%- if dw and (dw.none or dw.restart or dw.both) %}
