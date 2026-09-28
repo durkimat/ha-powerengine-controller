@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.53 (beta)
+
+### Behaviour changes
+- None. Card only.
+
+### Costs page
+- The savings waterfall is now drawn as columns, left to right. It starts at "no solar or battery" on the left,
+  cascades down through each saving, and ends with what you paid on the right. On a phone the labels and values
+  shorten to fit; tap a bar for its exact value.
+
 ## 0.9.52 (beta)
 
 ### Behaviour changes
