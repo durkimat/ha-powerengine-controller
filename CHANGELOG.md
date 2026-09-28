@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.51 (beta)
+
+### Behaviour changes
+- None to control. Dashboard only.
+
+### Monitoring
+- **The Energy flow diagram now follows your configuration** (#160). Before, it was fixed. Now:
+  - Each enabled solar plant gets its own panel, with its name.
+  - The battery size comes from the capacity PowerEngine uses, and the floor from your minimum reserve.
+  - The car appears only when an EV charger is set up.
+- It updates when you save the configuration, and once more after start-up, when the real battery capacity is
+  known. Refresh the dashboard to see it.
+- New sensors: one power sensor per solar plant, `sensor.pe_state_solar_<id>_power`. They're added and removed
+  as plants are. `sensor.pe_state_solar_power` is still the total.
+
 ## 0.9.50 (beta)
 
 ### Behaviour changes
