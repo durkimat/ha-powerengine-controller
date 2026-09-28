@@ -77,6 +77,25 @@ class SlotTracker:
             changed = True
         return changed
 
+    def car_idle(self, now: datetime, within: timedelta = timedelta(hours=12),
+                 min_run: timedelta = timedelta(minutes=15)) -> bool:
+        """True if the latest smart slot that has run for a while (within `within`) passed with the car drawing
+        nothing: the car is plugged in but full (or not accepting charge), so a coming slot won't feed it either.
+        28 Sep 2026: EDF gave a 09:00-15:30 slot after two where the car drew nothing; the plan held the battery
+        for the car all morning instead of using the cheap slot."""
+        latest = None
+        for rec in self.slots.values():
+            start = datetime.fromisoformat(rec["start"])
+            if start > now or now - start > within or rec["status"] == "cancelled":
+                continue
+            stop = min(now, datetime.fromisoformat(rec["ended"]) if rec.get("ended") else datetime.fromisoformat(
+                rec["end"]))
+            if stop - start < min_run:
+                continue
+            if latest is None or start > datetime.fromisoformat(latest["start"]):
+                latest = rec
+        return latest is not None and (latest.get("charging_min") or 0.0) < 1.0
+
     def save(self) -> None:
         if not self.path:
             return

@@ -59,3 +59,25 @@ def test_car_finishing_early_shows_less_than_planned_and_summary_counts():
     assert (s["slots"], s["used"], s["done_no_car"], s["cancelled"], s["cut_short"]) == (3, 1, 1, 1, 0)
     assert abs(s["car_kwh"] - 7000 * 20 / 60 / 1000) < 0.05 and s["planned_kwh"] == 9.0     # rounded to 0.1
     assert s["recent"][0]["time"] == "22:00–23:00"
+
+
+def test_car_idle_after_a_slot_it_drew_nothing_in():
+    from datetime import datetime, timedelta, timezone
+
+    from pe_core.slots import SlotTracker
+    now = datetime(2026, 9, 28, 7, 41, tzinfo=timezone.utc)
+    t = SlotTracker()
+    def rec(start_h, end_h, mins, status="done"):
+        s, e = now.replace(hour=start_h, minute=0), now.replace(hour=end_h, minute=0)
+        t.slots[s.isoformat()] = {"start": s.isoformat(), "end": e.isoformat(), "status": status,
+                                  "car_kwh": mins * 0.12, "charging_min": float(mins), "confirmed": False}
+    assert not t.car_idle(now)                               # nothing seen: assume it may charge
+    rec(2, 3, 55)
+    assert not t.car_idle(now)                               # it charged in the last one
+    rec(6, 7, 0)
+    assert t.car_idle(now)                                   # the latest passed with the car idle: full
+    rec(7, 9, 0, status="planned")                           # running for 41 min, still nothing
+    assert t.car_idle(now)
+    t.slots[now.replace(hour=7, minute=0).isoformat()]["charging_min"] = 12.0
+    assert not t.car_idle(now)                               # it has started drawing
+    assert not t.car_idle(now + timedelta(hours=20))         # too long ago to tell
