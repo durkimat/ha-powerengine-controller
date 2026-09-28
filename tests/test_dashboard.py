@@ -71,3 +71,15 @@ def test_charts_have_a_phone_version():
         assert all("title" not in (y.get("apex_config") or {}) for y in b["yaxis"])
         assert b["apex_config"]["legend"]["position"] == "top"
     assert (desk[0]["graph_span"], phone[0]["graph_span"]) == ("36h", "18h")
+
+
+def test_every_page_says_what_it_is():
+    """On a phone only the tab icons show, so each page starts with its title."""
+    d = yaml.safe_load(open(SOURCE).read())
+    for view in d["views"]:
+        if view.get("panel"):
+            first = view["cards"][0]["cards"][0]
+            title = first.get("heading") if first.get("type") == "heading" else None
+        else:
+            title = (view.get("header") or {}).get("card", {}).get("content", "").lstrip("# ")
+        assert title, view["title"]
