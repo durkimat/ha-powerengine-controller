@@ -2,6 +2,26 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.63 (beta)
+
+### Behaviour changes
+- None for your setup. The demo can only start on a PowerEngine that isn't set up yet, so it can never take over a
+  real system.
+
+### Demo mode (first working version)
+- A PowerEngine with no configuration now opens on a welcome card with two choices: **Try the demo** or **Set up your
+  system**.
+- The demo runs on four recorded, scrubbed days from a real home: a sunny day, a dull day, a grid-services event day
+  and a car-charging day. A simulated battery follows PowerEngine's own commands, so the plans, decisions, costs and
+  charts behave as they would for real.
+- **Nothing is controlled.** In demo mode every service call goes to the simulated home, never to Home Assistant, and
+  the only things written are PowerEngine's own sensors. Its data goes in a separate demo folder.
+- A banner on every page says it's a demo. It has buttons to switch day or exit. Settings can be changed in the demo
+  and are reset on exit.
+- It works without MQTT: PowerEngine can publish its entities directly, and their switches work too.
+- Your dashboard gains a hidden demo card at the top of each page. It shows nothing on a set-up system.
+- **Don't run a second PowerEngine in demo mode alongside your real one**: they would share entity names.
+
 ## 0.9.62 (beta)
 
 ### Behaviour changes

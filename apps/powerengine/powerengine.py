@@ -139,6 +139,9 @@ class PowerEngine(hass.Hass):
     def _track(self, kind, handle, due=None):
         handles = self.__dict__.get("_handles")
         if handles is not None and handle is not None:
+            if kind == "timer":                         # forget one-off timers that have already run (bounded list)
+                now = datetime.now(timezone.utc)
+                handles[:] = [h for h in handles if not (h[0] == "timer" and h[2] is not None and h[2] < now)]
             handles.append((kind, handle, due))
         return handle
 
@@ -196,8 +199,12 @@ class PowerEngine(hass.Hass):
 
     def initialize(self):
         if self.__dict__.get("_touched") is None:
-            self.__dict__["_touched"], self.__dict__["_handles"] = set(), []     # from here on, what we set is recorded
-            self._install_tracking()
+            custom = self.args.get("settings_file")
+            if not any(os.path.isfile(p) for p in ([custom] if custom else list(DEFAULT_PATHS))):
+                # Only an app that isn't set up can switch in and out of the demo, so only then are attributes,
+                # timers and listeners recorded for _wipe(). A configured app runs exactly as before.
+                self.__dict__["_touched"], self.__dict__["_handles"] = set(), []
+                self._install_tracking()
         else:
             self._wipe()
         self.log(f"PowerEngine {__version__} starting")
@@ -2842,6 +2849,9 @@ class PowerEngine(hass.Hass):
             return
         data = data if isinstance(data, dict) else {}
         action, day = data.get("action"), data.get("day")
+        if self.__dict__.get("_touched") is None:           # started configured: never re-initialised in place
+            return self._demo_reply(False, "The demo can only start on a PowerEngine that isn't set up yet, so it "
+                                           "never takes over a real system.")
         pack = load_demo_pack()
         if action in ("start", "day"):
             if action == "start" and not self._demo and self._real_config_exists():

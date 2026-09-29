@@ -132,6 +132,24 @@ def test_a_real_config_is_configured_and_start_is_refused(make):
     assert not (make.folder / "demo.json").exists() and app._demo is None and app.real_calls == []
 
 
+def test_a_configured_app_runs_exactly_as_before_no_tracking(make):
+    # A set-up PowerEngine never re-initialises in place, so none of the recording is installed: its timers and
+    # listeners go straight to AppDaemon, and no list of handles grows while it runs.
+    app = make(real_config=True)
+    assert "_touched" not in app.__dict__ and "_handles" not in app.__dict__
+    assert "run_in" not in app.__dict__ and "listen_state" not in app.__dict__
+
+
+def test_an_unconfigured_app_forgets_timers_that_have_run(make):
+    app = make()
+    before = len(app.__dict__["_handles"])
+    for _ in range(50):
+        app.run_in(lambda kw: None, 1)
+    Clock.now = NOW + timedelta(minutes=5)
+    app.run_in(lambda kw: None, 1)
+    assert len(app.__dict__["_handles"]) <= before + 1
+
+
 def test_start_writes_demo_json_and_reinitialises_into_that_day(make):
     app = make()
     assert send(app, action="start", day="sunny") == [{"ok": True, "message": "Starting the demo: Sunny day."}]
