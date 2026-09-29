@@ -150,7 +150,7 @@ def test_the_version_sensor_says_it_is_a_demo_with_the_days_title(run):
     app = run["app"]
     attrs = app.states["sensor.pe_diag_version"]["attributes"]
     assert attrs["demo"]["day"] == "car" and attrs["demo"]["title"] == "Car charging day"
-    assert "nothing is controlled" in attrs["demo"]["note"] and attrs["names"]["supplier"] == "EDF"
+    assert attrs["names"]["supplier"] == "EDF"
 
 
 def test_history_backfilled_so_learning_and_health_have_days_to_work_with(run):

@@ -218,3 +218,25 @@ Goal: PowerEngine runs with no MQTT broker and no real inverter (a demo), and in
     entities, nothing else (no `zone.home`). So **always call `self.call_service` / `self.fire_event` in `powerengine.py`;
     never call them on anything else** (an adapter's `ha`, `hass.Hass...`). `test_no_direct_call_to_home_assistant_bypasses_
     the_gate` reads the source and fails on a new call anywhere else.
+- **C3, controller side. Done** (`_on_demo`, `_saved_demo_day`, `_wipe` in `powerengine.py`; `tests/test_demo_control.py`).
+  The card's contract:
+  - `sensor.pe_diag_version` attributes: `setup` is `"unconfigured"` (no real config.yaml) or `"configured"`; `demo` is
+    `null`, or `{"day", "title" (names filled), "days": [{"key","title"}, ...all pack days], "note": "Recorded data from a
+    real home. Nothing is controlled."}`. An unconfigured app publishes the sensor (direct publishing when there is no MQTT).
+  - Event **`pe_demo`** (admin, over the websocket): `{"action":"start","day":"sunny"}`, `{"action":"day","day":"dull"}`,
+    `{"action":"exit"}`. Answer event **`pe_demo_result`**: `{"ok": true|false, "message": "<plain words>"}`. Only that
+    event name is handled. `start` is refused (`ok:false`) when a real config.yaml exists and no demo is running, so a demo
+    never takes over a real system. Bad days, unknown actions and `day` with no demo running are refused. The app arg
+    `demo` still wins (then start/day/exit are refused, with a message).
+  - `start`/`day` write `<save dir>/demo.json` `{"day": ...}` and re-initialise; `exit` removes it and re-initialises
+    (unconfigured, or back to the real config). A saved demo.json is ignored when a real config exists. Demo settings are
+    discarded because the config copy is remade on every start.
+  - **Re-initialise = `initialize()` again, after `_wipe()`** (no `restart_app`). From the first `initialize()` the app
+    records every attribute it sets (`__setattr__` into `_touched`) and every timer/listener handle (instance wrappers on
+    `run_in/run_every/run_daily/listen_event/listen_state`). `_wipe()` runs `terminate()`, cancels the handles (skipping
+    `run_in` timers already due) and deletes the attributes (this also puts the real `get_state` etc. back).
+    **Rule: keep `initialize()` and what it sets in `self`; don't set attributes from AppDaemon threads outside it.**
+    `test_no_duplicate_timers_or_listeners_after_start_day_exit_start` compares the live handle set with the fresh one.
+  - Dashboard: with no real config a demo also writes `<save dir>/dashboard.yaml` (plus C2's `demo/` copy). Every view of
+    `dashboard.lovelace` starts with `- type: custom:powerengine-demo-card` (full width, no options); the golden fixture
+    has exactly those 24 lines more.
