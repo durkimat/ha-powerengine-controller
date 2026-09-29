@@ -2,6 +2,23 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.60 (beta)
+
+### Behaviour changes
+- None unless you change the new settings: their defaults match what PowerEngine did before.
+
+### Smart-charge requests, configurable (Config page, car and smart charge)
+- **Requests per day** (4–10, default 6).
+- **Time between requests** (10–120 minutes, default 20). Unsuccessful requests also back off: 30, 60, 120, then
+  240 minutes. That usually limits things more than the daily cap.
+- **Skip if a slot is due within** (1–8 hours, default 3).
+- **Smart slots cover the whole house** (default on). Tick if your supplier charges the whole house the slot rate
+  even when the car isn't charging (EDF does). Off: slots are planned at your normal rate for the house and battery,
+  and PowerEngine doesn't ask for extra slots.
+- **Don't ask when the car is full** (default off). This skips requests while the charger says the charge is
+  complete, or the car drew nothing in the last slot. The success rate on the Config page shows whether requests for
+  a full car work.
+
 ## 0.9.59 (beta)
 
 ### Behaviour changes
