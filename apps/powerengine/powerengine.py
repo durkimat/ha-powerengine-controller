@@ -18,6 +18,8 @@ import appdaemon.plugins.hass.hassapi as hass
 from pe_core import __version__, clock, damping, diagnostics, gridcheck, ramcontrol, rctest, releases, testwrite
 from pe_core import learn as learning
 from pe_core.activity import ActivityLog
+from pe_core.adapters.axle import AxleEvents
+from pe_core.adapters.kraken import KrakenTariff, supplier_of
 from pe_core.adapters.solis import SolisInverter
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
@@ -423,7 +425,8 @@ class PowerEngine(hass.Hass):
         self._release_if_still_missing()
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
-                readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
+                readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None,
+                                self._tariff(), self._events())
                 self._record_load(readings)
                 self._grid_check(readings)
                 self._record_costs(readings)
@@ -1229,6 +1232,21 @@ class PowerEngine(hass.Hass):
             inv = self._inv = SolisInverter(self, self._role_entity, BATTERY_VOLTS)
         return inv
 
+    def _tariff(self):
+        """The tariff adapter (Kraken: EDF or Octopus, told apart by the rate sensor's integration)."""
+        tariff = getattr(self, "_tariff_adapter", None)
+        name = supplier_of(self._role_entity("import_rate_now") if self.cfg else None)
+        if tariff is None or tariff.name != name:  # rebuilt if the rate sensor moves supplier
+            tariff = self._tariff_adapter = KrakenTariff(name, self._role_entity)
+        return tariff
+
+    def _events(self):
+        """The grid-event adapter (Axle)."""
+        events = getattr(self, "_events_adapter", None)
+        if events is None:
+            events = self._events_adapter = AxleEvents(self._role_entity)
+        return events
+
     def _slot_map(self):
         """{slot n: {role: entity}} when all three inverter slots exist (SolaX '_2'/'_3' names), else None."""
         if self.cfg is None:
@@ -1811,7 +1829,7 @@ class PowerEngine(hass.Hass):
 
     def _battery_now(self):
         try:
-            r = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"))
+            r = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None, self._tariff(), self._events())
             return {"soc": r.battery_soc, "battery_w": r.battery_power, "grid_w": r.grid_power}
         except Exception:
             return {}
@@ -2099,8 +2117,7 @@ class PowerEngine(hass.Hass):
                 self._save_smart()
             return
         st = self.get_state(eid, attribute="all") or {}
-        options = (st.get("attributes") or {}).get("options") or [f"{h:02d}:{m:02d}" for h in range(4, 12)
-                                                                   for m in (0, 30)][:15]
+        options = self._tariff().ready_by_options(st)
         cheap_p = cheap_limit(r, self.cfg)
         worth = worth_asking(r.ev_state(), r.dispatches, r.now,
                              r.import_rate is not None and r.import_rate * 100 <= cheap_p, r.battery_soc,
@@ -2136,13 +2153,12 @@ class PowerEngine(hass.Hass):
         """Active mode only: set the ready-by time (and keep the charge target at 100%)."""
         try:
             self._our_write = (value, datetime.now(timezone.utc))
-            if eid.startswith("select."):
-                self.call_service("select/select_option", entity_id=eid, option=value)
-            else:
-                self.call_service("time/set_value", entity_id=eid, time=f"{value}:00")
+            service, data = self._tariff().ready_by_call(eid, value)
+            self.call_service(service, **data)
             target = self._role_entity("smart_target_soc")
-            if target and str(self.get_state(target)) not in ("100", "100.0"):
-                self.call_service("number/set_value", entity_id=target, value=100)
+            call = self._tariff().charge_target_call(target, self.get_state(target) if target else None)
+            if call:
+                self.call_service(call[0], **call[1])
         except Exception as err:
             self.log(f"Could not request smart-charge slots: {err!r}", level="WARNING")
 
@@ -2221,7 +2237,7 @@ class PowerEngine(hass.Hass):
         eid = self._role_entity("import_rate_now")
         code = str(self.get_state(eid, attribute="tariff") or "") if eid else ""
         if code.startswith("E-1R-") and len(code) > 7:
-            supplier = "edf" if "edf_energy" in eid else "octopus"
+            supplier = supplier_of(eid)
             ctx.current = {"supplier": supplier, "product": code[5:-2], "tariff": code, "region": code[-1],
                            "name": "your tariff"}
         spec = self.cfg.inputs.get("export_rate") or {}

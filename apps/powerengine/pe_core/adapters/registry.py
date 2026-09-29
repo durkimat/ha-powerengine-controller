@@ -1,10 +1,10 @@
-"""A tiny lookup from (kind, name) to an adapter factory. Nothing registers here yet; step 2 onward will."""
+"""A tiny lookup from (kind, name) to an adapter factory. Adapters register themselves when their module is imported."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-KINDS = ("inverter", "tariff", "ev", "forecast")
+KINDS = ("inverter", "tariff", "event", "ev", "forecast")
 
 _registry: dict[str, dict[str, Callable]] = {kind: {} for kind in KINDS}
 

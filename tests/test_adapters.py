@@ -112,7 +112,7 @@ def test_register_and_get_round_trip():
 def test_get_unknown_name_raises_helpful_key_error():
     register("tariff", "edf", lambda: None)
     with pytest.raises(KeyError, match="edf"):
-        get("tariff", "octopus")
+        get("tariff", "nonexistent")
 
 
 def test_unknown_kind_raises_value_error():
