@@ -22,6 +22,7 @@ from datetime import datetime
 
 from .decide import EXPORT, FORCE_DISCHARGE, GRID_CHARGE, HOLD, SELF_USE
 from .forecast import Slot
+from .names import N
 from .tariff import cheap_threshold
 
 DT_H = 0.5
@@ -270,7 +271,7 @@ def simulate(slots: list[PlanSlot], soc: float, p: Params) -> float:
 
 def _default(s: Slot, p: Params, tz) -> PlanSlot:
     if p.axle_enabled and s.axle:
-        return PlanSlot(s, FORCE_DISCHARGE, f"Axle event: export for {axle_words(p, s.export)}")
+        return PlanSlot(s, FORCE_DISCHARGE, f"{N('event')} event: export for {axle_words(p, s.export)}")
     if p.free_enabled and s.free:
         return PlanSlot(s, GRID_CHARGE, "free-electricity session: fill the battery", target_soc=100.0)
     cheap = s.price is not None and s.price * 100 <= p.cheap_cap_p
@@ -296,7 +297,7 @@ def axle_words(p: Params, export: float | None) -> str:
     total = axle_rate(p, export)
     pounds = f"£{total:.2f}".replace(".00", "")
     if p.axle_plus_export and export:
-        return f"{pounds}/kWh (£{p.axle_value:g} Axle + {export * 100:g}p export)"
+        return f"{pounds}/kWh (£{p.axle_value:g} {N('event')} + {export * 100:g}p export)"
     return f"{pounds}/kWh"
 
 
@@ -484,7 +485,7 @@ def _rules_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None
         c = plan[best]
         when = _when(plan[i].slot.start, now, tz)
         if kind == "axle":
-            reason = (f"top up for the Axle event at {when} (charging at {_p(c.slot.price)} to earn "
+            reason = (f"top up for the {N('event')} event at {when} (charging at {_p(c.slot.price)} to earn "
                       f"{axle_words(p, plan[i].slot.export)})")
             target = 100.0
         else:
@@ -657,8 +658,11 @@ def slot_certainty_rows(slots: list[Slot], tz=None) -> list[dict]:
     return out
 
 
-NEXT_WORDS = {SELF_USE: "self-use", GRID_CHARGE: "charge", HOLD: "hold", FORCE_DISCHARGE: "Axle export",
-              EXPORT: "sell"}
+NEXT_WORDS = {SELF_USE: "self-use", GRID_CHARGE: "charge", HOLD: "hold", EXPORT: "sell"}
+
+
+def _next_word(action: str) -> str:
+    return f"{N('event')} export" if action == FORCE_DISCHARGE else NEXT_WORDS.get(action, action)
 
 
 def next_text(plan: Plan | None, n: int = 2) -> str:
@@ -675,7 +679,7 @@ def next_text(plan: Plan | None, n: int = 2) -> str:
     parts = []
     for w in merged[1:1 + n]:
         day = f" {w['day']}" if w.get("day") else ""
-        parts.append(f"{NEXT_WORDS.get(w['action'], w['action'])} {w['from']}–{w['to']}{day}")
+        parts.append(f"{_next_word(w['action'])} {w['from']}–{w['to']}{day}")
     return ", then ".join(parts)
 
 

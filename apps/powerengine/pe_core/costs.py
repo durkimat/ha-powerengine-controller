@@ -25,6 +25,7 @@ import statistics
 from dataclasses import dataclass
 
 from .ledger import Ledger
+from .names import N
 from .tariff import Rates
 
 METHOD_VERSION = 7        # 3: export rate falls back to your current one when history had none
@@ -332,15 +333,15 @@ def waterfall(days_summaries: list[dict], period: str) -> dict:
     steps_list = [
         {"label": "No solar or battery", "kind": "total", "value": r0},
         {"label": "Solar", "kind": "step", "value": r2(r1 - r0)},
-        {"label": "EDF tariff", "kind": "step", "value": r2(r2v - r1)},
+        {"label": N("tariff"), "kind": "step", "value": r2(r2v - r1)},
         {"label": "Battery on self-use", "kind": "step", "value": r2(r3 - r2v)},
         {"label": "PowerEngine", "kind": "step", "value": r2(r4 - r3)},
         {"label": "Day-to-day cost", "kind": "subtotal", "value": r4},
         {"label": "Battery carry-over", "kind": "step", "value": r2(r5 - r4)},
     ]
     if round(sums["events_metered"] - sums["axle_income"], 2) != 0:
-        steps_list.append({"label": "Axle & free power", "kind": "step", "value": r2(r6 - r5)})
-    paid_label = "You paid (after Axle payments)" if round(sums["axle_income"], 2) > 0 else "You paid"
+        steps_list.append({"label": f"{N('event')} & free power", "kind": "step", "value": r2(r6 - r5)})
+    paid_label = f"You paid (after {N('event')} payments)" if round(sums["axle_income"], 2) > 0 else "You paid"
     steps_list.append({"label": paid_label, "kind": "total", "value": r6})
 
     return {"period": period, "days": len(chosen), "from": chosen[0]["date"] if chosen else None,

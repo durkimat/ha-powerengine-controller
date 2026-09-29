@@ -93,6 +93,8 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   measures them and warns above 15,000 bytes. The role catalogue is about 14.5 KB.
 - **HA config:** a git copy lives at `$HOME/mnt/HA/config`, synced by the owner with `./ha-sync.sh pull` /
   `push --apply`. Commit there only right after he says he has pulled. He pushes and applies it.
+- **Never hard-code a supplier or device name in user text** (EDF, Zappi, Solcast, Solis, Axle): use the names map
+  (`pe_core/names.py`, `N(term)` or a `<<term>>` placeholder). Stored names (entity ids, topics, keys) never change.
 - **Deleting files:** only when he asks. Put scratch files in `$HOME/mnt/powerengine/_to_delete`.
 
 ## Current work: making it generic (Phase 0)
@@ -139,7 +141,24 @@ behaviour change:
      `_solar_forecast()` now returns points, via `_forecast()`. `read(..., forecast=None)`. Nothing serialises the solar list.
    - Left: the roles' `attribute="detailedForecast"` and `suggest` regexes (step 7). Step 6 texts naming Solcast:
      `docs/INSTALL.md:25`; the stored config value `solcast_site` (`config.py:43` `FORECAST_SOURCES`) is a key, not text.
-6. Neutral names internally; display names come from adapters.
+6. Neutral names; display names come from the adapters. **Done** (branch `neutral-names-6`; identical text for EDF/Zappi/Solcast/Solis/Axle):
+   - **Rule: never hard-code a supplier or device name in user-visible text; use the names map.** Stored or addressed
+     things keep their names (entity ids, MQTT topics, attribute/config keys and values, cost-history fields, file names).
+   - `pe_core/names.py`: one map of terms (`supplier`, `tariff`, `dispatch`, `dispatch_short`, `smart_charge`, `ev_charger`,
+     `forecast`, `inverter`, `event`) built from the adapters' `display_names()` (`build_names`). `N(term)` reads the current map
+     (defaults are his words, so unit tests and the replay see EDF/Zappi/...; the app calls `set_current()` via `_names()`).
+     `fill(text)` replaces `<<term>>` placeholders and raises on an unknown one. Unknown terms fall back to neutral words
+     (`adapters/vocabulary.py`: "your supplier", "smart-charge slot", ...).
+   - Python texts use `N(...)` (decide, planner, costs, status, notify, `smartcharge.ask_message`) or `<<term>>` in static
+     tables (role help in `roles.py`, setting help in `config.py`), filled when the catalogues are built.
+   - Dashboard (`dashboard.lovelace`): user text carries `<<term>>`; `sync_dashboard(..., names=)` fills it after the
+     energy-flow splice (`dashboard.render`). `tests/golden/dashboard_edf_zappi_solcast_solis_axle.lovelace` is the frozen
+     rendered original; a test keeps the render with his names byte-identical to it.
+   - The app publishes the map as attribute `names` on `sensor.pe_diag_version` (small; not `map_catalogue`, which is near the
+     15.5 KB limit). The card fills its own placeholders from it (`fillNames`), with neutral fallbacks.
+   - Left: comments/docstrings (incl. dated history notes), the `state_axle` entity's display name, the roles' `suggest`
+     regexes, `FORECAST_SOURCES`, `docs/INSTALL.md` (his hardware's setup guide), the dashboard's and the simulator's
+     EDF-versus-Octopus comparison sentences, and the card's "Forecast: Solcast site" option (names that config value).
 7. Solis as a definition file (YAML plus a small driver; firmware variants; RAM first).
 
 Each step is a small PR that passes the replay unchanged.

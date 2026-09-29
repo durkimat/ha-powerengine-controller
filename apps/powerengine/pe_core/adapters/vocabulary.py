@@ -12,6 +12,10 @@ GRID_EVENT = "grid_event"      # a supplier/aggregator event to shift load (Axle
 TARIFF = "tariff"              # the electricity supplier/contract
 EV_CHARGER = "ev_charger"      # the car charger
 INVERTER = "inverter"          # the battery inverter
+SUPPLIER = "supplier"          # the electricity supplier's short name ("EDF")
+DISPATCH_SHORT = "dispatch_short"   # a smart-charge slot in a few words ("EDF slot")
+SMART_CHARGE = "smart_charge"  # the supplier's smart-charging service ("EDF smart charge")
+EVENT_SOURCE = "event"         # who runs grid events, short ("Axle")
 FORECAST = "forecast"          # the generation forecast provider
 
 DEFAULT_NAMES: dict[str, str] = {
@@ -21,6 +25,10 @@ DEFAULT_NAMES: dict[str, str] = {
     EV_CHARGER: "car charger",
     INVERTER: "inverter",
     FORECAST: "forecast",
+    SUPPLIER: "your supplier",
+    DISPATCH_SHORT: "smart slot",
+    SMART_CHARGE: "smart charge",
+    EVENT_SOURCE: "grid-services",
 }
 
 
@@ -31,4 +39,5 @@ def display(term: str, names: dict[str, str] | None = None) -> str:
     return DEFAULT_NAMES.get(term, term)
 
 
-__all__ = ["DISPATCH", "GRID_EVENT", "TARIFF", "EV_CHARGER", "INVERTER", "FORECAST", "DEFAULT_NAMES", "display"]
+__all__ = ["DISPATCH", "GRID_EVENT", "TARIFF", "EV_CHARGER", "INVERTER", "FORECAST", "SUPPLIER", "DISPATCH_SHORT",
+           "SMART_CHARGE", "EVENT_SOURCE", "DEFAULT_NAMES", "display"]

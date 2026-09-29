@@ -13,6 +13,7 @@ from typing import Any
 
 import yaml
 
+from .names import fill
 from .roles import RETIRED_ROLES, ROLE_BY_KEY, is_forbidden_control
 
 SCHEMA_VERSION = 1
@@ -104,7 +105,7 @@ LOCATION_LAG_H = {"garage": 24.0, "outside": 6.0, "indoors": 72.0}
 NOTIFY_EVENTS = {
     "health": (True, "Health problems", "When the Health tab finds a problem (checked after start-up and each night)."),
     "inputs": (True, "Inputs not working", "When a required input has been unavailable or stale for 15 minutes."),
-    "axle": (True, "Axle events", "When an Axle event is scheduled, with its time."),
+    "axle": (True, "<<event>> events", "When an <<event>> event is scheduled, with its time."),
     "free_power": (True, "Free-power sessions", "When a free-electricity session is announced."),
     "daily": (False, "Daily summary", "Each morning: yesterday's cost and savings."),
     "simulator": (True, "Tariff opportunities", "When the overnight Simulator finds a tariff that would have cost "
@@ -130,15 +131,17 @@ SETTING_TEXT = {
                           "most it can be; the day's prices can set it lower."),
     "grid_charge_target_soc": ("Grid-charge target", "%", "How full to charge from the grid when import is cheap."),
     "charge_hysteresis_soc": ("Charge restart margin", "%", "Once full, restart only below target minus this."),
-    "pre_axle_lookahead_h": ("Axle look-ahead", "h", "How long before an Axle event to start protecting charge."),
-    "axle_margin_soc": ("Axle safety margin", "%", "Extra charge kept above what an Axle event needs."),
+    "pre_axle_lookahead_h": ("<<event>> look-ahead", "h",
+                             "How long before an <<event>> event to start protecting charge."),
+    "axle_margin_soc": ("<<event>> safety margin", "%",
+                        "Extra charge kept above what an <<event>> event needs."),
     "main_fuse_a": ("Main supply fuse", "A",
                     "Rating of the main fuse at the supply cutout. PowerEngine plans grid charging so house + car + "
                     "battery import stays under 90% of it (230 V), reducing battery charging first. Change it if "
                     "the fuse is upgraded."),
     "ev_charger_kw": ("Car charger power", "kW",
-                      "What the car draws while charging (7.4 kW for a 32 A Zappi). Used to plan the fuse limit "
-                      "during smart-charge slots."),
+                      "What the car draws while charging (7.4 kW for a 32 A <<ev_charger>>). Used to plan the fuse "
+                      "limit during smart-charge slots."),
     "export_limit_kw": ("Export limit", "kW",
                         "The export limit your DNO approved. PowerEngine never plans to export more than this."),
     "battery_wear_p": ("Battery wear cost", "p/kWh",
@@ -224,7 +227,7 @@ SETTING_SECTIONS = (
     ("battery", "Battery and charging", ("min_reserve_soc", "cheap_threshold_p", "grid_charge_target_soc",
                                          "charge_hysteresis_soc")),
     ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
-    ("axle", "Axle events", ("pre_axle_lookahead_h", "axle_margin_soc")),
+    ("axle", "<<event>> events", ("pre_axle_lookahead_h", "axle_margin_soc")),
     ("smart", "Smart-charge requests", ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h")),
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p", "overnight_switch_cost_p")),
@@ -240,13 +243,15 @@ def settings_catalogue() -> dict:
     """Settings schema for the config page: defaults, ranges, labels, help."""
     order = [k for _, _, keys in SETTING_SECTIONS for k in keys]
     safety = [{"key": k, "default": SAFETY[k][0], "min": SAFETY[k][1], "max": SAFETY[k][2],
-               "label": SETTING_TEXT[k][0], "unit": SETTING_TEXT[k][1], "help": SETTING_TEXT[k][2]} for k in order]
-    system = [{"key": k, "default": d, "label": SETTING_TEXT[k][0], "help": SETTING_TEXT[k][2]}
+               "label": fill(SETTING_TEXT[k][0]), "unit": SETTING_TEXT[k][1], "help": fill(SETTING_TEXT[k][2])}
+              for k in order]
+    system = [{"key": k, "default": d, "label": fill(SETTING_TEXT[k][0]), "help": fill(SETTING_TEXT[k][2])}
               | ({"section": SYSTEM_CHOICES[k][0], "options": [list(o) for o in SYSTEM_CHOICES[k][1]]}
                  if k in SYSTEM_CHOICES else {})
               for k, d in SYSTEM_DEFAULTS.items()]
     return {"safety": safety, "system": system,
-            "sections": [{"key": sec, "label": label, "keys": list(keys)} for sec, label, keys in SETTING_SECTIONS]}
+            "sections": [{"key": sec, "label": fill(label), "keys": list(keys)}
+                         for sec, label, keys in SETTING_SECTIONS]}
 _ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
 _PLANT_ID = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 
