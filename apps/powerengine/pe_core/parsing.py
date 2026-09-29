@@ -65,3 +65,24 @@ def parse_windows(items: Any, value_keys: tuple[str, ...] = ("value_inc_vat", "v
 
 def _is_on(state: State | None) -> bool:
     return bool(state) and str(state.get("state", "")).lower() in _ON
+
+
+def _power_w(state: State | None, invert: bool = False) -> float | None:
+    if not state:
+        return None
+    n = _num(state.get("state"))
+    if n is None:
+        return None
+    unit = (state.get("attributes") or {}).get("unit_of_measurement")
+    if unit == "kW":
+        n *= 1000
+    return -n if invert else n
+
+
+def _energy_kwh(state: State | None) -> float | None:
+    if not state:
+        return None
+    n = _num(state.get("state"))
+    if n is None:
+        return None
+    return n / 1000 if (state.get("attributes") or {}).get("unit_of_measurement") == "Wh" else n

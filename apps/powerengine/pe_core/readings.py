@@ -17,10 +17,23 @@ from typing import Any
 
 from .adapters.axle import AxleEvents
 from .adapters.kraken import KrakenTariff
+from .adapters.myenergi import ZappiCharger
 from .config import Config
-from .parsing import State, Window, _is_on, _num, _rate, parse_time, parse_windows  # noqa: F401
+from .parsing import (  # noqa: F401
+    State,
+    Window,
+    _energy_kwh,
+    _is_on,
+    _num,
+    _power_w,
+    _rate,
+    parse_time,
+    parse_windows,
+)
 
 GetState = Callable[[str], State | None]
+
+_DEFAULT_EV = ZappiCharger()
 
 
 @dataclass
@@ -60,6 +73,8 @@ class Readings:
     forecast_today_kwh: float | None = None
     forecast_tomorrow_kwh: float | None = None
     problems: list[str] = field(default_factory=list)
+    # the EV charger adapter that classifies the plug status (None: the default Zappi one); not part of equality
+    ev: Any = field(default=None, repr=False, compare=False)
 
     # --- derived views -----------------------------------------------------------
 
@@ -83,20 +98,17 @@ class Readings:
         nxt = self.next_rate_change()
         return nxt.start if nxt else None
 
-    def ev_state(self) -> str:
-        """'charging' | 'plugged_in' | 'unplugged', from the Zappi plug status.
+    def _ev_adapter(self) -> ZappiCharger:
+        return self.ev or _DEFAULT_EV
 
-        The plug status reads 'Charging' exactly while the car draws power, so it is the source of truth. Charging
-        power is only a fallback for when the plug status is unmapped or unavailable.
-        """
-        plug = (self.ev_plug or "").strip().lower()
-        if plug in ("", "unknown", "unavailable"):
-            return "charging" if (self.ev_power or 0) > 100 else "unplugged"
-        if plug == "charging":
-            return "charging"
-        if "disconnect" in plug:
-            return "unplugged"
-        return "plugged_in"
+    def ev_state(self) -> str:
+        """'charging' | 'plugged_in' | 'unplugged' (the EV adapter's reading of the plug status; see
+        `ZappiCharger.classify`)."""
+        return self._ev_adapter().classify(self.ev_plug, self.ev_power)
+
+    def ev_complete(self) -> bool:
+        """The charger says the charge is complete (car full) while the car is still plugged in."""
+        return self._ev_adapter().complete(self.ev_state(), self.ev_status)
 
     def axle_state(self) -> str:
         if self.axle_active:
@@ -118,27 +130,6 @@ class Readings:
 CHECK_METER_MAX_AGE_S = 180        # an older check-meter reading isn't used (the inverter's meter is, uncorrected)
 
 
-def _power_w(state: State | None, invert: bool = False) -> float | None:
-    if not state:
-        return None
-    n = _num(state.get("state"))
-    if n is None:
-        return None
-    unit = (state.get("attributes") or {}).get("unit_of_measurement")
-    if unit == "kW":
-        n *= 1000
-    return -n if invert else n
-
-
-def _energy_kwh(state: State | None) -> float | None:
-    if not state:
-        return None
-    n = _num(state.get("state"))
-    if n is None:
-        return None
-    return n / 1000 if (state.get("attributes") or {}).get("unit_of_measurement") == "Wh" else n
-
-
 def forecast_kwh(items: Any) -> float | None:
     """Total of a Solcast detailedForecast list (pv_estimate is kW over 30 min)."""
     if not isinstance(items, list) or not items:
@@ -149,13 +140,15 @@ def forecast_kwh(items: Any) -> float | None:
 # --- the reader ---------------------------------------------------------------------
 
 def read(cfg: Config, get_state: GetState, now: datetime | None = None, tariff: KrakenTariff | None = None,
-         events: AxleEvents | None = None) -> Readings:
+         events: AxleEvents | None = None, ev: ZappiCharger | None = None) -> Readings:
     """Build Readings from the config's mappings using `get_state(entity_id)`. The supplier's tariff data and the
-    aggregator's events are parsed by the tariff and event adapters (the Kraken and Axle ones unless given)."""
+    aggregator's events are parsed by the tariff and event adapters, and the car charger's by the EV adapter (the
+    Kraken, Axle and Zappi ones unless given)."""
     now = now or datetime.now(timezone.utc)
     tariff = tariff or KrakenTariff()
     events = events or AxleEvents()
-    r = Readings(now=now)
+    ev = ev or _DEFAULT_EV
+    r = Readings(now=now, ev=ev)
     inputs = cfg.inputs
 
     def state(role: str) -> State | None:
@@ -203,7 +196,8 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None, tariff: 
         r.grid_power, r.grid_source = r.grid_ref_power, "check meter"
         if r.house_power_raw is not None:
             r.house_power_raw = max(0.0, r.house_power_raw - delta)
-    r.ev_power = _power_w(state("ev_charge_power"))
+    ev_raw = ev.read(state)
+    r.ev_power = ev_raw["power_w"]
     r.house_includes_ev = bool(cfg.system.get("house_load_includes_ev", True))
     if r.house_power_raw is not None:
         car = r.ev_power if (r.house_includes_ev and r.ev_power and r.ev_power > 0) else 0.0
@@ -227,10 +221,8 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None, tariff: 
     r.rates = tariff.read_rates(state)
     r.dispatches, r.completed_dispatches = tariff.read_dispatches(state)
 
-    r.ev_plug = (state("ev_plug_status") or {}).get("state")
-    r.ev_status = (state("ev_charger_status") or {}).get("state")
-    r.ev_mode = (state("ev_charge_mode") or {}).get("state")
-    r.ev_session_kwh = _energy_kwh(state("ev_session_energy"))
+    r.ev_plug, r.ev_status, r.ev_mode, r.ev_session_kwh = (ev_raw["plug"], ev_raw["status"], ev_raw["mode"],
+                                                            ev_raw["session_kwh"])
 
     r.axle_active, r.axle_start, r.axle_end = events.read_event(state)
     r.free_active, r.free_start, r.free_end = tariff.read_free_sessions(state)
