@@ -268,15 +268,15 @@ def test_inputs_back_within_the_grace_period_writes_nothing(app):
 
 
 def test_write_limit_pauses(app):
-    app._publish = lambda topic, payload: app.published.append((topic, payload))
+    app._publisher_obj = types.SimpleNamespace(preset=lambda key, value: app.published.append((key, value)))
     app.own["n"] = 148
     assert app._within_write_limit(2)
     assert not app._within_write_limit(3)
-    assert ("powerengine/ctl_pause/set", "ON") in app.published
+    assert ("ctl_pause", "ON") in app.published
 
 
 def test_write_limit_counts_from_resume(app):
-    app._publish = lambda topic, payload: app.published.append((topic, payload))
+    app._publisher_obj = types.SimpleNamespace(preset=lambda key, value: app.published.append((key, value)))
     app.own["n"] = 200
     app.writes.set_base(app._today(), 150)  # resumed after 150 writes
     assert app._within_write_limit(100) and not app._within_write_limit(101)

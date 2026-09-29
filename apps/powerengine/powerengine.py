@@ -21,6 +21,7 @@ from pe_core.activity import ActivityLog
 from pe_core.adapters.axle import AxleEvents
 from pe_core.adapters.kraken import KrakenTariff, supplier_of
 from pe_core.adapters.myenergi import ZappiCharger
+from pe_core.adapters.publish import select_publisher
 from pe_core.adapters.solcast import ROLES as FORECAST_ROLES
 from pe_core.adapters.solcast import SolcastForecast
 from pe_core.adapters.solis import SolisInverter
@@ -45,17 +46,7 @@ from pe_core.decide import cheap_limit, decide
 from pe_core.eeprom import BlockWriteModel, WriteLog, WriteModel
 from pe_core.energy import Recorder
 from pe_core.entities import (
-    AVAILABILITY_TOPIC,
-    BASE_TOPIC,
     ENTITIES,
-    HISTORY_DAY_TOPIC,
-    HISTORY_PLAN_TOPIC,
-    OFFLINE,
-    ONLINE,
-    PAUSE_TOPIC,
-    discovery_payload,
-    entity_removal_messages,
-    removal_messages,
     solar_plant_entity,
     solar_plant_id_from_entity,
     validate_definitions,
@@ -155,18 +146,22 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Could not read the saved log: {err!r}", level="WARNING")
 
-        self.mqtt = self._mqtt_api()
-        if self.mqtt is None:
+        choice = self._publisher_choice()
+        self.mqtt = None if choice == "direct" else self._mqtt_api(quiet=choice == "auto")
+        self._publisher_obj = None
+        if self._get_publisher() is None:
             return
+        self.log(f"Entity publishing: {self._get_publisher().name}"
+                 + (" (set 'Entity publishing' on the Config page to change it)" if choice == "auto" else ""))
         if self.cfg is not None and self.cfg.remove_entities:
             self._remove_entities()
             return
 
         for ent in ENTITIES:
-            self._publish(ent.discovery_topic, discovery_payload(ent, __version__))
+            self._get_publisher().discover(ent, __version__)
         self._sync_solar_entities()
         self._ui_defaults()
-        self._publish(AVAILABILITY_TOPIC, ONLINE)
+        self._get_publisher().available(True)
         self._publish_state("diag_version", __version__)
         self._publish_state("diag_started", datetime.now(timezone.utc).isoformat(timespec="seconds"))
         self._publish_state("map_catalogue", str(len(ROLES)), catalogue())
@@ -255,8 +250,8 @@ class PowerEngine(hass.Hass):
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
 
     def terminate(self):
-        if getattr(self, "mqtt", None) is not None:
-            self._publish(AVAILABILITY_TOPIC, OFFLINE)
+        if self._get_publisher() is not None:
+            self._get_publisher().available(False)
         try:
             self._log_ring.save(self._log_path())
         except Exception:
@@ -1070,7 +1065,7 @@ class PowerEngine(hass.Hass):
 
     def _publish_history(self, *args, **kwargs):
         """The Plan history tab: the chosen day and plan against what happened."""
-        if self.costbook is None or getattr(self, "mqtt", None) is None:
+        if self.costbook is None or self._get_publisher() is None:
             return
         try:
             tz = self.tz or timezone.utc
@@ -1731,7 +1726,9 @@ class PowerEngine(hass.Hass):
             return True
         self.log(f"Daily write limit reached ({today - base} writes, limit {limit}); pausing control",
                  level="WARNING")
-        self._publish(PAUSE_TOPIC, "ON")          # the pause switch; its change returns the inverter to Self-Use
+        pub = self._get_publisher()
+        if pub is not None:                       # the pause switch; its change returns the inverter to Self-Use
+            pub.preset("ctl_pause", "ON")
         self._notify("health", (f"control:limit:{self._today()}", "PowerEngine: control paused",
                                 f"PowerEngine made {today - base} inverter writes today, reaching the daily limit "
                                 f"of {limit}. The inverter is back on Self-Use. Check the Health tab, then resume "
@@ -2402,7 +2399,7 @@ class PowerEngine(hass.Hass):
             self._notify("daily", daily_message(s))
 
     def _health(self):
-        if self.costbook is None or getattr(self, "mqtt", None) is None:
+        if self.costbook is None or self._get_publisher() is None:
             return
         try:
             h = self.costbook.health(self._today(), getattr(self, "_checks", None))
@@ -2430,7 +2427,7 @@ class PowerEngine(hass.Hass):
         """Discover a power sensor for each enabled solar plant, and retire any no longer enabled (plants
         removed or disabled since the last time this ran). HA's own state, not a file PowerEngine keeps, is
         the record of what's currently published (the same lookup RAM remote control uses for its entities)."""
-        if self.cfg is None or self.mqtt is None:
+        if self.cfg is None or self._get_publisher() is None:
             return
         wanted = {p.id: p.name for p in self.cfg.solar_plants if p.enabled}
         try:
@@ -2440,10 +2437,9 @@ class PowerEngine(hass.Hass):
         published = {pid for pid in (solar_plant_id_from_entity(e) for e in ids) if pid}
         for pid, name in wanted.items():
             ent = solar_plant_entity(pid, name)
-            self._publish(ent.discovery_topic, discovery_payload(ent, __version__))
+            self._get_publisher().discover(ent, __version__)
         for pid in published - set(wanted):
-            for topic, payload in entity_removal_messages(solar_plant_entity(pid, "")):
-                self._publish(topic, payload)
+            self._get_publisher().retire(solar_plant_entity(pid, ""))
 
     def _energy_flow_card(self):
         plants = self.cfg.solar_plants if self.cfg else ()
@@ -2635,38 +2631,58 @@ class PowerEngine(hass.Hass):
                 done = json.load(fh)
         except (OSError, ValueError):
             done = {}
+        pub = self._get_publisher()
+        if not pub.retains:                       # direct: nothing survives a start, so set them again
+            done = {}
         if not done.get("right_align"):
-            self._publish(f"{BASE_TOPIC}/ui_right_align/set", "ON")      # right-aligned numbers by default
+            pub.preset("ui_right_align", "ON")               # right-aligned numbers by default
             done["right_align"] = True
         if not done.get("history"):
-            self._publish(HISTORY_DAY_TOPIC, "Yesterday")
-            self._publish(HISTORY_PLAN_TOPIC, "Start of day")
+            pub.preset("ui_history_day", "Yesterday")
+            pub.preset("ui_history_plan", "Start of day")
             done["history"] = True
+            if not pub.retains:
+                return
             try:
                 with open(path, "w", encoding="utf-8") as fh:
                     json.dump(done, fh)
             except OSError as err:
                 self.log(f"Could not save dashboard defaults: {err}", level="WARNING")
 
-    def _mqtt_api(self):
+    def _publisher_choice(self):
+        choice = ((getattr(self.cfg, "system", None) or {}).get("publisher") if self.cfg else None) or "auto"
+        return choice
+
+    def _get_publisher(self):
+        """The one door for every entity the app publishes (MQTT or direct; the core never knows which)."""
+        pub = self.__dict__.get("_publisher_obj")
+        if pub is None:
+            pub = select_publisher(self._publisher_choice(), getattr(self, "mqtt", None),
+                                   getattr(self, "set_state", None))
+            self._publisher_obj = pub
+        return pub
+
+    def _mqtt_api(self, quiet=False):
         try:
             api = self.get_plugin_api("MQTT")
         except Exception as err:  # plugin not configured
             api = None
-            self.log(f"MQTT plugin error: {err}", level="WARNING")
-        if api is None:
+            if not quiet:
+                self.log(f"MQTT plugin error: {err}", level="WARNING")
+        if api is None and quiet:
+            self.log("No MQTT plugin in AppDaemon: publishing entities directly.")
+        elif api is None:
             self.log("MQTT plugin not configured in appdaemon.yaml; entities can't be published. "
                      "See docs/INSTALL.md, Step 3.", level="WARNING")
         return api
 
-    def _publish(self, topic, payload):
-        if not isinstance(payload, str):
-            payload = json.dumps(payload, default=str)
-        self.mqtt.mqtt_publish(topic, payload, qos=1, retain=True)
-
     def _publish_state(self, key, state, attributes=None):
-        self._publish(f"powerengine/{key}/state", str(state))
-        if attributes is not None:
+        pub = self._get_publisher()
+        if pub is None:
+            return
+        if attributes is None:
+            pub.publish(key, state)
+        else:
             payload = attributes if isinstance(attributes, str) else json.dumps(attributes, default=str)
             try:                                  # measured as HA's recorder stores it: compact JSON, UTF-8
                 compact = json.dumps(json.loads(payload), separators=(",", ":"), ensure_ascii=False)
@@ -2678,7 +2694,7 @@ class PowerEngine(hass.Hass):
                 self.log(f"sensor.pe_{key}: attributes are {size} bytes, near Home Assistant's "
                          f"{diagnostics.ATTR_LIMIT}-byte limit (over it, HA stops recording this sensor's history)",
                          level="WARNING")
-            self._publish(f"powerengine/{key}/attributes", payload)
+            pub.publish(key, state, payload)
 
     def _publish_status(self):
         """The Monitoring page's Mode tile: one word, coloured by the dashboard. Stopped (writes couldn't be confirmed)
@@ -2702,7 +2718,6 @@ class PowerEngine(hass.Hass):
         self._publish_state("diag_heartbeat", datetime.now(timezone.utc).isoformat(timespec="seconds"))
 
     def _remove_entities(self):
-        for topic, payload in removal_messages():
-            self._publish(topic, payload)
+        self._get_publisher().retire_all()
         self.log("remove_entities is set: removed all PowerEngine entities. The app is now idle; "
                  "remove it in HACS or set remove_entities: false to bring them back.", level="WARNING")
