@@ -90,3 +90,89 @@ def test_half_hours():
     from pe_core.smartcharge import half_hours
     w = [Window(T0, T0 + timedelta(hours=1), -1)]
     assert len(half_hours(w)) == 2 and len(half_hours(w, T0 + timedelta(minutes=40))) == 1
+
+
+# --- configurable rules (smart_* settings, slots_whole_house, smart_skip_full_car) ----------------
+
+def test_worth_asking_lookahead_is_configurable():
+    now = T0
+    in_5h = [Window(now + timedelta(hours=5), now + timedelta(hours=6), -3)]
+    assert worth_asking("plugged_in", in_5h, now, False, 50, 100, False, 15, 7)[0] is True       # default 3 h: far off
+    assert worth_asking("plugged_in", in_5h, now, False, 50, 100, False, 15, 7,
+                        lookahead=timedelta(hours=8))[0] is False                                # 8 h: due within it
+    assert worth_asking("plugged_in", in_5h, now, False, 50, 100, False, 15, 7,
+                        lookahead=timedelta(hours=1))[0] is True
+
+
+def test_worth_asking_whole_house_off_never_asks():
+    args = ("plugged_in", [], T0, False, 50, 100, False, 15, 7)
+    assert worth_asking(*args)[0] is True
+    ok, why = worth_asking(*args, whole_house=False)
+    assert not ok and why == "smart slots don't cover the house"
+    assert worth_asking("unplugged", [], T0, False, 50, 100, False, 15, 7, whole_house=False)[1] == "car not plugged in"
+    assert worth_asking("charging", [], T0, False, 50, 100, False, 15, 7, whole_house=False)[1] == \
+        "car already charging"                                           # the car checks come first
+
+
+def test_worth_asking_skip_full_car():
+    args = ("plugged_in", [], T0, False, 50, 100, False, 15, 7)
+    assert worth_asking(*args, car_full=True)[0] is True                       # not skipping: asks anyway
+    assert worth_asking(*args, skip_full=True)[0] is True                      # skipping, but the car isn't full
+    ok, why = worth_asking(*args, car_full=True, skip_full=True)
+    assert not ok and why == "the car looks full"
+
+
+def run_day(tmp_path, cap, gap_min):
+    sc = SmartCharger(str(tmp_path / "s.json"))
+    t, cur, sent = T0, "11:00", []
+    for _ in range(24 * 12):
+        a = sc.step(t, t.replace(tzinfo=None), (True, "battery has room"), OPTS, cur, [], active=True, daily_cap=cap,
+                    min_gap=timedelta(minutes=gap_min))
+        if a:
+            sent.append(t)
+            cur = a["to"]
+        sc.resolve(t, [])
+        t += timedelta(minutes=5)
+    return [x for x in sent if x.date() == T0.date()]
+
+
+def test_daily_cap_of_4_and_10(tmp_path):
+    # with the back-off (30, 60, 120, 240, 240 ...) from 14:00 only 4 fit before midnight; make room with a cap of 2
+    assert len(run_day(tmp_path, 2, 20)) == 2
+    (tmp_path / "s.json").unlink(missing_ok=True)
+    assert len(run_day(tmp_path, 4, 10)) <= 4
+
+
+def test_daily_cap_is_the_limit_when_gaps_are_short(tmp_path):
+    def many(cap):
+        sc = SmartCharger()
+        n, t = 0, T0.replace(hour=0, minute=0)
+        for _ in range(24 * 12):
+            sc.backoff = 0                                       # (keep the back-off out of it: only the cap)
+            sc.next_allowed = None
+            if sc.step(t, t.replace(tzinfo=None), (True, "x"), OPTS, "11:00", [], active=True, daily_cap=cap,
+                       min_gap=timedelta(minutes=10)):
+                n += 1
+                sc.attempts[-1]["result"] = "none"               # settled, so the next may follow
+            t += timedelta(minutes=5)
+        return n
+    assert many(4) == 4 and many(10) == 10 and many(6) == 6
+
+
+def test_min_gap_of_60_minutes(tmp_path):
+    sc = SmartCharger()
+    assert sc.step(T0, T0.replace(tzinfo=None), (True, "x"), OPTS, "11:00", [], active=True,
+                   min_gap=timedelta(minutes=60))
+    sc.attempts[-1]["result"] = "none"
+    sc.next_allowed = None
+    t = T0 + timedelta(minutes=45)
+    assert sc.step(t, t.replace(tzinfo=None), (True, "x"), OPTS, "11:00", [], active=True) is not None   # 20 min: ok
+    sc2 = SmartCharger()
+    sc2.step(T0, T0.replace(tzinfo=None), (True, "x"), OPTS, "11:00", [], active=True, min_gap=timedelta(minutes=60))
+    sc2.attempts[-1]["result"] = "none"
+    sc2.next_allowed = None
+    assert sc2.step(t, t.replace(tzinfo=None), (True, "x"), OPTS, "11:00", [], active=True,
+                    min_gap=timedelta(minutes=60)) is None                                  # 45 < 60
+    t = T0 + timedelta(minutes=61)
+    assert sc2.step(t, t.replace(tzinfo=None), (True, "x"), OPTS, "11:00", [], active=True,
+                    min_gap=timedelta(minutes=60)) is not None

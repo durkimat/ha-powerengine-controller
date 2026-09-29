@@ -201,3 +201,41 @@ def test_idle_car_means_smart_slots_are_just_cheap_time():
     assert any(s.smart_slot and s.car_expected for s in slots)
     idle = build_slots(dataclasses.replace(base, car_idle=True), None, None, timezone.utc)
     assert all(not s.car_expected for s in idle if s.smart_slot)
+
+
+def _smart_slots(**kw):
+    r = read(CONFIG, get_state(), NOW)
+    return r, build_slots(r, [], None, BST, **kw)
+
+
+def test_whole_house_on_leaves_smart_slot_prices_alone():
+    _, base = _smart_slots()
+    _, explicit = _smart_slots(whole_house=True)
+    assert [(s.price, s.certainty, s.slot_price) for s in base] == [(s.price, s.certainty, s.slot_price)
+                                                                     for s in explicit]
+
+
+def test_whole_house_off_prices_smart_slots_at_the_standard_rate():
+    r, on = _smart_slots()
+    _, off = _smart_slots(whole_house=False)
+    peak = max(w.value for w in r.rates)
+    smart_off = [s for s in off if s.smart_slot]
+    assert smart_off and all(s.price == pytest.approx(peak) for s in smart_off)
+    assert [s.price for s in off if not s.smart_slot] == [s.price for s in on if not s.smart_slot]
+    assert any(s.smart_slot and s.price < peak for s in on)              # (the cheap early-morning slots)
+    assert all(s.car_expected == o.car_expected and s.car_kw == o.car_kw for s, o in zip(off, on, strict=True))
+
+
+def test_whole_house_off_keeps_the_fixed_overnight_window_and_skips_certainty():
+    class Sure:
+        def score(self, *a, **k):
+            return 0.5
+    r = read(CONFIG, get_state(), NOW)
+    tods = set(range(0, 10))                                             # half-hours 00:00-05:00 local
+    weighted = build_slots(r, [], None, BST, certainty=Sure(), overnight=tods)
+    off = build_slots(r, [], None, BST, certainty=Sure(), overnight=tods, whole_house=False)
+    night = [s for s in off if s.smart_slot and s.overnight]
+    assert night and all(s.price == 0.06993 for s in night)              # unchanged inside the fixed window
+    day = [s for s in off if s.smart_slot and not s.overnight]
+    assert day and all(s.certainty is None and s.slot_price is None for s in day)      # no weighting off-window
+    assert any(s.smart_slot and not s.overnight and s.certainty == 0.5 for s in weighted)

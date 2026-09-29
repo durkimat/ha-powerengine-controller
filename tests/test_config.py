@@ -136,3 +136,32 @@ def test_round_trip_efficiency_input():
     assert params_from(cfg).efficiency == 0.9 and not use_measured(cfg, "battery_round_trip")
     with pytest.raises(ConfigError, match="50 to 100"):
         parse_config({"inputs": {"battery_round_trip": {"value": 0.9}}})
+
+
+def test_smart_request_settings_defaults_ranges_and_rounding():
+    import pytest
+
+    from pe_core.config import SAFETY, SETTING_TEXT, ConfigError, settings_catalogue
+    cfg = parse_config({})
+    assert (cfg.safety["smart_max_requests_per_day"], cfg.safety["smart_min_gap_min"],
+            cfg.safety["smart_lookahead_h"]) == (6, 20, 3)
+    assert SAFETY["smart_max_requests_per_day"] == (6, 4, 10) and SAFETY["smart_min_gap_min"] == (20, 10, 120)
+    assert SAFETY["smart_lookahead_h"] == (3, 1, 8)
+    for key in ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h"):
+        assert key in SETTING_TEXT
+    sec = next(s for s in settings_catalogue()["sections"] if s["key"] == "smart")
+    assert sec["label"] == "Smart-charge requests" and len(sec["keys"]) == 3
+    assert parse_config({"safety": {"smart_max_requests_per_day": 10}}).safety["smart_max_requests_per_day"] == 10
+    got = parse_config({"safety": {"smart_max_requests_per_day": 7.6}}).safety["smart_max_requests_per_day"]
+    assert got == 8 and isinstance(got, int)
+    for key, bad in (("smart_max_requests_per_day", 3), ("smart_max_requests_per_day", 11), ("smart_min_gap_min", 9),
+                     ("smart_min_gap_min", 121), ("smart_lookahead_h", 0.5), ("smart_lookahead_h", 9)):
+        with pytest.raises(ConfigError, match="must be between"):
+            parse_config({"safety": {key: bad}})
+
+
+def test_smart_request_features_defaults():
+    cfg = parse_config({})
+    assert cfg.features["slots_whole_house"] is True and cfg.features["smart_skip_full_car"] is False
+    cfg = parse_config({"features": {"slots_whole_house": False, "smart_skip_full_car": True}})
+    assert cfg.features["slots_whole_house"] is False and cfg.features["smart_skip_full_car"] is True

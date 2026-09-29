@@ -175,11 +175,14 @@ def _solar_points(solar) -> list[ForecastPoint]:
 
 def build_slots(r: Readings, solar: list[dict] | list[ForecastPoint] | None, profile: LoadProfile | None, tz,
                 horizon_h: float = 48, min_h: float = 36, certainty=None,
-                first_seen: dict[str, str] | None = None, overnight: set[int] | None = None) -> list[Slot]:
+                first_seen: dict[str, str] | None = None, overnight: set[int] | None = None,
+                whole_house: bool = True) -> list[Slot]:
     """Half-hour slots from the current half-hour to the end of known prices (24-48 h).
 
     `certainty` (a certainty.Certainty) turns each future smart slot's price into an expected price, using when
-    the slot was first announced (`first_seen`: slot start iso -> iso) for its group."""
+    the slot was first announced (`first_seen`: slot start iso -> iso) for its group. `whole_house` False: the
+    supplier doesn't give the house the slot rate, so a smart slot outside the fixed overnight window is planned at
+    the day's standard (highest) rate, unweighted."""
     start = slot_start(r.now)
     rates = sorted(r.rates, key=lambda w: w.start)
     last_known = max((w.end for w in rates), default=start)
@@ -246,7 +249,10 @@ def build_slots(r: Readings, solar: list[dict] | list[ForecastPoint] | None, pro
         # if EDF ends it early the plan is remade at once)
         win = next((w for w in r.dispatches if w.start <= s < w.end), None) if slot.smart_slot else None
         running = win is not None and win.start <= r.now
-        if (slot.smart_slot and certainty is not None and s > start and price is not None and not slot.overnight
+        if slot.smart_slot and not whole_house and price is not None and not slot.overnight:
+            rng = day_range(s)
+            slot.price = rng[1] if rng else price
+        elif (slot.smart_slot and certainty is not None and s > start and price is not None and not slot.overnight
                 and not running):
             rng = day_range(s)
             std = rng[1] if rng else price
