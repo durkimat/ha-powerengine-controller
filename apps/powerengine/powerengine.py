@@ -10,6 +10,7 @@ feature is on, EDF smart-charge requests) behind the handover guards, the pause 
 import dataclasses
 import json
 import os
+import shutil
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -44,6 +45,9 @@ from pe_core.costbook import MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import energy_flow_card, sync_dashboard
 from pe_core.decide import cheap_limit, decide
+from pe_core.demo.gate import DemoGate
+from pe_core.demo.pack import load_pack as load_demo_pack
+from pe_core.demo.world import DemoWorld
 from pe_core.eeprom import BlockWriteModel, WriteLog, WriteModel
 from pe_core.energy import Recorder
 from pe_core.entities import (
@@ -118,6 +122,8 @@ def _real(writes) -> int:
     return sum(not is_staged(w.role) for w in writes)
 
 class PowerEngine(hass.Hass):
+    _demo = None                     # the demo day when `demo: <day>` is set in apps.yaml (see _demo_setup)
+
     def initialize(self):
         self.log(f"PowerEngine {__version__} starting")
         self._started_at = datetime.now(timezone.utc)
@@ -129,6 +135,9 @@ class PowerEngine(hass.Hass):
         custom = self.args.get("settings_file")
         self.paths = [custom] if custom else list(DEFAULT_PATHS)
         self.cfg, self.cfg_path, self.cfg_error = None, None, None
+        self._demo = None
+        if self.args.get("demo"):
+            self._demo_setup(str(self.args["demo"]))
         try:
             self.cfg, self.cfg_path = load_config(self.paths)
         except ConfigError as err:
@@ -244,7 +253,8 @@ class PowerEngine(hass.Hass):
         self.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
         self.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
         self.run_every(self._check_update, "now+120", 60)        # a new version installed: ask HA to restart us
-        self.run_every(self._release_check, "now+60", 300)       # a new version released: straight from GitHub
+        if not self._demo:                                       # (the demo makes no calls to the internet)
+            self.run_every(self._release_check, "now+60", 300)   # a new version released: straight from GitHub
         self.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
         self.listen_event(self._on_health_dismiss, "pe_health_dismiss")
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
@@ -418,6 +428,8 @@ class PowerEngine(hass.Hass):
     def _cycle(self, kwargs):
         """Read inputs, decide (Passive: would-do only), then publish entities that changed."""
         readings, decision = None, None
+        if self._demo:
+            self._demo_world().step()                      # the simulated home and battery move on a minute
         if self.cfg is not None and not self.cfg_error and (self.mode.effective == "unconfigured"
                                                             or getattr(self, "_guard_live", False)):
             self._guard_live = False
@@ -1270,7 +1282,10 @@ class PowerEngine(hass.Hass):
 
     def _publish_names(self):
         """The version sensor carries the names map (a small attribute; the card fills its placeholders from it)."""
-        self._publish_state("diag_version", __version__, {"names": self._names()})
+        attrs = {"names": self._names()}
+        if self._demo:
+            attrs["demo"] = self._demo_info()
+        self._publish_state("diag_version", __version__, attrs)
 
     def _events(self):
         """The grid-event adapter (Axle)."""
@@ -2679,7 +2694,51 @@ class PowerEngine(hass.Hass):
             except OSError as err:
                 self.log(f"Could not save dashboard defaults: {err}", level="WARNING")
 
+    # --- demo mode (demo plan C2): a simulated home and battery, and nothing written to the real system -----------
+
+    def _demo_setup(self, day):
+        """`demo: <day>` in apps.yaml. The settings are a fresh copy of demo/config.template in a separate folder, so
+        the real configuration, costs, journal and learned data are never touched; the app's get_state, call_service,
+        fire_event, set_state and get_history become the demo gate's (pe_core/demo/gate.py); publishing is direct."""
+        pack = load_demo_pack()
+        if day not in pack["days"]:
+            first = next(iter(pack["days"]))
+            self.log(f"Demo: no day called {day!r} (the pack has {', '.join(pack['days'])}); using {first}",
+                     level="WARNING")
+            day = first
+        self._demo = day
+        self.cfg_path = None
+        demo_dir = os.path.join(os.path.dirname(self._save_path()), "demo")
+        shutil.rmtree(demo_dir, ignore_errors=True)                  # a fresh demo each start
+        os.makedirs(demo_dir, exist_ok=True)
+        shutil.copyfile(os.path.join(os.path.dirname(__file__), "demo", "config.template"),
+                        os.path.join(demo_dir, "config.yaml"))
+        self.paths = [os.path.join(demo_dir, "config.yaml")]
+        gate = self._demo_gate = DemoGate(
+            self._demo_world, getattr(self, "get_state", None), getattr(self, "set_state", None),
+            getattr(self, "fire_event", None), self.log,
+            allowed_events=(RESULT_EVENT, "pe_test_result", "pe_sim_result", diagnostics.BUNDLE_EVENT))
+        self.get_state, self.get_history, self.call_service = gate.get_state, gate.get_history, gate.call_service
+        self.set_state, self.fire_event = gate.set_state, gate.fire_event
+        self.log(f"Demo mode: the {day} day, simulated home and battery; nothing outside {demo_dir} is changed")
+
+    def _demo_world(self):
+        world = self.__dict__.get("_world")
+        if world is None:
+            pack = load_demo_pack()
+            tz = getattr(self, "tz", None) or ZoneInfo(pack["tz"])
+            world = self._world = DemoWorld(pack, self._demo, tz, lambda: datetime.now(timezone.utc))
+        return world
+
+    def _demo_info(self):
+        """What the demo banner shows (published on the version sensor)."""
+        title = fill(self._demo_world().title(), self._names())
+        return {"day": self._demo, "title": title,
+                "note": f"Demo: {title}. A simulated home and battery; nothing is controlled."}
+
     def _publisher_choice(self):
+        if self._demo:
+            return "direct"
         choice = ((getattr(self.cfg, "system", None) or {}).get("publisher") if self.cfg else None) or "auto"
         return choice
 

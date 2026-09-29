@@ -201,3 +201,20 @@ Goal: PowerEngine runs with no MQTT broker and no real inverter (a demo), and in
     entity id, account number, MPAN, serial or site id can never be copied in. Never commit a pack from an unscrubbed
     source, never put private day files in tests (they use synthetic days), and don't loosen the whitelist without
     looking at what the new string is.
+- **C2, the demo world. Done** (`pe_core/demo/world.py`, `gate.py`, `demo/config.template`, the `_demo_*` methods in
+  `powerengine.py`). **Start it** with `demo: sunny` (or `dull`, `axle`, `car`) in the app's apps.yaml entry, and restart
+  AppDaemon; remove the line to go back. The app then runs on a simulated home: `DemoWorld` (18 kWh battery, 95% each
+  way, 5 kW, 12% floor, remote-control failsafe after 5 min) moves one pack day onto today, and the real Solis/Kraken/
+  Zappi/Solcast/Axle adapters read its `demo_*` entities unmodified (`world.IDS` lists them; RC discovery finds the
+  `battery_control_override` ones). The settings are a fresh copy of `demo/config.template` in `<config>/powerengine/demo/`
+  (the folder is wiped at each demo start; nothing else there or in `<config>/powerengine/` is touched; not `.yaml`, or
+  AppDaemon would load it as app config). Publishing is direct. Off: smart-charge requests, tariff simulator, cold-battery
+  weather, the GitHub release check. `sensor.pe_diag_version` carries `attributes.demo` (`day`, `title` with the names
+  filled, `note`) for C3's banner.
+  - **The gate rule: in demo mode every call to Home Assistant goes through `DemoGate`.** The app replaces its own
+    `get_state`, `get_history`, `call_service`, `set_state` and `fire_event` on the instance: service calls go only to the
+    world (what it refuses, such as notifications and logbook entries, is dropped and logged once); `set_state` only for
+    `pe_` entities; `fire_event` only the card's answers; `get_state` sees demo entities and PowerEngine's own `pe_`
+    entities, nothing else (no `zone.home`). So **always call `self.call_service` / `self.fire_event` in `powerengine.py`;
+    never call them on anything else** (an adapter's `ha`, `hass.Hass...`). `test_no_direct_call_to_home_assistant_bypasses_
+    the_gate` reads the source and fails on a new call anywhere else.

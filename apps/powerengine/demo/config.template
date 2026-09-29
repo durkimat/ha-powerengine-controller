@@ -1,0 +1,139 @@
+# The demo's configuration: every input is a demo entity (pe_core/demo/world.py), remote control drives the simulated
+# battery, and nothing here can reach a real system. It is not .yaml because AppDaemon would load that as app config;
+# each demo start copies it fresh as config.yaml into <config>/powerengine/demo/.
+# Off in the demo: smart-charge requests (no supplier to ask), the tariff simulator, and cold-battery weather
+# (the last two fetch from the internet).
+schema_version: 1
+inputs:
+  battery_soc:
+    entity: sensor.demo_inverter_battery_soc
+  battery_power:
+    entity: sensor.demo_inverter_battery_power
+  battery_charge_today:
+    entity: sensor.demo_inverter_battery_charge_today
+  battery_discharge_today:
+    entity: sensor.demo_inverter_battery_discharge_today
+  inverter_min_soc:
+    entity: number.demo_inverter_battery_minimum_soc
+  grid_power:
+    entity: sensor.demo_inverter_meter_power
+  grid_import_today:
+    entity: sensor.demo_inverter_grid_import_today
+  grid_export_today:
+    entity: sensor.demo_inverter_grid_export_today
+  house_load_power:
+    entity: sensor.demo_inverter_house_load
+  house_load_today:
+    entity: sensor.demo_inverter_house_load_today
+  solar_forecast_today:
+    entity: sensor.demo_solar_forecast_today
+  solar_forecast_tomorrow:
+    entity: sensor.demo_solar_forecast_tomorrow
+  solar_forecast_day3:
+    entity: sensor.demo_solar_forecast_day_3
+  import_rate_now:
+    entity: sensor.demo_edf_energy_import_current_rate
+  import_rates_today:
+    entity: event.demo_edf_energy_import_current_day_rates
+  import_rates_tomorrow:
+    entity: event.demo_edf_energy_import_next_day_rates
+  export_rate:
+    entity: sensor.demo_edf_energy_export_current_rate
+  standing_charge:
+    entity: sensor.demo_edf_energy_import_current_standing_charge
+  offpeak_now:
+    entity: binary_sensor.demo_edf_energy_import_off_peak
+  smart_dispatches:
+    entity: binary_sensor.demo_edf_energy_intelligent_dispatching
+  free_power_active:
+    entity: binary_sensor.demo_edf_energy_free_electricity_now
+  free_power_next_start:
+    entity: sensor.demo_edf_energy_next_free_electricity_session_start
+  free_power_next_end:
+    entity: sensor.demo_edf_energy_next_free_electricity_session_end
+  ev_plug_status:
+    entity: sensor.demo_zappi_plug_status
+  ev_charger_status:
+    entity: sensor.demo_zappi_status
+  ev_charge_power:
+    entity: sensor.demo_zappi_power_charging
+  ev_energy_today:
+    entity: sensor.demo_zappi_energy_used_today
+  axle_event_active:
+    entity: sensor.demo_axle_event_in_progress
+  axle_event_start:
+    entity: sensor.demo_axle_start_time
+  axle_event_end:
+    entity: sensor.demo_axle_end_time
+  guard_read_only:
+    entity: switch.demo_other_controller_read_only
+  guard_off_1:
+    entity: automation.demo_legacy_battery_control
+  battery_capacity:
+    value: 18
+  battery_max_charge_power:
+    value: 5000
+  battery_max_discharge_power:
+    value: 5000
+solar_plants:
+- id: main
+  name: Main
+  power:
+    entity: sensor.demo_solar_power
+  energy_today:
+    entity: sensor.demo_solar_energy_today
+  forecast: solcast_site
+  enabled: true
+features:
+  auto_cheap_threshold: true
+  fill_when_cheap: true
+  smart_charge_optimisation: false
+  arbitrage: true
+  axle: true
+  free_power_days: true
+  tariff_simulator: false
+  optimised_plan: true
+  learn_taper: true
+  learn_reserve: true
+  learn_export: true
+  learn_car: true
+  cold_caution: false
+  cold_learning: false
+  damp_restart: true
+  damp_bursts: false
+  deep_overnight: true
+operation:
+  mode: active
+safety:
+  min_reserve_soc: 12
+  cheap_threshold_p: 10
+  grid_charge_target_soc: 100
+  charge_hysteresis_soc: 3
+  main_fuse_a: 80
+  ev_charger_kw: 7.4
+  export_limit_kw: 6
+  pre_axle_lookahead_h: 6
+  axle_margin_soc: 5
+  battery_wear_p: 2
+  arbitrage_min_margin_p: 1
+  arbitrage_min_soc: 75
+  arbitrage_max_soc: 90
+  arbitrage_band_penalty_p: 2
+  max_writes_per_day: 60
+  ram_refresh_min: 1
+  ram_switch_cost_p: 0.5
+  ram_max_power_w: 5000
+  damp_restart_min: 5
+system:
+  house_load_includes_ev: true
+  battery_location: garage
+  control_method: ram_remote
+  publisher: direct
+notifications:
+  service: persistent_notification
+  events:
+    health: false
+    inputs: false
+    axle: false
+    free_power: false
+    daily: false
