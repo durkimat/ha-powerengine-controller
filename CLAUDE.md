@@ -184,3 +184,20 @@ Goal: PowerEngine runs with no MQTT broker and no real inverter (a demo), and in
   "toggle" for a switch, one of the select's options, a number). Fire it from the card with
   `hass.connection.sendMessagePromise({type: "fire_event", event_type: "pe_command", event_data: {...}})` (admin only)
   when HA refuses a service call because the domain has no platform. Invalid values are ignored.
+- **C1, demo data pack. Done** (`apps/powerengine/demo/pack.json`, about 19 KB, inside the app folder HACS installs;
+  pure reader `pe_core/demo/pack.py`: `load_pack`, `days`, `day_at`, `row_at`, `smart_slots`, `axle_events`). Four
+  recorded, scrubbed days, picked by rule from the owner's cost records: `sunny` (most solar), `dull` (least solar),
+  `axle` (largest grid-services export; its title is `<<event>> event day`, fill it with `names.fill`) and `car` (most
+  car kWh); a day that wins two rules gives the later rule its next best. It is September data: no "winter" names.
+  Per half-hour: house, car, solar, a derived solar forecast (recorded solar smoothed over 2 h, scaled per day within
+  10%), rates (act, std, ovn, exp, standing), recorded SoC at the start, smart-slot, axle and free flags, and a small
+  `as_recorded` grid/battery section. Times are offsets from local midnight (Europe/London); `day_at` maps wall-clock
+  times, so a spring-forward date has 46 rows and an autumn one 50 (the repeated hour plays twice).
+  - **Rebuild:** `python3 tools/build_demo_pack.py <config>/powerengine/costs [--glob "2026-09-*.json"]`. It prints
+    the chosen days and their totals and writes the pack. Only complete days count (48 consecutive records from local
+    midnight, at least 95% coverage, no duplicate starts).
+  - **Scrub rule:** the pack holds numbers, times and flags only. The builder refuses (exit 2) any string in a source
+    record except `start`, `source: "history"`, `fv` (a rates tag, dropped) and `v.event` (`axle` or `free_power`), so an
+    entity id, account number, MPAN, serial or site id can never be copied in. Never commit a pack from an unscrubbed
+    source, never put private day files in tests (they use synthetic days), and don't loosen the whitelist without
+    looking at what the new string is.
