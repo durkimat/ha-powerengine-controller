@@ -27,6 +27,7 @@ from pe_core.adapters.solcast import SolcastForecast
 from pe_core.adapters.solis import SolisInverter
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
+from pe_core.commands import from_pe_command, from_service
 from pe_core.config import (
     DEFAULT_PATHS,
     LOCATION_LAG_H,
@@ -229,6 +230,7 @@ class PowerEngine(hass.Hass):
         self.listen_event(self._on_set_control, CONTROL_EVENT)
         self.listen_event(self._on_sim_history, "pe_sim_history")
         self.listen_event(self._on_sim_settings, "pe_sim_settings")
+        self._listen_for_commands()
         self._beat({})
         self.run_every(self._beat, "now+60", HEARTBEAT_SECONDS)
         self.run_every(lambda kwargs: self._evaluate(), f"now+{RECHECK_SECONDS}", RECHECK_SECONDS)
@@ -2498,6 +2500,34 @@ class PowerEngine(hass.Hass):
         self._update_seen = installed
         self.log(f"Version {installed} installed (running {__version__}); asking Home Assistant to restart AppDaemon")
         self.fire_event("pe_update_installed", running=__version__, installed=installed)
+
+    def _listen_for_commands(self):
+        """Direct mode only: HA has no integration behind our entities, so hear its service calls. (With MQTT the
+        switches are real and the app just watches their state, so nothing is registered.)"""
+        pub = self._get_publisher()
+        if pub is not None and not pub.retains:
+            self.listen_event(self._on_call_service, "call_service")
+            self.listen_event(self._on_pe_command, "pe_command")
+
+    def _on_call_service(self, event_name, data, kwargs):
+        """Direct mode: a switch, select or number of ours was operated in HA (see pe_core/commands.py)."""
+        data = data or {}
+        for ent, value in from_service(str(data.get("domain")), str(data.get("service")),
+                                       data.get("service_data") or {}, self.get_state):
+            self._on_command(ent.key, value)
+
+    def _on_pe_command(self, event_name, data, kwargs):
+        """Direct mode: the card's own command event, for when HA refuses a service call for a missing platform."""
+        for ent, value in from_pe_command(data, self.get_state):
+            self._on_command(ent.key, value)
+
+    def _on_command(self, key, value):
+        """One place a command from HA lands: set the entity, and the state listeners (pause and guards, history)
+        react to the change exactly as they do when MQTT delivers it."""
+        pub = self._get_publisher()
+        if pub is not None:
+            self.log(f"Command from Home Assistant: {key} = {value}")
+            pub.preset(key, value)
 
     def _on_set_control(self, event_name, data, kwargs):
         """The Battery controller switch: Active when handed to PowerEngine, Passive when handed to Predbat.
