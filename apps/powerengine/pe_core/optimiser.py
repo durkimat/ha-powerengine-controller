@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from .decide import EXPORT, FORCE_DISCHARGE, GRID_CHARGE, HOLD, SELF_USE
 from .forecast import Slot
-from .planner import Params, PlanSlot, car_slot, step
+from .planner import DT_H, Params, PlanSlot, car_slot, step
 
 LEVELS = 101                                  # 0..100 %
 
@@ -135,8 +135,11 @@ MID_SLOT_STICK = 0.15                 # GBP: changing the running half-hour's ac
 
 
 def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_action: str | None = None,
-             stick: float = 0.0) -> dict | None:
-    """`wear`: GBP per kWh taken out of the battery, counted in the choice (not in the cash cost returned).
+             stick: float = 0.0, first_h: float | None = None) -> dict | None:
+    """`first_h`: hours of the first slot still to run (None: a whole half-hour): it is simulated for that part
+    only, so feasibility, the sale floor, energy, cost and end charge are those of the rest of the half-hour.
+
+    `wear`: GBP per kWh taken out of the battery, counted in the choice (not in the cash cost returned).
 
     Also counted in the choice: the arbitrage band's outside-band cost (not inside the fixed overnight window),
     a cost per switch of the inverter's timed windows, and, with top-up when cheap on, a steep cost for ending the
@@ -147,6 +150,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
     end_value = min(prices) if prices else 0.0
     cap = p.capacity_kwh
     T = len(slots)
+    hours = [first_h if (t == 0 and first_h is not None and first_h < DT_H) else DT_H for t in range(T)]
     K = 4
     ends = window_ends(slots)
     final = final_topup(slots, p)
@@ -162,7 +166,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
         for lv in range(LEVELS):
             options = []
             for a in acts:
-                ps = PlanSlot(s, a, "", target_soc=slot_target(s, p, final[t]))
+                ps = PlanSlot(s, a, "", target_soc=slot_target(s, p, final[t]), hours=hours[t])
                 end = step(ps, float(lv), p)
                 if a == EXPORT and end < sell_floor(s, p) - 1e-6:
                     continue                           # below the band only where the refill is guaranteed
@@ -193,7 +197,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
     kp = KIND.get(prev_action, NONE_K) if prev_action else NONE_K
     for t, s in enumerate(slots):
         a = choice[t][min(LEVELS - 1, max(0, round(lvl)))][kp]
-        ps = PlanSlot(s, a, "", target_soc=slot_target(s, p, final[t]))
+        ps = PlanSlot(s, a, "", target_soc=slot_target(s, p, final[t]), hours=hours[t])
         lvl = step(ps, lvl, p)
         actions.append(a)
         socs.append(round(lvl, 1))

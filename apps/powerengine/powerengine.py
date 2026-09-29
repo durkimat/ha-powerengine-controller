@@ -995,11 +995,12 @@ class PowerEngine(hass.Hass):
                             overnight=window)
         slots, cold = self._apply_cold(slots, r.now)
         strategy = "optimiser" if self.cfg.features.get("optimised_plan", True) else "rules"
+        first_h = self._first_slot_hours(slots, r.now)
         self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz,
                               auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)),
                               wear_p=self.cfg.safety.get("battery_wear_p", 2.0), strategy=strategy,
                               prev_action=self._decision.action if getattr(self, "_decision", None) else None,
-                              stick=self._mid_slot_stick(r.now))
+                              stick=self._mid_slot_stick(r.now), first_h=first_h)
         self._plan_sig, self._plan_time = sig, r.now
         self._snapshot_plan(r.now)
         extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0,
@@ -1007,7 +1008,8 @@ class PowerEngine(hass.Hass):
         if self.plan.strategy != "optimiser":
             try:                                          # the optimiser, for comparison only
                 p = self._params(r)
-                extra["optimiser"] = compare(self.plan, optimise(slots, r.battery_soc, p, wear=p.wear_p / 100), p)
+                opt = optimise(slots, r.battery_soc, p, wear=p.wear_p / 100, first_h=first_h)
+                extra["optimiser"] = compare(self.plan, opt, p)
             except Exception as err:
                 self.log(f"Optimiser comparison failed: {err!r}", level="WARNING")
         try:                                              # the writes the plan implies, for the plan chart
@@ -1491,6 +1493,17 @@ class PowerEngine(hass.Hass):
             self.log(f"RAM remote control Off ({reason})")
             cmd = self._inverter().ram_off_command()
             self._ram_send([cmd.writes()[0]], rc, "change", cmd)
+
+    @staticmethod
+    def _first_slot_hours(slots, now):
+        """Hours of the plan's first half-hour still to run, so a plan made part-way through it is for the rest of it
+        (at least a minute, so a plan made just before the boundary stays sensible). None: a whole half-hour."""
+        if not slots:
+            return None
+        left = (slots[0].end - now).total_seconds()
+        if left >= 1800:
+            return None
+        return max(left, 60.0) / 3600
 
     def _mid_slot_stick(self, now):
         """A replan part-way through a half-hour (not in its first two minutes, when the plan's next half-hour takes
