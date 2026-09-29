@@ -20,6 +20,7 @@ from pe_core import learn as learning
 from pe_core.activity import ActivityLog
 from pe_core.adapters.axle import AxleEvents
 from pe_core.adapters.kraken import KrakenTariff, supplier_of
+from pe_core.adapters.myenergi import ZappiCharger
 from pe_core.adapters.solis import SolisInverter
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
@@ -426,7 +427,7 @@ class PowerEngine(hass.Hass):
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
                 readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None,
-                                self._tariff(), self._events())
+                                self._tariff(), self._events(), self._ev())
                 self._record_load(readings)
                 self._grid_check(readings)
                 self._record_costs(readings)
@@ -1240,6 +1241,13 @@ class PowerEngine(hass.Hass):
             tariff = self._tariff_adapter = KrakenTariff(name, self._role_entity)
         return tariff
 
+    def _ev(self):
+        """The car charger adapter (Zappi)."""
+        ev = getattr(self, "_ev_adapter", None)
+        if ev is None:
+            ev = self._ev_adapter = ZappiCharger(self._role_entity)
+        return ev
+
     def _events(self):
         """The grid-event adapter (Axle)."""
         events = getattr(self, "_events_adapter", None)
@@ -1829,7 +1837,8 @@ class PowerEngine(hass.Hass):
 
     def _battery_now(self):
         try:
-            r = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None, self._tariff(), self._events())
+            r = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None,
+                     self._tariff(), self._events(), self._ev())
             return {"soc": r.battery_soc, "battery_w": r.battery_power, "grid_w": r.grid_power}
         except Exception:
             return {}

@@ -125,7 +125,7 @@ def test_unknown_kind_raises_value_error():
 
 
 def test_names_empty_when_nothing_registered():
-    assert names("ev") == []
+    assert names("forecast") == []
 
 
 # ---------------------------------------------------------------------------
