@@ -15,6 +15,7 @@ Every slot keeps a plain-English reason, so the plan can always say why.
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -557,6 +558,22 @@ def headline(plan: Plan) -> str:
     return f"{when}: {verb.lower() if when != 'Now' else verb} ({nxt['price']}): {nxt['reason']}.{tail}"
 
 
+WINDOWS_BUDGET = 6000      # bytes of sensor.pe_plan's attributes for the windows list (HA drops history over 16 KB)
+
+
+def windows_within(ws: list[dict], budget: int = WINDOWS_BUDGET) -> tuple[list[dict], int]:
+    """The soonest windows that fit `budget` bytes of compact JSON, and how many later ones were left out. A choppy
+    plan can have 40+ windows at ~280 bytes each, which took sensor.pe_plan over HA's limit on 28 Sep 2026."""
+    out, used = [], 2
+    for w in ws:
+        n = len(json.dumps(w, separators=(",", ":"), default=str)) + 1
+        if out and used + n > budget:
+            break
+        out.append(w)
+        used += n
+    return out, len(ws) - len(out)
+
+
 def params_from(cfg, readings=None) -> Params:
     """Planner parameters from the config (fixed values) and safety settings."""
     def static(role, default):
@@ -581,7 +598,7 @@ def params_from(cfg, readings=None) -> Params:
         min_reserve_soc=s["min_reserve_soc"],
         target_soc=s["grid_charge_target_soc"],
         cheap_cap_p=s["cheap_threshold_p"],
-        axle_kw=min(4.0, max_dis),
+        axle_kw=max_dis,                 # Axle pays per kWh: plan events at full discharge power (0.9.55)
         axle_enabled=bool(f.get("axle")),
         axle_plus_export=bool(f.get("axle_plus_export", True)),
         free_enabled=bool(f.get("free_power_days")),
@@ -663,7 +680,9 @@ def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
     text = headline(plan)
     est = next((ps.slot.start.isoformat() for ps in plan.slots if ps.slot.price_estimated), None)
     nxt = plan.windows[1] if len(plan.windows) > 1 else None
-    attrs = {"windows": plan.windows, "series": ser, "cost": round(plan.cost, 2), "strategy": plan.strategy,
+    shown, more = windows_within(plan.windows)
+    attrs = {"windows": shown, "windows_more": more, "series": ser, "cost": round(plan.cost, 2),
+             "strategy": plan.strategy,
              "alternative": plan.alternative,
              "baseline_cost": round(plan.baseline_cost, 2), "saving": round(plan.saving, 2),
              "extra_kwh": round(plan.extra_kwh, 1), "cheap_p": plan.cheap_p, "extra_value": round(plan.extra_value, 2),

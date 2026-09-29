@@ -10,7 +10,7 @@ null
 },
 {
 "t": "2026-09-27T20:00:00+00:00",
-"plan": "ssssCECCECCECCECCECCssssssssssCC",
+"plan": "ssssCECCECCECCECCECCssssssssssss",
 "soc": [
 88,
 90,
@@ -36,7 +36,7 @@ null
 },
 {
 "t": "2026-09-27T20:15:00+00:00",
-"plan": "ssssCECCECCECCECCECCssssssssssCC",
+"plan": "ssssCECCECCECCECCECCssssssssssss",
 "soc": [
 87,
 90,
@@ -69,7 +69,7 @@ null
 },
 {
 "t": "2026-09-27T20:20:00+00:00",
-"plan": "EsssCCECCECCECCECCECsssssHHHHHHC",
+"plan": "EsssCCECCECCECCECCECsssssHHHHHHH",
 "soc": [
 75,
 84,
@@ -187,7 +187,7 @@ null
 },
 {
 "t": "2026-09-27T20:25:00+00:00",
-"plan": "EsssCCECCECCECCECCECsssssHHHHHHC",
+"plan": "EsssCCECCECCECCECCECsssssHHHHHHH",
 "soc": [
 76,
 85,
@@ -438,7 +438,7 @@ null
 },
 {
 "t": "2026-09-27T21:10:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssCCCCCCC",
+"plan": "sEEECCCEEEECCCCCCCssssssssCCCCCC",
 "soc": [
 92,
 61,
@@ -447,7 +447,7 @@ null
 100,
 96,
 94,
-94
+95
 ]
 },
 {
@@ -474,20 +474,6 @@ null
 },
 {
 "t": "2026-09-27T21:15:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssCCCCCCC",
-"soc": [
-93,
-62,
-59,
-56,
-100,
-96,
-94,
-94
-]
-},
-{
-"t": "2026-09-27T21:26:00+00:00",
 "plan": "sEEECCCEEEECCCCCCCssssssssCCCCCC",
 "soc": [
 93,
@@ -515,7 +501,7 @@ null
 },
 {
 "t": "2026-09-27T21:30:00+00:00",
-"plan": "EEECCCEEEECCCCCCCssssssssCCCCCCC",
+"plan": "EEECCCEEEECCCCCCCsssssssCCCCCCCC",
 "soc": [
 79,
 77,
@@ -524,7 +510,7 @@ null
 100,
 95,
 94,
-95
+94
 ]
 },
 {
@@ -633,7 +619,7 @@ null
 },
 {
 "t": "2026-09-27T21:35:00+00:00",
-"plan": "EEECCCEEEECCCCCCCssssssssCCCCCCC",
+"plan": "EEECCCEEEECCCCCCCsssssssCCCCCCCC",
 "soc": [
 77,
 75,
@@ -642,7 +628,7 @@ null
 100,
 95,
 94,
-95
+94
 ]
 },
 {
@@ -737,7 +723,7 @@ null
 },
 {
 "t": "2026-09-27T21:40:00+00:00",
-"plan": "EEECCCEEEECCCCCCCssssssssCCCCCCC",
+"plan": "EEECCCEEEECCCCCCCsssssssCCCCCCCC",
 "soc": [
 76,
 74,
@@ -746,7 +732,7 @@ null
 100,
 95,
 94,
-95
+94
 ]
 },
 {
@@ -841,7 +827,7 @@ null
 },
 {
 "t": "2026-09-27T21:45:00+00:00",
-"plan": "EEECCCEEEECCCCCCCssssssssCCCCCCC",
+"plan": "EEECCCEEEECCCCCCCsssssssCCCCCCCC",
 "soc": [
 75,
 73,
@@ -850,7 +836,7 @@ null
 100,
 95,
 94,
-95
+94
 ]
 },
 {
@@ -960,7 +946,7 @@ null
 },
 {
 "t": "2026-09-27T21:50:00+00:00",
-"plan": "HEEECCCEEEECCCCCCssssssssCCCCCCC",
+"plan": "HEEECCCEEEECCCCCCsssssssCCCCCCCC",
 "soc": [
 88,
 57,
@@ -969,7 +955,7 @@ null
 100,
 95,
 94,
-95
+94
 ]
 },
 {
@@ -1177,7 +1163,7 @@ null
 },
 {
 "t": "2026-09-27T22:00:00+00:00",
-"plan": "EEECCCEEEECCCCCCssssssssCCCCCCCE",
+"plan": "EEECCCEEEECCCCCCsssssssCCCCCCCCE",
 "soc": [
 73,
 71,
@@ -1185,8 +1171,8 @@ null
 65,
 99,
 94,
-95,
-95
+94,
+94
 ]
 },
 {
@@ -1519,7 +1505,7 @@ null
 },
 {
 "t": "2026-09-27T22:15:00+00:00",
-"plan": "EEECCCEEEECCCCCCssssssssCCCCCCCE",
+"plan": "EEECCCEEEECCCCCCsssssssCCCCCCCCE",
 "soc": [
 74,
 72,
@@ -1527,8 +1513,8 @@ null
 66,
 99,
 94,
-95,
-95
+94,
+94
 ]
 },
 {

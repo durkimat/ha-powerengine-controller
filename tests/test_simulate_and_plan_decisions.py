@@ -22,7 +22,7 @@ def R(t=NOW, **kw):
 
 def test_params_from_config():
     p = params_from(CFG)
-    assert p.capacity_kwh == 18 and p.max_discharge_kw == 4.8 and p.axle_kw == 4.0
+    assert p.capacity_kwh == 18 and p.max_discharge_kw == 4.8 and p.axle_kw == 4.8
     assert p.cheap_cap_p == 10 and p.hold_for_car is True
 
 
@@ -123,3 +123,17 @@ def test_next_text_merges_windows_and_skips_the_running_one():
     assert next_text(plan) == "sell 14:00–16:00, then self-use 16:00–23:30"
     assert next_text(plan, n=3).endswith("charge 23:30–05:00 tomorrow")
     assert next_text(None) == ""
+
+
+def test_plan_windows_are_capped_to_a_byte_budget_soonest_first():
+    import json
+
+    from pe_core.planner import WINDOWS_BUDGET, windows_within
+    ws = [{"start": f"2026-09-29T{h:02d}:00:00+00:00", "end": f"2026-09-29T{h:02d}:30:00+00:00", "action": "export",
+           "reason": "sell at 15p: refilled at 6.99p from 13:30", "target_soc": None, "soc_start": 90, "soc_end": 80,
+           "cost": -0.5, "estimated": False, "price": "6.99p", "from": "10:00", "to": "10:30", "day": ""}
+          for h in range(24)] * 3
+    shown, more = windows_within(ws)
+    assert shown == ws[:len(shown)] and more == len(ws) - len(shown) > 0
+    assert len(json.dumps(shown, separators=(",", ":"))) <= WINDOWS_BUDGET
+    assert windows_within(ws[:3]) == (ws[:3], 0)
