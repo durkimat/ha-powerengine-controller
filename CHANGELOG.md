@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.58 (beta)
+
+### Behaviour changes
+- None. This release reorganises how PowerEngine reads your car charger, so other chargers can be supported later.
+
+### Under the hood (making PowerEngine generic, step 4)
+- The Zappi-specific part now sits in a car-charger "adapter": turning the plug status ("Charging", "EV
+  Disconnected" and so on) into charging, plugged in or unplugged, and spotting "charge complete".
+- Spotting a full car from the smart-slot history and the check meter were already charger-neutral, so they stay
+  as they are.
+- The recorded-night replay passed unchanged.
+
 ## 0.9.57 (beta)
 
 ### Behaviour changes
