@@ -89,7 +89,8 @@ SAFETY = {
     "damp_burst_window_min": (10.0, 2, 60),   # burst damping: something written this recently counts as a burst
     "damp_burst_settle_min": (5.0, 1, 30),    # ...and then waits for the plan to be steady this long (min)
 }
-SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage", "control_method": "timed_windows"}
+SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage", "control_method": "timed_windows",
+                   "publisher": "auto"}
 # system settings chosen from a list: key -> (config-page section, ((value, label), ...))
 SYSTEM_CHOICES = {
     "battery_location": ("cold", (("garage", "Garage or outbuilding (follows outside over about 24 h)"),
@@ -98,6 +99,9 @@ SYSTEM_CHOICES = {
                                   ("custom", "Custom: use Battery warm-up time below"))),
     "control_method": ("control", (("timed_windows", "Timed windows (the inverter's charge/discharge times; EEPROM)"),
                                    ("ram_remote", "RAM remote control (Battery control override; no EEPROM writes)"))),
+    "publisher": ("system", (("auto", "Automatic (MQTT if AppDaemon has the MQTT plugin, else direct)"),
+                             ("mqtt", "MQTT"),
+                             ("direct", "Direct through AppDaemon (no MQTT broker)"))),
 }
 LOCATION_LAG_H = {"garage": 24.0, "outside": 6.0, "indoors": 72.0}
 
@@ -216,6 +220,11 @@ SETTING_TEXT = {
     "battery_location": ("Battery location", "",
                          "Where the battery is, which sets how quickly it follows the outside temperature: how long "
                          "a cold spell takes to chill it, and to warm it back up."),
+    "publisher": ("Entity publishing", "",
+                  "How PowerEngine's entities get into Home Assistant. MQTT keeps them across restarts and lets "
+                  "their switches be changed from HA. Direct needs no MQTT broker, but the entities are rebuilt at "
+                  "each start and their switches are read-only. Automatic uses MQTT when it is set up. Takes effect "
+                  "after a restart."),
     "house_load_includes_ev": ("House load includes the car charger", "",
                                "Tick if the car is inside the inverter's house load. PowerEngine then subtracts it and "
                                "stops the battery discharging into the car."),

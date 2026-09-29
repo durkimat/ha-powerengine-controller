@@ -162,3 +162,15 @@ behaviour change:
 7. Solis as a definition file (YAML plus a small driver; firmware variants; RAM first).
 
 Each step is a small PR that passes the replay unchanged.
+
+## Demo mode plan
+
+Goal: PowerEngine runs with no MQTT broker and no real inverter (a demo), and installs more easily.
+
+- **B1, publisher adapter. Done** (`pe_core/adapters/publish.py`): `StatePublisher` (`discover`, `publish`, `preset`,
+  `retire`, `retire_all`, `available`) with `MqttPublisher` (exactly the old topics, payloads, QoS 1, retained) and
+  `DirectPublisher(set_state, remove_state=None)` (HA states through AppDaemon, same entity ids as MQTT discovery's
+  `default_entity_id`). System setting `publisher`: `auto` (MQTT if the AppDaemon MQTT plugin is there, else direct) /
+  `mqtt` / `direct`. **Rule: all entity output goes through `self._get_publisher()`; never call `mqtt_publish` or build a
+  topic in the app.** Direct-mode gaps: no entity registry (no unique ids, gone when HA restarts until the next publish),
+  no retire from HA (marked `unavailable`), and no commands from HA (switches and selects are read-only) until B2.

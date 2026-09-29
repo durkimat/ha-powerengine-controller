@@ -187,7 +187,8 @@ def test_app_publishes_the_names_map_on_the_version_sensor():
         e = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
         e.cfg = None
         sent = {}
-        e._publish = lambda topic, payload, *a, **k: sent.__setitem__(topic, payload)
+        e._publisher_obj = types.SimpleNamespace(
+            publish=lambda key, state, attrs=None: sent.__setitem__(f"powerengine/{key}/attributes", attrs))
         e._publish_names()
         assert json.loads(sent["powerengine/diag_version/attributes"])["names"] == nm.neutral_names()
         e.cfg = object()
