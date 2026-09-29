@@ -987,11 +987,15 @@ class PowerEngine(hass.Hass):
         return fc.points(fc.read(lambda eid, attr: self.get_state(eid, attribute=attr),
                                  [self._role_entity(role) for role in FORECAST_ROLES]))
 
-    def _maybe_replan(self, r):
+    def _car_idle(self, r) -> bool:
+        """The last smart slot passed with the car drawing nothing (it's full)."""
         try:
-            r.car_idle = bool(self.slots.car_idle(r.now)) if getattr(self, "slots", None) else False
+            return bool(self.slots.car_idle(r.now)) if getattr(self, "slots", None) else False
         except Exception:
-            r.car_idle = False
+            return False
+
+    def _maybe_replan(self, r):
+        r.car_idle = self._car_idle(r)
         sig = (len(r.rates), r.rates[0].start if r.rates else None,
                tuple((w.start, w.end) for w in r.dispatches), r.axle_start, r.axle_end, r.free_start, r.free_end,
                self.profile.days if self.profile else None, json.dumps(self.cfg.safety, sort_keys=True),
@@ -1003,7 +1007,7 @@ class PowerEngine(hass.Hass):
         window = overnight_window(self.costbook.cheap_history) if self.costbook is not None else set()
         slots = build_slots(r, self._solar_forecast(), self.profile, self.tz, certainty=cert,
                             first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
-                            overnight=window)
+                            overnight=window, whole_house=bool(self.cfg.features.get("slots_whole_house", True)))
         slots, cold = self._apply_cold(slots, r.now)
         strategy = "optimiser" if self.cfg.features.get("optimised_plan", True) else "rules"
         first_h = self._first_slot_hours(slots, r.now)
@@ -2135,14 +2139,21 @@ class PowerEngine(hass.Hass):
         st = self.get_state(eid, attribute="all") or {}
         options = self._tariff().ready_by_options(st)
         cheap_p = cheap_limit(r, self.cfg)
+        safety, feats = self.cfg.safety, self.cfg.features
         worth = worth_asking(r.ev_state(), r.dispatches, r.now,
                              r.import_rate is not None and r.import_rate * 100 <= cheap_p, r.battery_soc,
-                             self.cfg.safety["grid_charge_target_soc"], bool(self.cfg.features.get("arbitrage")),
-                             r.export_rate * 100 if r.export_rate is not None else None, cheap_p)
+                             safety["grid_charge_target_soc"], bool(feats.get("arbitrage")),
+                             r.export_rate * 100 if r.export_rate is not None else None, cheap_p,
+                             lookahead=timedelta(hours=safety["smart_lookahead_h"]),
+                             whole_house=bool(feats.get("slots_whole_house", True)),
+                             car_full=r.ev_complete() or self._car_idle(r),
+                             skip_full=bool(feats.get("smart_skip_full_car", False)))
         active = self.mode.effective == "active"
         now_local = r.now.astimezone(self.tz) if self.tz else r.now
         a = self.smart.step(r.now, now_local, worth, options, st.get("state"), r.dispatches, active,
-                            settled=self._smart_settled(r.now, st.get("state")))
+                            settled=self._smart_settled(r.now, st.get("state")),
+                            daily_cap=int(safety["smart_max_requests_per_day"]),
+                            min_gap=timedelta(minutes=safety["smart_min_gap_min"]))
         if a:
             verb = "Asking" if active else "Would ask"
             self.log(f"{verb} EDF for smart-charge slots: ready-by {a['from']} → {a['to']} ({a['why']})")

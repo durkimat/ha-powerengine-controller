@@ -2,14 +2,14 @@
 
 Changing the ready-by time makes EDF re-plan the car's charging, which often creates new slots (the whole house
 gets the slot rate). What PowerEngine does, decided with Matthew on 26 Sep 2026:
-  - Ask only when it's worth it: the car is plugged in and not charging, no slot is planned in the next 3 hours,
+  - Ask only when it's worth it: the car is plugged in and not charging, no slot is planned soon (3 hours by default),
     import isn't already cheap, and either the battery has room or arbitrage is on and cheap power could be sold
     for more than it costs.
   - Pick the next nearest ready-by time (EDF currently offers morning times only); it must differ from the
     current one, since the change is what prompts EDF to re-plan. The charge target stays at 100%.
   - Check about 15 minutes later whether new slots appeared. If not, back off: 30, 60, 120, then 240 minutes
-    before the next try; at most 6 requests a day and never within 20 minutes of the last one, so EDF's API is
-    never hammered. Success or unplugging resets the back-off.
+    before the next try; at most 6 requests a day and never within 20 minutes of the last one (both settings; these
+    are the defaults), so EDF's API is never hammered. Success or unplugging resets the back-off.
   - Changes made by anything else (e.g. the four "IO Schedule" automations) are logged with their outcome too,
     which gives the baseline to compare against.
 In Passive mode nothing is sent: requests are recorded as "would" so the timing can be reviewed.
@@ -60,10 +60,18 @@ def choose_time(options: list[str], current: str | None, now_local: datetime) ->
 
 
 def worth_asking(ev_state: str, dispatches, now: datetime, cheap_now: bool, soc: float | None, target: float,
-                 arbitrage: bool, export_p: float | None, cheap_p: float | None) -> tuple[bool, str]:
+                 arbitrage: bool, export_p: float | None, cheap_p: float | None, lookahead: timedelta = LOOKAHEAD,
+                 whole_house: bool = True, car_full: bool = False, skip_full: bool = False) -> tuple[bool, str]:
+    """Is it worth asking for slots now? `lookahead`: skip if a slot is planned within it. `whole_house`: the
+    supplier charges the whole house the slot rate (if not, extra slots only help the car). `skip_full` with
+    `car_full`: the charger says the charge is complete, or the car drew nothing last slot."""
     if ev_state != "plugged_in":
         return False, "car not plugged in" if ev_state == "unplugged" else "car already charging"
-    if any(w.start - now <= LOOKAHEAD and w.end > now for w in dispatches):
+    if not whole_house:
+        return False, "smart slots don't cover the house"
+    if skip_full and car_full:
+        return False, "the car looks full"
+    if any(w.start - now <= lookahead and w.end > now for w in dispatches):
         return False, "a slot is already planned soon"
     if cheap_now:
         return False, "import is already cheap"
@@ -130,7 +138,8 @@ class SmartCharger:
         self._record(now, "other", frm, to, dispatches)
 
     def step(self, now: datetime, now_local: datetime, worth: tuple[bool, str], options: list[str],
-             current: str | None, dispatches, active: bool, settled: bool = True) -> dict | None:
+             current: str | None, dispatches, active: bool, settled: bool = True, daily_cap: int = DAILY_CAP,
+             min_gap: timedelta = MIN_GAP) -> dict | None:
         """The request to make now, if any: {"to": "HH:MM", ...}. Records it (as "would" when not active).
         Nothing while not `settled` (just started, or EDF's data was recently unavailable: an empty slot list
         then may just mean it hasn't loaded yet, and a request would make EDF re-plan for nothing)."""
@@ -143,10 +152,10 @@ class SmartCharger:
             return None
         today = now.date().isoformat()
         mine_today = [a for a in self.attempts if a["by"] in ("powerengine", "would") and a["time"][:10] == today]
-        if len(mine_today) >= DAILY_CAP:
+        if len(mine_today) >= daily_cap:
             return None
         last = max((datetime.fromisoformat(a["time"]) for a in self.attempts), default=None)
-        if last and now - last < MIN_GAP:
+        if last and now - last < min_gap:
             return None
         if self.next_allowed and now < datetime.fromisoformat(self.next_allowed):
             return None
