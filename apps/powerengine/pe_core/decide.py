@@ -38,11 +38,14 @@ class Decision:
     target_soc: float | None = None
     power_w: float | None = None
     details: dict = field(default_factory=dict)
+    label_target_soc: float | None = None    # what the sentence says a charge is heading for (the end of the plan's
+                                             # run of charging); the control keeps using target_soc, the slot's own
 
     def sentence(self, passive: bool) -> str:
         verb = ACTION_TEXT[self.action]
-        if self.action == GRID_CHARGE and self.target_soc is not None:
-            verb += f" to {self.target_soc:.0f}%"
+        shown = self.label_target_soc if self.label_target_soc is not None else self.target_soc
+        if self.action == GRID_CHARGE and shown is not None:
+            verb += f" to {shown:.0f}%"
         if self.action == FORCE_DISCHARGE and self.power_w:
             verb += f" at {self.power_w / 1000:.1f} kW"
         if self.action == SELF_USE and self.power_w is not None:
@@ -192,7 +195,19 @@ def fuse_limited(d: Decision, r: Readings, cfg: Config) -> Decision:
     if room >= max_w:
         return d
     why = f"{d.reason} (charging limited to {room / 1000:.1f} kW by the {s.get('main_fuse_a', 60):g} A fuse)"
-    return Decision(d.action, d.rule, why, target_soc=d.target_soc, power_w=round(room), details=d.details)
+    return Decision(d.action, d.rule, why, target_soc=d.target_soc, power_w=round(room), details=d.details,
+                    label_target_soc=d.label_target_soc)
+
+
+def _run_destination(plan, ps) -> float | None:
+    """Where the plan's run of the same action, from the first slot on, ends up: the last slot's target."""
+    target = ps.target_soc
+    for nxt in plan.slots:
+        if nxt.action != ps.action:
+            break
+        if nxt.target_soc is not None:
+            target = nxt.target_soc
+    return target
 
 
 def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bool, target: float) -> Decision:
@@ -203,7 +218,8 @@ def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bo
     if r.house_includes_ev and r.ev_state() == "charging":
         # the battery mustn't feed the car: follow the plan if it charges now; at a cheap rate charge it too
         if ps.action == GRID_CHARGE:
-            return Decision(GRID_CHARGE, "car_charging", f"car is charging; {ps.reason}", target_soc=ps.target_soc)
+            return Decision(GRID_CHARGE, "car_charging", f"car is charging; {ps.reason}", target_soc=ps.target_soc,
+                            label_target_soc=_run_destination(plan, ps))
         if cheap:
             top = min(target, s["arbitrage_max_soc"]) if f.get("arbitrage") and not ps.slot.overnight else target
             if f.get("fill_when_cheap", True) and soc < top:
@@ -220,4 +236,5 @@ def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bo
         # without this the inverter kept charging (RAM control: 63% -> 82% against a 76% target, 28 Sep 2026)
         return Decision(HOLD, "plan", f"reached the {ps.target_soc:.0f}% charge target for this half-hour: "
                         "holding until the next one", target_soc=ps.target_soc)
-    return Decision(ps.action, "plan", ps.reason, target_soc=ps.target_soc)
+    return Decision(ps.action, "plan", ps.reason, target_soc=ps.target_soc,
+                    label_target_soc=_run_destination(plan, ps) if ps.action == GRID_CHARGE else None)

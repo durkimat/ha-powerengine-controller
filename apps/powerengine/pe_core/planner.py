@@ -81,6 +81,8 @@ class PlanSlot:
     grid_to_battery: float = 0.0      # kWh drawn from the grid into the battery (grid-charge only)
     battery_export: float = 0.0       # kWh of grid_export that came from the battery (the rest is solar)
     cost: float = 0.0                 # GBP (negative = income)
+    hours: float = DT_H               # how long this slot is simulated for: less than a half-hour only for the current
+                                      # one, part-way through it (its flows and cost are then that part's)
 
 
 @dataclass
@@ -185,9 +187,18 @@ def grid_charge_kw(s: Slot, p: Params, dt_h: float = DT_H, soc: float | None = N
     return max(0.0, min(charge_limit_kw(s, p, soc), headroom))
 
 
-def step(ps: PlanSlot, soc: float, p: Params, dt_h: float = DT_H) -> float:
-    """Apply ps.action for `dt_h` hours starting at `soc` (%). Fills in flows and cost; returns end SoC."""
+def step(ps: PlanSlot, soc: float, p: Params, dt_h: float | None = None) -> float:
+    """Apply ps.action for `dt_h` hours starting at `soc` (%). Fills in flows and cost; returns end SoC.
+
+    Without `dt_h` the slot's own duration applies (`ps.hours`, a half-hour unless it is the current, part-run one):
+    then the slot's house load and solar, which are for a whole half-hour, are cut to that part. With `dt_h` given,
+    the slot's energies are taken as already for that duration."""
     s = ps.slot
+    if dt_h is None:
+        dt_h = ps.hours
+        if dt_h != DT_H:
+            frac = dt_h / DT_H
+            s = replace(s, load_kwh=s.load_kwh * frac, solar_kwh=s.solar_kwh * frac)
     cap = p.capacity_kwh
     stored = soc / 100 * cap
     floor = p.min_reserve_soc / 100 * cap
@@ -295,7 +306,7 @@ def _first_problem(plan: list[PlanSlot], p: Params, start: int, eff2: float):
         ps = plan[i]
         at_floor = ps.soc_end <= p.min_reserve_soc + 0.05
         if ps.action == FORCE_DISCHARGE and at_floor:
-            wanted = p.axle_kw * DT_H
+            wanted = p.axle_kw * ps.hours
             delivered = (ps.soc_start - ps.soc_end) / 100 * p.capacity_kwh * p.efficiency
             if delivered < wanted - 0.01:
                 return i, axle_rate(p, ps.slot.export), "axle"
@@ -348,15 +359,21 @@ def _add_arbitrage(plan: list[PlanSlot], soc: float, p: Params, now: datetime, t
 
 def make_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None, auto_cheap: bool = False,
               wear_p: float = 2.0, strategy: str = "rules", prev_action: str | None = None,
-              stick: float = 0.0) -> Plan:
+              stick: float = 0.0, first_h: float | None = None) -> Plan:
     """The plan. strategy "optimiser": the optimiser chooses each half-hour's action (lowest cost, arbitrage band
-    and safety rules included) and the rule-based plan supplies the explanations where they agree."""
-    rules = _rules_plan(slots, soc, p, now, tz, auto_cheap, wear_p)
+    and safety rules included) and the rule-based plan supplies the explanations where they agree.
+
+    `first_h`: hours of the first slot still to run (a plan made part-way through it), or None for a whole
+    half-hour. The first slot is then planned for that part only: its energy, cost and end charge (so a charge's
+    target) are for the rest of the half-hour, and the sale of a slot already begun is judged on what is left."""
+    if first_h is not None and first_h >= DT_H:
+        first_h = None
+    rules = _rules_plan(slots, soc, p, now, tz, auto_cheap, wear_p, first_h)
     if strategy != "optimiser" or not slots:
         return rules
     from .optimiser import optimise
     p_used = replace(p, cheap_cap_p=rules.cheap_p) if rules.cheap_p is not None else p
-    opt = optimise(slots, soc, p_used, wear=p.wear_p / 100, prev_action=prev_action, stick=stick)
+    opt = optimise(slots, soc, p_used, wear=p.wear_p / 100, prev_action=prev_action, stick=stick, first_h=first_h)
     if not opt:
         return rules
     plan = _overlay(rules, opt, soc, p_used, now, tz)
@@ -431,12 +448,14 @@ def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool]
 
 
 def _rules_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None, auto_cheap: bool = False,
-                wear_p: float = 2.0) -> Plan:
+                wear_p: float = 2.0, first_h: float | None = None) -> Plan:
     if auto_cheap:
         p = replace(p, cheap_cap_p=cheap_threshold([s.price for s in slots], p.cheap_cap_p, p.efficiency ** 2, wear_p))
     plan = [_default(s, p, tz) for s in slots]
     eff2 = p.efficiency ** 2
     baseline = [PlanSlot(s, FORCE_DISCHARGE if (p.axle_enabled and s.axle) else SELF_USE, "") for s in slots]
+    if first_h is not None and plan:
+        plan[0].hours = baseline[0].hours = first_h
     baseline_cost = simulate(baseline, soc, p)
 
     simulate(plan, soc, p)

@@ -87,6 +87,20 @@ null
 "warning": "Load history from HA was empty; retrying in an hour. PowerEngine's own load record is still used."
 },
 {
+"t": "2026-09-27T15:20:00+00:00",
+"plan": "sssssssssssssssssssssssssCCCCCss",
+"soc": [
+87,
+84,
+78,
+72,
+66,
+60,
+54,
+90
+]
+},
+{
 "t": "2026-09-27T15:30:00+00:00",
 "plan": "sssssssssssssEECCCCEEEECCCCCCsss",
 "soc": [
@@ -107,14 +121,42 @@ null
 "option": "04:00"
 },
 {
+"t": "2026-09-27T15:37:00+00:00",
+"plan": "sssssssssssssEECCCCEEEECCCCCCsss",
+"soc": [
+87,
+82,
+76,
+71,
+68,
+60,
+57,
+100
+]
+},
+{
 "t": "2026-09-27T15:47:00+00:00",
 "plan": "sssssssssssssEECCCCEEEECCCCCCsss",
 "soc": [
 86,
 81,
 75,
-69,
-66,
+70,
+67,
+60,
+57,
+100
+]
+},
+{
+"t": "2026-09-27T15:52:00+00:00",
+"plan": "sssssssssssssEECCCCEEEECCCCCCsss",
+"soc": [
+86,
+81,
+76,
+70,
+67,
 60,
 57,
 100
@@ -144,7 +186,7 @@ null
 "t": "2026-09-27T16:07:00+00:00",
 "plan": "ssssssssssssEECCCCEEEECCCCCCssss",
 "soc": [
-88,
+89,
 83,
 77,
 58,
@@ -158,7 +200,7 @@ null
 "t": "2026-09-27T16:12:00+00:00",
 "plan": "ssssssssssssEECCCCEEEECCCCCCssss",
 "soc": [
-89,
+90,
 84,
 78,
 59,
@@ -172,7 +214,7 @@ null
 "t": "2026-09-27T16:17:00+00:00",
 "plan": "ssssssssssssEECCCCEEEECCCCCCssss",
 "soc": [
-90,
+91,
 85,
 79,
 60,
@@ -186,9 +228,9 @@ null
 "t": "2026-09-27T16:22:00+00:00",
 "plan": "ssssssssssssEECCCCEEEECCCCCCssss",
 "soc": [
-92,
+93,
 87,
-81,
+82,
 62,
 88,
 44,
@@ -200,9 +242,9 @@ null
 "t": "2026-09-27T16:27:00+00:00",
 "plan": "ssssssssssssEECCCCEEEECCCCCCssss",
 "soc": [
-93,
-88,
-82,
+94,
+89,
+83,
 63,
 89,
 44,
@@ -234,7 +276,7 @@ null
 "soc": [
 91,
 85,
-79,
+80,
 46,
 90,
 29,
@@ -247,8 +289,8 @@ null
 "plan": "sssssssssssEECCCCEEEECCCCCCsssss",
 "soc": [
 90,
-84,
-78,
+85,
+79,
 45,
 90,
 29,
@@ -261,9 +303,9 @@ null
 "plan": "sssssssssssEECCCCEEEECCCCCCsssss",
 "soc": [
 88,
-82,
-76,
-43,
+83,
+77,
+44,
 90,
 29,
 84,
@@ -274,10 +316,10 @@ null
 "t": "2026-09-27T16:51:00+00:00",
 "plan": "sssssssssssEECCCCEEEECCCCCCsssss",
 "soc": [
-87,
-81,
-75,
-42,
+88,
+82,
+76,
+43,
 90,
 29,
 84,
@@ -319,13 +361,27 @@ null
 ]
 },
 {
+"t": "2026-09-27T17:15:00+00:00",
+"plan": "ssssssssssEECCCCEEEECCCCCCssssss",
+"soc": [
+86,
+80,
+75,
+56,
+75,
+43,
+98,
+96
+]
+},
+{
 "t": "2026-09-27T17:20:00+00:00",
 "plan": "ssssssssssEECCCCEEEECCCCCCssssss",
 "soc": [
-85,
-79,
-73,
-55,
+86,
+80,
+74,
+56,
 75,
 43,
 98,
@@ -336,10 +392,10 @@ null
 "t": "2026-09-27T17:25:00+00:00",
 "plan": "ssssssssssEECCCCEEEECCCCCCssssss",
 "soc": [
-84,
-78,
-72,
-54,
+85,
+79,
+73,
+55,
 75,
 43,
 98,
@@ -381,17 +437,45 @@ null
 ]
 },
 {
+"t": "2026-09-27T17:45:00+00:00",
+"plan": "sssssssssEECCCCEEEECCCCCCsssssss",
+"soc": [
+83,
+77,
+72,
+69,
+60,
+57,
+100,
+95
+]
+},
+{
 "t": "2026-09-27T17:46:00+00:00",
 "warning": "Load history from HA was empty; retrying in an hour. PowerEngine's own load record is still used."
+},
+{
+"t": "2026-09-27T17:51:00+00:00",
+"plan": "sssssssssEECCCCEEEECCCCCCsssssss",
+"soc": [
+84,
+78,
+72,
+69,
+60,
+57,
+100,
+95
+]
 },
 {
 "t": "2026-09-27T17:56:00+00:00",
 "plan": "sssssssssEECCCCEEEECCCCCCsssssss",
 "soc": [
-82,
-76,
-70,
-67,
+83,
+77,
+71,
+68,
 60,
 57,
 100,
@@ -432,8 +516,8 @@ null
 "soc": [
 85,
 79,
-59,
-85,
+60,
+86,
 44,
 70,
 99,
@@ -469,8 +553,8 @@ null
 "soc": [
 87,
 81,
-61,
-87,
+62,
+88,
 44,
 70,
 99,
@@ -481,10 +565,10 @@ null
 "t": "2026-09-27T18:20:00+00:00",
 "plan": "ssssssssEECCCCEEEECCCCCCssssssss",
 "soc": [
-88,
-82,
-62,
-88,
+89,
+83,
+63,
+89,
 44,
 70,
 99,
@@ -493,14 +577,14 @@ null
 },
 {
 "t": "2026-09-27T18:25:00+00:00",
-"plan": "ssssssssEECCCCEEEECCCCCCssssssss",
+"plan": "ssssssssEEECCCCEEECCCCCCssssssss",
 "soc": [
-89,
-83,
-63,
-89,
-44,
-70,
+90,
+84,
+64,
+61,
+58,
+84,
 99,
 94
 ]
@@ -531,9 +615,9 @@ null
 "soc": [
 89,
 83,
-49,
-75,
-43,
+50,
+76,
+44,
 90,
 97,
 94
@@ -541,13 +625,13 @@ null
 },
 {
 "t": "2026-09-27T18:40:00+00:00",
-"plan": "sssssssEECCCEEEECCCCCCCsssssssss",
+"plan": "sssssssEEECCCCEEECCCCCCsssssssss",
 "soc": [
 88,
 82,
-48,
-74,
-42,
+49,
+75,
+43,
 90,
 97,
 94
@@ -559,7 +643,21 @@ null
 "soc": [
 87,
 81,
-47,
+48,
+90,
+29,
+84,
+97,
+94
+]
+},
+{
+"t": "2026-09-27T18:50:00+00:00",
+"plan": "sssssssEECCCCEEEECCCCCCsssssssss",
+"soc": [
+88,
+82,
+48,
 90,
 29,
 84,
@@ -571,9 +669,9 @@ null
 "t": "2026-09-27T18:55:00+00:00",
 "plan": "sssssssEECCCCEEEECCCCCCsssssssss",
 "soc": [
-86,
-80,
-46,
+87,
+81,
+48,
 90,
 29,
 84,
@@ -639,6 +737,20 @@ null
 "entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
+"t": "2026-09-27T19:21:00+00:00",
+"plan": "ssssssEEECCCCEEECCCCCCssssssssss",
+"soc": [
+90,
+84,
+37,
+90,
+58,
+100,
+96,
+94
+]
+},
+{
 "t": "2026-09-27T19:31:00+00:00",
 "plan": "sssssEEECCCCEEECCCCCCsssssssssss",
 "soc": [
@@ -695,20 +807,6 @@ null
 "soc": [
 90,
 84,
-23,
-78,
-46,
-100,
-95,
-94
-]
-},
-{
-"t": "2026-09-27T19:51:00+00:00",
-"plan": "sssssEEEECCCCEEECCCCCsssssssssss",
-"soc": [
-91,
-85,
 24,
 79,
 47,
@@ -718,14 +816,28 @@ null
 ]
 },
 {
-"t": "2026-09-27T19:56:00+00:00",
-"plan": "sssssEEECCCCEEECCCCCCsssssssssss",
+"t": "2026-09-27T19:51:00+00:00",
+"plan": "sssssEEEECCCCEEECCCCCsssssssssss",
 "soc": [
-89,
-83,
-51,
-75,
-72,
+92,
+86,
+25,
+80,
+48,
+100,
+95,
+94
+]
+},
+{
+"t": "2026-09-27T19:56:00+00:00",
+"plan": "sssssEEEECCCCEEECCCCCsssssssssss",
+"soc": [
+90,
+84,
+23,
+78,
+46,
 100,
 95,
 94
@@ -746,12 +858,26 @@ null
 ]
 },
 {
+"t": "2026-09-27T20:10:00+00:00",
+"plan": "ssssEEEECCCCEEECCCCCssssssssCCCC",
+"soc": [
+88,
+68,
+37,
+63,
+60,
+99,
+94,
+95
+]
+},
+{
 "t": "2026-09-27T20:15:00+00:00",
 "plan": "ssssEEECCCCEEECCCCCCssssssssCCCC",
 "soc": [
 87,
-67,
-64,
+68,
+65,
 60,
 86,
 99,
@@ -764,10 +890,10 @@ null
 "plan": "ssssEEEECCCCEEECCCCCssssssssCCCC",
 "soc": [
 88,
-68,
-36,
-62,
-59,
+69,
+37,
+63,
+60,
 99,
 94,
 95
@@ -781,11 +907,11 @@ null
 "t": "2026-09-27T20:21:00+00:00",
 "plan": "ssssEEEECCCCEEECCCCCssssssssCCCC",
 "soc": [
-89,
-69,
-37,
-63,
-60,
+90,
+70,
+38,
+64,
+61,
 99,
 94,
 95
@@ -793,13 +919,13 @@ null
 },
 {
 "t": "2026-09-27T20:26:00+00:00",
-"plan": "ssssEEEECCCCEEECCCCCssssssssCCCC",
+"plan": "ssssEEECCCCEEECCCCCCssssssssCCCC",
 "soc": [
-90,
-70,
-38,
-64,
-61,
+91,
+71,
+68,
+60,
+86,
 99,
 94,
 95
@@ -841,13 +967,13 @@ null
 },
 {
 "t": "2026-09-27T20:41:00+00:00",
-"plan": "sssEEEECCCCEEECCCCCssssssssCCCCC",
+"plan": "sssEEECCCCEEECCCCCCssssssssCCCCC",
 "soc": [
 89,
-55,
-52,
-49,
-75,
+56,
+82,
+44,
+90,
 97,
 94,
 95
@@ -855,6 +981,20 @@ null
 },
 {
 "t": "2026-09-27T20:46:00+00:00",
+"plan": "sssEEEECCCCEEECCCCCssssssssCCCCC",
+"soc": [
+87,
+54,
+51,
+48,
+74,
+97,
+94,
+95
+]
+},
+{
+"t": "2026-09-27T20:51:00+00:00",
 "plan": "sssEEEECCCCEEECCCCCssssssssCCCCC",
 "soc": [
 87,
@@ -868,28 +1008,14 @@ null
 ]
 },
 {
-"t": "2026-09-27T20:51:00+00:00",
+"t": "2026-09-27T20:56:00+00:00",
 "plan": "sssEEECCCCEEECCCCCCssssssssCCCCC",
 "soc": [
-86,
-52,
-78,
+90,
+56,
+82,
 44,
 90,
-97,
-94,
-95
-]
-},
-{
-"t": "2026-09-27T20:56:00+00:00",
-"plan": "sssEEEECCCCEEECCCCCssssssssCCCCC",
-"soc": [
-89,
-55,
-52,
-49,
-75,
 97,
 94,
 95
@@ -904,6 +1030,20 @@ null
 68,
 37,
 91,
+96,
+94,
+95
+]
+},
+{
+"t": "2026-09-27T21:02:00+00:00",
+"plan": "ssEEECCCEEEECCCCCCssssssssCCCCCC",
+"soc": [
+90,
+43,
+69,
+37,
+92,
 96,
 94,
 95
@@ -1002,6 +1142,20 @@ null
 ]
 },
 {
+"t": "2026-09-27T21:22:00+00:00",
+"plan": "sEEECCCCEEEECCCCCCssssssssCCCCCC",
+"soc": [
+94,
+62,
+75,
+43,
+98,
+96,
+94,
+95
+]
+},
+{
 "t": "2026-09-27T21:30:00+00:00",
 "decision": [
 "export",
@@ -1030,11 +1184,11 @@ null
 },
 {
 "t": "2026-09-27T21:31:00+00:00",
-"plan": "EEECCCEEEECCCCCCCsssssssssssssss",
+"plan": "EEEECCCCEEECCCCCCsssssssssssssss",
 "soc": [
 79,
-76,
-44,
+47,
+73,
 70,
 100,
 95,
@@ -1048,12 +1202,12 @@ null
 },
 {
 "t": "2026-09-27T21:36:00+00:00",
-"plan": "EEECCCCEEEECCCCCCsssssssssssssss",
+"plan": "EEEECCCCEEECCCCCCsssssssssssssss",
 "soc": [
-77,
+80,
+48,
 74,
-60,
-57,
+71,
 100,
 95,
 94,
@@ -1062,90 +1216,10 @@ null
 },
 {
 "t": "2026-09-27T21:41:00+00:00",
-"plan": "EEECCCCEEEECCCCCCsssssssssssssss",
+"plan": "EEEECCCCEEECCCCCCsssssssssssssss",
 "soc": [
-76,
-73,
-60,
-57,
-100,
-95,
-94,
-100
-]
-},
-{
-"t": "2026-09-27T21:46:00+00:00",
-"decision": [
-"self_use",
-"plan",
-null,
-null
-]
-},
-{
-"t": "2026-09-27T21:46:00+00:00",
-"plan": "sEEECCCEEECCCECCCsssssssssssssss",
-"soc": [
-88,
-56,
-53,
-79,
-100,
-95,
-94,
-100
-]
-},
-{
-"t": "2026-09-27T21:46:00+00:00",
-"svc": "logbook/log"
-},
-{
-"t": "2026-09-27T21:46:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_2",
-"value": 30
-},
-{
-"t": "2026-09-27T21:46:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 23
-},
-{
-"t": "2026-09-27T21:46:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes",
-"value": 0
-},
-{
-"t": "2026-09-27T21:46:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_3",
-"value": 30
-},
-{
-"t": "2026-09-27T21:47:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-27T21:47:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-27T21:47:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
-},
-{
-"t": "2026-09-27T21:51:00+00:00",
-"plan": "sEEECCCCEEECCCCCCsssssssssssssss",
-"soc": [
-87,
-55,
+81,
+49,
 75,
 72,
 100,
@@ -1155,12 +1229,73 @@ null
 ]
 },
 {
-"t": "2026-09-27T22:00:00+00:00",
-"decision": [
-"export",
-"plan",
-null,
-null
+"t": "2026-09-27T21:41:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-27T21:41:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-27T21:41:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_3",
+"value": 30
+},
+{
+"t": "2026-09-27T21:42:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-27T21:42:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
+},
+{
+"t": "2026-09-27T21:46:00+00:00",
+"plan": "EEEECCCCEEECCCCCCsssssssssssssss",
+"soc": [
+82,
+50,
+75,
+72,
+100,
+95,
+94,
+100
+]
+},
+{
+"t": "2026-09-27T21:51:00+00:00",
+"plan": "EEEEECCCCEEECCCCCsssssssssssssss",
+"soc": [
+83,
+23,
+78,
+46,
+100,
+95,
+94,
+100
+]
+},
+{
+"t": "2026-09-27T21:56:00+00:00",
+"plan": "EEEEECCCCEEECCCCCsssssssssssssss",
+"soc": [
+86,
+25,
+80,
+48,
+100,
+95,
+94,
+100
 ]
 },
 {
@@ -1178,17 +1313,80 @@ null
 ]
 },
 {
-"t": "2026-09-27T22:00:00+00:00",
-"svc": "logbook/log"
+"t": "2026-09-27T22:05:00+00:00",
+"plan": "EEECCCEEEECCCCCCssssssssssssssss",
+"soc": [
+75,
+72,
+40,
+66,
+99,
+94,
+95,
+100
+]
+},
+{
+"t": "2026-09-27T22:10:00+00:00",
+"plan": "EEECCCEEEECCCCCCssssssssssssssss",
+"soc": [
+78,
+75,
+43,
+69,
+99,
+94,
+95,
+100
+]
+},
+{
+"t": "2026-09-27T22:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-27T22:11:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
 "t": "2026-09-27T22:15:00+00:00",
 "plan": "EEECCCEEEECCCCCCssssssssssssssss",
 "soc": [
-74,
-71,
-39,
-65,
+81,
+78,
+44,
+70,
+99,
+94,
+95,
+100
+]
+},
+{
+"t": "2026-09-27T22:20:00+00:00",
+"plan": "EEECCCEEEECCCCCCssssssssssssssss",
+"soc": [
+84,
+81,
+44,
+70,
+99,
+94,
+95,
+100
+]
+},
+{
+"t": "2026-09-27T22:25:00+00:00",
+"plan": "EEECCCEEEECCCCCCssssssssssssssss",
+"soc": [
+86,
+84,
+44,
+70,
 99,
 94,
 95,
@@ -1211,12 +1409,12 @@ null
 },
 {
 "t": "2026-09-27T22:35:00+00:00",
-"plan": "EECCCEEEECCCCCCsssssssssssssssss",
+"plan": "EEECCCEEECCCCCCsssssssssssssssss",
 "soc": [
-73,
+75,
+72,
+40,
 90,
-29,
-84,
 97,
 94,
 98,
@@ -1224,27 +1422,70 @@ null
 ]
 },
 {
-"t": "2026-09-27T22:40:00+00:00",
-"plan": "EECCCEEEECCCCCCsssssssssssssssss",
-"soc": [
-70,
-90,
-29,
-84,
-97,
-94,
-98,
-100
-]
+"t": "2026-09-27T22:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours",
+"value": 1
+},
+{
+"t": "2026-09-27T22:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 2
+},
+{
+"t": "2026-09-27T22:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 30
+},
+{
+"t": "2026-09-27T22:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-27T22:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-27T22:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_3",
+"value": 1
+},
+{
+"t": "2026-09-27T22:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_3",
+"value": 0
+},
+{
+"t": "2026-09-27T22:36:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T22:36:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-27T22:36:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
 },
 {
 "t": "2026-09-27T22:45:00+00:00",
-"plan": "EECCCEEEECCCCCCsssssssssssssssss",
+"plan": "EEECCCEEECCCCCCsssssssssssssssss",
 "soc": [
-69,
+76,
+73,
+42,
 90,
-29,
-84,
 97,
 94,
 98,
@@ -1253,12 +1494,12 @@ null
 },
 {
 "t": "2026-09-27T22:46:00+00:00",
-"plan": "EECCCEEEECCCCCCsssssssssssssssss",
+"plan": "EEECCCEEECCCCCCsssssssssssssssss",
 "soc": [
-68,
+76,
+73,
+41,
 90,
-29,
-84,
 97,
 94,
 98,
@@ -1271,12 +1512,12 @@ null
 },
 {
 "t": "2026-09-27T22:51:00+00:00",
-"plan": "EECCCEEEECCCCCCsssssssssssssssss",
+"plan": "EEECCCEEECCCCCCsssssssssssssssss",
 "soc": [
-67,
+77,
+74,
+43,
 90,
-29,
-84,
 97,
 94,
 98,
@@ -1285,12 +1526,12 @@ null
 },
 {
 "t": "2026-09-27T22:56:00+00:00",
-"plan": "EECCCEEEECCCCCCsssssssssssssssss",
+"plan": "EEECCCEEECCCCCCsssssssssssssssss",
 "soc": [
-64,
+77,
+74,
+42,
 90,
-29,
-84,
 97,
 94,
 98,
@@ -1312,81 +1553,12 @@ null
 ]
 },
 {
-"t": "2026-09-27T23:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 1
-},
-{
-"t": "2026-09-27T23:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 2
-},
-{
-"t": "2026-09-27T23:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes",
-"value": 30
-},
-{
-"t": "2026-09-27T23:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-27T23:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-27T23:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_3",
-"value": 4
-},
-{
-"t": "2026-09-27T23:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_3",
-"value": 7
-},
-{
-"t": "2026-09-27T23:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_3",
-"value": 1
-},
-{
-"t": "2026-09-27T23:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_3",
-"value": 0
-},
-{
-"t": "2026-09-27T23:01:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-27T23:01:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-27T23:01:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
-},
-{
 "t": "2026-09-27T23:05:00+00:00",
 "plan": "EECCCEEECCCCCCssssssssssssssssss",
 "soc": [
-60,
-86,
-54,
+62,
+88,
+56,
 100,
 96,
 94,
@@ -1396,12 +1568,12 @@ null
 },
 {
 "t": "2026-09-27T23:10:00+00:00",
-"plan": "ECCCEEEECCCCCCssssssssssssssssss",
+"plan": "EECCCEEECCCCCCssssssssssssssssss",
 "soc": [
-58,
-75,
-43,
-98,
+63,
+89,
+57,
+100,
 96,
 94,
 100,
@@ -1411,49 +1583,14 @@ null
 {
 "t": "2026-09-27T23:10:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 0
-},
-{
-"t": "2026-09-27T23:10:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 0
-},
-{
-"t": "2026-09-27T23:10:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes",
-"value": 0
-},
-{
-"t": "2026-09-27T23:10:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_2",
-"value": 30
+"entity_id": "number.solis_timed_charge_start_hours_2",
+"value": 4
 },
 {
 "t": "2026-09-27T23:10:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 2
-},
-{
-"t": "2026-09-27T23:10:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_3",
-"value": 0
-},
-{
-"t": "2026-09-27T23:10:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_3",
-"value": 30
-},
-{
-"t": "2026-09-27T23:11:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
+"value": 7
 },
 {
 "t": "2026-09-27T23:11:00+00:00",
@@ -1461,18 +1598,13 @@ null
 "entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
-"t": "2026-09-27T23:11:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
-},
-{
 "t": "2026-09-27T23:15:00+00:00",
-"plan": "ECCCEEEECCCCCCssssssssssssssssss",
+"plan": "EECCCEEECCCCCCssssssssssssssssss",
 "soc": [
-55,
-75,
-43,
-98,
+62,
+88,
+56,
+100,
 96,
 94,
 100,
@@ -1481,12 +1613,12 @@ null
 },
 {
 "t": "2026-09-27T23:20:00+00:00",
-"plan": "ECCCEEEECCCCCCssssssssssssssssss",
+"plan": "EECCCEEECCCCCCssssssssssssssssss",
 "soc": [
-53,
-75,
-43,
-98,
+63,
+89,
+57,
+100,
 96,
 94,
 100,
@@ -1495,12 +1627,12 @@ null
 },
 {
 "t": "2026-09-27T23:25:00+00:00",
-"plan": "ECCCEEEECCCCCCssssssssssssssssss",
+"plan": "EECCCEEECCCCCCssssssssssssssssss",
 "soc": [
-50,
-75,
-43,
-98,
+62,
+88,
+57,
+100,
 96,
 94,
 100,
@@ -1522,181 +1654,12 @@ null
 ]
 },
 {
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 1
-},
-{
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 2
-},
-{
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes",
-"value": 30
-},
-{
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 2
-},
-{
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes",
-"value": 30
-},
-{
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 4
-},
-{
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 0
-},
-{
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes_2",
-"value": 30
-},
-{
-"t": "2026-09-27T23:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 1
-},
-{
-"t": "2026-09-27T23:31:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-27T23:31:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
 "t": "2026-09-27T23:32:00+00:00",
-"svc": "persistent_notification/create"
-},
-{
-"t": "2026-09-27T23:37:00+00:00",
-"plan": "EECCCCEEECCCCsssssssssssssssssss",
+"plan": "EECCCCEECCCCCsssssssssssssssssss",
 "soc": [
-50,
-76,
-44,
-99,
-94,
-93,
-100,
-100
-]
-},
-{
-"t": "2026-09-27T23:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes",
-"value": 30
-},
-{
-"t": "2026-09-27T23:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 3
-},
-{
-"t": "2026-09-27T23:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_3",
-"value": 0
-},
-{
-"t": "2026-09-27T23:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_3",
-"value": 0
-},
-{
-"t": "2026-09-27T23:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 0
-},
-{
-"t": "2026-09-27T23:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 1
-},
-{
-"t": "2026-09-27T23:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 30
-},
-{
-"t": "2026-09-27T23:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 3
-},
-{
-"t": "2026-09-27T23:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 5
-},
-{
-"t": "2026-09-27T23:38:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-27T23:38:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-27T23:38:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
-},
-{
-"t": "2026-09-27T23:42:00+00:00",
-"plan": "EECCCEEECCCCCsssssssssssssssssss",
-"soc": [
-52,
-78,
-46,
+49,
+75,
+72,
 100,
 95,
 94,
@@ -1705,7 +1668,68 @@ null
 ]
 },
 {
-"t": "2026-09-27T23:47:00+00:00",
+"t": "2026-09-27T23:32:00+00:00",
+"svc": "persistent_notification/create"
+},
+{
+"t": "2026-09-27T23:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 30
+},
+{
+"t": "2026-09-27T23:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 3
+},
+{
+"t": "2026-09-27T23:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours_2",
+"value": 3
+},
+{
+"t": "2026-09-27T23:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-27T23:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-27T23:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes_3",
+"value": 30
+},
+{
+"t": "2026-09-27T23:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_3",
+"value": 30
+},
+{
+"t": "2026-09-27T23:33:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T23:33:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-27T23:33:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
+},
+{
+"t": "2026-09-27T23:37:00+00:00",
 "plan": "EECCCEEECCCCCsssssssssssssssssss",
 "soc": [
 53,
@@ -1719,12 +1743,51 @@ null
 ]
 },
 {
-"t": "2026-09-27T23:52:00+00:00",
+"t": "2026-09-27T23:42:00+00:00",
 "plan": "EECCCEEECCCCCsssssssssssssssssss",
 "soc": [
+58,
+84,
+52,
+100,
+95,
+94,
+100,
+100
+]
+},
+{
+"t": "2026-09-27T23:47:00+00:00",
+"plan": "EECCCEEECCCCCsssssssssssssssssss",
+"soc": [
+61,
+87,
 55,
-81,
-49,
+100,
+95,
+94,
+100,
+100
+]
+},
+{
+"t": "2026-09-27T23:47:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-27T23:48:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T23:52:00+00:00",
+"plan": "ECCEEEECCCCCCsssssssssssssssssss",
+"soc": [
+66,
+60,
+57,
 100,
 95,
 94,
@@ -1735,26 +1798,38 @@ null
 {
 "t": "2026-09-27T23:52:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes",
+"entity_id": "number.solis_timed_charge_start_minutes",
 "value": 0
 },
 {
 "t": "2026-09-27T23:52:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 4
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 2
 },
 {
 "t": "2026-09-27T23:52:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_2",
-"value": 30
+"entity_id": "number.solis_timed_discharge_start_hours_2",
+"value": 2
 },
 {
 "t": "2026-09-27T23:52:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 7
+"entity_id": "number.solis_timed_discharge_start_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-27T23:52:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-27T23:52:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_3",
+"value": 0
 },
 {
 "t": "2026-09-27T23:53:00+00:00",
@@ -1767,12 +1842,17 @@ null
 "entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
+"t": "2026-09-27T23:53:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
+},
+{
 "t": "2026-09-27T23:57:00+00:00",
-"plan": "EECCCEEECCCCCsssssssssssssssssss",
+"plan": "ECCEEEECCCCCCsssssssssssssssssss",
 "soc": [
+70,
+60,
 57,
-83,
-51,
 100,
 95,
 94,
@@ -1797,8 +1877,8 @@ null
 {
 "t": "2026-09-28T00:00:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 2
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 30
 },
 {
 "t": "2026-09-28T00:00:00+00:00",
@@ -1809,22 +1889,55 @@ null
 {
 "t": "2026-09-28T00:00:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
+"entity_id": "number.solis_timed_discharge_start_hours",
 "value": 2
 },
 {
 "t": "2026-09-28T00:00:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
+"entity_id": "number.solis_timed_discharge_end_hours",
 "value": 4
 },
 {
+"t": "2026-09-28T00:00:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T00:00:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours_2",
+"value": 1
+},
+{
+"t": "2026-09-28T00:00:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_2",
+"value": 1
+},
+{
+"t": "2026-09-28T00:00:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_2",
+"value": 30
+},
+{
 "t": "2026-09-28T00:01:00+00:00",
-"plan": "ECCEEECCCCCCssssssssssssssssssss",
+"decision": [
+"grid_charge",
+"plan",
+88,
+null
+]
+},
+{
+"t": "2026-09-28T00:01:00+00:00",
+"plan": "CCEEEECCCCCCssssssssssssssssssss",
 "soc": [
-59,
-56,
-82,
+87,
+44,
+70,
 99,
 94,
 95,
@@ -1841,18 +1954,86 @@ null
 "t": "2026-09-28T00:01:00+00:00",
 "svc": "button/press",
 "entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-28T00:01:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T00:01:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T00:01:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T00:01:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T00:01:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-28T00:01:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-28T00:01:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_2",
+"value": 0
 },
 {
 "t": "2026-09-28T00:01:00+00:00",
 "warning": "Load history from HA was empty; retrying in an hour. PowerEngine's own load record is still used."
 },
 {
+"t": "2026-09-28T00:02:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+87,
+null
+]
+},
+{
+"t": "2026-09-28T00:02:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-28T00:02:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
 "t": "2026-09-28T00:07:00+00:00",
-"plan": "ECCEEECCCCCCssssssssssssssssssss",
+"decision": [
+"grid_charge",
+"plan",
+86,
+null
+]
+},
+{
+"t": "2026-09-28T00:07:00+00:00",
+"plan": "CCEEEECCCCCCssssssssssssssssssss",
 "soc": [
-60,
-57,
-83,
+86,
+44,
+70,
 99,
 94,
 95,
@@ -1862,11 +2043,11 @@ null
 },
 {
 "t": "2026-09-28T00:12:00+00:00",
-"plan": "EECCCEECCCCCssssssssssssssssssss",
+"plan": "CCEEEECCCCCCssssssssssssssssssss",
 "soc": [
-62,
-88,
 85,
+44,
+70,
 99,
 94,
 95,
@@ -1875,226 +2056,53 @@ null
 ]
 },
 {
-"t": "2026-09-28T00:12:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 2
-},
-{
-"t": "2026-09-28T00:12:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T00:12:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 3
-},
-{
-"t": "2026-09-28T00:12:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 1
-},
-{
-"t": "2026-09-28T00:12:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T00:12:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 2
-},
-{
-"t": "2026-09-28T00:12:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T00:12:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 3
-},
-{
-"t": "2026-09-28T00:12:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_2",
-"value": 30
-},
-{
-"t": "2026-09-28T00:13:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T00:13:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
 "t": "2026-09-28T00:17:00+00:00",
-"plan": "EEECCCCEECCCssssssssssssssssssss",
-"soc": [
-64,
-61,
-58,
-98,
-93,
-94,
-100,
-100
+"decision": [
+"grid_charge",
+"plan",
+85,
+null
 ]
 },
 {
-"t": "2026-09-28T00:17:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T00:17:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 4
-},
-{
-"t": "2026-09-28T00:17:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:17:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:17:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:17:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T00:17:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 4
-},
-{
-"t": "2026-09-28T00:17:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 5
-},
-{
-"t": "2026-09-28T00:18:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T00:18:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
+"t": "2026-09-28T00:22:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+84,
+null
+]
 },
 {
 "t": "2026-09-28T00:22:00+00:00",
-"plan": "EECCEEECCCCCssssssssssssssssssss",
+"plan": "CCEEEECCCCCCssssssssssssssssssss",
 "soc": [
-65,
-62,
-59,
+84,
+44,
+70,
 99,
 94,
 95,
 100,
 100
 ]
-},
-{
-"t": "2026-09-28T00:22:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 4
-},
-{
-"t": "2026-09-28T00:22:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 7
-},
-{
-"t": "2026-09-28T00:22:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T00:22:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 2
-},
-{
-"t": "2026-09-28T00:22:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 3
-},
-{
-"t": "2026-09-28T00:22:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T00:22:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 3
-},
-{
-"t": "2026-09-28T00:22:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:22:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 4
-},
-{
-"t": "2026-09-28T00:23:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T00:23:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
 "t": "2026-09-28T00:27:00+00:00",
-"plan": "EECCEEECCCCCssssssssssssssssssss",
+"decision": [
+"grid_charge",
+"plan",
+83,
+null
+]
+},
+{
+"t": "2026-09-28T00:27:00+00:00",
+"plan": "CCEEEECCCCCCssssssssssssssssssss",
 "soc": [
-66,
-63,
-60,
+82,
+44,
+70,
 99,
 94,
 95,
@@ -2104,530 +2112,19 @@ null
 },
 {
 "t": "2026-09-28T00:30:00+00:00",
-"plan": "EECCCEECCCCsssssssssssssssssssss",
-"soc": [
-67,
+"decision": [
+"grid_charge",
+"plan",
 90,
-87,
-97,
-94,
-98,
-100,
-99
+null
 ]
 },
 {
 "t": "2026-09-28T00:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_2",
-"value": 30
-},
-{
-"t": "2026-09-28T00:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 4
-},
-{
-"t": "2026-09-28T00:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 4
-},
-{
-"t": "2026-09-28T00:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 5
-},
-{
-"t": "2026-09-28T00:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 1
-},
-{
-"t": "2026-09-28T00:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes_2",
-"value": 30
-},
-{
-"t": "2026-09-28T00:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 2
-},
-{
-"t": "2026-09-28T00:31:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T00:31:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"plan": "EEECCCCCECCsssssssssssssssssssss",
+"plan": "CEEEECCCCCCsssssssssssssssssssss",
 "soc": [
-68,
-65,
-75,
-97,
-94,
-98,
-100,
-99
-]
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_3",
-"value": 3
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_3",
-"value": 5
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes_3",
-"value": 30
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 5
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 6
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 3
-},
-{
-"t": "2026-09-28T00:32:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:33:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T00:33:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T00:33:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"plan": "EECCEECCCCCsssssssssssssssssssss",
-"soc": [
-66,
-63,
-89,
-97,
-94,
-98,
-100,
-99
-]
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 4
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 7
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_3",
-"value": 2
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_3",
-"value": 30
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_3",
-"value": 3
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 1
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 2
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 3
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 4
-},
-{
-"t": "2026-09-28T00:37:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_2",
-"value": 30
-},
-{
-"t": "2026-09-28T00:38:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T00:38:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T00:38:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
-},
-{
-"t": "2026-09-28T00:42:00+00:00",
-"plan": "EECCEECCCCCsssssssssssssssssssss",
-"soc": [
-65,
-62,
-88,
-97,
-94,
-98,
-100,
-99
-]
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"plan": "EEECCCCCECCsssssssssssssssssssss",
-"soc": [
-64,
-61,
-75,
-97,
-94,
-98,
-100,
-99
-]
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 3
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 5
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes_2",
-"value": 30
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_3",
-"value": 0
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_3",
-"value": 0
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_3",
-"value": 0
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes_3",
-"value": 0
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 3
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 5
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 6
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:48:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T00:48:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T00:48:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"plan": "ECCEEECCCCCsssssssssssssssssssss",
-"soc": [
-62,
-59,
-85,
-97,
-94,
-98,
-100,
-99
-]
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 2
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 3
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_3",
-"value": 4
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_3",
-"value": 30
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_3",
-"value": 7
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 2
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 3
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 4
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_2",
-"value": 30
-},
-{
-"t": "2026-09-28T00:53:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T00:53:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T00:53:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
-},
-{
-"t": "2026-09-28T00:57:00+00:00",
-"plan": "ECCEEECCCCCsssssssssssssssssssss",
-"soc": [
-61,
-58,
+90,
+29,
 84,
 97,
 94,
@@ -2637,10 +2134,146 @@ null
 ]
 },
 {
-"t": "2026-09-28T01:00:00+00:00",
-"plan": "EEECCCCCCCssssssssssssssssssssss",
+"t": "2026-09-28T00:42:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+89,
+null
+]
+},
+{
+"t": "2026-09-28T00:42:00+00:00",
+"plan": "CEEEECCCCCCsssssssssssssssssssss",
 "soc": [
-60,
+88,
+27,
+82,
+97,
+94,
+98,
+100,
+99
+]
+},
+{
+"t": "2026-09-28T00:42:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T00:47:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+85,
+null
+]
+},
+{
+"t": "2026-09-28T00:47:00+00:00",
+"plan": "CEEEECCCCCCsssssssssssssssssssss",
+"soc": [
+85,
+24,
+79,
+97,
+94,
+98,
+100,
+99
+]
+},
+{
+"t": "2026-09-28T00:47:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T00:52:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+81,
+null
+]
+},
+{
+"t": "2026-09-28T00:52:00+00:00",
+"plan": "CCEEECCCCCCsssssssssssssssssssss",
+"soc": [
+81,
+44,
+90,
+97,
+94,
+98,
+100,
+99
+]
+},
+{
+"t": "2026-09-28T00:52:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T00:52:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 30
+},
+{
+"t": "2026-09-28T00:52:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 30
+},
+{
+"t": "2026-09-28T00:52:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes",
+"value": 30
+},
+{
+"t": "2026-09-28T00:53:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-28T00:57:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+78,
+null
+]
+},
+{
+"t": "2026-09-28T00:57:00+00:00",
+"plan": "CCEEECCCCCCsssssssssssssssssssss",
+"soc": [
+77,
+44,
+90,
+97,
+94,
+98,
+100,
+99
+]
+},
+{
+"t": "2026-09-28T01:00:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+89,
+null
+]
+},
+{
+"t": "2026-09-28T01:00:00+00:00",
+"plan": "CEEECCCCCCssssssssssssssssssssss",
+"soc": [
+89,
 57,
 100,
 96,
@@ -2652,56 +2285,51 @@ null
 },
 {
 "t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_3",
-"value": 3
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 2
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 3
-},
-{
-"t": "2026-09-28T01:01:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T01:01:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T01:01:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
+"svc": "logbook/log"
 },
 {
 "t": "2026-09-28T01:05:00+00:00",
-"plan": "EEECCCCCCCssssssssssssssssssssss",
+"decision": [
+"grid_charge",
+"plan",
+84,
+null
+]
+},
+{
+"t": "2026-09-28T01:05:00+00:00",
+"plan": "CEEECCCCCCssssssssssssssssssssss",
 "soc": [
-57,
-54,
+83,
+52,
 100,
+96,
+94,
+100,
+100,
+96
+]
+},
+{
+"t": "2026-09-28T01:05:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T01:10:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+81,
+null
+]
+},
+{
+"t": "2026-09-28T01:10:00+00:00",
+"plan": "CCEEECCCCCssssssssssssssssssssss",
+"soc": [
+80,
+44,
+99,
 96,
 94,
 100,
@@ -2711,25 +2339,88 @@ null
 },
 {
 "t": "2026-09-28T01:10:00+00:00",
-"plan": "EEECCCCCCCssssssssssssssssssssss",
-"soc": [
-56,
-53,
-100,
-96,
-94,
-100,
-100,
-96
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T01:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T01:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T01:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T01:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T01:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours_3",
+"value": 2
+},
+{
+"t": "2026-09-28T01:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_3",
+"value": 3
+},
+{
+"t": "2026-09-28T01:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 3
+},
+{
+"t": "2026-09-28T01:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T01:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes",
+"value": 30
+},
+{
+"t": "2026-09-28T01:11:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-28T01:11:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
+},
+{
+"t": "2026-09-28T01:15:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+76,
+null
 ]
 },
 {
 "t": "2026-09-28T01:15:00+00:00",
-"plan": "EEECCCCCCCssssssssssssssssssssss",
+"plan": "CCEEECCCCCssssssssssssssssssssss",
 "soc": [
-54,
-51,
-100,
+76,
+44,
+99,
 96,
 94,
 100,
@@ -2739,17 +2430,30 @@ null
 },
 {
 "t": "2026-09-28T01:16:00+00:00",
-"plan": "EEECCCCCCCssssssssssssssssssssss",
+"decision": [
+"grid_charge",
+"plan",
+75,
+null
+]
+},
+{
+"t": "2026-09-28T01:16:00+00:00",
+"plan": "CCEEECCCCCssssssssssssssssssssss",
 "soc": [
-53,
-50,
-100,
+74,
+43,
+97,
 96,
 94,
 100,
 100,
 96
 ]
+},
+{
+"t": "2026-09-28T01:16:00+00:00",
+"svc": "logbook/log"
 },
 {
 "t": "2026-09-28T01:16:00+00:00",
@@ -2757,11 +2461,20 @@ null
 },
 {
 "t": "2026-09-28T01:21:00+00:00",
-"plan": "ECCCEECCCCssssssssssssssssssssss",
+"decision": [
+"grid_charge",
+"plan",
+72,
+null
+]
+},
+{
+"t": "2026-09-28T01:21:00+00:00",
+"plan": "CCEEECCCCCssssssssssssssssssssss",
 "soc": [
-52,
-75,
-100,
+71,
+39,
+94,
 96,
 94,
 100,
@@ -2771,73 +2484,23 @@ null
 },
 {
 "t": "2026-09-28T01:21:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 5
-},
-{
-"t": "2026-09-28T01:21:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 7
-},
-{
-"t": "2026-09-28T01:21:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_3",
-"value": 2
-},
-{
-"t": "2026-09-28T01:21:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_3",
-"value": 4
-},
-{
-"t": "2026-09-28T01:21:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 4
-},
-{
-"t": "2026-09-28T01:21:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T01:21:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 5
-},
-{
-"t": "2026-09-28T01:21:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 2
-},
-{
-"t": "2026-09-28T01:22:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T01:22:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T01:22:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
+"svc": "logbook/log"
 },
 {
 "t": "2026-09-28T01:26:00+00:00",
-"plan": "EECCCCCECCssssssssssssssssssssss",
+"decision": [
+"grid_charge",
+"plan",
+66,
+null
+]
+},
+{
+"t": "2026-09-28T01:26:00+00:00",
+"plan": "CCEEECCCCCssssssssssssssssssssss",
 "soc": [
-49,
-75,
+66,
+34,
 89,
 96,
 94,
@@ -2848,109 +2511,23 @@ null
 },
 {
 "t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 3
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 5
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 6
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 7
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_3",
-"value": 0
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_3",
-"value": 0
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_3",
-"value": 0
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 2
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 3
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 5
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes_2",
-"value": 30
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 6
-},
-{
-"t": "2026-09-28T01:26:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-28T01:27:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T01:27:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T01:27:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
+"svc": "logbook/log"
 },
 {
 "t": "2026-09-28T01:31:00+00:00",
-"plan": "EECCCCCCCssssssssssssssssssssssF",
+"decision": [
+"grid_charge",
+"plan",
+75,
+null
+]
+},
+{
+"t": "2026-09-28T01:31:00+00:00",
+"plan": "CCEECCCCCssssssssssssssssssssssF",
 "soc": [
-46,
-72,
+74,
+71,
 100,
 95,
 94,
@@ -2961,27 +2538,7 @@ null
 },
 {
 "t": "2026-09-28T01:31:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T01:31:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T01:31:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T01:31:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 3
+"svc": "logbook/log"
 },
 {
 "t": "2026-09-28T01:31:00+00:00",
@@ -2992,14 +2549,50 @@ null
 {
 "t": "2026-09-28T01:31:00+00:00",
 "svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes_3",
+"value": 30
+},
+{
+"t": "2026-09-28T01:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes_3",
+"value": 30
+},
+{
+"t": "2026-09-28T01:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T01:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T01:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T01:31:00+00:00",
+"svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 2
+"value": 3
+},
+{
+"t": "2026-09-28T01:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes_2",
+"value": 30
 },
 {
 "t": "2026-09-28T01:31:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 3
+"value": 4
 },
 {
 "t": "2026-09-28T01:31:00+00:00",
@@ -3018,11 +2611,52 @@ null
 "entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
+"t": "2026-09-28T01:32:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
+},
+{
 "t": "2026-09-28T01:36:00+00:00",
-"plan": "EECCCCCCCssssssssssssssssssssssF",
-"soc": [
-44,
+"decision": [
+"grid_charge",
+"plan",
 70,
+null
+]
+},
+{
+"t": "2026-09-28T01:36:00+00:00",
+"plan": "CCEECCCCCssssssssssssssssssssssF",
+"soc": [
+70,
+67,
+100,
+95,
+94,
+100,
+100,
+93
+]
+},
+{
+"t": "2026-09-28T01:36:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T01:41:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+65,
+null
+]
+},
+{
+"t": "2026-09-28T01:41:00+00:00",
+"plan": "CCEECCCCCssssssssssssssssssssssF",
+"soc": [
+65,
+62,
 100,
 95,
 94,
@@ -3033,10 +2667,23 @@ null
 },
 {
 "t": "2026-09-28T01:41:00+00:00",
-"plan": "EECCCCCCCssssssssssssssssssssssF",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T01:46:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+60,
+null
+]
+},
+{
+"t": "2026-09-28T01:46:00+00:00",
+"plan": "CCCEECCCCssssssssssssssssssssssF",
 "soc": [
-41,
-67,
+59,
+56,
 100,
 95,
 94,
@@ -3047,96 +2694,113 @@ null
 },
 {
 "t": "2026-09-28T01:46:00+00:00",
-"plan": "EECCCCCCCssssssssssssssssssssssF",
-"soc": [
-38,
-64,
-100,
-95,
-94,
-100,
-100,
-93
-]
+"svc": "logbook/log"
 },
 {
-"t": "2026-09-28T01:51:00+00:00",
-"plan": "ECCCECCCCssssssssssssssssssssssF",
-"soc": [
-36,
-62,
-100,
-95,
-94,
-100,
-100,
-93
-]
-},
-{
-"t": "2026-09-28T01:51:00+00:00",
+"t": "2026-09-28T01:46:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 3
-},
-{
-"t": "2026-09-28T01:51:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
+"entity_id": "number.solis_timed_charge_end_hours_3",
 "value": 4
 },
 {
-"t": "2026-09-28T01:51:00+00:00",
+"t": "2026-09-28T01:46:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T01:51:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 5
-},
-{
-"t": "2026-09-28T01:51:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_2",
+"entity_id": "number.solis_timed_charge_end_minutes_3",
 "value": 0
 },
 {
-"t": "2026-09-28T01:51:00+00:00",
+"t": "2026-09-28T01:46:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
+"entity_id": "number.solis_timed_discharge_start_hours",
 "value": 4
 },
 {
-"t": "2026-09-28T01:51:00+00:00",
+"t": "2026-09-28T01:46:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
+"entity_id": "number.solis_timed_discharge_end_hours",
 "value": 5
 },
 {
-"t": "2026-09-28T01:51:00+00:00",
+"t": "2026-09-28T01:46:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-28T01:46:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-28T01:46:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-28T01:46:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_end_minutes_2",
 "value": 0
 },
 {
-"t": "2026-09-28T01:52:00+00:00",
+"t": "2026-09-28T01:47:00+00:00",
 "svc": "button/press",
 "entity_id": "button.solis_update_charge_discharge_times"
 },
 {
-"t": "2026-09-28T01:52:00+00:00",
+"t": "2026-09-28T01:47:00+00:00",
 "svc": "button/press",
 "entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
-"t": "2026-09-28T01:56:00+00:00",
-"plan": "ECCCCCECCssssssssssssssssssssssF",
+"t": "2026-09-28T01:47:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
+},
+{
+"t": "2026-09-28T01:51:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+56,
+null
+]
+},
+{
+"t": "2026-09-28T01:51:00+00:00",
+"plan": "CCCEECCCCssssssssssssssssssssssF",
 "soc": [
-33,
-88,
+55,
+52,
+100,
+95,
+94,
+100,
+100,
+93
+]
+},
+{
+"t": "2026-09-28T01:51:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T01:56:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+50,
+null
+]
+},
+{
+"t": "2026-09-28T01:56:00+00:00",
+"plan": "CCCEECCCCssssssssssssssssssssssF",
+"soc": [
+50,
+47,
 100,
 95,
 94,
@@ -3147,43 +2811,22 @@ null
 },
 {
 "t": "2026-09-28T01:56:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 5
-},
-{
-"t": "2026-09-28T01:56:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 6
-},
-{
-"t": "2026-09-28T01:56:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 5
-},
-{
-"t": "2026-09-28T01:56:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 6
-},
-{
-"t": "2026-09-28T01:57:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T01:57:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
+"svc": "logbook/log"
 },
 {
 "t": "2026-09-28T02:00:00+00:00",
-"plan": "ECCCCCCCssssssssssssssssssssssFF",
+"decision": [
+"grid_charge",
+"plan",
+60,
+null
+]
+},
+{
+"t": "2026-09-28T02:00:00+00:00",
+"plan": "CCCECCCCssssssssssssssssssssssFF",
 "soc": [
-31,
+60,
 86,
 99,
 94,
@@ -3195,56 +2838,60 @@ null
 },
 {
 "t": "2026-09-28T02:00:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T02:00:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_charge_start_hours",
-"value": 0
+"value": 3
 },
 {
 "t": "2026-09-28T02:00:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_charge_end_hours",
-"value": 0
+"value": 4
 },
 {
 "t": "2026-09-28T02:00:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_charge_end_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T02:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 3
-},
-{
-"t": "2026-09-28T02:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_2",
 "value": 30
 },
 {
 "t": "2026-09-28T02:00:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 3
+"entity_id": "number.solis_timed_charge_start_hours_2",
+"value": 5
 },
 {
 "t": "2026-09-28T02:00:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes_2",
+"entity_id": "number.solis_timed_charge_start_minutes_2",
 "value": 0
 },
 {
 "t": "2026-09-28T02:00:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 3
+"entity_id": "number.solis_timed_charge_start_hours_3",
+"value": 0
 },
 {
 "t": "2026-09-28T02:00:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_2",
+"entity_id": "number.solis_timed_charge_start_minutes_3",
+"value": 0
+},
+{
+"t": "2026-09-28T02:00:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_3",
+"value": 0
+},
+{
+"t": "2026-09-28T02:00:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes",
 "value": 30
 },
 {
@@ -3258,11 +2905,86 @@ null
 "entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
-"t": "2026-09-28T02:10:00+00:00",
-"plan": "ECCCCECCssssssssssssssssssssssFF",
+"t": "2026-09-28T02:01:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
+},
+{
+"t": "2026-09-28T02:05:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+58,
+null
+]
+},
+{
+"t": "2026-09-28T02:05:00+00:00",
+"plan": "CCCCCECCssssssssssssssssssssssFF",
 "soc": [
-34,
-89,
+57,
+90,
+99,
+94,
+95,
+100,
+100,
+88
+]
+},
+{
+"t": "2026-09-28T02:05:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T02:05:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 5
+},
+{
+"t": "2026-09-28T02:05:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours_2",
+"value": 6
+},
+{
+"t": "2026-09-28T02:05:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 5
+},
+{
+"t": "2026-09-28T02:05:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 6
+},
+{
+"t": "2026-09-28T02:06:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-28T02:06:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-28T02:10:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+59,
+null
+]
+},
+{
+"t": "2026-09-28T02:10:00+00:00",
+"plan": "CCCECCCCssssssssssssssssssssssFF",
+"soc": [
+58,
+84,
 99,
 94,
 95,
@@ -3273,188 +2995,118 @@ null
 },
 {
 "t": "2026-09-28T02:10:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 6
+"svc": "logbook/log"
 },
 {
 "t": "2026-09-28T02:10:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_charge_end_hours",
-"value": 7
+"value": 4
 },
 {
 "t": "2026-09-28T02:10:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
+"entity_id": "number.solis_timed_charge_start_hours_2",
 "value": 5
-},
-{
-"t": "2026-09-28T02:10:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes_2",
-"value": 30
 },
 {
 "t": "2026-09-28T02:10:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_start_hours",
-"value": 5
+"value": 4
 },
 {
 "t": "2026-09-28T02:10:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes",
-"value": 30
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 5
 },
 {
-"t": "2026-09-28T02:10:00+00:00",
+"t": "2026-09-28T02:11:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-28T02:11:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-28T02:15:00+00:00",
+"decision": [
+"grid_charge",
+"plan",
+58,
+null
+]
+},
+{
+"t": "2026-09-28T02:15:00+00:00",
+"plan": "CCCCCECCssssssssssssssssssssssFF",
+"soc": [
+58,
+90,
+99,
+94,
+95,
+100,
+100,
+88
+]
+},
+{
+"t": "2026-09-28T02:15:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T02:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 5
+},
+{
+"t": "2026-09-28T02:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours_2",
+"value": 6
+},
+{
+"t": "2026-09-28T02:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 5
+},
+{
+"t": "2026-09-28T02:15:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_end_hours",
 "value": 6
 },
 {
-"t": "2026-09-28T02:11:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T02:11:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T02:15:00+00:00",
-"plan": "ECCCECCCssssssssssssssssssssssFF",
-"soc": [
-36,
-62,
-99,
-94,
-95,
-100,
-100,
-88
-]
-},
-{
-"t": "2026-09-28T02:15:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-28T02:15:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T02:15:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 5
-},
-{
-"t": "2026-09-28T02:15:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 30
-},
-{
 "t": "2026-09-28T02:16:00+00:00",
 "svc": "button/press",
 "entity_id": "button.solis_update_charge_discharge_times"
 },
 {
 "t": "2026-09-28T02:16:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T02:20:00+00:00",
-"plan": "EECCCCCCssssssssssssssssssssssFF",
-"soc": [
-38,
-64,
-99,
-94,
-95,
-100,
-100,
-88
-]
-},
-{
-"t": "2026-09-28T02:20:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 4
-},
-{
-"t": "2026-09-28T02:20:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-28T02:20:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-28T02:20:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-28T02:20:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T02:20:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T02:20:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T02:20:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 4
-},
-{
-"t": "2026-09-28T02:20:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_2",
-"value": 0
-},
-{
-"t": "2026-09-28T02:21:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T02:21:00+00:00",
 "svc": "button/press",
 "entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
 "t": "2026-09-28T02:25:00+00:00",
-"plan": "EECCCCCCssssssssssssssssssssssFF",
+"decision": [
+"grid_charge",
+"plan",
+57,
+null
+]
+},
+{
+"t": "2026-09-28T02:25:00+00:00",
+"plan": "CCCCCECCssssssssssssssssssssssFF",
 "soc": [
-39,
-65,
+56,
+90,
 99,
 94,
 95,
@@ -3464,11 +3116,39 @@ null
 ]
 },
 {
+"t": "2026-09-28T02:28:00+00:00",
+"decision": [
+"hold",
+"plan",
+57,
+null
+]
+},
+{
+"t": "2026-09-28T02:28:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T02:28:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_current",
+"value": 0
+},
+{
 "t": "2026-09-28T02:30:00+00:00",
-"plan": "ECCCCCCssssssssssssssssssssssFFs",
+"decision": [
+"hold",
+"plan",
+null,
+null
+]
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"plan": "HECCCCCssssssssssssssssssssssFFs",
 "soc": [
-42,
-90,
+57,
+83,
 97,
 94,
 98,
@@ -3476,6 +3156,82 @@ null
 99,
 85
 ]
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 30
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 4
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours_2",
+"value": 4
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours_2",
+"value": 4
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_2",
+"value": 4
+},
+{
+"t": "2026-09-28T02:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-28T02:31:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-28T02:31:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
 "t": "2026-09-28T02:31:00+00:00",
@@ -3483,10 +3239,10 @@ null
 },
 {
 "t": "2026-09-28T02:36:00+00:00",
-"plan": "ECCCCCCssssssssssssssssssssssFFs",
+"plan": "HECCCCCssssssssssssssssssssssFFs",
 "soc": [
-44,
-90,
+59,
+85,
 97,
 94,
 98,
@@ -3497,76 +3253,24 @@ null
 },
 {
 "t": "2026-09-28T02:41:00+00:00",
-"plan": "EECCCCCssssssssCCCCCCCCssssssFFs",
+"plan": "HECCCCCssssssssssssssssssssssFFs",
 "soc": [
-46,
-72,
-96,
-93,
+61,
+87,
+97,
 94,
-94,
-93,
-79
+98,
+100,
+99,
+85
 ]
 },
 {
-"t": "2026-09-28T02:41:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T02:41:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 3
-},
-{
-"t": "2026-09-28T02:41:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T02:41:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 4
-},
-{
-"t": "2026-09-28T02:41:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T02:41:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-28T02:41:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 0
-},
-{
-"t": "2026-09-28T02:42:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T02:42:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
 "t": "2026-09-28T02:46:00+00:00",
-"plan": "EECCCCCssssssssssssssssssssssFFs",
+"plan": "HECCCCCssssssssssssssssssssssFFs",
 "soc": [
-48,
-74,
+63,
+89,
 97,
 94,
 98,
@@ -3577,10 +3281,10 @@ null
 },
 {
 "t": "2026-09-28T02:51:00+00:00",
-"plan": "EECCCCCssssssssssssssssssssssFFs",
+"plan": "HHECCCCssssssssssssssssssssssFFs",
 "soc": [
-50,
-76,
+65,
+77,
 97,
 94,
 98,
@@ -3590,11 +3294,75 @@ null
 ]
 },
 {
+"t": "2026-09-28T02:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 30
+},
+{
+"t": "2026-09-28T02:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours_2",
+"value": 5
+},
+{
+"t": "2026-09-28T02:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-28T02:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 4
+},
+{
+"t": "2026-09-28T02:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes",
+"value": 30
+},
+{
+"t": "2026-09-28T02:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 5
+},
+{
+"t": "2026-09-28T02:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-28T02:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-28T02:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-28T02:52:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-28T02:52:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
 "t": "2026-09-28T02:56:00+00:00",
-"plan": "EECCCCCssssssssssssssssssssssFFs",
+"plan": "HHECCCCssssssssssssssssssssssFFs",
 "soc": [
-52,
-78,
+67,
+79,
 97,
 94,
 98,
@@ -3605,10 +3373,10 @@ null
 },
 {
 "t": "2026-09-28T03:00:00+00:00",
-"plan": "ECCCCCssssssssssssssssssssssFFss",
+"plan": "HECCCCssssssssssssssssssssssFFss",
 "soc": [
-54,
-100,
+69,
+95,
 96,
 94,
 100,
@@ -3619,10 +3387,10 @@ null
 },
 {
 "t": "2026-09-28T03:05:00+00:00",
-"plan": "ECCCCCssssssssssssssssssssssFFss",
+"plan": "HECCCCssssssssssssssssssssssFFss",
 "soc": [
-55,
-100,
+70,
+96,
 96,
 94,
 100,
@@ -3633,10 +3401,10 @@ null
 },
 {
 "t": "2026-09-28T03:10:00+00:00",
-"plan": "ECCCCCssssssssssssssssssssssFFss",
+"plan": "HECCCCssssssssssssssssssssssFFss",
 "soc": [
-58,
-100,
+73,
+99,
 96,
 94,
 100,
@@ -3647,12 +3415,12 @@ null
 },
 {
 "t": "2026-09-28T03:15:00+00:00",
-"plan": "EECCCCssssssssssssssssssssssFFss",
+"plan": "HECCCCssssssssssssssssssssssFFss",
 "soc": [
-60,
-86,
-95,
-93,
+75,
+100,
+96,
+94,
 100,
 100,
 96,
@@ -3660,66 +3428,83 @@ null
 ]
 },
 {
-"t": "2026-09-28T03:15:00+00:00",
+"t": "2026-09-28T03:20:00+00:00",
+"plan": "HHECCCssssssssssssssssssssssFFss",
+"soc": [
+78,
+90,
+96,
+94,
+100,
+100,
+96,
+70
+]
+},
+{
+"t": "2026-09-28T03:20:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_charge_start_hours",
 "value": 5
 },
 {
-"t": "2026-09-28T03:15:00+00:00",
+"t": "2026-09-28T03:20:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 7
+},
+{
+"t": "2026-09-28T03:20:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
 "value": 0
 },
 {
-"t": "2026-09-28T03:15:00+00:00",
+"t": "2026-09-28T03:20:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
+"entity_id": "number.solis_timed_charge_start_hours_2",
 "value": 4
 },
 {
-"t": "2026-09-28T03:15:00+00:00",
+"t": "2026-09-28T03:20:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_2",
+"value": 5
+},
+{
+"t": "2026-09-28T03:20:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 5
+},
+{
+"t": "2026-09-28T03:20:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_start_minutes",
 "value": 0
 },
 {
-"t": "2026-09-28T03:15:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
-"value": 5
-},
-{
-"t": "2026-09-28T03:15:00+00:00",
+"t": "2026-09-28T03:20:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 0
+"value": 30
 },
 {
-"t": "2026-09-28T03:16:00+00:00",
+"t": "2026-09-28T03:21:00+00:00",
 "svc": "button/press",
 "entity_id": "button.solis_update_charge_discharge_times"
 },
 {
-"t": "2026-09-28T03:20:00+00:00",
-"plan": "EECCCCssssssssssssssssssssssFFss",
-"soc": [
-63,
-89,
-96,
-94,
-100,
-100,
-96,
-70
-]
+"t": "2026-09-28T03:21:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
 "t": "2026-09-28T03:25:00+00:00",
-"plan": "EECCCCssssssssssssssssssssssFFss",
+"plan": "HHECCCssssssssssssssssssssssFFss",
 "soc": [
-65,
-91,
+80,
+92,
 96,
 94,
 100,
@@ -3730,9 +3515,9 @@ null
 },
 {
 "t": "2026-09-28T03:30:00+00:00",
-"plan": "ECCCCssssssssssssssssssssssFFsss",
+"plan": "HECCCssssssssssssssssssssssFFsss",
 "soc": [
-68,
+83,
 100,
 95,
 94,
@@ -3744,9 +3529,9 @@ null
 },
 {
 "t": "2026-09-28T03:35:00+00:00",
-"plan": "ECCCCssssssssssssssssssssssFFsss",
+"plan": "HECCCssssssssssssssssssssssFFsss",
 "soc": [
-70,
+85,
 100,
 95,
 94,
@@ -3758,9 +3543,9 @@ null
 },
 {
 "t": "2026-09-28T03:40:00+00:00",
-"plan": "ECCCCssssssssssssssssssssssFFsss",
+"plan": "HECCCssssssssssssssssssssssFFsss",
 "soc": [
-72,
+87,
 100,
 95,
 94,
@@ -3772,9 +3557,9 @@ null
 },
 {
 "t": "2026-09-28T03:45:00+00:00",
-"plan": "EECCCssssssssssssssssssssssFFsss",
+"plan": "HHECCssssssssssssssssssssssFFsss",
 "soc": [
-74,
+89,
 100,
 95,
 94,
@@ -3787,7 +3572,25 @@ null
 {
 "t": "2026-09-28T03:45:00+00:00",
 "svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours",
+"value": 6
+},
+{
+"t": "2026-09-28T03:45:00+00:00",
+"svc": "number/set_value",
 "entity_id": "number.solis_timed_charge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T03:45:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-28T03:45:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes_2",
 "value": 30
 },
 {
@@ -3799,8 +3602,14 @@ null
 {
 "t": "2026-09-28T03:45:00+00:00",
 "svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 6
+},
+{
+"t": "2026-09-28T03:45:00+00:00",
+"svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_end_minutes",
-"value": 30
+"value": 0
 },
 {
 "t": "2026-09-28T03:46:00+00:00",
@@ -3809,13 +3618,18 @@ null
 },
 {
 "t": "2026-09-28T03:46:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-28T03:46:00+00:00",
 "warning": "Load history from HA was empty; retrying in an hour. PowerEngine's own load record is still used."
 },
 {
 "t": "2026-09-28T03:51:00+00:00",
-"plan": "EECCCssssssssssssssssssssssFFsss",
+"plan": "HHECCssssssssssssssssssssssFFsss",
 "soc": [
-76,
+91,
 100,
 95,
 94,
@@ -3827,9 +3641,9 @@ null
 },
 {
 "t": "2026-09-28T03:56:00+00:00",
-"plan": "EECCCssssssssssssssssssssssFFsss",
+"plan": "HHECCssssssssssssssssssssssFFsss",
 "soc": [
-77,
+92,
 100,
 95,
 94,
@@ -3841,9 +3655,9 @@ null
 },
 {
 "t": "2026-09-28T04:00:00+00:00",
-"plan": "ECCCssssssssssssssssssssssFFssss",
+"plan": "HECCssssssssssssssssssssssFFssss",
 "soc": [
-81,
+96,
 99,
 94,
 95,
@@ -3855,9 +3669,9 @@ null
 },
 {
 "t": "2026-09-28T04:05:00+00:00",
-"plan": "ECCCssssssssssssssssssssssFFssss",
+"plan": "HECCssssssssssssssssssssssFFssss",
 "soc": [
-82,
+97,
 99,
 94,
 95,
@@ -3869,9 +3683,9 @@ null
 },
 {
 "t": "2026-09-28T04:15:00+00:00",
-"plan": "ECCCssssssssssssssssssssssFFssss",
+"plan": "HHHCssssssssssssssssssssssFFssss",
 "soc": [
-84,
+99,
 99,
 94,
 95,
@@ -3882,10 +3696,68 @@ null
 ]
 },
 {
+"t": "2026-09-28T04:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours",
+"value": 5
+},
+{
+"t": "2026-09-28T04:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-28T04:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-28T04:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-28T04:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-28T04:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T04:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-28T04:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T04:16:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-28T04:16:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
 "t": "2026-09-28T04:20:00+00:00",
-"plan": "ECCCssssssssssssssssssssssFFssss",
+"plan": "HHHHssssssssssssssssssssssFFssss",
 "soc": [
-85,
+100,
 99,
 94,
 95,
@@ -3897,9 +3769,9 @@ null
 },
 {
 "t": "2026-09-28T04:30:00+00:00",
-"plan": "ECCssssssssssssssssssssssFFsssss",
+"plan": "HHHssssssssssssssssssssssFFsssss",
 "soc": [
-85,
+100,
 97,
 94,
 98,
@@ -3907,55 +3779,6 @@ null
 99,
 85,
 49
-]
-},
-{
-"t": "2026-09-28T04:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 6
-},
-{
-"t": "2026-09-28T04:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T04:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 5
-},
-{
-"t": "2026-09-28T04:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes_2",
-"value": 30
-},
-{
-"t": "2026-09-28T04:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 6
-},
-{
-"t": "2026-09-28T04:31:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T04:31:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T05:00:00+00:00",
-"decision": [
-"hold",
-"plan",
-null,
-null
 ]
 },
 {
@@ -3971,16 +3794,6 @@ null
 70,
 45
 ]
-},
-{
-"t": "2026-09-28T05:00:00+00:00",
-"svc": "logbook/log"
-},
-{
-"t": "2026-09-28T05:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_current",
-"value": 0
 },
 {
 "t": "2026-09-28T05:01:00+00:00",

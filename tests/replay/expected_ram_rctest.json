@@ -104,25 +104,16 @@ true
 },
 {
 "t": "2026-09-27T19:35:00+00:00",
-"decision": [
-"self_use",
-"plan",
-null,
-null
-]
-},
-{
-"t": "2026-09-27T19:35:00+00:00",
-"plan": "sssssCECCECCECCECCECCsssssssssss",
+"plan": "EssssCCECCECCECCECCECsssssHHHHHH",
 "soc": [
-88,
-82,
+77,
+71,
+89,
 90,
 75,
 89,
-90,
-85,
-84
+84,
+83
 ]
 },
 {
@@ -135,27 +126,14 @@ null
 },
 {
 "t": "2026-09-27T19:35:00+00:00",
-"svc": "logbook/log"
-},
-{
-"t": "2026-09-27T19:35:00+00:00",
 "warning": "Supervised RC test failed: inconclusive (no battery power readings)"
 },
 {
-"t": "2026-09-27T19:45:00+00:00",
-"decision": [
-"export",
-"plan",
-null,
-null
-]
-},
-{
-"t": "2026-09-27T19:45:00+00:00",
+"t": "2026-09-27T19:40:00+00:00",
 "plan": "EssssCCECCECCECCECCECsssssHHHHHH",
 "soc": [
-75,
-70,
+79,
+73,
 89,
 90,
 75,
@@ -166,7 +144,17 @@ null
 },
 {
 "t": "2026-09-27T19:45:00+00:00",
-"svc": "logbook/log"
+"plan": "EssssCECCECCECCECCECCsssssssssss",
+"soc": [
+83,
+77,
+90,
+75,
+89,
+90,
+85,
+84
+]
 },
 {
 "t": "2026-09-27T19:46:00+00:00",
@@ -174,39 +162,43 @@ null
 },
 {
 "t": "2026-09-27T19:50:00+00:00",
-"plan": "EssssCCECCECCECCECCECsssssHHHHHH",
-"soc": [
-77,
-72,
-89,
-90,
-75,
-89,
-84,
-83
-]
-},
-{
-"t": "2026-09-27T19:55:00+00:00",
-"plan": "EssssCCECCECCECCECCECsssssHHHHHH",
-"soc": [
-75,
-70,
-89,
-90,
-75,
-89,
-84,
-83
-]
-},
-{
-"t": "2026-09-27T20:00:00+00:00",
 "decision": [
 "self_use",
 "plan",
 null,
 null
+]
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"plan": "sEsssCCECCECCECCECCECsssssHHHHHH",
+"soc": [
+92,
+73,
+89,
+90,
+75,
+89,
+84,
+83
+]
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"plan": "sEsssCCECCECCECCECCECsssssHHHHHH",
+"soc": [
+90,
+71,
+89,
+90,
+75,
+89,
+84,
+83
 ]
 },
 {
@@ -222,9 +214,5 @@ null
 94,
 95
 ]
-},
-{
-"t": "2026-09-27T20:00:00+00:00",
-"svc": "logbook/log"
 }
 ]

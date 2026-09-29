@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.56 (beta)
+
+### Behaviour changes
+- **Exports in cheap slots now run their full half-hour** (#168). The planner treated the current half-hour as a
+  whole 30 minutes even when it re-planned part-way through. A sale that had to stay above the 75% selling floor
+  looked impossible after a minute of discharging, so the next re-plan switched to charging.
+  - What that caused: it sold about 1 kWh at a time instead of the 2.6 kWh planned, and switched export ↔ charge
+    every hour (every 5 minutes just after a restart).
+  - Now: the current half-hour is planned for the time it has left. A planned sale completes, then the battery
+    refills, with fewer, longer actions. On the recorded test night, timed-window mode also made about 30% fewer
+    inverter writes.
+- **Charge labels show where the charge is heading:** "Grid-charge to 90%", not the next half-hour's step (the
+  label said 47% on 29 Sep while charging to 90%). Control still works half-hour by half-hour.
+
 ## 0.9.55 (beta)
 
 ### Behaviour changes

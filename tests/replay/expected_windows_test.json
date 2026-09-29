@@ -156,46 +156,24 @@ true
 },
 {
 "t": "2026-09-27T19:50:00+00:00",
-"decision": [
-"export",
-"plan",
-null,
-null
-]
-},
-{
-"t": "2026-09-27T19:50:00+00:00",
-"plan": "EssssCCCCCCCCCCCCCCCCsssssHHHHHH",
+"plan": "sEsssCCCCCCCCCCCCCCCCsssssHHHHHH",
 "soc": [
-77,
-71,
+92,
+72,
 90,
 90,
 90,
 90,
 85,
 85
-]
-},
-{
-"t": "2026-09-27T19:50:00+00:00",
-"svc": "logbook/log"
-},
-{
-"t": "2026-09-27T19:55:00+00:00",
-"decision": [
-"self_use",
-"plan",
-null,
-null
 ]
 },
 {
 "t": "2026-09-27T19:55:00+00:00",
 "plan": "sssssCCCCCCCCCCCCCCCCsssssHHHHHH",
 "soc": [
-89,
-83,
+90,
+84,
 90,
 90,
 90,
@@ -203,10 +181,6 @@ null
 85,
 85
 ]
-},
-{
-"t": "2026-09-27T19:55:00+00:00",
-"svc": "logbook/log"
 },
 {
 "t": "2026-09-27T20:00:00+00:00",
