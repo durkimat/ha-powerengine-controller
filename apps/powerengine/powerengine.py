@@ -107,6 +107,7 @@ BUTTON_DELAY_S = 3                # apply the inverter's window times this long 
 INPUT_GRACE_SECONDS = 600         # inputs missing: keep the inverter's programmed windows this long before releasing
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
+DEMO_EVENT, DEMO_RESULT_EVENT = "pe_demo", "pe_demo_result"
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
 PAUSE_ENTITY = "switch.pe_ctl_pause"
@@ -124,7 +125,81 @@ def _real(writes) -> int:
 class PowerEngine(hass.Hass):
     _demo = None                     # the demo day when `demo: <day>` is set in apps.yaml (see _demo_setup)
 
+    # --- starting again inside the running app (the demo's start, day and exit) -------------------------------
+    # AppDaemon keeps every timer and listener until they are cancelled, and an app object keeps its attributes. To
+    # run initialize() again without doubling anything up, the app records which attributes initialize() and the
+    # callbacks set (`_touched`) and which timers and listeners it registered (`_handles`), and _wipe() undoes both.
+
+    def __setattr__(self, name, value):
+        super().__setattr__(name, value)
+        touched = self.__dict__.get("_touched")
+        if touched is not None:
+            touched.add(name)
+
+    def _track(self, kind, handle, due=None):
+        handles = self.__dict__.get("_handles")
+        if handles is not None and handle is not None:
+            handles.append((kind, handle, due))
+        return handle
+
+    def _untrack(self, handle):
+        handles = self.__dict__.get("_handles")
+        if handles is not None:
+            handles[:] = [h for h in handles if h[1] != handle]
+
+    def _install_tracking(self):
+        """Wrap the scheduling and listening calls (once, on the instance) so their handles are kept in `_handles`."""
+        def timed(orig):
+            def wrapper(callback, delay, **kwargs):
+                due = datetime.now(timezone.utc) + timedelta(seconds=float(delay))
+                return self._track("timer", orig(callback, delay, **kwargs), due)
+            return wrapper
+
+        def tracked(kind, orig):
+            def wrapper(callback, *args, **kwargs):
+                return self._track(kind, orig(callback, *args, **kwargs))
+            return wrapper
+
+        def cancelling(orig):
+            def wrapper(handle, *args, **kwargs):
+                self._untrack(handle)
+                return orig(handle, *args, **kwargs)
+            return wrapper
+        d = self.__dict__
+        d["run_in"] = timed(self.run_in)
+        for name in ("run_every", "run_daily"):
+            d[name] = tracked("timer", getattr(self, name))
+        d["listen_event"], d["listen_state"] = tracked("event", self.listen_event), tracked("state", self.listen_state)
+        for name in ("cancel_timer", "cancel_listen_event", "cancel_listen_state"):
+            d[name] = cancelling(getattr(self, name))
+
+    def _wipe(self):
+        """Undo a previous initialize(): stop and hand back the inverter, cancel every timer and listener it made, and
+        delete every attribute it set (which also puts back the real get_state etc. that demo mode replaced)."""
+        try:
+            self.terminate()
+        except Exception as err:
+            self.log(f"Restart: terminate failed: {err!r}", level="WARNING")
+        now = datetime.now(timezone.utc)
+        cancel = {"timer": self.cancel_timer, "event": self.cancel_listen_event, "state": self.cancel_listen_state}
+        for kind, handle, due in list(self.__dict__.get("_handles") or []):
+            if kind == "timer" and due is not None and due <= now:
+                self._untrack(handle)                       # already ran
+                continue
+            try:
+                cancel[kind](handle)
+            except Exception:
+                self._untrack(handle)
+        for name in list(self.__dict__["_touched"]):
+            self.__dict__.pop(name, None)
+        self.__dict__["_touched"].clear()
+
     def initialize(self):
+        if self.__dict__.get("_touched") is None:
+            self.__dict__["_touched"], self.__dict__["_handles"] = set(), []     # from here on, what we set is recorded
+            self._install_tracking()
+        else:
+            self._wipe()
         self.log(f"PowerEngine {__version__} starting")
         self._started_at = datetime.now(timezone.utc)
         self.damper = damping.Damper()
@@ -134,10 +209,12 @@ class PowerEngine(hass.Hass):
         # Optional override. Not "config_path": AppDaemon sets that arg itself.
         custom = self.args.get("settings_file")
         self.paths = [custom] if custom else list(DEFAULT_PATHS)
+        self._real_paths = list(self.paths)
         self.cfg, self.cfg_path, self.cfg_error = None, None, None
         self._demo = None
-        if self.args.get("demo"):
-            self._demo_setup(str(self.args["demo"]))
+        day = self.args.get("demo") or self._saved_demo_day()
+        if day:
+            self._demo_setup(str(day))
         try:
             self.cfg, self.cfg_path = load_config(self.paths)
         except ConfigError as err:
@@ -257,6 +334,7 @@ class PowerEngine(hass.Hass):
             self.run_every(self._release_check, "now+60", 300)   # a new version released: straight from GitHub
         self.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
         self.listen_event(self._on_health_dismiss, "pe_health_dismiss")
+        self.listen_event(self._on_demo, DEMO_EVENT)
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
@@ -1282,9 +1360,8 @@ class PowerEngine(hass.Hass):
 
     def _publish_names(self):
         """The version sensor carries the names map (a small attribute; the card fills its placeholders from it)."""
-        attrs = {"names": self._names()}
-        if self._demo:
-            attrs["demo"] = self._demo_info()
+        attrs = {"names": self._names(), "setup": "configured" if self._real_config_exists() else "unconfigured",
+                 "demo": self._demo_info() if self._demo else None}
         self._publish_state("diag_version", __version__, attrs)
 
     def _events(self):
@@ -2469,12 +2546,15 @@ class PowerEngine(hass.Hass):
         return energy_flow_card(plants, capacity_wh, reserve_soc, has_ev, self._inverter().card_model)
 
     def _sync_dashboard(self):
-        target = os.path.join(os.path.dirname(self._save_path()), "dashboard.yaml")
-        try:
-            if sync_dashboard(target, card=self._energy_flow_card(), names=self._names()):
-                self.log(f"Dashboard updated: {target} (refresh the PowerEngine dashboard to see it)")
-        except OSError as err:
-            self.log(f"Could not write the dashboard file {target}: {err}", level="WARNING")
+        targets = [os.path.join(os.path.dirname(self._save_path()), "dashboard.yaml")]
+        if self._demo and not self._real_config_exists():           # nobody's set up yet: the registered dashboard
+            targets.append(os.path.join(self._real_dir(), "dashboard.yaml"))    # shows the demo
+        for target in targets:
+            try:
+                if sync_dashboard(target, card=self._energy_flow_card(), names=self._names()):
+                    self.log(f"Dashboard updated: {target} (refresh the PowerEngine dashboard to see it)")
+            except OSError as err:
+                self.log(f"Could not write the dashboard file {target}: {err}", level="WARNING")
 
     # --- saving from the config card -------------------------------------------------
 
@@ -2708,7 +2788,7 @@ class PowerEngine(hass.Hass):
             day = first
         self._demo = day
         self.cfg_path = None
-        demo_dir = os.path.join(os.path.dirname(self._save_path()), "demo")
+        demo_dir = os.path.join(self._real_dir(), "demo")
         shutil.rmtree(demo_dir, ignore_errors=True)                  # a fresh demo each start
         os.makedirs(demo_dir, exist_ok=True)
         shutil.copyfile(os.path.join(os.path.dirname(__file__), "demo", "config.template"),
@@ -2717,10 +2797,88 @@ class PowerEngine(hass.Hass):
         gate = self._demo_gate = DemoGate(
             self._demo_world, getattr(self, "get_state", None), getattr(self, "set_state", None),
             getattr(self, "fire_event", None), self.log,
-            allowed_events=(RESULT_EVENT, "pe_test_result", "pe_sim_result", diagnostics.BUNDLE_EVENT))
+            allowed_events=(RESULT_EVENT, "pe_test_result", "pe_sim_result", diagnostics.BUNDLE_EVENT,
+                            DEMO_RESULT_EVENT))
         self.get_state, self.get_history, self.call_service = gate.get_state, gate.get_history, gate.call_service
         self.set_state, self.fire_event = gate.set_state, gate.fire_event
         self.log(f"Demo mode: the {day} day, simulated home and battery; nothing outside {demo_dir} is changed")
+
+    def _real_dir(self):
+        """The folder the real config lives in (or would): where demo.json, the demo folder and, before the app is set
+        up, the dashboard go. Not the demo folder, even while the demo runs."""
+        paths = self.__dict__.get("_real_paths") or list(DEFAULT_PATHS)
+        for path in paths:
+            if os.path.isdir(os.path.dirname(os.path.dirname(path))):
+                return os.path.dirname(path)
+        return os.path.dirname(paths[0])
+
+    def _real_config_exists(self):
+        return any(os.path.isfile(p) for p in (self.__dict__.get("_real_paths") or list(DEFAULT_PATHS)))
+
+    def _demo_file(self):
+        return os.path.join(self._real_dir(), "demo.json")
+
+    def _saved_demo_day(self):
+        """The day a dashboard start chose (demo.json), honoured only while there is no real config."""
+        path = self._demo_file()
+        if not os.path.isfile(path):
+            return None
+        if self._real_config_exists():
+            self.log(f"Ignoring {path}: a real config exists, so no demo starts by itself", level="WARNING")
+            return None
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return str(json.load(fh).get("day") or "") or None
+        except (OSError, ValueError, AttributeError):
+            return None
+
+    def _demo_reply(self, ok, message):
+        self.log(f"Demo: {message}", level="INFO" if ok else "WARNING")
+        self.fire_event(DEMO_RESULT_EVENT, ok=ok, message=message)
+
+    def _on_demo(self, event_name, data, kwargs):
+        """The card's demo buttons (pe_demo: start / day / exit). Only the event named pe_demo is handled."""
+        if event_name != DEMO_EVENT:
+            return
+        data = data if isinstance(data, dict) else {}
+        action, day = data.get("action"), data.get("day")
+        pack = load_demo_pack()
+        if action in ("start", "day"):
+            if action == "start" and not self._demo and self._real_config_exists():
+                return self._demo_reply(False, "The demo can only start on a PowerEngine that isn't set up yet, "
+                                               "so it never takes over a real system.")
+            if not isinstance(day, str) or day not in pack["days"]:
+                return self._demo_reply(False, f"There's no demo day called {day!r}. Choose one of: "
+                                               f"{', '.join(pack['days'])}.")
+            if action == "day" and not self._demo:
+                return self._demo_reply(False, "No demo is running. Start it first.")
+            if self.args.get("demo"):
+                return self._demo_reply(False, f"The demo is set in apps.yaml (demo: {self.args['demo']}); change "
+                                               "that line and restart AppDaemon to pick another day.")
+            try:
+                os.makedirs(self._real_dir(), exist_ok=True)
+                tmp = self._demo_file() + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    json.dump({"day": day}, fh)
+                os.replace(tmp, self._demo_file())
+            except OSError as err:
+                return self._demo_reply(False, f"Couldn't save the demo choice ({err}).")
+            title = fill(pack["days"][day].get("title", day), self._names())
+            self._demo_reply(True, f"Starting the demo: {title}." if action == "start" else f"Switched to: {title}.")
+        elif action == "exit":
+            if self.args.get("demo"):
+                return self._demo_reply(False, f"The demo is set in apps.yaml (demo: {self.args['demo']}); remove "
+                                               "that line and restart AppDaemon to leave it.")
+            try:
+                os.remove(self._demo_file())
+            except FileNotFoundError:
+                pass
+            except OSError as err:
+                return self._demo_reply(False, f"Couldn't end the demo ({err}).")
+            self._demo_reply(True, "The demo has ended.")
+        else:
+            return self._demo_reply(False, f"I don't know the demo action {action!r}.")
+        self.initialize()                                            # again, cleanly: see _wipe
 
     def _demo_world(self):
         world = self.__dict__.get("_world")
@@ -2732,9 +2890,11 @@ class PowerEngine(hass.Hass):
 
     def _demo_info(self):
         """What the demo banner shows (published on the version sensor)."""
-        title = fill(self._demo_world().title(), self._names())
-        return {"day": self._demo, "title": title,
-                "note": f"Demo: {title}. A simulated home and battery; nothing is controlled."}
+        names = self._names()
+        pack = self._demo_world().pack["days"]
+        return {"day": self._demo, "title": fill(self._demo_world().title(), names),
+                "days": [{"key": k, "title": fill(v.get("title", k), names)} for k, v in pack.items()],
+                "note": "Recorded data from a real home. Nothing is controlled."}
 
     def _publisher_choice(self):
         if self._demo:
