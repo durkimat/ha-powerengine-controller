@@ -561,6 +561,11 @@ views:
               {%- for w in state_attr('sensor.pe_plan', 'windows') or [] %}
               | {{ (w.day ~ ' ') if w.day }}{{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}** | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
               {%- endfor %}
+              {%- set more = state_attr('sensor.pe_plan', 'windows_more') | int(0) %}
+              {%- if more %}
+
+              …and {{ more }} more change{{ 's' if more != 1 else '' }} later in the plan (shown on the chart; left out here to keep the sensor within Home Assistant's size limit).
+              {%- endif %}
               {%- set wf = state_attr('sensor.pe_plan', 'writes_forecast_24h') %}
               {%- if wf is not none %}
 

@@ -63,7 +63,17 @@ def test_free_power_fills_battery():
 
 def test_axle_active_wins_over_everything():
     d = decide(R(axle_active=True, free_active=True, ev_power=7000, import_rate=CHEAP), CFG)
-    assert d.action == FORCE_DISCHARGE and d.power_w == 4000
+    assert d.action == FORCE_DISCHARGE and d.power_w == 4800          # the battery's own limit, not a 4 kW default
+
+
+def test_axle_discharges_at_the_battery_limit_within_the_ram_cap():
+    fast = {"battery_capacity": {"value": 18}, "battery_max_discharge_power": {"value": 5200}}
+    windows = parse_config({"inputs": fast, "system": {"control_method": "timed_windows"}})
+    ram = parse_config({"inputs": fast, "system": {"control_method": "ram_remote"}})
+    unknown = parse_config({"inputs": {"battery_capacity": {"value": 18}}})
+    assert decide(R(axle_active=True), windows).power_w == 5200
+    assert decide(R(axle_active=True), ram).power_w == 5000           # the RAM remote-control cap
+    assert decide(R(axle_active=True), unknown).power_w == 4000       # limit not configured: the default
 
 
 def test_axle_feature_off_is_ignored():
@@ -73,8 +83,8 @@ def test_axle_feature_off_is_ignored():
 
 def test_pre_axle_reserve_maths():
     r = R(axle_start=NOW + timedelta(hours=2), axle_end=NOW + timedelta(hours=3))
-    # 12% floor + 4 kWh / 18 kWh (22.2%) + 5% margin
-    assert pre_axle_reserve(r, CFG) == pytest.approx(39.2, abs=0.1)
+    # 12% floor + 4.8 kWh / 18 kWh (26.7%) + 5% margin
+    assert pre_axle_reserve(r, CFG) == pytest.approx(43.7, abs=0.1)    # sized at the battery's 4.8 kW
 
 
 def test_pre_axle_holds_charge():
@@ -106,7 +116,7 @@ def test_no_data():
 def test_sentences():
     charging = decide(R(import_rate=CHEAP), CFG).sentence(passive=True)
     assert charging.startswith("Would grid-charge to 100%: import is cheap")
-    assert decide(R(axle_active=True), CFG).sentence(passive=False).startswith("Force-discharge at 4.0 kW")
+    assert decide(R(axle_active=True), CFG).sentence(passive=False).startswith("Force-discharge at 4.8 kW")
 
 
 def test_safety_settings_validated():

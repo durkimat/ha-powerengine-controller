@@ -27,11 +27,12 @@ from dataclasses import dataclass
 from .ledger import Ledger
 from .tariff import Rates
 
-METHOD_VERSION = 6        # 3: export rate falls back to your current one when history had none
+METHOD_VERSION = 7        # 3: export rate falls back to your current one when history had none
                           # 4: Axle exports also earn the export rate (EDF pays it on top of Axle's £1)
                           # 5: not used (day_scenarios() is computed live from the records, no re-value needed)
                           # 6: an Axle event's energy is costed at the overnight rate (battery, with losses) and the
                           #    export rate (solar), not the ledger's basis, which values grid charging at the peak rate
+                          # 7: no change to the values; re-valued so the last special event is rebuilt whole
 # daily energy totals (kWh) shown for checking against the inverter's own counters
 ENERGY_KEYS = ("grid_import", "grid_export", "solar", "house", "car", "battery_in", "battery_out", "b_e",
                "unallocated_src", "unallocated_sink", "correction_kwh")

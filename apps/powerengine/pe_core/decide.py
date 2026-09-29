@@ -71,13 +71,27 @@ def cheap_limit(r: Readings, cfg: Config) -> float:
     return cheap_threshold(ahead, s["cheap_threshold_p"], wear_p=s.get("battery_wear_p", 2.0))
 
 
+def axle_power_w(cfg: Config) -> float:
+    """Discharge power for an Axle event: as fast as the battery allows, since Axle pays per kWh exported. Within
+    the RAM remote-control cap when that's the control method. AXLE_POWER_W_DEFAULT applies only when the battery's
+    limit isn't configured. (Before 0.9.55 it capped every event at 4 kW, which on 28 Sep 2026 left about 1 kWh an
+    hour unsold.)"""
+    p = _static(cfg, "battery_max_discharge_power", AXLE_POWER_W_DEFAULT)
+    if (cfg.system.get("control_method") or "timed_windows") == "ram_remote":
+        try:
+            p = min(p, float(cfg.safety.get("ram_max_power_w", 5000)))
+        except (TypeError, ValueError):
+            p = min(p, 5000.0)
+    return p
+
+
 def pre_axle_reserve(r: Readings, cfg: Config) -> float | None:
     """SoC (%) needed to cover a scheduled Axle event, or None if there isn't one."""
     if not (r.axle_start and r.axle_end):
         return None
     hours = max(0.0, (r.axle_end - r.axle_start).total_seconds() / 3600)
     capacity = _static(cfg, "battery_capacity", 0) or None
-    power = min(AXLE_POWER_W_DEFAULT, _static(cfg, "battery_max_discharge_power", AXLE_POWER_W_DEFAULT))
+    power = axle_power_w(cfg)
     if not capacity:
         return None
     need = power / 1000 * hours / capacity * 100
@@ -103,7 +117,6 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
     s, f = cfg.safety, cfg.features
     soc, price_p = r.battery_soc, r.import_rate * 100
     target = s["grid_charge_target_soc"]
-    max_dis = _static(cfg, "battery_max_discharge_power", AXLE_POWER_W_DEFAULT)
     threshold = cheap_limit(r, cfg)
     cheap = price_p <= threshold
     price = f"{price_p:.2f}".rstrip("0").rstrip(".") + "p"
@@ -113,7 +126,7 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
         extra = (f" + {r.export_rate * 100:g}p export" if f.get("axle_plus_export", True) and r.export_rate
                  else "")
         return Decision(FORCE_DISCHARGE, "axle_active", f"Axle event in progress (paid £1{extra} per kWh exported)",
-                        power_w=min(AXLE_POWER_W_DEFAULT, max_dis))
+                        power_w=axle_power_w(cfg))
 
     # With a plan, live overrides first (Axle now, free power now, car charging now), then the plan.
     if plan is not None and plan.slots:

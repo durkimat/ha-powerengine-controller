@@ -2,6 +2,23 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.55 (beta)
+
+### Behaviour changes
+- **Axle events export at full power.** Before, discharge during an event was capped at 4 kW whatever your battery
+  could do. On 28 Sep the battery ran at 3.97 kW, with about 2.5 kW reaching the grid, and there was 71% charge
+  left at the end. Events now run at your battery's maximum discharge (5.2 kW), within the RAM remote-control limit
+  (5 kW). At £1.15/kWh that's about £1.15 more per hour of event.
+- **Axle preparation is sized to match.** The plan and the pre-event reserve now allow for the higher power, so
+  the battery is topped up a little more before a scheduled event.
+
+### Fixes
+- **Last special event:** the Costs page now shows the whole event (all its half-hours added up), not just its
+  last half-hour. Costs are recalculated once after updating (cost method 7) to rebuild it.
+- **Plan sensor size:** a choppy plan could push `sensor.pe_plan` over Home Assistant's 16 KB limit (18 KB on the
+  morning of 28 Sep), and HA then stops recording its history. The Actions list now shows the soonest changes
+  that fit, with "…and N more later" underneath. The chart still covers the whole plan.
+
 ## 0.9.54 (beta)
 
 ### Behaviour changes

@@ -167,13 +167,26 @@ class CostBook:
         return n
 
     def _note_event(self, rec: dict) -> None:
+        """The last Axle or free-power event, whole: back-to-back half-hours of the same kind add up (before 0.9.55
+        only the event's final half-hour was shown)."""
         v = rec["v"]
-        if v.get("event") and v.get("event_kwh", 0) >= 0.1:           # ignore a flag with next to no energy
-            start = datetime.fromisoformat(rec["start"])
-            local = start.astimezone(self.tz) if self.tz else start
-            self.last_event = {"type": v["event"], "date": local.date().isoformat(), "time": local.strftime("%H:%M"),
-                               "kwh": round(v["event_kwh"], 2), "gross": round(v["event_gross"], 2),
-                               "energy": round(v.get("event_energy", 0.0), 2), "net": round(v["event_net"], 2)}
+        if not (v.get("event") and v.get("event_kwh", 0) >= 0.1):     # ignore a flag with next to no energy
+            return
+        start = datetime.fromisoformat(rec["start"])
+        end = start + timedelta(seconds=rec.get("seconds") or 1800)
+        vals = {"kwh": v["event_kwh"], "gross": v["event_gross"], "energy": v.get("event_energy", 0.0),
+                "net": v["event_net"]}
+        ev = self.last_event
+        if ev and ev.get("type") == v["event"] and ev.get("end") and \
+                abs((datetime.fromisoformat(ev["end"]) - start).total_seconds()) < 120:
+            for k, x in vals.items():
+                ev[k] = round((ev.get(k) or 0.0) + x, 2)
+            ev["end"] = end.isoformat()
+            ev["half_hours"] = ev.get("half_hours", 1) + 1
+            return
+        local = start.astimezone(self.tz) if self.tz else start
+        self.last_event = {"type": v["event"], "date": local.date().isoformat(), "time": local.strftime("%H:%M"),
+                           "end": end.isoformat(), "half_hours": 1, **{k: round(x, 2) for k, x in vals.items()}}
 
     # --- plan snapshots (for plan-vs-actual) ------------------------------------------------
     def save_plan_snapshot(self, day: date, snapshot: dict) -> None:
