@@ -1605,6 +1605,9 @@ views:
       - type: grid
         column_span: 3
         cards:
+          # setup checklist: what PowerEngine needs, with one-button HACS installs (admins only)
+          - type: custom:powerengine-setup-card
+            grid_options: {columns: full}
           # one-button update: HACS checks GitHub now, then the handover package's script installs what's new and
           # restarts AppDaemon (admins only)
           - type: custom:powerengine-update-card
