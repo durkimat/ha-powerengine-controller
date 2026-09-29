@@ -2,6 +2,25 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.62 (beta)
+
+### Behaviour changes
+- None for your setup.
+
+### Easier install (the first steps of the demo-mode plan)
+- **New: PowerEngine setup card**, at the top of the Configuration page. It checks each piece PowerEngine needs:
+  - HACS, and its AppDaemon option;
+  - the AppDaemon add-on;
+  - the PowerEngine app, and whether it's running;
+  - the chart cards;
+  - MQTT.
+
+  Anything HACS can install gets a button (admins only). When everything is in place it shows one line: "All set". It can also be added to any dashboard from the card picker, which is how a new user will start.
+- **New setting: Entity publishing** (Config page, under Other): auto, MQTT or direct.
+  - **MQTT**, as today, keeps entities across restarts and lets their switches be changed from Home Assistant.
+  - **Direct** needs no MQTT broker, for the coming demo mode. Entities are rebuilt at each start and switches are read-only for now.
+  - **Auto** (the default) uses MQTT when it's there, so nothing changes for you.
+
 ## 0.9.61 (beta)
 
 ### Behaviour changes
