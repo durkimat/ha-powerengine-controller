@@ -21,6 +21,8 @@ from pe_core.activity import ActivityLog
 from pe_core.adapters.axle import AxleEvents
 from pe_core.adapters.kraken import KrakenTariff, supplier_of
 from pe_core.adapters.myenergi import ZappiCharger
+from pe_core.adapters.solcast import ROLES as FORECAST_ROLES
+from pe_core.adapters.solcast import SolcastForecast
 from pe_core.adapters.solis import SolisInverter
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
@@ -427,7 +429,7 @@ class PowerEngine(hass.Hass):
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
                 readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None,
-                                self._tariff(), self._events(), self._ev())
+                                self._tariff(), self._events(), self._ev(), self._forecast())
                 self._record_load(readings)
                 self._grid_check(readings)
                 self._record_costs(readings)
@@ -972,13 +974,18 @@ class PowerEngine(hass.Hass):
                  f"{len(self.loadstore.means)} recorded by PowerEngine)")
         self._plan_sig = None                                       # re-plan with the new profile
 
+    def _forecast(self):
+        """The generation forecast adapter (Solcast)."""
+        fc = getattr(self, "_forecast_adapter", None)
+        if fc is None:
+            fc = self._forecast_adapter = SolcastForecast(self._role_entity, self.tz)
+        return fc
+
     def _solar_forecast(self):
-        items = []
-        for role in ("solar_forecast_today", "solar_forecast_tomorrow", "solar_forecast_day3"):
-            eid = self._role_entity(role)
-            if eid:
-                items += self.get_state(eid, attribute="detailedForecast") or []
-        return items
+        """The forecast as neutral half-hourly points, from every mapped forecast role."""
+        fc = self._forecast()
+        return fc.points(fc.read(lambda eid, attr: self.get_state(eid, attribute=attr),
+                                 [self._role_entity(role) for role in FORECAST_ROLES]))
 
     def _maybe_replan(self, r):
         try:
@@ -1838,7 +1845,7 @@ class PowerEngine(hass.Hass):
     def _battery_now(self):
         try:
             r = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None,
-                     self._tariff(), self._events(), self._ev())
+                     self._tariff(), self._events(), self._ev(), self._forecast())
             return {"soc": r.battery_soc, "battery_w": r.battery_power, "grid_w": r.grid_power}
         except Exception:
             return {}

@@ -10,6 +10,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
+from .adapters.base import ForecastPoint
+from .adapters.solcast import SolcastForecast
 from .certainty import expected_price
 from .readings import Readings, Window, parse_time
 from .tariff import cheap_tods, overnight_window, tod
@@ -160,7 +162,18 @@ def _in(windows: list[Window], s: datetime) -> bool:
     return any(w.start < s + SLOT and w.end > s for w in windows)
 
 
-def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | None, tz,
+_DEFAULT_FORECAST = SolcastForecast()
+
+
+def _solar_points(solar) -> list[ForecastPoint]:
+    """`solar` as neutral points, in order: ForecastPoints as given, raw forecast dicts via the Solcast adapter."""
+    out: list[ForecastPoint] = []
+    for item in solar or []:
+        out += [item] if isinstance(item, ForecastPoint) else _DEFAULT_FORECAST.points([item])
+    return out
+
+
+def build_slots(r: Readings, solar: list[dict] | list[ForecastPoint] | None, profile: LoadProfile | None, tz,
                 horizon_h: float = 48, min_h: float = 36, certainty=None,
                 first_seen: dict[str, str] | None = None, overnight: set[int] | None = None) -> list[Slot]:
     """Half-hour slots from the current half-hour to the end of known prices (24-48 h).
@@ -173,14 +186,8 @@ def build_slots(r: Readings, solar: list[dict] | None, profile: LoadProfile | No
     end = min(start + timedelta(hours=horizon_h), max(last_known, start + timedelta(hours=min_h)))
 
     solar_by_slot: dict[datetime, float] = {}
-    for item in solar or []:
-        t = parse_time(item.get("period_start"))
-        try:
-            kw = float(item.get("pv_estimate") or 0.0)
-        except (TypeError, ValueError):
-            continue
-        if t:
-            solar_by_slot[slot_start(t)] = kw * 0.5
+    for point in _solar_points(solar):
+        solar_by_slot[slot_start(point.start)] = point.kwh
 
     axle = [Window(r.axle_start, r.axle_end)] if r.axle_start and r.axle_end else []
     free = [Window(r.free_start, r.free_end)] if r.free_start and r.free_end else []

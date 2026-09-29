@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.59 (beta)
+
+### Behaviour changes
+- None. This release reorganises how PowerEngine reads the solar forecast, so other forecast services can be
+  supported later.
+
+### Under the hood (making PowerEngine generic, step 5)
+- The Solcast-specific part (the half-hourly forecast list and how its estimates become kWh) now sits in a forecast
+  "adapter". The planner works from neutral half-hourly points.
+- One robustness gain: a malformed entry in the forecast list is now skipped rather than stopping the plan.
+- The recorded-night replay passed unchanged.
+
 ## 0.9.58 (beta)
 
 ### Behaviour changes

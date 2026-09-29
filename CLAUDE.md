@@ -130,7 +130,15 @@ behaviour change:
    - Left: role `suggest` regexes (step 7), `slots.car_idle`, `gridcheck`. Zappi-named texts for step 6: `pe_core/config.py:126`
      (setting help "32 A Zappi"), `pe_core/roles.py:109` (check meter "e.g. Zappi CT"), `docs/INSTALL.md:25, 278`, and comments in
      `gridcheck.py:1,16` and `checks.py:95`.
-5. Solcast forecast adapter.
+5. Solcast forecast adapter. **Done** (branch `forecast-adapter-5`):
+   - `pe_core/adapters/solcast.py`: `SolcastForecast` (`attribute = "detailedForecast"`): `points(items)` -> `ForecastPoint`s
+     (kWh = pv_estimate x 0.5, optional 10/90 bands; the slot builder's old skip rules), `day_kwh(items)` (was
+     `readings.forecast_kwh`, which stays as a wrapper), `read(get_attribute, entity_ids)` (was the loop in the app's
+     `_solar_forecast`), and `half_hourly(ha, day)`. Registered as `("forecast", "solcast")`.
+   - `build_slots(r, solar, ...)` takes `ForecastPoint`s or raw dicts (raw go through the default adapter); the app's
+     `_solar_forecast()` now returns points, via `_forecast()`. `read(..., forecast=None)`. Nothing serialises the solar list.
+   - Left: the roles' `attribute="detailedForecast"` and `suggest` regexes (step 7). Step 6 texts naming Solcast:
+     `docs/INSTALL.md:25`; the stored config value `solcast_site` (`config.py:43` `FORECAST_SOURCES`) is a key, not text.
 6. Neutral names internally; display names come from adapters.
 7. Solis as a definition file (YAML plus a small driver; firmware variants; RAM first).
 
