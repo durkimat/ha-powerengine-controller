@@ -18,6 +18,7 @@ from typing import Any
 from .adapters.axle import AxleEvents
 from .adapters.kraken import KrakenTariff
 from .adapters.myenergi import ZappiCharger
+from .adapters.solcast import SolcastForecast
 from .config import Config
 from .parsing import (  # noqa: F401
     State,
@@ -34,6 +35,7 @@ from .parsing import (  # noqa: F401
 GetState = Callable[[str], State | None]
 
 _DEFAULT_EV = ZappiCharger()
+_DEFAULT_FORECAST = SolcastForecast()
 
 
 @dataclass
@@ -131,23 +133,23 @@ CHECK_METER_MAX_AGE_S = 180        # an older check-meter reading isn't used (th
 
 
 def forecast_kwh(items: Any) -> float | None:
-    """Total of a Solcast detailedForecast list (pv_estimate is kW over 30 min)."""
-    if not isinstance(items, list) or not items:
-        return None
-    return round(sum((_num(i.get("pv_estimate")) or 0.0) * 0.5 for i in items if isinstance(i, dict)), 3)
+    """Total of a forecast's `detailedForecast` list (see `SolcastForecast.day_kwh`)."""
+    return _DEFAULT_FORECAST.day_kwh(items)
 
 
 # --- the reader ---------------------------------------------------------------------
 
 def read(cfg: Config, get_state: GetState, now: datetime | None = None, tariff: KrakenTariff | None = None,
-         events: AxleEvents | None = None, ev: ZappiCharger | None = None) -> Readings:
+         events: AxleEvents | None = None, ev: ZappiCharger | None = None,
+         forecast: SolcastForecast | None = None) -> Readings:
     """Build Readings from the config's mappings using `get_state(entity_id)`. The supplier's tariff data and the
     aggregator's events are parsed by the tariff and event adapters, and the car charger's by the EV adapter (the
-    Kraken, Axle and Zappi ones unless given)."""
+    Kraken, Axle and Zappi ones unless given), and the forecast's by the forecast adapter (Solcast)."""
     now = now or datetime.now(timezone.utc)
     tariff = tariff or KrakenTariff()
     events = events or AxleEvents()
     ev = ev or _DEFAULT_EV
+    forecast = forecast or _DEFAULT_FORECAST
     r = Readings(now=now, ev=ev)
     inputs = cfg.inputs
 
@@ -228,8 +230,8 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None, tariff: 
     r.free_active, r.free_start, r.free_end = tariff.read_free_sessions(state)
     r.offpeak_now = tariff.read_offpeak(state)
 
-    r.forecast_today_kwh = forecast_kwh(attr("solar_forecast_today", "detailedForecast"))
-    r.forecast_tomorrow_kwh = forecast_kwh(attr("solar_forecast_tomorrow", "detailedForecast"))
+    r.forecast_today_kwh = forecast.day_kwh(attr("solar_forecast_today", forecast.attribute))
+    r.forecast_tomorrow_kwh = forecast.day_kwh(attr("solar_forecast_tomorrow", forecast.attribute))
 
     for name in ("battery_soc", "battery_power", "grid_power", "house_power", "import_rate"):
         if getattr(r, name) is None:

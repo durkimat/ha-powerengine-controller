@@ -125,6 +125,7 @@ def test_unknown_kind_raises_value_error():
 
 
 def test_names_empty_when_nothing_registered():
+    registry_module._registry["forecast"].clear()      # (every kind has an adapter now; the fixture restores it)
     assert names("forecast") == []
 
 
