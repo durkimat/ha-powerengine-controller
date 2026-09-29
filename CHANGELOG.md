@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.61 (beta)
+
+### Behaviour changes
+- None, and no visible changes for your setup: every screen and message reads word for word as before.
+
+### Under the hood (making PowerEngine generic, step 6)
+- Supplier and device names (EDF, EDF smart slot, Zappi, Solcast, Solis, Axle) now come from the adapters rather
+  than being written into the texts. Someone on Octopus would see "intelligent dispatch" where you see "EDF smart
+  slot".
+- The dashboard is written with those names when PowerEngine starts or the configuration is saved. A test checks
+  that your dashboard comes out byte-for-byte the same as before.
+- No entity names, attributes, settings or history changed.
+
 ## 0.9.60 (beta)
 
 ### Behaviour changes
