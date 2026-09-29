@@ -14,6 +14,7 @@ from typing import Any
 from ..parsing import _num, parse_time
 from .base import ForecastPoint, HomeAssistant
 from .registry import register
+from .vocabulary import FORECAST
 
 ROLES = ("solar_forecast_today", "solar_forecast_tomorrow", "solar_forecast_day3")
 
@@ -34,6 +35,9 @@ class SolcastForecast:
     def __init__(self, role_entity: Callable[[str], str | None] | None = None, tz: tzinfo | None = None):
         self.role_entity = role_entity
         self.tz = tz or timezone.utc
+
+    def display_names(self) -> dict[str, str]:
+        return {FORECAST: "Solcast"}
 
     def points(self, items: Iterable[Any] | None) -> list[ForecastPoint]:
         """Half-hourly points (kWh = pv_estimate kW x 0.5), in the given order. An item with no readable start time or

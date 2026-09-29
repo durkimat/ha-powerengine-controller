@@ -262,10 +262,10 @@ views:
             name: Car
           - type: tile
             entity: sensor.pe_state_smart_charge
-            name: <<smart_charge>>
+            name: EDF smart charge
           - type: tile
             entity: sensor.pe_state_axle
-            name: <<event>>
+            name: Axle
           - type: tile
             entity: sensor.pe_state_free_power
             name: Free power
@@ -312,7 +312,7 @@ views:
               {%- set extra = state_attr('sensor.pe_plan', 'extra_kwh') | float(0) %}{% if extra | abs >= 0.5 %}
               · the plan ends with {{ '%.1f' | format(extra | abs) }} kWh {{ 'more' if extra > 0 else 'less' }} in the battery than plain self-use (worth £{{ '%.2f' | format(state_attr('sensor.pe_plan', 'extra_value') | float(0) | abs) }} at the cheapest price), counted in the saving{% endif %}
               {%- for c in state_attr('sensor.pe_plan', 'slot_certainty') or [] %}
-              · <<dispatch_short>> {{ c.day }} {{ c.from }}–{{ c.to }} at {{ c.slot_p }}p: {{ c.certainty }}% likely to happen (the plan allows for it not happening){% endfor %}
+              · EDF slot {{ c.day }} {{ c.from }}–{{ c.to }} at {{ c.slot_p }}p: {{ c.certainty }}% likely to happen (the plan allows for it not happening){% endfor %}
               {%- set cold = state_attr('sensor.pe_plan', 'cold') %}{% if cold and cold.periods %}
               · cold battery ({{ cold.battery_c_now }}°C estimated now; caution below {{ cold.threshold_c }}°C{{ ', learned' if cold.learned else '' }}): charging planned at {{ (cold.factor * 100) | round | int }}% of the normal rate {% for p in cold.periods %}{{ p.from }}–{{ p.to }}{{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}
               {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}
@@ -894,14 +894,14 @@ views:
               {%- macro headline(p, label) %}
               {%- if p and p.days %}
               {%- set paid = (p.steps[-1].value) | float(0) %}
-              {%- set has_axle = '<<event>>' in p.steps[-1].label %}
+              {%- set has_axle = 'Axle' in p.steps[-1].label %}
               {%- set everyday = sv(p.steps, 'Day-to-day cost') | float(0) %}
               {%- set carry = sv(p.steps, 'Battery carry-over') | float(0) %}
               {%- set pe_step = sv(p.steps, 'PowerEngine') | float(0) %}
               {%- set self_use = everyday - pe_step %}
               {%- set no_batt = sv(p.steps, 'No solar or battery') | float(0) %}
 
-              **{{ label }}: you paid {{ gbp(paid) }}**{{ " after <<event>>'s payments" if has_axle else "" }}. Day-to-day cost {{ gbp(everyday) }}: with a battery on plain self-use it would have been {{ gbp(self_use) }}, with no solar or battery {{ gbp(no_batt) }}. **PowerEngine saved {{ gbp(self_use - everyday) }}** on top of the hardware.
+              **{{ label }}: you paid {{ gbp(paid) }}**{{ " after Axle's payments" if has_axle else "" }}. Day-to-day cost {{ gbp(everyday) }}: with a battery on plain self-use it would have been {{ gbp(self_use) }}, with no solar or battery {{ gbp(no_batt) }}. **PowerEngine saved {{ gbp(self_use - everyday) }}** on top of the hardware.
               {%- endif %}
               {%- endmacro %}
               {%- set periods = state_attr('sensor.pe_cost_waterfall', 'periods') or {} %}
@@ -925,12 +925,12 @@ views:
             content: |-
               **Reading the chart, left to right**
               - **No solar or battery:** what the period would have cost buying every kWh from the grid (including the standing charge).
-              - **Solar, Tariff, Self-use battery:** what your solar, your <<tariff>>'s cheap rates and a battery left on the inverter's default setting would each have saved.
+              - **Solar, Tariff, Self-use battery:** what your solar, your EDF tariff's cheap rates and a battery left on the inverter's default setting would each have saved.
               - **PowerEngine:** what PowerEngine saved on top of that, by choosing when to charge, discharge and export.
               - **Day-to-day cost:** the result, a subtotal of your normal half-hours. It leaves out the two items that follow, so days can be compared like for like.
               - **Carry-over:** energy bought for later (a cost) or used from earlier (a credit). For example, charging at 7p tonight for tomorrow.
-              - **<<event>>:** <<event>> and free-power events. Negative means money in: <<event>>'s £1/kWh plus <<supplier>>'s export payment.
-              - **You paid:** the real total for the period, after <<event>>'s payments.
+              - **Axle:** Axle and free-power events. Negative means money in: Axle's £1/kWh plus EDF's export payment.
+              - **You paid:** the real total for the period, after Axle's payments.
       - type: grid
         column_span: 3
         cards:
@@ -980,7 +980,7 @@ views:
                     return (entity.attributes.days || []).filter(d => d.scenarios).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.solar]).filter(p => p[0] >= from);
                 - entity: sensor.pe_cost_days
                   show: {legend_value: false}
-                  name: "+ <<tariff>>"
+                  name: "+ EDF tariff"
                   type: column
                   color: "#26a69a"
                   extend_to: false
@@ -1029,11 +1029,11 @@ views:
               |---|---|
               | No solar or battery | Every kWh from the grid: the house at the standard rate, the car at the overnight rate; plus the standing charge. |
               | Solar | Your solar covers the house first, the surplus is exported; no battery. |
-              | + <<tariff>> | The same, but grid energy is priced at the real half-hourly rates (smart slots, overnight, peak). |
+              | + EDF tariff | The same, but grid energy is priced at the real half-hourly rates (smart slots, overnight, peak). |
               | + battery on self-use | Your battery in the inverter's default mode; it charges only from surplus solar and covers the house when it can. |
               | PowerEngine | What you actually paid, from the meters. |
 
-              All scenarios use the same measured house, car and solar. The battery carry-over adjustment values the day's change in battery charge at the overnight rate, so tonight's charging for tomorrow doesn't make today look dear. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated. <<event>> and free-power events are shown separately.
+              All scenarios use the same measured house, car and solar. The battery carry-over adjustment values the day's change in battery charge at the overnight rate, so tonight's charging for tomorrow doesn't make today look dear. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated. Axle and free-power events are shown separately.
       - type: grid
         column_span: 3
         cards:
@@ -1046,20 +1046,20 @@ views:
               {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
               {%- set e = states.sensor.pe_event_last %}
               {%- if e and e.attributes.type is defined %}
-              **Last event:** {{ '<<event>> export' if e.attributes.type == 'axle' else 'Free power' }} on {{ as_timestamp(e.attributes.date) | timestamp_custom('%a %d %b') }} from {{ e.attributes.time }}: {{ e.attributes.kwh }} kWh, worth {{ gbp(e.attributes.gross) }} ({{ gbp(e.attributes.net) }} net).
+              **Last event:** {{ 'Axle export' if e.attributes.type == 'axle' else 'Free power' }} on {{ as_timestamp(e.attributes.date) | timestamp_custom('%a %d %b') }} from {{ e.attributes.time }}: {{ e.attributes.kwh }} kWh, worth {{ gbp(e.attributes.gross) }} ({{ gbp(e.attributes.net) }} net).
               {%- else %}
-              No <<event>> or free-power events recorded yet.
+              No Axle or free-power events recorded yet.
               {%- endif %}
 
-              | Month | <<event>> kWh | <<event>> paid you | Energy it used | <<event>> net | Free power | Day-to-day energy (metered) | Standing charge |
+              | Month | Axle kWh | Axle paid you | Energy it used | Axle net | Free power | Day-to-day energy (metered) | Standing charge |
               |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
               {%- for m in (state_attr('sensor.pe_event_months', 'months') or []) | reverse %}
               | {{ as_timestamp(m.month ~ '-01') | timestamp_custom('%b %Y') }} | {{ '%.1f' | format(m.axle_kwh | default(0) | float(0)) }} | {{ gbp(m.axle_gross) }} | {{ gbp(m.axle_energy) }} | **{{ gbp(m.axle_net) }}** | {{ gbp(m.free_power_net) }} | {{ gbp((m.actual | float(0)) - (m.standing | default(0) | float(0))) }} | {{ gbp(m.standing) }} |
               {%- endfor %}
 
-              - **<<event>> paid you:** kWh exported in <<event>> events × (£1 from <<event>> + <<supplier>>'s export rate).
+              - **Axle paid you:** kWh exported in Axle events × (£1 from Axle + EDF's export rate).
               - **Energy it used:** what that energy was worth otherwise. Battery energy is costed at the overnight rate it's refilled at, including the battery's losses. Solar is costed at the export rate it would have earned anyway.
-              - **<<event>> net:** the difference, what the events really added.
+              - **Axle net:** the difference, what the events really added.
               - **Free power:** kWh used in free-power sessions × the rate you'd otherwise have paid.
               - **Day-to-day energy (metered):** the meter's cost for all the other half-hours, without the standing charge (shown next to it). This is the metered figure, before the carry-over adjustment used in the chart.
 
@@ -1108,7 +1108,7 @@ views:
 
               - **No solar or battery (S0):** house kWh × standard rate + car kWh × overnight rate + standing charge. Assumes the car would otherwise have charged overnight.
               - **Solar:** solar used by the house × standard rate, plus solar exported or stored × export rate.
-              - **Smart charge:** every kWh bought in an <<dispatch>> × (standard rate − slot rate), split between house, car (against the overnight rate) and battery by where it went. The standard rate in a slot is the day's peak rate.
+              - **Smart charge:** every kWh bought in an EDF smart slot × (standard rate − slot rate), split between house, car (against the overnight rate) and battery by where it went. The standard rate in a slot is the day's peak rate.
               - **Battery (default):** a half-hour simulation of the inverter's plain self-use with the same battery: charges only from surplus solar, covers the house.
               - **Battery control:** the battery's real value minus the default: what the charge/discharge timing added. Energy delivered is valued at the rate it avoided; energy used is costed from a first-in-first-out ledger (solar at the export rate, grid at the standard rate when bought), losses included. Can be negative. In Passive mode this is whatever is controlling the battery today.
               - **Arbitrage:** grid-bought energy later exported: export revenue − its cost.
@@ -1116,7 +1116,7 @@ views:
               - **Actual:** metered import × rate − metered export × export rate + standing charge.
               - **Unexplained:** Actual minus the layers. Inverter losses, standby use and meter mismatch land here; if it grows, the model needs fixing.
 
-              Caveats: half-hour resolution from HA's sensors, which may differ slightly from <<supplier>>'s bill; rates are the ones seen at the time; first-in-first-out is a convention, not physics; battery round-trip efficiency is {{ states('sensor.pe_diag_battery_efficiency') }}% ({{ 'measured over the last 30 days' if state_attr('sensor.pe_diag_battery_efficiency', 'measured') else 'the configured figure until 14 full days are recorded' }}). Method version {{ state_attr('sensor.pe_cost_days', 'method') or 1 }}.
+              Caveats: half-hour resolution from HA's sensors, which may differ slightly from EDF's bill; rates are the ones seen at the time; first-in-first-out is a convention, not physics; battery round-trip efficiency is {{ states('sensor.pe_diag_battery_efficiency') }}% ({{ 'measured over the last 30 days' if state_attr('sensor.pe_diag_battery_efficiency', 'measured') else 'the configured figure until 14 full days are recorded' }}). Method version {{ state_attr('sensor.pe_cost_days', 'method') or 1 }}.
   - title: Health
     path: health
     icon: mdi:stethoscope
@@ -1379,9 +1379,9 @@ views:
             content: |-
               {%- set s = state_attr('sensor.pe_diag_health', 'slots') %}
               {%- if s and (s.slots or s.upcoming) %}
-              Last {{ s.days }} days: **{{ s.slots }} slot{{ '' if s.slots == 1 else 's' }}** finished, **{{ s.used }} used by the car**, {{ s.done_no_car }} ran with no car charging, {{ s.cancelled }} cancelled before starting, {{ s.cut_short }} cut short{{ (', ' ~ s.upcoming ~ ' upcoming') if s.upcoming else '' }}. The car drew {{ s.car_kwh }} kWh against {{ s.planned_kwh }} kWh planned by <<supplier>>.
+              Last {{ s.days }} days: **{{ s.slots }} slot{{ '' if s.slots == 1 else 's' }}** finished, **{{ s.used }} used by the car**, {{ s.done_no_car }} ran with no car charging, {{ s.cancelled }} cancelled before starting, {{ s.cut_short }} cut short{{ (', ' ~ s.upcoming ~ ' upcoming') if s.upcoming else '' }}. The car drew {{ s.car_kwh }} kWh against {{ s.planned_kwh }} kWh planned by EDF.
 
-              | Day | Time | What happened | <<supplier>> planned | Car drew | Charging |
+              | Day | Time | What happened | EDF planned | Car drew | Charging |
               |---|---|---|---:|---:|---:|
               {%- for r in s.recent | reverse %}
               | {{ r.day }} | {{ r.time }} | {{ {'planned': 'upcoming', 'done': 'ran' ~ (' (confirmed)' if r.confirmed else ''), 'cancelled': 'cancelled', 'cut_short': 'cut short'}[r.status] }} | {{ r.planned_kwh if r.planned_kwh is not none else '–' }} kWh | {{ r.car_kwh }} kWh | {{ r.charging_min | round(0) | int }} min |
@@ -1391,10 +1391,10 @@ views:
               **Slot certainty: {{ (c.overall * 100) | round(0) | int }}%** overall from {{ c.slots }} finished slot{{ '' if c.slots == 1 else 's' }} (starts at 70% and learns as slots finish).{% for g in c.groups %} {{ g.when | capitalize }}, {{ g.notice }}: {{ (g.certainty * 100) | round(0) | int }}% ({{ g.slots }}).{% endfor %} The plan prices each upcoming slot as certainty × slot price + the rest at the normal price, so it only leans on slots that usually happen.
               {%- endif %}
               {%- else %}
-              No smart-charge slots seen yet. PowerEngine records each one <<supplier>> plans (and what the car actually drew) from now on.
+              No smart-charge slots seen yet. PowerEngine records each one EDF plans (and what the car actually drew) from now on.
               {%- endif %}
           - type: heading
-            heading: Asking <<supplier>> for slots
+            heading: Asking EDF for slots
           - type: markdown
             grid_options: {columns: full}
             content: |-
@@ -1409,9 +1409,9 @@ views:
               | {{ x.when }} | {{ {'other': 'your automations', 'powerengine': 'PowerEngine', 'would': 'PowerEngine (would)'}[x.by] }} | {{ x.change }} | {{ ('+' ~ x.gained ~ ' / −' ~ (x.lost or 0) ~ ' half-hours') if x.result in ['slots', 'none', 'lost slots'] else x.result }} | {{ x.why }} |
               {%- endfor %}
 
-              Changing the car's ready-by time prompts <<supplier>> to re-plan, which often adds slots. PowerEngine asks only when it's worth it (car plugged in, no slot soon, battery has room or arbitrage is on), picks the next nearest time, checks 15 minutes later, and backs off (30 minutes, 1, 2, then 4 hours), within the request limits on the Config page (6 a day, 20 minutes apart, by default). It only sends requests in Active mode (not while paused), and not until 15 minutes after a restart of PowerEngine, HA or the <<supplier>> integration. The result counts half-hours of slots gained and lost, since a re-plan can also move or drop slots already planned.
+              Changing the car's ready-by time prompts EDF to re-plan, which often adds slots. PowerEngine asks only when it's worth it (car plugged in, no slot soon, battery has room or arbitrage is on), picks the next nearest time, checks 15 minutes later, and backs off (30 minutes, 1, 2, then 4 hours), within the request limits on the Config page (6 a day, 20 minutes apart, by default). It only sends requests in Active mode (not while paused), and not until 15 minutes after a restart of PowerEngine, HA or the EDF integration. The result counts half-hours of slots gained and lost, since a re-plan can also move or drop slots already planned.
               {%- else %}
-              No ready-by changes seen yet. PowerEngine records every change (yours or its own) and whether <<supplier>> added slots within 15 minutes.
+              No ready-by changes seen yet. PowerEngine records every change (yours or its own) and whether EDF added slots within 15 minutes.
               {%- endif %}
           - type: heading
             heading: Inverter control preview

@@ -20,13 +20,15 @@ from typing import Any
 from ..parsing import State, Window, _is_on, _num, _rate, parse_time, parse_windows
 from .base import Dispatch, GridEvent, HomeAssistant
 from .registry import register
-from .vocabulary import DISPATCH, GRID_EVENT, TARIFF
+from .vocabulary import DISPATCH, DISPATCH_SHORT, GRID_EVENT, SMART_CHARGE, SUPPLIER, TARIFF
 
 StateFn = Callable[[str], State | None]
 
 SUPPLIERS = {
-    "edf": {DISPATCH: "EDF smart slot", TARIFF: "EDF", GRID_EVENT: "EDF free-electricity session"},
-    "octopus": {DISPATCH: "Octopus intelligent dispatch", TARIFF: "Octopus Energy",
+    "edf": {SUPPLIER: "EDF", TARIFF: "EDF tariff", DISPATCH: "EDF smart slot", DISPATCH_SHORT: "EDF slot",
+            SMART_CHARGE: "EDF smart charge", GRID_EVENT: "EDF free-electricity session"},
+    "octopus": {SUPPLIER: "Octopus", TARIFF: "Octopus tariff", DISPATCH: "Octopus intelligent dispatch",
+                DISPATCH_SHORT: "Octopus dispatch", SMART_CHARGE: "Octopus intelligent charging",
                 GRID_EVENT: "Octopus saving session"},
 }
 

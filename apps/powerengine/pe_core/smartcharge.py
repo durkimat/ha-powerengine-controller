@@ -189,3 +189,9 @@ class SmartCharger:
                 "would_today": sum(1 for a in recent if a["by"] == "would"
                                    and a["time"][:10] == now.date().isoformat()),
                 "next_allowed": self.next_allowed, "recent": rows}
+
+
+def ask_message(verb: str, action: dict, names: dict[str, str]) -> str:
+    """The log line for a smart-charge request: 'Asking EDF for smart-charge slots: ready-by 07:00 → 07:30 (why)'."""
+    supplier = names.get("supplier") or "your supplier"
+    return f"{verb} {supplier} for smart-charge slots: ready-by {action['from']} → {action['to']} ({action['why']})"

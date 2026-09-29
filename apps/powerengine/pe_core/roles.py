@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+from .names import fill
+
 # kind -> what the value is; drives unit checks and how the card shows it
 KINDS = ("power", "energy", "percent", "rate", "money", "text", "binary", "timestamp", "list", "static", "control", "temperature")
 
@@ -46,6 +48,7 @@ class Role:
 
     def as_dict(self) -> dict:
         d = asdict(self)
+        d["label"], d["description"] = fill(self.label), fill(self.description)     # names from the adapters
         d.pop("group")                           # the card places roles by its own topic list; not needed
         if self.domains == ("sensor",):          # the card's default; left out to keep the catalogue small
             d.pop("domains")
@@ -60,8 +63,8 @@ GROUPS = (
     ("solar", "Solar forecast"),
     ("tariff", "Tariff"),
     ("ev", "EV charger"),
-    ("smart", "EDF smart charge"),
-    ("axle", "Axle VPP"),
+    ("smart", "<<smart_charge>>"),
+    ("axle", "<<event>> VPP"),
     ("free", "Free-power sessions"),
     ("controls", "Control outputs (Active mode only)"),
     ("handover", "Handover guards (Active mode only)"),
@@ -106,7 +109,7 @@ ROLES: tuple[Role, ...] = (
     # --- grid and house ---
     Role("grid_power", "grid", "Grid power", "Live import/export at the meter.",
          "power", signed=True, sign_note="+ importing, - exporting", suggest=(r"^sensor\.solis_meter_active_power$",)),
-    Role("grid_power_reference", "grid", "Check meter", "A second grid meter (e.g. Zappi CT).", "power",
+    Role("grid_power_reference", "grid", "Check meter", "A second grid meter (e.g. <<ev_charger>> CT).", "power",
          required="no", signed=True, sign_note="+ in, - out", suggest=(r"^sensor\.myenergi_.*_power_grid$",)),
     Role("grid_import_today", "grid", "Grid import today", "Energy imported today, for costs and losses.",
          "energy", suggest=(r"^sensor\.solis_grid_import_today$",)),
@@ -161,17 +164,17 @@ ROLES: tuple[Role, ...] = (
     Role("smart_dispatches", "smart", "Smart-charge dispatches", "Planned and completed smart-charge slots.",
          "list", domains=("binary_sensor",), attribute="planned_dispatches",
          suggest=(r"^binary_sensor\.edf_energy_.*_intelligent_dispatching$",)),
-    Role("smart_state", "smart", "Smart-charge state", "EDF's smart-charging state, for the status view.",
+    Role("smart_state", "smart", "Smart-charge state", "<<supplier>>'s smart-charging state, for the status view.",
          "text", required="no", suggest=(r"^sensor\.edf_energy_.*_intelligent_state$",)),
     # --- Axle ---
-    Role("axle_event_active", "axle", "Axle event active", "On during an Axle event (triggers force discharge).",
+    Role("axle_event_active", "axle", "<<event>> event active", "On during an <<event>> event (triggers force discharge).",
          "binary", required="axle", domains=("sensor", "binary_sensor"),
          suggest=(r"^sensor\.axle_vpp_axle_event_in_progress$",)),
-    Role("axle_event_start", "axle", "Axle event start", "Start of the next event, to hold charge for it.",
+    Role("axle_event_start", "axle", "<<event>> event start", "Start of the next event, to hold charge for it.",
          "timestamp", required="axle", suggest=(r"^sensor\.axle_vpp_axle_start_time_friendly$",)),
-    Role("axle_event_end", "axle", "Axle event end", "End of the next event.",
+    Role("axle_event_end", "axle", "<<event>> event end", "End of the next event.",
          "timestamp", required="axle", suggest=(r"^sensor\.axle_vpp_axle_end_time_friendly$",)),
-    Role("axle_direction", "axle", "Axle event direction", "Import or export event (only export is acted on).",
+    Role("axle_direction", "axle", "<<event>> event direction", "Import or export event (only export is acted on).",
          "text", required="no", unknown_ok=True, suggest=(r"^sensor\.axle_vpp_axle_import_export$",)),
     # --- free power ---
     Role("free_power_active", "free", "Free power now", "On during a free-electricity session.",
@@ -211,10 +214,10 @@ ROLES: tuple[Role, ...] = (
          "control", required="no", domains=("button",), suggest=(r"^button\.solis_sync_rtc$",)),
     Role("inverter_export_limit", "controls", "Inverter export limit (entity)", "Export (backflow) power limit.",
          "control", required="no", domains=("number",), suggest=(r"^number\.solis_backflow_power$",)),
-    Role("smart_target_soc", "controls", "Smart-charge target", "Car charge target sent to EDF.",
+    Role("smart_target_soc", "controls", "Smart-charge target", "Car charge target sent to <<supplier>>.",
          "control", required="no", domains=("number",),
          suggest=(r"^number\.edf_energy_.*_intelligent_charge_target$",)),
-    Role("smart_target_time", "controls", "Smart-charge ready-by time", "Ready-by time sent to EDF.",
+    Role("smart_target_time", "controls", "Smart-charge ready-by time", "Ready-by time sent to <<supplier>>.",
          "control", required="no", domains=("select", "time"),
          suggest=(r"^select\.edf_energy_.*_intelligent_target_time$",)),
     # --- handover guards: Active is refused unless every mapped guard is in its safe state ---

@@ -76,6 +76,7 @@ from pe_core.history import chosen_day, chosen_plan, day_view
 from pe_core.journal import WriteJournal, day_summary, is_staged
 from pe_core.loadstore import LoadStore
 from pe_core.modes import GUARDS, UNVERIFIED, effective_mode, guard_problems, guard_status
+from pe_core.names import build_names, fill, neutral_names, set_current
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
 from pe_core.optimiser import compare, optimise
 from pe_core.planner import make_plan, params_from, plan_entity_states, slot_certainty_rows
@@ -88,7 +89,7 @@ from pe_core.simjob import SimContext, SimStore
 from pe_core.simjob import run as sim_run
 from pe_core.simulate import SimBattery
 from pe_core.slots import SlotTracker
-from pe_core.smartcharge import SmartCharger, worth_asking
+from pe_core.smartcharge import SmartCharger, ask_message, worth_asking
 from pe_core.status import entity_states
 from pe_core.store import save_config, with_operation
 from pe_core.tariff import overnight_window
@@ -194,6 +195,7 @@ class PowerEngine(hass.Hass):
             self.tz = ZoneInfo(str(self.get_timezone()))
         except Exception:
             self.tz = None
+        self._publish_names()                          # the adapters (the forecast needs tz) can now name themselves
         self.recorder = Recorder()
         self.notifier = Notifier(os.path.join(os.path.dirname(self._save_path()), "notifications.json"))
         self._bad_since = {}
@@ -1158,7 +1160,7 @@ class PowerEngine(hass.Hass):
             since = self._bad_since.setdefault(key, now)
             if (now - since).total_seconds() >= 15 * 60:
                 role = ROLE_BY_KEY.get(key)
-                self._notify("inputs", input_message(key, role.label if role else key, status, message))
+                self._notify("inputs", input_message(key, fill(role.label) if role else key, status, message))
 
     def _watch_events(self, r):
         if r.axle_start and r.axle_start > r.now:
@@ -1258,6 +1260,20 @@ class PowerEngine(hass.Hass):
         if ev is None:
             ev = self._ev_adapter = ZappiCharger(self._role_entity)
         return ev
+
+    def _names(self):
+        """What this user's supplier and devices are called, from the adapters (neutral words before the config is
+        read). Also what the pure functions read for their texts."""
+        if self.cfg is None:
+            names = neutral_names()
+        else:
+            names = build_names(self._tariff(), self._ev(), self._forecast(), self._inverter(), self._events())
+        set_current(names)
+        return names
+
+    def _publish_names(self):
+        """The version sensor carries the names map (a small attribute; the card fills its placeholders from it)."""
+        self._publish_state("diag_version", __version__, {"names": self._names()})
 
     def _events(self):
         """The grid-event adapter (Axle)."""
@@ -2156,7 +2172,7 @@ class PowerEngine(hass.Hass):
                             min_gap=timedelta(minutes=safety["smart_min_gap_min"]))
         if a:
             verb = "Asking" if active else "Would ask"
-            self.log(f"{verb} EDF for smart-charge slots: ready-by {a['from']} → {a['to']} ({a['why']})")
+            self.log(ask_message(verb, a, self._names()))
             if active:
                 self._request_slots(eid, a["to"])
         if a or changed:
@@ -2442,7 +2458,7 @@ class PowerEngine(hass.Hass):
     def _sync_dashboard(self):
         target = os.path.join(os.path.dirname(self._save_path()), "dashboard.yaml")
         try:
-            if sync_dashboard(target, card=self._energy_flow_card()):
+            if sync_dashboard(target, card=self._energy_flow_card(), names=self._names()):
                 self.log(f"Dashboard updated: {target} (refresh the PowerEngine dashboard to see it)")
         except OSError as err:
             self.log(f"Could not write the dashboard file {target}: {err}", level="WARNING")
@@ -2602,7 +2618,7 @@ class PowerEngine(hass.Hass):
         other = [k for k in set(old) | set(new) if k != "inputs" and old.get(k) != new.get(k)]
         parts = []
         if changed:
-            labels = [ROLE_BY_KEY[k].label if k in ROLE_BY_KEY else k for k in changed]
+            labels = [fill(ROLE_BY_KEY[k].label) if k in ROLE_BY_KEY else k for k in changed]
             more = "…" if len(labels) > 6 else ""
             parts.append(f"{len(changed)} input(s) changed: " + ", ".join(labels[:6]) + more)
         if other:

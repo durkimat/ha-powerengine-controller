@@ -116,7 +116,8 @@ def test_unknown_supplier_is_rejected():
 
 def test_display_names_per_supplier():
     edf, octo = KrakenTariff("edf").display_names(), KrakenTariff("octopus").display_names()
-    assert display(DISPATCH, edf) == "EDF smart slot" and display(TARIFF, edf) == "EDF"
+    assert display(DISPATCH, edf) == "EDF smart slot" and display(TARIFF, edf) == "EDF tariff"
+    assert display("supplier", edf) == "EDF" and display("supplier", octo) == "Octopus"
     assert display(DISPATCH, octo) == "Octopus intelligent dispatch"
     assert GRID_EVENT in edf and GRID_EVENT in octo
 

@@ -10,6 +10,7 @@ from typing import Any
 
 from .decide import Decision
 from .modes import ModeDecision
+from .names import N
 from .readings import Readings
 
 IDLE_W = 50          # below this a flow counts as idle
@@ -75,10 +76,10 @@ def _price(r: Readings, tz: tzinfo | None) -> str | None:
 def _events(r: Readings, tz: tzinfo | None) -> list[str]:
     out = []
     if r.axle_state() == "active":
-        out.append("Axle event in progress" + (f" until {hhmm(r.axle_end, tz)}" if r.axle_end else ""))
+        out.append(f"{N('event')} event in progress" + (f" until {hhmm(r.axle_end, tz)}" if r.axle_end else ""))
     elif r.axle_state() == "scheduled":
         end = f"–{hhmm(r.axle_end, tz)}" if r.axle_end else ""
-        out.append(f"Axle event at {hhmm(r.axle_start, tz)}{end}")
+        out.append(f"{N('event')} event at {hhmm(r.axle_start, tz)}{end}")
     if r.free_state() == "active":
         out.append("Free power now" + (f" until {hhmm(r.free_end, tz)}" if r.free_end else ""))
     elif r.free_state() == "scheduled":

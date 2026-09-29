@@ -42,6 +42,7 @@ class SolisInverter:
     """Translates decisions into Solis timed-window settings. See module docstring."""
 
     name = "solis"
+    DISPLAY_NAMES = {"inverter": "Solis"}
     card_model = "solis"       # the Sunsynk Power Flow Card's "inverter: model:" key for this brand
 
     TIME_ROLES_1 = ("timed_charge_start_hour", "timed_charge_start_minute", "timed_charge_end_hour",
@@ -227,6 +228,9 @@ class SolisInverter:
         return "staged" if is_staged(role) else "eeprom"
 
     # --- capabilities / protocol conformance --------------------------------------------------
+
+    def display_names(self) -> dict[str, str]:
+        return dict(self.DISPLAY_NAMES)
 
     def capabilities(self) -> InverterCapabilities:
         return InverterCapabilities(

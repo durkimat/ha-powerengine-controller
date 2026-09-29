@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta, tzinfo
 
 from .config import Config
+from .names import N
 from .readings import Readings
 from .tariff import cheap_threshold
 
@@ -128,7 +129,8 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
     if f.get("axle") and r.axle_state() == "active":
         extra = (f" + {r.export_rate * 100:g}p export" if f.get("axle_plus_export", True) and r.export_rate
                  else "")
-        return Decision(FORCE_DISCHARGE, "axle_active", f"Axle event in progress (paid £1{extra} per kWh exported)",
+        return Decision(FORCE_DISCHARGE, "axle_active",
+                        f"{N('event')} event in progress (paid £1{extra} per kWh exported)",
                         power_w=axle_power_w(cfg))
 
     # With a plan, live overrides first (Axle now, free power now, car charging now), then the plan.
@@ -142,9 +144,9 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
         if need is not None and soc < need:
             when = (r.axle_start.astimezone(tz) if tz else r.axle_start).strftime("%H:%M")
             if cheap:
-                why = f"Axle event at {when} needs {need:.0f}%, and import is cheap ({price})"
+                why = f"{N('event')} event at {when} needs {need:.0f}%, and import is cheap ({price})"
                 return Decision(GRID_CHARGE, "pre_axle", why, target_soc=max(need, target))
-            return Decision(HOLD, "pre_axle", f"keep charge for the Axle event at {when} (needs {need:.0f}%)",
+            return Decision(HOLD, "pre_axle", f"keep charge for the {N('event')} event at {when} (needs {need:.0f}%)",
                             target_soc=need)
 
     # 3. Free-electricity session
@@ -228,7 +230,7 @@ def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bo
             return Decision(HOLD, "car_charging", f"car is charging at a cheap rate ({price}); the battery holds")
         return _car_at_peak(r, soc, s, price)
     if ps.action == FORCE_DISCHARGE and r.axle_state() != "active":
-        return Decision(HOLD, "plan", "Axle event due now per the plan, but not started yet: holding charge")
+        return Decision(HOLD, "plan", f"{N('event')} event due now per the plan, but not started yet: holding charge")
     if ps.action == SELF_USE and soc <= s["min_reserve_soc"]:
         return Decision(HOLD, "reserve", f"battery at its {s['min_reserve_soc']:.0f}% minimum reserve")
     if ps.action == GRID_CHARGE and ps.target_soc is not None and soc >= ps.target_soc:

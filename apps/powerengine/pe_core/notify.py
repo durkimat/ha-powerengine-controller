@@ -11,6 +11,8 @@ import json
 import os
 from datetime import datetime
 
+from .names import N
+
 DAILY_CAP = 10
 
 
@@ -80,8 +82,9 @@ def input_message(role: str, label: str, status: str, detail: str) -> tuple[str,
 
 def axle_message(start: datetime, end: datetime | None, now: datetime, tz=None) -> tuple[str, str, str]:
     until = f" to {(end.astimezone(tz) if tz else end):%H:%M}" if end else ""
-    return (f"axle:{start.isoformat()}", "Axle event scheduled",
-            f"Axle export event at {_when(start, now, tz)}{until}. PowerEngine will keep the battery ready for it.")
+    return (f"axle:{start.isoformat()}", f"{N('event')} event scheduled",
+            f"{N('event')} export event at {_when(start, now, tz)}{until}. "
+            "PowerEngine will keep the battery ready for it.")
 
 
 def free_message(start: datetime, end: datetime | None, now: datetime, tz=None) -> tuple[str, str, str]:

@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import os
 
+from .names import fill
+
 # Shipped as .lovelace, not .yaml: AppDaemon would try to load a .yaml here as app config.
 SOURCE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dashboard", "dashboard.lovelace")
 
@@ -104,13 +106,21 @@ def _splice(text: str, card: str) -> str:
     return "\n".join(lines[:begin_i + 1] + card_lines + lines[end_i:])
 
 
-def sync_dashboard(target: str, source: str = SOURCE, card: str | None = None) -> bool:
-    """Copy the shipped dashboard to `target` if it differs. With `card` (the Energy flow card's YAML, from
-    `energy_flow_card`), the text between the markers is replaced with it first. Returns True if written."""
-    with open(source, encoding="utf-8") as fh:
-        wanted = fh.read()
+def render(text: str, card: str | None = None, names: dict[str, str] | None = None) -> str:
+    """The shipped dashboard as written to HA: the Energy flow card spliced in, then every `<<term>>` placeholder
+    replaced by the user's supplier or device name (an unknown placeholder raises, so it can't ship)."""
     if card is not None:
-        wanted = _splice(wanted, card)
+        text = _splice(text, card)
+    return fill(text, names)
+
+
+def sync_dashboard(target: str, source: str = SOURCE, card: str | None = None,
+                   names: dict[str, str] | None = None) -> bool:
+    """Copy the shipped dashboard to `target` if it differs. With `card` (the Energy flow card's YAML, from
+    `energy_flow_card`), the text between the markers is replaced with it first; `<<term>>` placeholders are filled
+    from `names` (the current names map by default). Returns True if written."""
+    with open(source, encoding="utf-8") as fh:
+        wanted = render(fh.read(), card, names)
     try:
         with open(target, encoding="utf-8") as fh:
             if fh.read() == wanted:

@@ -13,7 +13,7 @@ from datetime import datetime
 from ..parsing import State, _is_on, parse_time
 from .base import GridEvent, HomeAssistant
 from .registry import register
-from .vocabulary import GRID_EVENT
+from .vocabulary import EVENT_SOURCE, GRID_EVENT
 
 StateFn = Callable[[str], State | None]
 
@@ -27,7 +27,7 @@ class AxleEvents:
         self.role_entity = role_entity
 
     def display_names(self) -> dict[str, str]:
-        return {GRID_EVENT: "Axle event"}
+        return {GRID_EVENT: "Axle event", EVENT_SOURCE: "Axle"}
 
     def read_event(self, state: StateFn) -> tuple[bool, datetime | None, datetime | None]:
         """(event active now, next event start, next event end)."""
