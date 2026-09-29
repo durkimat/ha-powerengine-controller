@@ -129,6 +129,21 @@ class TariffAdapter(Protocol):
         ...
 
 
+@runtime_checkable
+class GridEventAdapter(Protocol):
+    """Reads an aggregator's grid events (Axle export events, saving sessions) in neutral terms."""
+
+    name: str
+
+    def display_names(self) -> dict[str, str]:
+        """Vocabulary term -> this aggregator's own name for it, e.g. {"grid_event": "Axle event"}."""
+        ...
+
+    def grid_events(self, ha: HomeAssistant, now: datetime) -> list[GridEvent]:
+        """Upcoming or current events."""
+        ...
+
+
 @dataclass(frozen=True)
 class EVState:
     """A car charger's state, in neutral terms."""
@@ -183,6 +198,7 @@ __all__ = [
     "Dispatch",
     "GridEvent",
     "TariffAdapter",
+    "GridEventAdapter",
     "EVState",
     "EVAdapter",
     "ForecastPoint",

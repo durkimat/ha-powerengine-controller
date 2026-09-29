@@ -12,22 +12,15 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
+from .adapters.axle import AxleEvents
+from .adapters.kraken import KrakenTariff
 from .config import Config
+from .parsing import State, Window, _is_on, _num, _rate, parse_time, parse_windows  # noqa: F401
 
-State = dict[str, Any]
 GetState = Callable[[str], State | None]
-
-_ON = {"on", "true", "yes", "1", "active"}
-
-
-@dataclass(frozen=True)
-class Window:
-    start: datetime
-    end: datetime
-    value: float | None = None           # rate (GBP/kWh), or kWh for dispatches
 
 
 @dataclass
@@ -122,26 +115,6 @@ class Readings:
 
 # --- parsing helpers ----------------------------------------------------------------
 
-def _num(value: Any) -> float | None:
-    try:
-        n = float(value)
-    except (TypeError, ValueError):
-        return None
-    return n if n == n else None           # drop NaN
-
-
-def parse_time(value: Any) -> datetime | None:
-    if value in (None, "", "unknown", "unavailable", "None"):
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    try:
-        t = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
-
-
 CHECK_METER_MAX_AGE_S = 180        # an older check-meter reading isn't used (the inverter's meter is, uncorrected)
 
 
@@ -166,30 +139,6 @@ def _energy_kwh(state: State | None) -> float | None:
     return n / 1000 if (state.get("attributes") or {}).get("unit_of_measurement") == "Wh" else n
 
 
-def _rate(state: State | None) -> float | None:
-    if not state:
-        return None
-    n = _num(state.get("state"))
-    if n is None:
-        return None
-    return n / 100 if (state.get("attributes") or {}).get("unit_of_measurement") == "p/kWh" else n
-
-
-def parse_windows(items: Any, value_keys: tuple[str, ...] = ("value_inc_vat", "value")) -> list[Window]:
-    """Parse [{start, end, value...}] lists (EDF/Octopus rates, dispatches)."""
-    out: list[Window] = []
-    for it in items or []:
-        if not isinstance(it, dict):
-            continue
-        start, end = parse_time(it.get("start")), parse_time(it.get("end"))
-        if not start:
-            continue
-        end = end or start + timedelta(minutes=30)
-        value = next((_num(it[k]) for k in value_keys if k in it and _num(it[k]) is not None), None)
-        out.append(Window(start, end, value))
-    return out
-
-
 def forecast_kwh(items: Any) -> float | None:
     """Total of a Solcast detailedForecast list (pv_estimate is kW over 30 min)."""
     if not isinstance(items, list) or not items:
@@ -197,15 +146,15 @@ def forecast_kwh(items: Any) -> float | None:
     return round(sum((_num(i.get("pv_estimate")) or 0.0) * 0.5 for i in items if isinstance(i, dict)), 3)
 
 
-def _is_on(state: State | None) -> bool:
-    return bool(state) and str(state.get("state", "")).lower() in _ON
-
-
 # --- the reader ---------------------------------------------------------------------
 
-def read(cfg: Config, get_state: GetState, now: datetime | None = None) -> Readings:
-    """Build Readings from the config's mappings using `get_state(entity_id)`."""
+def read(cfg: Config, get_state: GetState, now: datetime | None = None, tariff: KrakenTariff | None = None,
+         events: AxleEvents | None = None) -> Readings:
+    """Build Readings from the config's mappings using `get_state(entity_id)`. The supplier's tariff data and the
+    aggregator's events are parsed by the tariff and event adapters (the Kraken and Axle ones unless given)."""
     now = now or datetime.now(timezone.utc)
+    tariff = tariff or KrakenTariff()
+    events = events or AxleEvents()
     r = Readings(now=now)
     inputs = cfg.inputs
 
@@ -272,30 +221,20 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None) -> Readi
             seen = True
     r.solar_power = total if seen else None
 
-    r.import_rate = _rate(state("import_rate_now"))
-    r.export_rate = _rate(state("export_rate"))
-    sc = state("standing_charge")
-    r.standing_charge = _num((sc or {}).get("state"))
-    sc_unit = ((sc or {}).get("attributes") or {}).get("unit_of_measurement")
-    if r.standing_charge is not None and sc_unit in ("p", "p/day"):
-        r.standing_charge /= 100
-    r.rates = parse_windows(attr("import_rates_today", "rates")) + parse_windows(attr("import_rates_tomorrow", "rates"))
-    r.dispatches = parse_windows(attr("smart_dispatches", "planned_dispatches"), ("charge_in_kwh",))
-    r.completed_dispatches = parse_windows(attr("smart_dispatches", "completed_dispatches"), ("charge_in_kwh",))
+    r.import_rate = tariff.read_import_rate(state)
+    r.export_rate = tariff.read_export_rate(state)
+    r.standing_charge = tariff.read_standing_charge(state)
+    r.rates = tariff.read_rates(state)
+    r.dispatches, r.completed_dispatches = tariff.read_dispatches(state)
 
     r.ev_plug = (state("ev_plug_status") or {}).get("state")
     r.ev_status = (state("ev_charger_status") or {}).get("state")
     r.ev_mode = (state("ev_charge_mode") or {}).get("state")
     r.ev_session_kwh = _energy_kwh(state("ev_session_energy"))
 
-    r.axle_active = _is_on(state("axle_event_active"))
-    r.axle_start = parse_time((state("axle_event_start") or {}).get("state"))
-    r.axle_end = parse_time((state("axle_event_end") or {}).get("state"))
-    r.free_active = _is_on(state("free_power_active"))
-    r.free_start = parse_time((state("free_power_next_start") or {}).get("state"))
-    r.free_end = parse_time((state("free_power_next_end") or {}).get("state"))
-    off = state("offpeak_now")
-    r.offpeak_now = _is_on(off) if off else None
+    r.axle_active, r.axle_start, r.axle_end = events.read_event(state)
+    r.free_active, r.free_start, r.free_end = tariff.read_free_sessions(state)
+    r.offpeak_now = tariff.read_offpeak(state)
 
     r.forecast_today_kwh = forecast_kwh(attr("solar_forecast_today", "detailedForecast"))
     r.forecast_tomorrow_kwh = forecast_kwh(attr("solar_forecast_tomorrow", "detailedForecast"))
