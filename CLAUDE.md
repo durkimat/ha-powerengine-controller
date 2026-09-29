@@ -174,3 +174,13 @@ Goal: PowerEngine runs with no MQTT broker and no real inverter (a demo), and in
   `mqtt` / `direct`. **Rule: all entity output goes through `self._get_publisher()`; never call `mqtt_publish` or build a
   topic in the app.** Direct-mode gaps: no entity registry (no unique ids, gone when HA restarts until the next publish),
   no retire from HA (marked `unavailable`), and no commands from HA (switches and selects are read-only) until B2.
+- **B2, commands in direct mode. Done** (`pe_core/commands.py`, `powerengine.py` `_listen_for_commands` / `_on_command`).
+  With MQTT the app never receives a command message: HA's switch publishes to the retained command topic, the state
+  changes, and the app's `listen_state` handlers (pause, guards, history) react. Direct mode does the same by setting the
+  entity's state itself: `_on_command(key, value)` validates, then `publisher.preset`. Direct mode only (no listeners in
+  MQTT mode) hears HA's `call_service` event (`switch.turn_on/turn_off/toggle`, `select.select_option/select_next/
+  select_previous`, `number.set_value`; `service_data.entity_id` as string, comma string or list; other entities ignored) and
+  the card's fallback event **`pe_command`**: `{"entity_id": "switch.pe_ctl_pause", "value": "ON"}` (`value`: "ON" / "OFF" /
+  "toggle" for a switch, one of the select's options, a number). Fire it from the card with
+  `hass.connection.sendMessagePromise({type: "fire_event", event_type: "pe_command", event_data: {...}})` (admin only)
+  when HA refuses a service call because the domain has no platform. Invalid values are ignored.
