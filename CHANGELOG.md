@@ -2,6 +2,24 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.57 (beta)
+
+### Behaviour changes
+- None. This release reorganises how PowerEngine reads your tariff, so other suppliers can be supported later.
+  What it does should be exactly the same.
+
+### Under the hood (making PowerEngine generic, step 3)
+- Everything specific to how EDF's tariff reaches PowerEngine now sits in a tariff "adapter" for the Octopus
+  Energy integration, which serves EDF and Octopus alike. That covers:
+  - the half-hourly rates, standing charge and off-peak flag;
+  - smart slots;
+  - free-electricity sessions;
+  - how PowerEngine asks for smart slots (the ready-by time and charge target).
+
+  Axle events come through their own small adapter.
+- When and how often PowerEngine asks EDF for slots is unchanged, including the back-off and settle rules.
+- The recorded-night replay passed unchanged.
+
 ## 0.9.56 (beta)
 
 ### Behaviour changes
