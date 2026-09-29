@@ -34,7 +34,7 @@ def octopus_names():
 
 
 def his_card():
-    from tests.test_dashboard import _plant
+    from test_dashboard import _plant
     return energy_flow_card([_plant("main", "Main")], 18000, 12, True, "solis")
 
 
@@ -108,8 +108,9 @@ def test_event_decision_reasons_read_the_same_and_follow_the_names():
 
 
 def test_waterfall_labels():
+    from test_costs import _day
+
     from pe_core.costs import waterfall
-    from tests.test_costs import _day
     days = [_day("2026-09-21", none=10, solar=8, tariff=7, self_use_adj=5, actual_adj=4, carry=0.2,
                  events_metered=1.0, axle_income=0.6, paid=4.6)]
     labels = [s["label"] for s in waterfall(days, "yesterday")["steps"]]
