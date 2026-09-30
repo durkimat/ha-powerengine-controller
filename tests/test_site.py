@@ -131,10 +131,13 @@ PLAIN = "schema_version: 1\noperation: {mode: passive}\ninputs: {}\n"
 
 def test_migration_adds_todays_site_with_a_backup_and_one_info_line(make):
     app = make(PLAIN)
-    assert saved(make)["site"] == TODAYS and app.cfg.site == Site() and "site" in app.cfg.raw
+    assert saved(make)["site"] == {**TODAYS, "inverter_firmware": "420044"}
+    assert app.cfg.site == Site(inverter_firmware="420044") and "site" in app.cfg.raw
     assert len(backups(make)) == 1
     added = [m for m in lines(app) if m.startswith("Site added to the configuration: ")]
     assert len(added) == 1 and "inverter solis" in added[0] and "tariff auto" in added[0]
+    assert "firmware 420044 (assumed: the variant PowerEngine has always used; not readable from the inverter)" \
+        in added[0]
 
 
 def test_migration_is_idempotent(make):
@@ -168,7 +171,7 @@ def test_migration_survives_a_failed_save(make, monkeypatch):
     make.config.write_text(PLAIN)
     monkeypatch.setattr(sys.modules["powerengine"], "save_config", broken)
     app.initialize()
-    assert make.config.read_text() == PLAIN and app.cfg.site == Site()
+    assert make.config.read_text() == PLAIN and app.cfg.site == Site()   # in memory: firmware unset, same variant
     assert any("Could not add the site to the configuration" in w for w in lines(app))
     assert app._inverter().name == "solis"
 
@@ -248,6 +251,15 @@ def test_changing_the_firmware_switches_to_passive_and_asks_for_the_tests_again(
     assert saved(make)["site"]["inverter_firmware"] == "FB01" and app._retest_required()
     assert version(app)["retest_required"] is True and version(app)["site"]["inverter_firmware"] == "FB01"
     assert any("supervised tests need running again" in w for w in lines(app))
+
+
+def test_a_firmware_that_resolves_to_the_same_variant_does_not_switch(make):
+    app = make("schema_version: 1\noperation: {mode: active}\ninputs: {}\nsite: {}\n")    # no firmware: the default
+    result = save_event(app, {**app.cfg.raw, "site": {"inverter_firmware": "420044"}})
+    assert result["ok"] and "Passive" not in result["message"]
+    assert saved(make)["operation"]["mode"] == "active" and not app._retest_required()
+    save_event(app, {**app.cfg.raw, "site": {}})                 # and back to none: still the same variant
+    assert saved(make)["operation"]["mode"] == "active" and not app._retest_required()
 
 
 def test_changing_the_inverter_switches_to_passive(make, monkeypatch):

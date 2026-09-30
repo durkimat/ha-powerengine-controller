@@ -203,14 +203,14 @@ behaviour change:
      was built for and rebuilds on change, so a config reload picks up a new site). `"none"` is a null adapter (`adapters/null.py`: `NoCharger`,
      `NoForecast`, `NoEvents`; reads nothing, neutral words in the names map). Tariff `auto` keeps `supplier_of`. `inverter_firmware` goes to the
      definition loader (`firmware=`), so firmware variants apply.
-   - Migration (`_add_site`): a real config with no `site` gets today's plant (solis, firmware from the definition's `firmware_entity` if any, zappi,
+   - Migration (`_add_site`): a real config with no `site` gets today's plant (solis, firmware from the definition's `firmware_entity` if any, else the definition's default ("420044", logged as assumed), zappi,
      car none, tariff auto, solcast, axle), saved by `store.save_config` (backup kept), one INFO line "Site added to the configuration: ...". Not in
      demo mode, not unconfigured, idempotent; a failed save warns and carries on in memory. Parts are never migrated to `none` (the words in texts
      would change). The replay harness config carries the site instead, so the goldens stay as recorded.
    - Definitions gained `status` (verified | community | draft; solis is verified on `verified_firmware: ["420044"]`) and an optional
      `firmware_entity` ({domain, tail}). The SolaX Modbus Solis plugin exposes no firmware entity, so solis names none.
    - `sensor.pe_diag_version` attributes add `site`, `site_options` (`adapters/options.py`, about 1 KB), `firmware_detected` and `retest_required`.
-   - Changing `site.inverter` or `site.inverter_firmware` in a saved config (`_on_save` -> `_site_guard`) switches to Passive, logs, notifies and sets
+   - Changing `site.inverter`, or `site.inverter_firmware` so that a different firmware variant applies (null and "420044" are the same for solis), (`_on_save` -> `_site_guard`) switches to Passive, logs, notifies and sets
      `retest_required` (`site_state.json` beside the config; cleared when a supervised RC test passes). The app has no stored RC-test results or
      Active gate, so the flag is what the card reads; the card decides how to show it. A save without `site` keeps the saved one.
    - 8b: the card's "Your system" block (reads the attributes above; saves with `pe_config_save`).

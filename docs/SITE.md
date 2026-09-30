@@ -28,15 +28,15 @@ for the owner; the migration never picks it.
 ## Migration
 
 A real config with no `site` gets one on start: solis, the firmware from the definition's `firmware_entity` if it names
-one (the SolaX Modbus Solis plugin has none, so null), zappi, none, auto, solcast, axle. It is saved through the normal
+one, else the definition's default firmware, logged as assumed (the SolaX Modbus Solis plugin has no firmware entity, so solis gets "420044"), zappi, none, auto, solcast, axle. It is saved through the normal
 save-with-backup path (`store.save_config`, so a `config.yaml.bak-<stamp>` is kept) and logged once at INFO as "Site
 added to the configuration: ...". It never runs in demo mode or with no config, does nothing when a `site` exists, and
 if the save fails the app carries on with the same choices in memory and warns.
 
 ## Changing the site
 
-Send the whole config with the new `site` in the `pe_config_save` event, as any other config change. If `inverter` or
-`inverter_firmware` differs from the saved site, the app switches to Passive whatever was asked, logs and notifies, and
+Send the whole config with the new `site` in the `pe_config_save` event, as any other config change. If `inverter` differs, or
+`inverter_firmware` changes so that a different firmware variant applies (null and "420044" are the same for solis), the app switches to Passive whatever was asked, logs and notifies, and
 marks the supervised tests as needing a re-run (`retest_required`, kept in `site_state.json` beside the config and
 cleared when a supervised RC test passes). Other keys only rebuild their adapters. A save with no `site` key keeps the
 saved one.

@@ -21,6 +21,7 @@ from pe_core import __version__, clock, damping, diagnostics, gridcheck, ramcont
 from pe_core import learn as learning
 from pe_core.activity import ActivityLog
 from pe_core.adapters import registry
+from pe_core.adapters.definition import load_definition
 from pe_core.adapters.kraken import supplier_of
 from pe_core.adapters.null import NULL as NULL_ADAPTERS
 from pe_core.adapters.options import site_options
@@ -1423,14 +1424,22 @@ class PowerEngine(hass.Hass):
             return
         if self.cfg_path not in self._real_paths:
             return
+        assumed = False
         try:
             site = Site()
             inverter = registry.get("inverter", site.inverter)(self, self._role_entity, BATTERY_VOLTS)
-            site = dataclasses.replace(site, inverter_firmware=inverter.firmware_detected())
+            firmware = inverter.firmware_detected()
+            if firmware is None:                           # not readable: the variant PowerEngine has always used
+                firmware = (load_definition(site.inverter).get("firmware") or {}).get("default")
+                assumed = firmware is not None
+            site = dataclasses.replace(site, inverter_firmware=firmware)
         except Exception as err:
             self.log(f"Site: could not detect the inverter firmware: {err!r}", level="WARNING")
             site = Site()
-        text = (f"inverter {site.inverter} (firmware {site.inverter_firmware or 'not set'}), "
+        fw = (f"firmware {site.inverter_firmware}" + (" (assumed: the variant PowerEngine has always used; not "
+                                                       "readable from the inverter)" if assumed else "")
+              if site.inverter_firmware else "firmware not set")
+        text = (f"inverter {site.inverter} ({fw}), "
                 f"ev_charger {site.ev_charger}, car {site.car}, tariff {site.tariff}, forecast {site.forecast}, "
                 f"events {site.events}")
         try:
@@ -1462,18 +1471,27 @@ class PowerEngine(hass.Hass):
         except OSError as err:
             self.log(f"Could not save the test state: {err}", level="WARNING")
 
+    @staticmethod
+    def _variant(site):
+        """What the site's inverter and firmware come to: the definition and the firmware variant that applies (so
+        no firmware and the definition's default one are the same)."""
+        try:
+            return site.inverter, load_definition(site.inverter, site.inverter_firmware).variant
+        except Exception:                                  # no definition file: the firmware as given
+            return site.inverter, site.inverter_firmware
+
     def _site_guard(self, new):
         """(the config to save, whether the inverter or its firmware changed from the saved site). A card that doesn't
-        know the `site:` section keeps the saved one. When the inverter or its firmware changes, PowerEngine goes to
-        Passive whatever was asked: the definition, and so the writes, are different now, and the supervised tests
-        have to be run again on it. Other site keys only rebuild their adapters."""
+        know the `site:` section keeps the saved one. When the inverter or the firmware variant that applies changes,
+        PowerEngine goes to Passive whatever was asked: the definition, and so the writes, are different now, and the
+        supervised tests have to be run again on it. Other site keys only rebuild their adapters."""
         old = self.cfg.raw.get("site") if self.cfg else None
         if old is not None and "site" not in new:
             new = {**new, "site": old}
         if old is None:
             return new, False
         before, after = parse_config({"site": old}).site, parse_config(new).site
-        if (before.inverter, before.inverter_firmware) == (after.inverter, after.inverter_firmware):
+        if self._variant(before) == self._variant(after):
             return new, False
         return (with_operation(new, "passive") if (new.get("operation") or {}).get("mode") == "active" else new), True
 
