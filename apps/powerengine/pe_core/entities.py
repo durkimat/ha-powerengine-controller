@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .history import DAY_OPTIONS, PLAN_OPTIONS
+from .history import DAY_OPTIONS, PLAN_OPTIONS, RANGE_OPTIONS
 
 BASE_TOPIC = "powerengine"
 DISCOVERY_PREFIX = "homeassistant"
@@ -201,7 +201,21 @@ HISTORY_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "plan_history", "Plan history", {"icon": "mdi:history"}),
 )
 
-ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES + UI_ENTITIES + CONTROL_SWITCHES + HISTORY_ENTITIES
+# Costs tab: the first and last day of the custom range for the savings waterfall (same retained pattern; the app
+# re-publishes cost_waterfall's 'custom' period when either changes).
+COST_FROM_TOPIC = f"{BASE_TOPIC}/ui_cost_from/set"
+COST_TO_TOPIC = f"{BASE_TOPIC}/ui_cost_to/set"
+COST_RANGE_ENTITIES: tuple[EntityDef, ...] = (
+    EntityDef("select", "ui_cost_from", "Costs range from",
+              {"icon": "mdi:calendar-start", "options": RANGE_OPTIONS, "command_topic": COST_FROM_TOPIC,
+               "state_topic": COST_FROM_TOPIC, "optimistic": False, "retain": True}),
+    EntityDef("select", "ui_cost_to", "Costs range to",
+              {"icon": "mdi:calendar-end", "options": RANGE_OPTIONS, "command_topic": COST_TO_TOPIC,
+               "state_topic": COST_TO_TOPIC, "optimistic": False, "retain": True}),
+)
+
+ENTITIES = (ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES + UI_ENTITIES + CONTROL_SWITCHES
+            + HISTORY_ENTITIES + COST_RANGE_ENTITIES)
 
 
 def device(version: str) -> dict[str, Any]:

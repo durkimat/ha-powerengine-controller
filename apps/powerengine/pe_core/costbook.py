@@ -12,8 +12,9 @@ import json
 import os
 from datetime import date, datetime, timedelta
 
-from .costs import METHOD_VERSION, SimDefault, day_summary, process, steps, waterfall
+from .costs import METHOD_VERSION, SimDefault, day_summary, process, steps, waterfall, waterfall_range
 from .energy import FLOW_VERSION, HalfHour
+from .history import range_day
 from .ledger import Ledger
 from .readings import Readings
 from .tariff import cheap_tods, overnight_window, rates_at, reclassify
@@ -336,12 +337,15 @@ def _step_value(period: dict, label: str) -> float:
 
 
 def cost_entity_states(book: CostBook, today: date, months: list[dict] | None = None,
-                       scenario_params: dict | None = None) -> dict:
+                       scenario_params: dict | None = None,
+                       custom_range: tuple[str | None, str | None] | None = None) -> dict:
     """key -> (state, attributes) for the cost_* and event_* entities.
 
     scenario_params (capacity, eff, floor_soc, max_kw, includes_ev): when given, cost_days's daily summaries
     also carry each day's what-if scenarios (see costs.day_scenarios), and cost_waterfall is published from
-    them; without it (no config yet) both fall back to their old, scenario-free shape.
+    them; without it (no config yet) both fall back to their old, scenario-free shape. custom_range is the two
+    Costs-tab selects' options (first day, last day; e.g. "7 days ago", "Yesterday"); the waterfall then also has a
+    'custom' period for that range (from the same 31 days, so the options reach back 30 days at most).
     """
     days = book.recent(today, scenario_params=scenario_params)
     today_s = next((d for d in days if d["date"] == today.isoformat()), None)
@@ -368,6 +372,9 @@ def cost_entity_states(book: CostBook, today: date, months: list[dict] | None = 
         # up to 31 days of summaries for the waterfall, independent of however many cost_days shows (SHOW_DAYS)
         wf_days = book.recent(today, days=WATERFALL_WINDOW_DAYS, scenario_params=scenario_params)
         periods = {p: waterfall(wf_days, p) for p in WATERFALL_PERIODS}
+        if custom_range is not None:
+            periods["custom"] = waterfall_range(wf_days, range_day(custom_range[0], today),
+                                                range_day(custom_range[1], today))
         out["cost_waterfall"] = (-_step_value(periods["yesterday"], "PowerEngine"), {"periods": periods})
     return out
 

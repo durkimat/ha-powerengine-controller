@@ -134,3 +134,32 @@ def test_listeners_only_in_direct_mode(app):
         app._publisher_obj = pub
         app._listen_for_commands()
         assert events == expected
+
+
+def test_costs_range_selects_take_day_options_only(app):
+    from pe_core.history import RANGE_OPTIONS
+    call(app, "select", "select_option", entity_id="select.pe_ui_cost_from", option="5 days ago")
+    call(app, "select", "select_option", entity_id="select.pe_ui_cost_to", option="Yesterday")
+    assert app.ha.states["select.pe_ui_cost_from"] == "5 days ago"
+    assert app.ha.states["select.pe_ui_cost_to"] == "Yesterday"
+    call(app, "select", "select_option", entity_id="select.pe_ui_cost_from", option="Today")     # not a whole day
+    call(app, "select", "select_option", entity_id="select.pe_ui_cost_from", option="31 days ago")
+    assert app.ha.states["select.pe_ui_cost_from"] == "5 days ago"
+    app._on_pe_command("pe_command", {"entity_id": "select.pe_ui_cost_to", "value": RANGE_OPTIONS[3]}, {})
+    assert app.ha.states["select.pe_ui_cost_to"] == RANGE_OPTIONS[3]
+
+
+def test_publish_costs_hands_the_two_selects_to_the_waterfall(app):
+    import powerengine
+    seen = {}
+
+    def fake_states(book, today, months, sp, custom):
+        seen["custom"] = custom
+        return {"cost_waterfall": (1.0, {"periods": {}})}
+    app.costbook, app.mqtt, app._published, app._months = object(), object(), {}, []
+    app._today = lambda: None
+    app._publish_state = lambda key, state, attrs: seen.setdefault("published", key)
+    app.ha.states.update({"select.pe_ui_cost_from": "7 days ago", "select.pe_ui_cost_to": "Yesterday"})
+    with mock.patch.object(powerengine, "cost_entity_states", fake_states):
+        app._on_cost_range("select.pe_ui_cost_from", "state", "3 days ago", "7 days ago", {})
+    assert seen == {"custom": ("7 days ago", "Yesterday"), "published": "cost_waterfall"}

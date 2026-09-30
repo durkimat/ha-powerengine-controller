@@ -1003,7 +1003,9 @@ class PowerEngine(hass.Hass):
         if self.costbook is None or getattr(self, "mqtt", None) is None or not hasattr(self, "_published"):
             return
         sp = self._scenario_params() if self.cfg is not None else None
-        for key, (state, attrs) in cost_entity_states(self.costbook, self._today(), self._months, sp).items():
+        custom = (self.get_state("select.pe_ui_cost_from"), self.get_state("select.pe_ui_cost_to"))
+        for key, (state, attrs) in cost_entity_states(self.costbook, self._today(), self._months, sp,
+                                                      custom).items():
             self._publish_if_changed(key, state, attrs)
 
     def _logbook(self, message):
@@ -1245,6 +1247,10 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Could not save the plan snapshot: {err!r}", level="WARNING")
 
+    def _on_cost_range(self, entity, attribute, old, new, kwargs):
+        if old != new:
+            self._publish_costs()
+
     def _publish_history(self, *args, **kwargs):
         """The Plan history tab: the chosen day and plan against what happened."""
         if self.costbook is None or self._get_publisher() is None:
@@ -1372,6 +1378,8 @@ class PowerEngine(hass.Hass):
                 self._write_listeners.append(self._listen_state(self._on_guard_change, eid))
         for eid in ("select.pe_ui_history_day", "select.pe_ui_history_plan"):
             self._write_listeners.append(self._listen_state(self._publish_history, eid))
+        for eid in ("select.pe_ui_cost_from", "select.pe_ui_cost_to"):      # the custom range of the waterfall
+            self._write_listeners.append(self._listen_state(self._on_cost_range, eid))
         self._write_listeners = [h for h in self._write_listeners if h is not None]
 
     def _listen_state(self, callback, entity_id):
@@ -2994,15 +3002,19 @@ class PowerEngine(hass.Hass):
         pub = self._get_publisher()
         if not pub.retains:                       # direct: nothing survives a start, so set them again
             done = {}
+        changed = False
         if not done.get("right_align"):
             pub.preset("ui_right_align", "ON")               # right-aligned numbers by default
-            done["right_align"] = True
+            done["right_align"] = changed = True
         if not done.get("history"):
             pub.preset("ui_history_day", "Yesterday")
             pub.preset("ui_history_plan", "Start of day")
-            done["history"] = True
-            if not pub.retains:
-                return
+            done["history"] = changed = True
+        if not done.get("cost_range"):
+            pub.preset("ui_cost_from", "7 days ago")         # the Costs tab's custom range: the last 7 days
+            pub.preset("ui_cost_to", "Yesterday")
+            done["cost_range"] = changed = True
+        if changed and pub.retains:
             try:
                 with open(path, "w", encoding="utf-8") as fh:
                     json.dump(done, fh)

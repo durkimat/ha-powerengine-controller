@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
+from datetime import date
 
 from .ledger import Ledger
 from .names import N
@@ -289,30 +290,23 @@ def steps(summary: dict) -> list[tuple[str, float]]:
             ("Stored", s4 + s["stored"]), ("Actual", s["actual"])]
 
 
-def waterfall(days_summaries: list[dict], period: str) -> dict:
-    """Sum day_scenarios() over a period into a savings waterfall's steps (GBP, running totals chain exactly).
-
-    days_summaries: day_summary() dicts with a 'scenarios' field (see day_scenarios), oldest first, as
-    CostBook.recent() returns them. period: 'yesterday', 'week' (last 7 complete days), 'month' (this calendar
-    month's complete days so far, the month of the last day in days_summaries) or 'days30' (last 30 complete
-    days). Steps: total 'No solar or battery', then 'Solar', 'EDF tariff', 'Battery on self-use', 'PowerEngine'
-    to the subtotal 'Day-to-day cost', then 'Battery carry-over' and (only if it moved money) 'Axle & free power'
-    to the total 'You paid'. Negative steps are savings.
-    """
+def _select_days(days_summaries: list[dict], period: str) -> list[dict]:
     complete = [d for d in days_summaries if d.get("complete") and d.get("scenarios")]
     if period == "yesterday":
-        chosen = complete[-1:]
-    elif period == "week":
-        chosen = complete[-7:]
-    elif period == "days30":
-        chosen = complete[-30:]
-    elif period == "month":
+        return complete[-1:]
+    if period == "week":
+        return complete[-7:]
+    if period == "days30":
+        return complete[-30:]
+    if period == "month":
         this_month = (days_summaries[-1]["date"] if days_summaries else "")[:7]
-        chosen = [d for d in complete if d["date"].startswith(this_month)]
-    else:
-        raise ValueError(f"unknown period {period!r}")
+        return [d for d in complete if d["date"].startswith(this_month)]
+    raise ValueError(f"unknown period {period!r}")
 
-    fields = ("none", "solar", "tariff", "self_use_adj", "actual_adj", "carry", "events_metered", "axle_income")
+
+def _steps_for(chosen: list[dict]) -> list[dict]:
+    """The waterfall's steps for some complete days (see waterfall)."""
+    fields = ("none", "solar", "tariff", "actual_adj", "carry", "events_metered", "axle_income")
     sums = dict.fromkeys(fields, 0.0)
     for d in chosen:
         sc = d["scenarios"]
@@ -325,8 +319,8 @@ def waterfall(days_summaries: list[dict], period: str) -> dict:
     r0 = r2(sums["none"])
     r1 = r2(sums["solar"])
     r2v = r2(sums["tariff"])
-    r3 = r2(sums["self_use_adj"])
-    r4 = r2(sums["actual_adj"])
+    # everything the battery and PowerEngine did beyond solar and the tariff: the real cost of the normal
+    # half-hours, including the carry-over (battery energy bought for later or used from earlier)
     r5 = r2(sums["actual_adj"] + sums["carry"])
     r6 = r2(sums["actual_adj"] + sums["carry"] + sums["events_metered"] - sums["axle_income"])
 
@@ -334,15 +328,55 @@ def waterfall(days_summaries: list[dict], period: str) -> dict:
         {"label": "No solar or battery", "kind": "total", "value": r0},
         {"label": "Solar", "kind": "step", "value": r2(r1 - r0)},
         {"label": N("tariff"), "kind": "step", "value": r2(r2v - r1)},
-        {"label": "Battery on self-use", "kind": "step", "value": r2(r3 - r2v)},
-        {"label": "PowerEngine", "kind": "step", "value": r2(r4 - r3)},
-        {"label": "Day-to-day cost", "kind": "subtotal", "value": r4},
-        {"label": "Battery carry-over", "kind": "step", "value": r2(r5 - r4)},
+        {"label": "PowerEngine", "kind": "step", "value": r2(r5 - r2v)},
     ]
     if round(sums["events_metered"] - sums["axle_income"], 2) != 0:
         steps_list.append({"label": f"{N('event')} & free power", "kind": "step", "value": r2(r6 - r5)})
     paid_label = f"You paid (after {N('event')} payments)" if round(sums["axle_income"], 2) > 0 else "You paid"
     steps_list.append({"label": paid_label, "kind": "total", "value": r6})
+    return steps_list
 
+
+def waterfall(days_summaries: list[dict], period: str) -> dict:
+    """Sum day_scenarios() over a period into a savings waterfall's steps (GBP, running totals chain exactly).
+
+    days_summaries: day_summary() dicts with a 'scenarios' field (see day_scenarios), oldest first, as
+    CostBook.recent() returns them. period: 'yesterday', 'week' (last 7 complete days), 'month' (this calendar
+    month's complete days so far, the month of the last day in days_summaries) or 'days30' (last 30 complete
+    days). Steps: total 'No solar or battery', then 'Solar', 'EDF tariff' and 'PowerEngine' (the battery and
+    PowerEngine together: the real cost of the normal half-hours, carry-over included, against solar and the tariff
+    alone), then (only if it moved money) 'Axle & free power', to the total 'You paid'. Negative steps are savings.
+    """
+    chosen = _select_days(days_summaries, period)
     return {"period": period, "days": len(chosen), "from": chosen[0]["date"] if chosen else None,
-            "to": chosen[-1]["date"] if chosen else None, "steps": steps_list}
+            "to": chosen[-1]["date"] if chosen else None, "steps": _steps_for(chosen)}
+
+
+def waterfall_range(days_summaries: list[dict], start: date | None, end: date | None) -> dict:
+    """The waterfall for a chosen date range (both ends included), for the dashboard's custom period.
+
+    Only complete days with scenarios count. A reversed range (start after end) is swapped; a range that reaches
+    beyond the days available is clamped to them. The result is waterfall()'s shape with period 'custom', the
+    days actually used ('from', 'to', 'days'), the dates asked for ('asked_from', 'asked_to') and a plain-words
+    'note' ('' when nothing needed changing). With no usable day it has 'days': 0, no dates and no steps changed.
+    """
+    complete = [d for d in days_summaries if d.get("complete") and d.get("scenarios")]
+    notes: list[str] = []
+    if start is None or end is None:
+        chosen: list[dict] = []
+        notes.append("Choose a From and a To day.")
+    else:
+        if start > end:
+            start, end = end, start
+            notes.append("From was after To, so the two were swapped.")
+        chosen = [d for d in complete if start.isoformat() <= d["date"] <= end.isoformat()]
+        if not chosen:
+            notes.append("No complete day with costs in that range.")
+        else:
+            want = (end - start).days + 1
+            if len(chosen) < want:
+                notes.append(f"Only {len(chosen)} of the {want} days asked for have costs recorded.")
+    return {"period": "custom", "days": len(chosen), "from": chosen[0]["date"] if chosen else None,
+            "to": chosen[-1]["date"] if chosen else None,
+            "asked_from": start.isoformat() if start else None, "asked_to": end.isoformat() if end else None,
+            "note": " ".join(notes), "steps": _steps_for(chosen)}
