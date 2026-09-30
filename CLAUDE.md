@@ -66,9 +66,9 @@ tools/release.sh <version> --app-notes <file> [--card-notes <file>] [--app-branc
 - **The card is released only when it changes** (give `--card-notes`; its changelog takes `## x.y.z`, `CARD_VERSION`
   moves to that version). No `--card-notes`: the card repo is not touched. Versions stay in one sequence: a card
   release takes the app version it ships with, so the card may go from 0.9.70 to 0.9.74.
-- **Minimum versions, not lockstep.** The card has `MIN_APP_VERSION` (oldest app it works with; 0.9.69, which added the
-  `demo_days` attribute). The app publishes `min_card_version` on `sensor.pe_diag_version` (`pe_core/version.py`
-  `MIN_CARD_VERSION`, 0.9.70). Each side warns only when the other is older than its minimum, not when they differ
+- **Minimum versions, not lockstep.** The card has `MIN_APP_VERSION` (oldest app it works with; 0.9.72, which added the
+  `custom` waterfall period). The app publishes `min_card_version` on `sensor.pe_diag_version` (`pe_core/version.py`
+  `MIN_CARD_VERSION`, 0.9.73). Each side warns only when the other is older than its minimum, not when they differ
   (card: `versionWarnings`). Raise a minimum in the PR that makes one side need something the other only newer
   versions have, and release both.
 - **Run it detached** (CI takes about 5 minutes, and a device_bash call is killed after 180 s, taking plain `&` or
