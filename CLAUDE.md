@@ -13,6 +13,7 @@ diagnostics UI. The owner is Matthew. This is live on his house: mistakes cost m
   readings, costs, learning, RAM control, damping, journal, releases, diagnostics and so on.
 - `apps/powerengine/dashboard/dashboard.lovelace`: the dashboard. The app writes it to HA on start, so edit it
   here, never in HA.
+- `docs/INVERTERS.md`: how to add an inverter as a definition file (`pe_core/adapters/devices/<name>.yml`).
 - `docs/INSTALL.md`: the install guide. Keep it current: any release that changes setup updates it in the same PR.
 - `docs/ha/powerengine_handover.yaml`: the HA package (handover scripts, update script, watchdog automations).
   The owner installs it into HA; see "HA config" below.
@@ -168,7 +169,31 @@ behaviour change:
    - Left: comments/docstrings (incl. dated history notes), the `state_axle` entity's display name, the roles' `suggest`
      regexes, `FORECAST_SOURCES`, `docs/INSTALL.md` (his hardware's setup guide), the dashboard's and the simulator's
      EDF-versus-Octopus comparison sentences, and the card's "Forecast: Solcast site" option (names that config value).
-7. Solis as a definition file (YAML plus a small driver; firmware variants; RAM first).
+7. Solis as a definition file (YAML plus a small driver; firmware variants; RAM first). **Done** (branch `phase0/solis-definition-7`; byte-identical for his S5-EH1P6K-L on firmware 420044):
+   - `pe_core/adapters/devices/solis.yml` holds all Solis data: display names, `card_model`, capability flags and limits, the
+     RAM remote-control entities/options/limits/tests first, then the timed slots (three, `_2`/`_3` suffix, staged parts, test
+     roles), the clock roles, the 29 brand `suggest` regexes per role, and `firmware:` variants (his 420044 is the base; a
+     commented `re:^FB` example). **It is `.yml`, not `.yaml`, on purpose:** AppDaemon loads every file ending `.yaml` under
+     the apps folder as app config; `test_no_stray_yaml_in_app_folder` allows only `powerengine.yaml` and `devices/*.yml`.
+   - `adapters/definition.py` loads, validates (clear `DefinitionError`s naming the missing key) and merges firmware variants
+     (`match` = exact version or `re:pattern`; first match wins; mappings merge key by key). It imports nothing else from
+     pe_core, so `roles.py` can use it. `adapters/defined.py`: `DefinedInverter(definition, ha, role_entity, ...)` implements
+     the whole inverter surface. `adapters/solis.py`: `SolisInverter(DefinedInverter)` keeps the old constructor, class
+     `DISPLAY_NAMES`, `card_model` and the registry entry. `registry.py` registers every `devices/*.yml` as an inverter on
+     first use (a class registered under the same name wins).
+   - Stays in Python, chosen by `behaviour:` (`timed_hhmm`, `override_select`, `drift_button`): the window arithmetic
+     (`control.py`, `schedule.py`), the RC command per decision, refresh and following check (`ramcontrol.py`), the RC tests'
+     verdicts (`rctest.py`), clock-drift maths (`clock.py`). The neutral role names (`timed_charge_start_hour`, `rc_mode`,
+     `storage_mode`) and the RC option words the controller works in (`Off`, `Force charge`, `Force discharge`) are the
+     app's vocabulary; a definition maps them to its inverter's own words (applied at the service call and the option check).
+   - `roles.py`: the brand `suggest` regexes are gone from it; `roles_for(inverter)` merges them from the definition
+     (`ROLES = roles_for()`), so the catalogue is unchanged (`tests/golden/roles_catalogue.json`).
+   - `tests/test_solis_definition.py` + `tests/golden/solis_parity.json` (recorded from the hand-written class before the
+     refactor) pin every protocol method's output; re-record only for a deliberate behaviour change
+     (`PE_PARITY_RECORD=1`). The replay goldens are untouched. See `docs/INVERTERS.md` for the file format.
+   - Left: the app still builds `SolisInverter` directly (no inverter setting yet), the RC controller compares option
+     words by the app's names, the timed behaviour handles exactly three slots, and `writes_needed` names the update button
+     role. Those are the first things a second inverter would generalise.
 
 Each step is a small PR that passes the replay unchanged.
 

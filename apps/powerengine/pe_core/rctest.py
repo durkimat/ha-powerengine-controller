@@ -36,13 +36,14 @@ SUFFIX = {
 }
 
 
-def find_entities(entity_ids) -> dict:
-    """The RC entities among HA's entity ids (by name; a 'solis' one wins if there are several)."""
+def find_entities(entity_ids, suffix: dict | None = None, prefer: str = "solis") -> dict:
+    """The RC entities among HA's entity ids (by name; one containing `prefer` wins if there are several).
+    `suffix`: role -> (domain, tail), from the inverter's definition (default: the SolaX Modbus names)."""
     found = {}
     ids = sorted(entity_ids)
-    for role, (domain, tail) in SUFFIX.items():
+    for role, (domain, tail) in (suffix or SUFFIX).items():
         hits = [e for e in ids if e.startswith(domain) and e.endswith(tail)]
-        hits.sort(key=lambda e: ("solis" not in e, e))
+        hits.sort(key=lambda e: (prefer not in e, e))
         if hits:
             found[role] = hits[0]
     return found

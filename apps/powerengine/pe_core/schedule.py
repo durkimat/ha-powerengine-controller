@@ -145,14 +145,15 @@ def assign(wanted: list[Period], programmed: list[tuple], now_local: datetime,
     return [r if r is not None else (tuple(programmed[k]) if later(k) else CLOSED) for k, r in enumerate(result)]
 
 
-def slot_entities(first: dict[str, str], exists) -> dict[int, dict[str, str]] | None:
-    """{slot n: {role: entity}} for slots 1-3, from slot 1's entities with SolaX Modbus's '_2'/'_3' suffixes, or
-    None if any of them is missing (then the single-window rolling strategy is used)."""
+def slot_entities(first: dict[str, str], exists, count: int = 3, suffix: str = "_{n}"
+                  ) -> dict[int, dict[str, str]] | None:
+    """{slot n: {role: entity}} for slots 1-`count`, from slot 1's entities plus the suffix (SolaX Modbus's '_2'/'_3'),
+    or None if any of them is missing (then the single-window rolling strategy is used)."""
     out = {1: dict(first)}
-    for n in (2, 3):
+    for n in range(2, count + 1):
         m = {}
         for role, eid in first.items():
-            e = f"{eid}_{n}"
+            e = eid + suffix.format(n=n)
             if not exists(e):
                 return None
             m[role] = e

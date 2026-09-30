@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.65 (beta)
+
+### Behaviour changes
+- None. PowerEngine does exactly what it did before, with the same commands, texts and suggestions.
+
+### Inverters as definition files (making PowerEngine generic, step 7)
+- Everything PowerEngine knows about the Solis inverter now lives in a data file (`adapters/devices/solis.yml`):
+  the remote-control entities and options, the timed windows, the clock, the entity suggestions on the Configuration
+  page, and firmware variants. A small generic driver reads it.
+- Supporting another inverter should mostly mean writing one of these files. See `docs/INVERTERS.md` for the format.
+- The file ends `.yml` on purpose: AppDaemon treats any `.yaml` in the apps folder as app configuration.
+
 ## 0.9.64 (beta)
 
 ### Behaviour changes

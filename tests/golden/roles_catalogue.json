@@ -1,0 +1,1234 @@
+{
+ "catalogue": {
+  "roles": [
+   {
+    "key": "battery_soc",
+    "label": "Battery state of charge",
+    "description": "How full the battery is. Used by every decision.",
+    "kind": "percent",
+    "suggest": [
+     "^sensor\\.solis_battery_soc$"
+    ]
+   },
+   {
+    "key": "battery_power",
+    "label": "Battery power",
+    "description": "Live charge/discharge power (unless the pair below is mapped).",
+    "kind": "power",
+    "signed": true,
+    "sign_note": "+ discharging, - charging",
+    "suggest": [
+     "^sensor\\.solis_battery_power$"
+    ]
+   },
+   {
+    "key": "battery_charge_power",
+    "label": "Battery charging power",
+    "description": "If Battery power has no sign: power in.",
+    "kind": "power",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.solis_battery_input_energy$"
+    ]
+   },
+   {
+    "key": "battery_discharge_power",
+    "label": "Battery discharging power",
+    "description": "If Battery power has no sign: power out.",
+    "kind": "power",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.solis_battery_output_energy$"
+    ]
+   },
+   {
+    "key": "battery_capacity",
+    "label": "Usable battery capacity",
+    "description": "Energy the battery can actually deliver.",
+    "kind": "static",
+    "static_ok": true,
+    "static_unit": "kWh",
+    "suggest_static": 18.0,
+    "measurable": true
+   },
+   {
+    "key": "battery_round_trip",
+    "label": "Battery round-trip efficiency",
+    "description": "Energy out \u00f7 energy in, all losses included.",
+    "kind": "static",
+    "required": "no",
+    "static_ok": true,
+    "static_unit": "%",
+    "suggest_static": 90.0,
+    "measurable": true
+   },
+   {
+    "key": "battery_max_charge_power",
+    "label": "Max charge power",
+    "description": "Fastest safe charge rate.",
+    "kind": "static",
+    "static_ok": true,
+    "static_unit": "W",
+    "suggest_static": 4800,
+    "measurable": true
+   },
+   {
+    "key": "battery_max_discharge_power",
+    "label": "Max discharge power",
+    "description": "Fastest safe discharge rate.",
+    "kind": "static",
+    "static_ok": true,
+    "static_unit": "W",
+    "suggest_static": 4800,
+    "measurable": true
+   },
+   {
+    "key": "battery_charge_today",
+    "label": "Battery charged today",
+    "description": "Energy into the battery today, for losses.",
+    "kind": "energy",
+    "suggest": [
+     "^sensor\\.solis_battery_charge_today$"
+    ]
+   },
+   {
+    "key": "battery_discharge_today",
+    "label": "Battery discharged today",
+    "description": "Energy out of the battery today, for losses.",
+    "kind": "energy",
+    "suggest": [
+     "^sensor\\.solis_battery_discharge_today$"
+    ]
+   },
+   {
+    "key": "battery_soh",
+    "label": "Battery health",
+    "description": "State of health, shown on the Health view.",
+    "kind": "percent",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.solis_battery_soh$"
+    ]
+   },
+   {
+    "key": "outside_temperature",
+    "label": "Outside temperature",
+    "description": "Local sensor, used now instead of the forecast.",
+    "kind": "temperature",
+    "required": "no"
+   },
+   {
+    "key": "battery_temperature",
+    "label": "Battery temperature",
+    "description": "The battery's own sensor, instead of the estimate.",
+    "kind": "temperature",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.solis_battery_temperature$"
+    ]
+   },
+   {
+    "key": "inverter_clock",
+    "label": "Inverter clock",
+    "description": "The inverter's own time, to check for drift.",
+    "kind": "text",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.solis_rtc$"
+    ]
+   },
+   {
+    "key": "inverter_min_soc",
+    "label": "Inverter minimum SoC",
+    "description": "The inverter's own floor, as a safety cross-check.",
+    "kind": "percent",
+    "required": "no",
+    "domains": [
+     "number",
+     "sensor"
+    ],
+    "suggest": [
+     "^number\\.solis_battery_minimum_soc$"
+    ]
+   },
+   {
+    "key": "grid_power",
+    "label": "Grid power",
+    "description": "Live import/export at the meter.",
+    "kind": "power",
+    "signed": true,
+    "sign_note": "+ importing, - exporting",
+    "suggest": [
+     "^sensor\\.solis_meter_active_power$"
+    ]
+   },
+   {
+    "key": "grid_power_reference",
+    "label": "Check meter",
+    "description": "A second grid meter (e.g. Zappi CT).",
+    "kind": "power",
+    "required": "no",
+    "signed": true,
+    "sign_note": "+ in, - out",
+    "suggest": [
+     "^sensor\\.myenergi_.*_power_grid$"
+    ]
+   },
+   {
+    "key": "grid_import_today",
+    "label": "Grid import today",
+    "description": "Energy imported today, for costs and losses.",
+    "kind": "energy",
+    "suggest": [
+     "^sensor\\.solis_grid_import_today$"
+    ]
+   },
+   {
+    "key": "grid_export_today",
+    "label": "Grid export today",
+    "description": "Energy exported today, for costs and losses.",
+    "kind": "energy",
+    "suggest": [
+     "^sensor\\.solis_grid_export_today$"
+    ]
+   },
+   {
+    "key": "grid_import_today_check",
+    "label": "Check meter import today",
+    "description": "Preferred over the inverter's figure.",
+    "kind": "energy",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.myenergi_.*_grid_import_today$"
+    ]
+   },
+   {
+    "key": "grid_export_today_check",
+    "label": "Check meter export today",
+    "description": "Preferred over the inverter's figure.",
+    "kind": "energy",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.myenergi_.*_grid_export_today$"
+    ]
+   },
+   {
+    "key": "house_load_power",
+    "label": "House load",
+    "description": "Household consumption (the car is subtracted if included).",
+    "kind": "power",
+    "suggest": [
+     "^sensor\\.solis_house_load$"
+    ]
+   },
+   {
+    "key": "house_load_today",
+    "label": "House load today",
+    "description": "Household energy used today, for costs and losses.",
+    "kind": "energy",
+    "suggest": [
+     "^sensor\\.solis_house_load_today$"
+    ]
+   },
+   {
+    "key": "solar_forecast_today",
+    "label": "Solar forecast today",
+    "description": "Half-hourly solar forecast for today.",
+    "kind": "list",
+    "attribute": "detailedForecast",
+    "suggest": [
+     "^sensor\\.solcast_pv_forecast_forecast_today$"
+    ]
+   },
+   {
+    "key": "solar_forecast_tomorrow",
+    "label": "Solar forecast tomorrow",
+    "description": "Half-hourly solar forecast for tomorrow.",
+    "kind": "list",
+    "attribute": "detailedForecast",
+    "suggest": [
+     "^sensor\\.solcast_pv_forecast_forecast_tomorrow$"
+    ]
+   },
+   {
+    "key": "solar_forecast_day3",
+    "label": "Solar forecast day 3",
+    "description": "Extends planning beyond tomorrow.",
+    "kind": "list",
+    "required": "no",
+    "attribute": "detailedForecast",
+    "suggest": [
+     "^sensor\\.solcast_pv_forecast_forecast_day_3$"
+    ]
+   },
+   {
+    "key": "import_rate_now",
+    "label": "Import rate now",
+    "description": "The rate you're paying right now.",
+    "kind": "rate",
+    "suggest": [
+     "^sensor\\.edf_energy_electricity_.*_current_rate$"
+    ],
+    "suggest_not": [
+     "export"
+    ]
+   },
+   {
+    "key": "import_rates_today",
+    "label": "Import rates today",
+    "description": "Today's half-hourly import rates (slots included).",
+    "kind": "list",
+    "domains": [
+     "event",
+     "sensor"
+    ],
+    "attribute": "rates",
+    "suggest": [
+     "^event\\.edf_energy_electricity_.*_current_day_rates$"
+    ],
+    "suggest_not": [
+     "export"
+    ]
+   },
+   {
+    "key": "import_rates_tomorrow",
+    "label": "Import rates tomorrow",
+    "description": "Tomorrow's half-hourly import rates.",
+    "kind": "list",
+    "domains": [
+     "event",
+     "sensor"
+    ],
+    "attribute": "rates",
+    "suggest": [
+     "^event\\.edf_energy_electricity_.*_next_day_rates$"
+    ],
+    "suggest_not": [
+     "export"
+    ]
+   },
+   {
+    "key": "export_rate",
+    "label": "Export rate",
+    "description": "What you're paid per kWh exported.",
+    "kind": "rate",
+    "static_ok": true,
+    "static_unit": "GBP/kWh",
+    "suggest": [
+     "^sensor\\.edf_energy_electricity_.*_export_current_rate$"
+    ]
+   },
+   {
+    "key": "standing_charge",
+    "label": "Standing charge",
+    "description": "Daily fixed charge, for costs.",
+    "kind": "money",
+    "static_ok": true,
+    "static_unit": "GBP/day",
+    "suggest": [
+     "^sensor\\.edf_energy_electricity_.*_current_standing_charge$"
+    ],
+    "suggest_not": [
+     "export"
+    ]
+   },
+   {
+    "key": "offpeak_now",
+    "label": "Off-peak now",
+    "description": "On in the normal off-peak window.",
+    "kind": "binary",
+    "domains": [
+     "binary_sensor"
+    ],
+    "suggest": [
+     "^binary_sensor\\.edf_energy_electricity_.*_off_peak$"
+    ],
+    "suggest_not": [
+     "export"
+    ]
+   },
+   {
+    "key": "ev_plug_status",
+    "label": "Car plug status",
+    "description": "'Charging' while the car draws power.",
+    "kind": "text",
+    "suggest": [
+     "^sensor\\.myenergi_zappi_.*_plug_status$"
+    ]
+   },
+   {
+    "key": "ev_charger_status",
+    "label": "Charger status",
+    "description": "What the charger is doing, for the status view.",
+    "kind": "text",
+    "suggest": [
+     "^sensor\\.myenergi_zappi_[0-9]+_status$"
+    ]
+   },
+   {
+    "key": "ev_charge_power",
+    "label": "Car charging power",
+    "description": "Live charging power, to separate car from house load.",
+    "kind": "power",
+    "suggest": [
+     "^sensor\\.myenergi_.*_power_charging$"
+    ]
+   },
+   {
+    "key": "ev_energy_today",
+    "label": "Car energy today",
+    "description": "Energy into the car today, for the car's share of costs.",
+    "kind": "energy",
+    "suggest": [
+     "^sensor\\.myenergi_zappi_.*_energy_used_today$"
+    ]
+   },
+   {
+    "key": "ev_charge_mode",
+    "label": "Charger mode",
+    "description": "Charger mode (e.g. Eco+), for the status view.",
+    "kind": "text",
+    "required": "no",
+    "domains": [
+     "select",
+     "sensor"
+    ],
+    "suggest": [
+     "^select\\.myenergi_zappi_.*_charge_mode$"
+    ]
+   },
+   {
+    "key": "ev_session_energy",
+    "label": "Charge this session",
+    "description": "Energy added this session, for the status tile.",
+    "kind": "energy",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.myenergi_zappi_.*_charge_added_session$"
+    ]
+   },
+   {
+    "key": "smart_dispatches",
+    "label": "Smart-charge dispatches",
+    "description": "Planned and completed smart-charge slots.",
+    "kind": "list",
+    "domains": [
+     "binary_sensor"
+    ],
+    "attribute": "planned_dispatches",
+    "suggest": [
+     "^binary_sensor\\.edf_energy_.*_intelligent_dispatching$"
+    ]
+   },
+   {
+    "key": "smart_state",
+    "label": "Smart-charge state",
+    "description": "EDF's smart-charging state, for the status view.",
+    "kind": "text",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.edf_energy_.*_intelligent_state$"
+    ]
+   },
+   {
+    "key": "axle_event_active",
+    "label": "Axle event active",
+    "description": "On during an Axle event (triggers force discharge).",
+    "kind": "binary",
+    "required": "axle",
+    "domains": [
+     "sensor",
+     "binary_sensor"
+    ],
+    "suggest": [
+     "^sensor\\.axle_vpp_axle_event_in_progress$"
+    ]
+   },
+   {
+    "key": "axle_event_start",
+    "label": "Axle event start",
+    "description": "Start of the next event, to hold charge for it.",
+    "kind": "timestamp",
+    "required": "axle",
+    "suggest": [
+     "^sensor\\.axle_vpp_axle_start_time_friendly$"
+    ]
+   },
+   {
+    "key": "axle_event_end",
+    "label": "Axle event end",
+    "description": "End of the next event.",
+    "kind": "timestamp",
+    "required": "axle",
+    "suggest": [
+     "^sensor\\.axle_vpp_axle_end_time_friendly$"
+    ]
+   },
+   {
+    "key": "axle_direction",
+    "label": "Axle event direction",
+    "description": "Import or export event (only export is acted on).",
+    "kind": "text",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.axle_vpp_axle_import_export$"
+    ],
+    "unknown_ok": true
+   },
+   {
+    "key": "free_power_active",
+    "label": "Free power now",
+    "description": "On during a free-electricity session.",
+    "kind": "binary",
+    "required": "free_power",
+    "domains": [
+     "binary_sensor"
+    ],
+    "suggest": [
+     "^binary_sensor\\.edf_energy_.*_free_electricity_now$"
+    ]
+   },
+   {
+    "key": "free_power_next_start",
+    "label": "Next free session start",
+    "description": "Start of the next free session, for planning.",
+    "kind": "timestamp",
+    "required": "free_power",
+    "suggest": [
+     "^sensor\\.edf_energy_.*_next_free_electricity_session_start$"
+    ]
+   },
+   {
+    "key": "free_power_next_end",
+    "label": "Next free session end",
+    "description": "End of the next free session.",
+    "kind": "timestamp",
+    "required": "free_power",
+    "suggest": [
+     "^sensor\\.edf_energy_.*_next_free_electricity_session_end$"
+    ]
+   },
+   {
+    "key": "timed_charge_start_hour",
+    "label": "Charge window start (hour)",
+    "description": "Timed charge window start hour.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.solis_timed_charge_start_hours$"
+    ]
+   },
+   {
+    "key": "timed_charge_start_minute",
+    "label": "Charge window start (minute)",
+    "description": "Timed charge window start minute.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.solis_timed_charge_start_minutes$"
+    ]
+   },
+   {
+    "key": "timed_charge_end_hour",
+    "label": "Charge window end (hour)",
+    "description": "Timed charge window end hour.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.solis_timed_charge_end_hours$"
+    ]
+   },
+   {
+    "key": "timed_charge_end_minute",
+    "label": "Charge window end (minute)",
+    "description": "Timed charge window end minute.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.solis_timed_charge_end_minutes$"
+    ]
+   },
+   {
+    "key": "timed_charge_current",
+    "label": "Charge current",
+    "description": "Timed charge current (A).",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.solis_timed_charge_current$"
+    ]
+   },
+   {
+    "key": "timed_discharge_start_hour",
+    "label": "Discharge window start (hour)",
+    "description": "Timed discharge window start hour.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.solis_timed_discharge_start_hours$"
+    ]
+   },
+   {
+    "key": "timed_discharge_start_minute",
+    "label": "Discharge window start (minute)",
+    "description": "Timed discharge start minute.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.solis_timed_discharge_start_minutes$"
+    ]
+   },
+   {
+    "key": "timed_discharge_end_hour",
+    "label": "Discharge window end (hour)",
+    "description": "Timed discharge window end hour.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.solis_timed_discharge_end_hours$"
+    ]
+   },
+   {
+    "key": "timed_discharge_end_minute",
+    "label": "Discharge window end (minute)",
+    "description": "Timed discharge end minute.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.solis_timed_discharge_end_minutes$"
+    ]
+   },
+   {
+    "key": "timed_discharge_current",
+    "label": "Discharge current",
+    "description": "Timed discharge current (A).",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.solis_timed_discharge_current$"
+    ]
+   },
+   {
+    "key": "timed_update_button",
+    "label": "Apply timed windows",
+    "description": "Button that sends the window times to the inverter.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "button"
+    ],
+    "suggest": [
+     "^button\\.solis_update_charge_discharge_times$"
+    ]
+   },
+   {
+    "key": "storage_mode",
+    "label": "Storage mode",
+    "description": "Energy storage control switch (Self-Use etc.).",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "select"
+    ],
+    "suggest": [
+     "^select\\.solis_energy_storage_control_switch$"
+    ]
+   },
+   {
+    "key": "inverter_clock_sync",
+    "label": "Sync inverter clock",
+    "description": "Button that sets the inverter's clock to HA's.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "button"
+    ],
+    "suggest": [
+     "^button\\.solis_sync_rtc$"
+    ]
+   },
+   {
+    "key": "inverter_export_limit",
+    "label": "Inverter export limit (entity)",
+    "description": "Export (backflow) power limit.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.solis_backflow_power$"
+    ]
+   },
+   {
+    "key": "smart_target_soc",
+    "label": "Smart-charge target",
+    "description": "Car charge target sent to EDF.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "number"
+    ],
+    "suggest": [
+     "^number\\.edf_energy_.*_intelligent_charge_target$"
+    ]
+   },
+   {
+    "key": "smart_target_time",
+    "label": "Smart-charge ready-by time",
+    "description": "Ready-by time sent to EDF.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "select",
+     "time"
+    ],
+    "suggest": [
+     "^select\\.edf_energy_.*_intelligent_target_time$"
+    ]
+   },
+   {
+    "key": "guard_read_only",
+    "label": "Other controller read-only",
+    "description": "Must be on (e.g. Predbat read-only).",
+    "kind": "binary",
+    "required": "no",
+    "domains": [
+     "switch",
+     "input_boolean",
+     "automation",
+     "binary_sensor"
+    ],
+    "suggest": [
+     "^switch\\.predbat_set_read_only$"
+    ]
+   },
+   {
+    "key": "guard_off_1",
+    "label": "Other control off (1)",
+    "description": "Must be off (e.g. a legacy battery automation).",
+    "kind": "binary",
+    "required": "no",
+    "domains": [
+     "switch",
+     "input_boolean",
+     "automation",
+     "binary_sensor"
+    ],
+    "suggest": [
+     "^automation\\.charge_house_battery_on$"
+    ]
+   },
+   {
+    "key": "guard_off_2",
+    "label": "Other control off (2)",
+    "description": "Must be off.",
+    "kind": "binary",
+    "required": "no",
+    "domains": [
+     "switch",
+     "input_boolean",
+     "automation",
+     "binary_sensor"
+    ],
+    "suggest": [
+     "^automation\\.house_battery_start_charging$"
+    ]
+   }
+  ]
+ },
+ "suggest": {
+  "battery_soc": [
+   [
+    "^sensor\\.solis_battery_soc$"
+   ],
+   [],
+   null
+  ],
+  "battery_power": [
+   [
+    "^sensor\\.solis_battery_power$"
+   ],
+   [],
+   null
+  ],
+  "battery_charge_power": [
+   [
+    "^sensor\\.solis_battery_input_energy$"
+   ],
+   [],
+   null
+  ],
+  "battery_discharge_power": [
+   [
+    "^sensor\\.solis_battery_output_energy$"
+   ],
+   [],
+   null
+  ],
+  "battery_capacity": [
+   [],
+   [],
+   18.0
+  ],
+  "battery_round_trip": [
+   [],
+   [],
+   90.0
+  ],
+  "battery_max_charge_power": [
+   [],
+   [],
+   4800
+  ],
+  "battery_max_discharge_power": [
+   [],
+   [],
+   4800
+  ],
+  "battery_charge_today": [
+   [
+    "^sensor\\.solis_battery_charge_today$"
+   ],
+   [],
+   null
+  ],
+  "battery_discharge_today": [
+   [
+    "^sensor\\.solis_battery_discharge_today$"
+   ],
+   [],
+   null
+  ],
+  "battery_soh": [
+   [
+    "^sensor\\.solis_battery_soh$"
+   ],
+   [],
+   null
+  ],
+  "outside_temperature": [
+   [],
+   [],
+   null
+  ],
+  "battery_temperature": [
+   [
+    "^sensor\\.solis_battery_temperature$"
+   ],
+   [],
+   null
+  ],
+  "inverter_clock": [
+   [
+    "^sensor\\.solis_rtc$"
+   ],
+   [],
+   null
+  ],
+  "inverter_min_soc": [
+   [
+    "^number\\.solis_battery_minimum_soc$"
+   ],
+   [],
+   null
+  ],
+  "grid_power": [
+   [
+    "^sensor\\.solis_meter_active_power$"
+   ],
+   [],
+   null
+  ],
+  "grid_power_reference": [
+   [
+    "^sensor\\.myenergi_.*_power_grid$"
+   ],
+   [],
+   null
+  ],
+  "grid_import_today": [
+   [
+    "^sensor\\.solis_grid_import_today$"
+   ],
+   [],
+   null
+  ],
+  "grid_export_today": [
+   [
+    "^sensor\\.solis_grid_export_today$"
+   ],
+   [],
+   null
+  ],
+  "grid_import_today_check": [
+   [
+    "^sensor\\.myenergi_.*_grid_import_today$"
+   ],
+   [],
+   null
+  ],
+  "grid_export_today_check": [
+   [
+    "^sensor\\.myenergi_.*_grid_export_today$"
+   ],
+   [],
+   null
+  ],
+  "house_load_power": [
+   [
+    "^sensor\\.solis_house_load$"
+   ],
+   [],
+   null
+  ],
+  "house_load_today": [
+   [
+    "^sensor\\.solis_house_load_today$"
+   ],
+   [],
+   null
+  ],
+  "solar_forecast_today": [
+   [
+    "^sensor\\.solcast_pv_forecast_forecast_today$"
+   ],
+   [],
+   null
+  ],
+  "solar_forecast_tomorrow": [
+   [
+    "^sensor\\.solcast_pv_forecast_forecast_tomorrow$"
+   ],
+   [],
+   null
+  ],
+  "solar_forecast_day3": [
+   [
+    "^sensor\\.solcast_pv_forecast_forecast_day_3$"
+   ],
+   [],
+   null
+  ],
+  "import_rate_now": [
+   [
+    "^sensor\\.edf_energy_electricity_.*_current_rate$"
+   ],
+   [
+    "export"
+   ],
+   null
+  ],
+  "import_rates_today": [
+   [
+    "^event\\.edf_energy_electricity_.*_current_day_rates$"
+   ],
+   [
+    "export"
+   ],
+   null
+  ],
+  "import_rates_tomorrow": [
+   [
+    "^event\\.edf_energy_electricity_.*_next_day_rates$"
+   ],
+   [
+    "export"
+   ],
+   null
+  ],
+  "export_rate": [
+   [
+    "^sensor\\.edf_energy_electricity_.*_export_current_rate$"
+   ],
+   [],
+   null
+  ],
+  "standing_charge": [
+   [
+    "^sensor\\.edf_energy_electricity_.*_current_standing_charge$"
+   ],
+   [
+    "export"
+   ],
+   null
+  ],
+  "offpeak_now": [
+   [
+    "^binary_sensor\\.edf_energy_electricity_.*_off_peak$"
+   ],
+   [
+    "export"
+   ],
+   null
+  ],
+  "ev_plug_status": [
+   [
+    "^sensor\\.myenergi_zappi_.*_plug_status$"
+   ],
+   [],
+   null
+  ],
+  "ev_charger_status": [
+   [
+    "^sensor\\.myenergi_zappi_[0-9]+_status$"
+   ],
+   [],
+   null
+  ],
+  "ev_charge_power": [
+   [
+    "^sensor\\.myenergi_.*_power_charging$"
+   ],
+   [],
+   null
+  ],
+  "ev_energy_today": [
+   [
+    "^sensor\\.myenergi_zappi_.*_energy_used_today$"
+   ],
+   [],
+   null
+  ],
+  "ev_charge_mode": [
+   [
+    "^select\\.myenergi_zappi_.*_charge_mode$"
+   ],
+   [],
+   null
+  ],
+  "ev_session_energy": [
+   [
+    "^sensor\\.myenergi_zappi_.*_charge_added_session$"
+   ],
+   [],
+   null
+  ],
+  "smart_dispatches": [
+   [
+    "^binary_sensor\\.edf_energy_.*_intelligent_dispatching$"
+   ],
+   [],
+   null
+  ],
+  "smart_state": [
+   [
+    "^sensor\\.edf_energy_.*_intelligent_state$"
+   ],
+   [],
+   null
+  ],
+  "axle_event_active": [
+   [
+    "^sensor\\.axle_vpp_axle_event_in_progress$"
+   ],
+   [],
+   null
+  ],
+  "axle_event_start": [
+   [
+    "^sensor\\.axle_vpp_axle_start_time_friendly$"
+   ],
+   [],
+   null
+  ],
+  "axle_event_end": [
+   [
+    "^sensor\\.axle_vpp_axle_end_time_friendly$"
+   ],
+   [],
+   null
+  ],
+  "axle_direction": [
+   [
+    "^sensor\\.axle_vpp_axle_import_export$"
+   ],
+   [],
+   null
+  ],
+  "free_power_active": [
+   [
+    "^binary_sensor\\.edf_energy_.*_free_electricity_now$"
+   ],
+   [],
+   null
+  ],
+  "free_power_next_start": [
+   [
+    "^sensor\\.edf_energy_.*_next_free_electricity_session_start$"
+   ],
+   [],
+   null
+  ],
+  "free_power_next_end": [
+   [
+    "^sensor\\.edf_energy_.*_next_free_electricity_session_end$"
+   ],
+   [],
+   null
+  ],
+  "timed_charge_start_hour": [
+   [
+    "^number\\.solis_timed_charge_start_hours$"
+   ],
+   [],
+   null
+  ],
+  "timed_charge_start_minute": [
+   [
+    "^number\\.solis_timed_charge_start_minutes$"
+   ],
+   [],
+   null
+  ],
+  "timed_charge_end_hour": [
+   [
+    "^number\\.solis_timed_charge_end_hours$"
+   ],
+   [],
+   null
+  ],
+  "timed_charge_end_minute": [
+   [
+    "^number\\.solis_timed_charge_end_minutes$"
+   ],
+   [],
+   null
+  ],
+  "timed_charge_current": [
+   [
+    "^number\\.solis_timed_charge_current$"
+   ],
+   [],
+   null
+  ],
+  "timed_discharge_start_hour": [
+   [
+    "^number\\.solis_timed_discharge_start_hours$"
+   ],
+   [],
+   null
+  ],
+  "timed_discharge_start_minute": [
+   [
+    "^number\\.solis_timed_discharge_start_minutes$"
+   ],
+   [],
+   null
+  ],
+  "timed_discharge_end_hour": [
+   [
+    "^number\\.solis_timed_discharge_end_hours$"
+   ],
+   [],
+   null
+  ],
+  "timed_discharge_end_minute": [
+   [
+    "^number\\.solis_timed_discharge_end_minutes$"
+   ],
+   [],
+   null
+  ],
+  "timed_discharge_current": [
+   [
+    "^number\\.solis_timed_discharge_current$"
+   ],
+   [],
+   null
+  ],
+  "timed_update_button": [
+   [
+    "^button\\.solis_update_charge_discharge_times$"
+   ],
+   [],
+   null
+  ],
+  "storage_mode": [
+   [
+    "^select\\.solis_energy_storage_control_switch$"
+   ],
+   [],
+   null
+  ],
+  "inverter_clock_sync": [
+   [
+    "^button\\.solis_sync_rtc$"
+   ],
+   [],
+   null
+  ],
+  "inverter_export_limit": [
+   [
+    "^number\\.solis_backflow_power$"
+   ],
+   [],
+   null
+  ],
+  "smart_target_soc": [
+   [
+    "^number\\.edf_energy_.*_intelligent_charge_target$"
+   ],
+   [],
+   null
+  ],
+  "smart_target_time": [
+   [
+    "^select\\.edf_energy_.*_intelligent_target_time$"
+   ],
+   [],
+   null
+  ],
+  "guard_read_only": [
+   [
+    "^switch\\.predbat_set_read_only$"
+   ],
+   [],
+   null
+  ],
+  "guard_off_1": [
+   [
+    "^automation\\.charge_house_battery_on$"
+   ],
+   [],
+   null
+  ],
+  "guard_off_2": [
+   [
+    "^automation\\.house_battery_start_charging$"
+   ],
+   [],
+   null
+  ]
+ }
+}
