@@ -124,6 +124,8 @@ roles:
   battery_discharge_today: {suggest: ['^sensor\.solis_battery_discharge_today$']}
   battery_soh: {suggest: ['^sensor\.solis_battery_soh$']}
   battery_temperature: {suggest: ['^sensor\.solis_battery_temperature$']}
+  battery_bms_charge_limit: {suggest: ['^sensor\.solis_bms_battery_charge_limit$']}
+  battery_bms_discharge_limit: {suggest: ['^sensor\.solis_bms_battery_discharge_limit$']}
   inverter_clock: {suggest: ['^sensor\.solis_rtc$']}
   inverter_min_soc: {suggest: ['^number\.solis_battery_minimum_soc$']}
   # Grid and house sensors

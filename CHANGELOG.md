@@ -2,6 +2,23 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.73 (beta)
+
+### Behaviour changes
+- **Remote control stays within what the battery will take.** If you map the new optional inputs *BMS charge limit* and *BMS discharge limit* (Solis: `sensor.solis_bms_battery_charge_limit`, `sensor.solis_bms_battery_discharge_limit`), PowerEngine lowers a charge or discharge command to the battery's own limit (amps times 52 V) when that is below the command. A limit of 0 turns a charge into a hold and a discharge into Self-Use. Nothing changes if the inputs are not mapped or read unavailable or nonsense.
+- **Cold battery, no BMS sensor:** while the cold-battery caution says the battery is cold, the charge command is capped at the caution's charge rate (the rate the plan already assumed) instead of always asking for the full rate.
+- **The "inverter not following" check** now compares the battery with the lower of the command and the BMS limit, so a charge the battery itself limits (cold, nearly full) is no longer reported as not following.
+- **A command that doesn't take is stepped down.** If a charge or discharge above 3000 W is still not being followed after 3 minutes, and the battery is doing less than a fifth of it (idle, or going the other way, as when a refused setting leaves the previous one), PowerEngine re-sends it 1000 W lower (for example 5000, 4000, 3000 W) and sends one notification; each step is in the log. A battery that is doing some of it (limited by its own BMS or by taper) is not stepped down. These are remote-control commands, not EEPROM writes, so the write budget is untouched. The lower ceiling is dropped when the kind of command changes or after an hour. At 3000 W the usual "not following" report applies.
+
+### Diagnostics
+- The diagnostics export has a new `bms` section: the charge limit and discharge limit sensors now, and a short history (one row every 2 minutes and on each command change) of the command, the expected power, the actual battery power, SoC, the follow state and the limits, so the first cold spell can be read back.
+
+### Setup
+- Two optional inputs in the battery section (see docs/INSTALL.md, "Battery limits"). Existing set-ups keep working without them. The role catalogue grows by about 0.45 KB (still under the 16 KB limit).
+
+### Not done
+- Reading the force-power registers back (43136 / 43129) with a Modbus probe: the SolaX Modbus integration here gives no read-back entity for them, so it is left for a later release.
+
 ## 0.9.72 (beta)
 
 ### Behaviour changes

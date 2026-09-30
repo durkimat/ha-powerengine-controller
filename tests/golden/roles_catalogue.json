@@ -128,6 +128,26 @@
     ]
    },
    {
+    "key": "battery_bms_charge_limit",
+    "label": "BMS charge limit",
+    "description": "The battery's own charge limit (A); commands stay under it.",
+    "kind": "text",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.solis_bms_battery_charge_limit$"
+    ]
+   },
+   {
+    "key": "battery_bms_discharge_limit",
+    "label": "BMS discharge limit",
+    "description": "The battery's own discharge limit (A).",
+    "kind": "text",
+    "required": "no",
+    "suggest": [
+     "^sensor\\.solis_bms_battery_discharge_limit$"
+    ]
+   },
+   {
     "key": "inverter_clock",
     "label": "Inverter clock",
     "description": "The inverter's own time, to check for drift.",
@@ -845,6 +865,20 @@
   "battery_temperature": [
    [
     "^sensor\\.solis_battery_temperature$"
+   ],
+   [],
+   null
+  ],
+  "battery_bms_charge_limit": [
+   [
+    "^sensor\\.solis_bms_battery_charge_limit$"
+   ],
+   [],
+   null
+  ],
+  "battery_bms_discharge_limit": [
+   [
+    "^sensor\\.solis_bms_battery_discharge_limit$"
    ],
    [],
    null

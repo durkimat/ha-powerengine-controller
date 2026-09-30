@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
 
-from pe_core import __version__, clock, damping, diagnostics, gridcheck, ramcontrol, rctest, releases, testwrite
+from pe_core import __version__, bms, clock, damping, diagnostics, gridcheck, ramcontrol, rctest, releases, testwrite
 from pe_core import learn as learning
 from pe_core.activity import ActivityLog
 from pe_core.adapters import registry
@@ -1740,6 +1740,10 @@ class PowerEngine(hass.Hass):
             want = self._inverter().ram_command(decision.action, decision.power_w, p.max_charge_kw * 1000,
                                                 p.max_discharge_kw * 1000,
                                                 float(self.cfg.safety.get("ram_max_power_w", 5000)))
+            limits = self._bms_limits(r, p.max_charge_kw * 1000)
+            want, capped = bms.cap_command(want, limits)             # never ask for more than the battery will take
+            want = ram.apply_ceiling(now, want)                      # ...nor above a step-down after a miss
+            self._note_bms_cap(capped)
             active = self.mode.effective == "active"
             if self._test_running():
                 ram.forget()                                   # the test drives remote control itself
@@ -1756,7 +1760,12 @@ class PowerEngine(hass.Hass):
                     if why == "change" and want.power_role:        # and once more once the mode has landed
                         self.run_in(self._ram_relatch, 5, role=want.power_role, watts=want.watts)
                 floor = float(self.cfg.safety.get("min_reserve_soc", 12))
-                if ram.check_following(now, r.battery_power, r.battery_soc, floor) == "not following":
+                follow = ram.check_following(now, r.battery_power, r.battery_soc, floor,
+                                             bms.expected_w(ram.sent, limits))
+                self._bms_sample(now, r, ram, limits, follow)
+                if follow == "not following" and self._ram_step_down(now, ram, r):
+                    pass                                   # re-sent lower next cycle; reported once by _ram_step_down
+                elif follow == "not following":
                     pw = self.get_state(rc.get(ram.sent.power_role)) if ram.sent.power_role else None
                     self.log(f"RAM remote control: inverter not following {ram.sent.text()} (battery "
                              f"{round(r.battery_power or 0)} W, SoC {r.battery_soc}, power setting reads {pw}, "
@@ -1781,6 +1790,68 @@ class PowerEngine(hass.Hass):
                 "writes": [w.as_dict() for w in want.writes()], "following": ram.follow})
         except Exception as err:
             self.log(f"RAM control step failed: {err!r}", level="WARNING")
+
+    def _bms_limits(self, r, rated_charge_w):
+        """The battery's own limits now (bms.Limits), from the optional BMS sensors. With none mapped and no cold
+        caution, every field is None and nothing changes."""
+        def raw(role):
+            eid = self._role_entity(role)
+            return self.get_state(eid) if eid else None
+        try:
+            return bms.read_limits(raw("battery_bms_charge_limit"), raw("battery_bms_discharge_limit"),
+                                   None, BATTERY_VOLTS, r.battery_power,
+                                   self._cold_charge_w(r.now, rated_charge_w))
+        except Exception as err:
+            self.log(f"BMS limits not read: {err!r}", level="WARNING")
+            return bms.Limits()
+
+    def _cold_charge_w(self, now, rated_w):
+        """Fallback when the BMS charge limit is unusable: the charge power the cold-battery caution allows now."""
+        try:
+            if not self.cfg.features.get("cold_caution", True) or not getattr(self, "_caution", None):
+                return None
+            if not self._caution.get(learning.hour_of(now)):
+                return None
+            _, fac, _ = self._cold_in_use()
+            return rated_w * fac if fac < 1.0 else None
+        except Exception:
+            return None
+
+    def _note_bms_cap(self, capped):
+        """Log a BMS cap once per change of reason."""
+        if capped != getattr(self, "_bms_note", None):
+            self._bms_note = capped
+            if capped:
+                self.log(f"RAM remote control: command {capped}")
+
+    def _bms_sample(self, now, r, ram, limits, follow):
+        """One row for the diagnostics export: command, expected and actual battery power, BMS limits."""
+        sent = ram.sent
+        if sent is None or sent.option == rctest.OPTION_OFF:
+            return
+        ring = self.__dict__.get("_bms_ring")
+        if ring is None:
+            ring = self.__dict__["_bms_ring"] = bms.SampleRing()
+        exp = bms.expected_w(sent, limits)
+        ring.add(now, sent.text(), {"expected_w": exp, "battery_w": r.battery_power, "soc": r.battery_soc,
+                                    "follow": follow, "limits": limits.as_dict()})
+
+    def _ram_step_down(self, now, ram, r):
+        """A charge or discharge that still isn't being followed after the alarm time: one step lower (5000 -> 4000
+        -> 3000 W), reported once. False at the floor, so the normal 'not following' report goes out."""
+        was, first = ram.sent, ram.ceiling_w is None
+        new = ram.step_down(now, r.battery_power)
+        if new is None:
+            return False
+        self.log(f"RAM remote control: the command {was.text()} did not take (battery "
+                 f"{round(r.battery_power or 0)} W, SoC {r.battery_soc}); trying {new} W", level="WARNING")
+        if first:                                      # the notification once; each step is in the log
+            self._notify("health", (f"control:ram_stepdown:{now.date()}:{was.option}",
+                                    "PowerEngine: remote control stepped down",
+                                    f"Asked for {was.text()} but the battery is at {round(r.battery_power or 0)} W "
+                                    f"(+ discharging). Trying lower powers, down to {ramcontrol.STEP_DOWN_FLOOR_W} W; "
+                                    "it goes back up when the command changes or after an hour."))
+        return True
 
     def _simulate_windows(self, r, decision, p):
         """While on RAM control: run the timed-window shadow inverters on the same plan and decisions, so the EEPROM
@@ -2951,9 +3022,21 @@ class PowerEngine(hass.Hass):
             "test": run.as_dict() | {"status": run.status} if run is not None else None,
             "smart_requests": s(lambda: self.smart.attempts[-40:]) if getattr(self, "smart", None) else None,
             "smart_slots": s(lambda: self.slots.summary(now, tz=self.tz)) if getattr(self, "slots", None) else None,
+            "bms": s(self._bms_bundle),
             "attribute_sizes": s(lambda: diagnostics.largest_attrs(self.__dict__.get("_attr_sizes", {}))),
             "log": list(getattr(self.__dict__.get("_log_ring"), "lines", [])),
         }
+
+    def _bms_bundle(self):
+        """The BMS limit sensors (charge, discharge) now, and the recent command / expected / actual rows, so
+        the first cold spell can be read back: command, battery power and the limits side by side."""
+        roles = ("battery_bms_charge_limit", "battery_bms_discharge_limit")
+        now_raw = {k: {"entity": self._role_entity(k),
+                       "state": self.get_state(self._role_entity(k)) if self._role_entity(k) else None} for k in roles}
+        ring = self.__dict__.get("_bms_ring")
+        return {"mapped": {k: bool(v["entity"]) for k, v in now_raw.items()}, "sensors": now_raw,
+                "recent": ring.as_list() if ring is not None else [],
+                "note": f"limits are in amps; watts use the nominal battery voltage ({BATTERY_VOLTS:g} V)"}
 
     def _on_diag_request(self, event_name, data, kwargs):
         now = datetime.now(timezone.utc)
