@@ -2,6 +2,26 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.69 (beta)
+
+### Behaviour changes
+- None for a set-up system using MQTT. Every fix below is on the demo and first-install path, found on the first
+  clean-install test, on HA 2026.9.4 with AppDaemon add-on 0.19.2.
+
+### Demo and first install
+- **Timers are cancelled properly on newer AppDaemon.** A demo start, day switch or exit left the old repeating
+  timers running alongside the new ones, because newer AppDaemon hands back a task instead of the timer's handle.
+- **Values are written exactly (direct publishing).** Newer AppDaemon turned `true` into the text "true" and dropped
+  zeros and `false` from attributes. That broke saving settings in the demo ("feature ... must be true or false") and
+  shifted the plan chart's solar and forecast series by hours.
+- **The demo keeps the recorded home's clock (Europe/London)** whatever time zone the HA install uses, so solar,
+  prices and events appear at the recorded times. The sunny day's event appeared an hour late on an install set to
+  Europe/Amsterdam.
+- **A quiet start:** no "Entity ... not found" warnings when PowerEngine creates its own entities, no health-check
+  crash before setup, and "no house-load input" and "no config.yaml" are information, not warnings.
+- **Before setup,** Mode and Health read "Not set up yet" instead of a red "Blocked" and "Unknown". The welcome card
+  names the demo days the same way as the banner.
+
 ## 0.9.68 (beta)
 
 ### Behaviour changes

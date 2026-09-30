@@ -291,6 +291,16 @@ Goal: PowerEngine runs with no MQTT broker and no real inverter (a demo), and in
     `run_in` timers already due) and deletes the attributes (this also puts the real `get_state` etc. back).
     **Rule: keep `initialize()` and what it sets in `self`; don't set attributes from AppDaemon threads outside it.**
     `test_no_duplicate_timers_or_listeners_after_start_day_exit_start` compares the live handle set with the fresh one.
+  - **Handles can be Tasks.** AppDaemon 4.5 returns an asyncio Task/Future (not the handle string) from `run_every`,
+    `run_in`, `listen_state` etc. when called on its event loop; 4.4 returns the string. `_track` records the handle
+    inside a finished Task, or records it when a pending one finishes (and cancels it at once if a wipe came first).
+  - **Direct publishing and AppDaemon 4.5's `set_state`.** Its REST write cleans the payload: `true` becomes "true",
+    and `false`, `null` and every 0 are dropped from attributes (series lose their zeros and shift; config booleans
+    arrive as text). So `_lossless_set_state` posts attributes with such values to HA's states endpoint itself
+    (`_rest_states_poster`, `pe_` entities only, so the gate rule holds) and `check_existence=False` stops the
+    "Entity not found" warnings on creation (only passed where `set_state` names it: 4.4 would make it an attribute).
+  - **The demo's clock is the pack's zone** (Europe/London), not AppDaemon's `time_zone` (often UTC on a fresh install,
+    which put the recorded day an hour out), and the app's `tz` is set to it while a demo runs.
   - Dashboard: with no real config a demo also writes `<save dir>/dashboard.yaml` (plus C2's `demo/` copy). Every view of
     `dashboard.lovelace` starts with `- type: custom:powerengine-demo-card` (full width, no options); the golden fixture
     has exactly those 24 lines more.
