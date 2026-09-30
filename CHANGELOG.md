@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.70 (beta)
+
+### Behaviour changes
+- None for a set-up system. These are demo and first-install fixes from the second clean-install test.
+
+### Demo and first install
+- No more "Invalid callback handle" warnings when the demo starts, changes day or exits. Each daily timer was
+  cancelled twice; the first cancel always worked, so no timers were left running.
+- No "Unknown Plugin Configuration" warning at start-up when there is no MQTT plugin.
+- The dashboard reloads itself once after starting, changing or leaving the demo, so the demo's own dashboard,
+  including the solar panel, shows without a manual refresh.
+
 ## 0.9.69 (beta)
 
 ### Behaviour changes
