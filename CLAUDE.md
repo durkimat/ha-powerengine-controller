@@ -71,6 +71,10 @@ tools/release.sh <version> --app-notes <file> [--card-notes <file>] [--app-branc
   `MIN_CARD_VERSION`, 0.9.70). Each side warns only when the other is older than its minimum, not when they differ
   (card: `versionWarnings`). Raise a minimum in the PR that makes one side need something the other only newer
   versions have, and release both.
+- **Run it detached** (CI takes about 5 minutes, and a device_bash call is killed after 180 s, taking plain `&` or
+  `nohup` children with it): `setsid nohup tools/release.sh ... > ../_to_delete/release-x.y.z.log 2>&1 < /dev/null &
+  disown`, then `tail` the log in later calls. Always pass `--title "x.y.z: short summary"`, because the default title
+  cuts the first notes line mid-word. Notes files go in `$HOME/mnt/powerengine/_to_delete/`.
 - Tokens: the script reads the token file only as a curl header or through git's credential helper. Never print it.
 
 Tests-only or docs-only changes can merge without a release.
