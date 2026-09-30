@@ -100,6 +100,21 @@ class MqttPublisher:
         self._send(AVAILABILITY_TOPIC, ONLINE if online else OFFLINE)
 
 
+def ad_would_alter(value: Any) -> bool:
+    """Would AppDaemon's REST `set_state` (4.5 and later, `utils.clean_http_kwargs`) change this attribute value? It
+    turns `true` into the text "true", and drops `false`, `null` and every zero (0 and 0.0, since 0 == False) from
+    dicts and lists, which shifts the entries of a series against its times. Such values have to be sent another way."""
+    if value is True or value is None or value is False:
+        return True
+    if isinstance(value, (int, float)):
+        return value == 0
+    if isinstance(value, dict):
+        return any(ad_would_alter(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(ad_would_alter(v) for v in value)
+    return False
+
+
 class DirectPublisher:
     """Creates and updates HA states through AppDaemon: `set_state(entity_id, state=..., attributes=...)`."""
 

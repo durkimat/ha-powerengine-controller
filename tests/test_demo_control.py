@@ -1,4 +1,5 @@
 """Starting, switching and leaving the demo from the dashboard (pe_demo / pe_demo_result), and doing it cleanly."""
+import asyncio
 import itertools
 import json
 import sys
@@ -18,24 +19,28 @@ NOTE = "Recorded data from a real home. Nothing is controlled."
 DAYS = [("sunny", "Sunny day"), ("dull", "Dull day"), ("axle", "<<event>> event day"), ("car", "Car charging day")]
 
 
-def load_app(monkeypatch):
+def load_app(monkeypatch, wrap=None):
+    """`wrap`: what a scheduling or listening call hands back. None: the handle itself (AppDaemon 4.4); a function
+    such as `task_handle` makes it an asyncio Task/Future that resolves to the handle (AppDaemon 4.5 called from
+    its event loop)."""
     Base = _fake_appdaemon()
 
     class Hass(Base):
         def __init__(self):
             super().__init__()
+            self.invalid_cancels = 0
             self.live = {}
             self.real_calls, self.real_events, self.real_sets = [], [], []
 
         def _add(self, kind, cb, key):
             h = next(_HANDLES)
             self.live[h] = (kind, cb.__name__, key)
-            return h
+            return wrap(h) if wrap else h
 
         def run_in(self, cb, delay, **kw):
             h = super().run_in(cb, delay, **kw)
             self.live[h] = ("timer", cb.__name__, "in")
-            return h
+            return wrap(h) if wrap else h
 
         def run_every(self, cb, *a, **k):
             return self._add("timer", cb, "every")
@@ -50,10 +55,16 @@ def load_app(monkeypatch):
             return self._add("state", cb, entity)
 
         def cancel_timer(self, handle, **kw):
+            if isinstance(handle, asyncio.Future):          # AppDaemon: "Invalid callback handle", nothing cancelled
+                self.invalid_cancels += 1
+                return
             self.timers[:] = [x for x in self.timers if x[3] != handle]  # in place: no new attribute
             self.live.pop(handle, None)
 
         def cancel_listen_event(self, handle, **kw):
+            if isinstance(handle, asyncio.Future):
+                self.invalid_cancels += 1
+                return
             self.live.pop(handle, None)
 
         cancel_listen_state = cancel_listen_event
@@ -89,8 +100,8 @@ def make(tmp_path, monkeypatch):
     folder = tmp_path / "powerengine"
     folder.mkdir()
 
-    def build(real_config=False, **args):
-        powerengine = load_app(monkeypatch)
+    def build(real_config=False, wrap=None, **args):
+        powerengine = load_app(monkeypatch, wrap)
         if real_config:
             (folder / "config.yaml").write_text("# the owner's config\n")
         app = powerengine.PowerEngine()
@@ -101,6 +112,16 @@ def make(tmp_path, monkeypatch):
     build.folder = folder
     yield build
     sys.modules.pop("powerengine", None)
+
+
+_LOOP = asyncio.new_event_loop()
+
+
+def task_handle(handle):
+    """What AppDaemon 4.5 returns when the call is made on its event loop: a finished Task holding the handle."""
+    fut = _LOOP.create_future()
+    fut.set_result(handle)
+    return fut
 
 
 def send(app, **data):

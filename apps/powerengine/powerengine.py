@@ -7,10 +7,13 @@ Passive (the default) only monitors and simulates. Active writes the Solis timed
 feature is on, EDF smart-charge requests) behind the handover guards, the pause switch and the daily write limit.
 """
 
+import asyncio
 import copy
 import dataclasses
+import inspect
 import json
 import os
+import re
 import shutil
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -25,7 +28,7 @@ from pe_core.adapters.definition import load_definition
 from pe_core.adapters.kraken import supplier_of
 from pe_core.adapters.null import NULL as NULL_ADAPTERS
 from pe_core.adapters.options import site_options
-from pe_core.adapters.publish import select_publisher
+from pe_core.adapters.publish import ad_would_alter, select_publisher
 from pe_core.adapters.solcast import ROLES as FORECAST_ROLES
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
@@ -75,7 +78,7 @@ from pe_core.history import chosen_day, chosen_plan, day_view
 from pe_core.journal import WriteJournal, day_summary, is_staged
 from pe_core.loadstore import LoadStore
 from pe_core.modes import GUARDS, UNVERIFIED, effective_mode, guard_problems, guard_status
-from pe_core.names import build_names, fill, neutral_names, set_current
+from pe_core.names import build_names, default_names, fill, neutral_names, set_current
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
 from pe_core.optimiser import compare, optimise
 from pe_core.planner import make_plan, params_from, plan_entity_states, slot_certainty_rows
@@ -90,7 +93,7 @@ from pe_core.simulate import SimBattery
 from pe_core.slots import SlotTracker
 from pe_core.smartcharge import SmartCharger, ask_message, worth_asking
 from pe_core.status import entity_states
-from pe_core.store import save_config, with_operation
+from pe_core.store import coerce_flags, save_config, with_operation
 from pe_core.tariff import overnight_window
 from pe_core.version import installed_version
 from pe_core.weather import Weather
@@ -114,6 +117,7 @@ DEMO_EVENT, DEMO_RESULT_EVENT = "pe_demo", "pe_demo_result"
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
 PAUSE_ENTITY = "switch.pe_ctl_pause"
+NOT_SET_UP = "Not set up yet"                    # what the Mode and Health tiles say before there is a config
 
 
 def _notice_id(key: str) -> str:
@@ -139,18 +143,53 @@ class PowerEngine(hass.Hass):
         if touched is not None:
             touched.add(name)
 
+    @staticmethod
+    def _resolved(handle):
+        """The handle string behind what AppDaemon returned. AppDaemon 4.4 returns the string; newer versions return
+        an asyncio Task/Future (when the call is made from the event loop) that resolves to it."""
+        if isinstance(handle, asyncio.Future):
+            if handle.done() and not handle.cancelled() and handle.exception() is None:
+                return handle.result()
+            return None
+        return handle
+
     def _track(self, kind, handle, due=None):
         handles = self.__dict__.get("_handles")
-        if handles is not None and handle is not None:
-            if kind == "timer":                         # forget one-off timers that have already run (bounded list)
-                now = datetime.now(timezone.utc)
-                handles[:] = [h for h in handles if not (h[0] == "timer" and h[2] is not None and h[2] < now)]
-            handles.append((kind, handle, due))
+        if handles is None or handle is None:
+            return handle
+        if kind == "timer":                             # forget one-off timers that have already run (bounded list)
+            now = datetime.now(timezone.utc)
+            handles[:] = [h for h in handles if not (h[0] == "timer" and h[2] is not None and h[2] < now)]
+        if isinstance(handle, asyncio.Future):
+            real = self._resolved(handle)
+            if real is not None:
+                handles.append((kind, real, due))
+            elif not handle.done():
+                generation = self.__dict__.get("_wipes", 0)
+
+                def record(fut, kind=kind, due=due):
+                    real = self._resolved(fut)
+                    live = self.__dict__.get("_handles")
+                    if real is None or live is None:
+                        return
+                    if self.__dict__.get("_wipes", 0) != generation:     # registered before a wipe: cancel it now
+                        cancel = {"timer": self.cancel_timer, "event": self.cancel_listen_event,
+                                  "state": self.cancel_listen_state}[kind]
+                        try:
+                            cancel(real)
+                        except Exception:
+                            pass
+                        return
+                    live.append((kind, real, due))
+                handle.add_done_callback(record)
+            return handle
+        handles.append((kind, handle, due))
         return handle
 
     def _untrack(self, handle):
         handles = self.__dict__.get("_handles")
-        if handles is not None:
+        handle = self._resolved(handle) if isinstance(handle, asyncio.Future) else handle
+        if handles is not None and handle is not None:
             handles[:] = [h for h in handles if h[1] != handle]
 
     def _install_tracking(self):
@@ -168,6 +207,7 @@ class PowerEngine(hass.Hass):
 
         def cancelling(orig):
             def wrapper(handle, *args, **kwargs):
+                handle = self._resolved(handle) if isinstance(handle, asyncio.Future) else handle
                 self._untrack(handle)
                 return orig(handle, *args, **kwargs)
             return wrapper
@@ -186,6 +226,7 @@ class PowerEngine(hass.Hass):
             self.terminate()
         except Exception as err:
             self.log(f"Restart: terminate failed: {err!r}", level="WARNING")
+        self.__dict__["_wipes"] = self.__dict__.get("_wipes", 0) + 1
         now = datetime.now(timezone.utc)
         cancel = {"timer": self.cancel_timer, "event": self.cancel_listen_event, "state": self.cancel_listen_state}
         for kind, handle, due in list(self.__dict__.get("_handles") or []):
@@ -232,7 +273,7 @@ class PowerEngine(hass.Hass):
             self.log(f"Config problem: {err}", level="WARNING")
         if self.cfg is None and self.cfg_error is None:
             looked = ", ".join(self.paths)
-            self.log(f"No config.yaml found (looked in {looked}); running unconfigured.", level="WARNING")
+            self.log(f"No config.yaml found (looked in {looked}); running unconfigured.")     # not a fault
         elif self.cfg is not None:
             self.log(f"Loaded config from {self.cfg_path}: {len(self.cfg.inputs)} inputs, "
                      f"{len(self.cfg.solar_plants)} solar plant(s)")
@@ -288,6 +329,8 @@ class PowerEngine(hass.Hass):
             self.tz = ZoneInfo(str(self.get_timezone()))
         except Exception:
             self.tz = None
+        if self._demo:                                 # the app reads the clock the way the demo world does
+            self.tz = self._demo_world().tz
         self._publish_names()                          # the adapters (the forecast needs tz) can now name themselves
         self.recorder = Recorder()
         self.notifier = Notifier(os.path.join(os.path.dirname(self._save_path()), "notifications.json"))
@@ -971,7 +1014,9 @@ class PowerEngine(hass.Hass):
         """
         house, car = self._role_entity("house_load_power"), self._role_entity("ev_charge_power")
         if not house:
-            self.log("Load history: no house-load input mapped yet", level="WARNING")
+            if not self.__dict__.get("_load_history_noted"):        # once, and only information: not a fault
+                self._load_history_noted = True
+                self.log("Load history: no house-load input mapped yet")
             return
         def unit(eid):
             try:
@@ -1299,12 +1344,20 @@ class PowerEngine(hass.Hass):
         for role in self.CONTROL_ROLES:
             eid = self._role_entity(role)
             if eid:
-                self._write_listeners.append(self.listen_state(self._on_control_change, eid))
+                self._write_listeners.append(self._listen_state(self._on_control_change, eid))
         for eid in [self._role_entity(key) for key, _ in GUARDS] + [PAUSE_ENTITY]:
             if eid:                                   # re-check the mode as soon as a guard or pause changes
-                self._write_listeners.append(self.listen_state(self._on_guard_change, eid))
+                self._write_listeners.append(self._listen_state(self._on_guard_change, eid))
         for eid in ("select.pe_ui_history_day", "select.pe_ui_history_plan"):
-            self._write_listeners.append(self.listen_state(self._publish_history, eid))
+            self._write_listeners.append(self._listen_state(self._publish_history, eid))
+        self._write_listeners = [h for h in self._write_listeners if h is not None]
+
+    def _listen_state(self, callback, entity_id):
+        """listen_state, except for the demo world's entities: they live inside the app, not in Home Assistant, so
+        AppDaemon would warn that they don't exist, and nothing could ever change them from outside anyway."""
+        if self._demo and self._demo_world().is_demo(entity_id):
+            return None
+        return self.listen_state(callback, entity_id)
 
     def _on_guard_change(self, entity, attribute, old, new, kwargs):
         if old != new:
@@ -1386,10 +1439,21 @@ class PowerEngine(hass.Hass):
         set_current(names)
         return names
 
+    def _demo_days_preview(self):
+        """The demo days the welcome offers, titled as the demo will show them (its own names, e.g. the event
+        provider's, which the unconfigured app has no adapters to know), so the welcome and the banner agree."""
+        try:
+            names = default_names()
+            return [{"key": k, "title": fill(v.get("title", k), names)} for k, v in load_demo_pack()["days"].items()]
+        except Exception:
+            return []
+
     def _publish_names(self):
         """The version sensor carries the names map (a small attribute; the card fills its placeholders from it)."""
         attrs = {"names": self._names(), "setup": "configured" if self._real_config_exists() else "unconfigured",
                  "demo": self._demo_info() if self._demo else None}
+        if attrs["setup"] == "unconfigured" and not self._demo:
+            attrs["demo_days"] = self._demo_days_preview()
         attrs.update(self._site_attributes())
         self._publish_state("diag_version", __version__, attrs)
 
@@ -2341,7 +2405,7 @@ class PowerEngine(hass.Hass):
         self._ready_by_handle = None
         eid = self._role_entity("smart_target_time") if self.cfg else None
         if eid:
-            self._ready_by_handle = self.listen_state(self._on_ready_by_change, eid)
+            self._ready_by_handle = self._listen_state(self._on_ready_by_change, eid)
 
     def _on_ready_by_change(self, entity, attribute, old, new, kwargs):
         if old == new or new in (None, "unknown", "unavailable") or old in (None, "unknown", "unavailable"):
@@ -2621,6 +2685,10 @@ class PowerEngine(hass.Hass):
     def _health(self):
         if self.costbook is None or self._get_publisher() is None:
             return
+        if self.cfg is None:                            # nothing to check yet (no config, or one that didn't load)
+            if not self.cfg_error:
+                self._publish_state("diag_health", NOT_SET_UP, {"findings": []})
+            return
         try:
             h = self.costbook.health(self._today(), getattr(self, "_checks", None))
             h["slots"] = self.slots.summary(datetime.now(timezone.utc), tz=self.tz,
@@ -2700,6 +2768,7 @@ class PowerEngine(hass.Hass):
         try:
             if not isinstance(new, dict):
                 raise ConfigError("no configuration received")
+            new = coerce_flags(new)          # true/false that arrived as text or 0/1 (the demo's settings save)
             new, switched = self._site_guard(new)
             _, backup = save_config(self._save_path(), new)
         except (ConfigError, OSError) as err:
@@ -2936,8 +3005,10 @@ class PowerEngine(hass.Hass):
         shutil.copyfile(os.path.join(os.path.dirname(__file__), "demo", "config.template"),
                         os.path.join(demo_dir, "config.yaml"))
         self.paths = [os.path.join(demo_dir, "config.yaml")]
+        real_set = getattr(self, "set_state", None)
         gate = self._demo_gate = DemoGate(
-            self._demo_world, getattr(self, "get_state", None), getattr(self, "set_state", None),
+            self._demo_world, getattr(self, "get_state", None),
+            self._lossless_set_state(real_set) if real_set is not None else None,
             getattr(self, "fire_event", None), self.log,
             allowed_events=(RESULT_EVENT, "pe_test_result", "pe_sim_result", diagnostics.BUNDLE_EVENT,
                             DEMO_RESULT_EVENT))
@@ -3029,8 +3100,11 @@ class PowerEngine(hass.Hass):
         world = self.__dict__.get("_world")
         if world is None:
             pack = load_demo_pack()
-            tz = getattr(self, "tz", None) or ZoneInfo(pack["tz"])
-            world = self._world = DemoWorld(pack, self._demo, tz, lambda: datetime.now(timezone.utc))
+            # The recorded days are UK wall-clock days (offsets from local midnight in the pack's time zone), so the
+            # demo always runs on that zone, not on whatever AppDaemon's `time_zone` happens to be: a fresh install
+            # is often set to UTC, which shifted the whole day (the sunny day's solar, the events, the forecast) by
+            # an hour against the clock the owner sees.
+            world = self._world = DemoWorld(pack, self._demo, ZoneInfo(pack["tz"]), lambda: datetime.now(timezone.utc))
         return world
 
     def _demo_info(self):
@@ -3051,10 +3125,99 @@ class PowerEngine(hass.Hass):
         """The one door for every entity the app publishes (MQTT or direct; the core never knows which)."""
         pub = self.__dict__.get("_publisher_obj")
         if pub is None:
-            pub = select_publisher(self._publisher_choice(), getattr(self, "mqtt", None),
-                                   getattr(self, "set_state", None))
+            pub = select_publisher(self._publisher_choice(), getattr(self, "mqtt", None), self._quiet_set_state())
             self._publisher_obj = pub
         return pub
+
+    @staticmethod
+    def _appdaemon_cleans_attributes():
+        """Does this AppDaemon clean the payload of set_state (4.5 and later)? 4.4 sends it as given."""
+        try:
+            from appdaemon import utils as ad_utils
+            return hasattr(ad_utils, "clean_http_kwargs")
+        except Exception:
+            return False
+
+    def _rest_states_poster(self):
+        """A function that writes an entity's state and attributes to Home Assistant exactly as given, or None. Newer
+        AppDaemon versions clean the payload of `set_state` on the way (`true` becomes "true"; `false`, `null` and every
+        0 are dropped, so a series loses its zeros and every later value shifts, and the config's booleans arrive as
+        text). This posts to HA's states endpoint with the plugin's own session instead, the way `set_state` does,
+        but with nothing removed. None where its plugin can't be reached."""
+        try:
+            plugin = self.AD.plugins.get_plugin_object(self.namespace)
+            loop, session, base = self.AD.loop, plugin.session, plugin.config.ha_url
+            import aiohttp
+        except Exception:
+            return None
+
+        async def post(entity_id, state, attributes):
+            payload = {"state": "" if state is None else str(state), "attributes": attributes or {}}
+            async with session.post(base / f"api/states/{entity_id}", json=payload,
+                                    timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                resp.raise_for_status()
+
+        def send(entity_id, state, attributes):
+            try:
+                running = asyncio.get_running_loop()
+            except RuntimeError:
+                running = None
+            if running is loop:                             # on AppDaemon's own loop: can't wait for it here
+                loop.create_task(post(entity_id, state, attributes))
+            else:
+                asyncio.run_coroutine_threadsafe(post(entity_id, state, attributes), loop).result(15)
+        return send
+
+    def _lossless_set_state(self, plain):
+        """`plain` (AppDaemon's set_state) for anything it would not alter; the exact REST write for attributes it would
+        (see _rest_states_poster). Only our own `pe_` entities are ever written this way."""
+        if not self._appdaemon_cleans_attributes():
+            return plain
+        post = self._rest_states_poster()
+
+        def set_state(entity_id, **kwargs):
+            attributes = kwargs.get("attributes")
+            if attributes and ad_would_alter(attributes) and re.match(r"^[a-z_]+\.pe_", str(entity_id)):
+                if post is not None:
+                    try:
+                        post(entity_id, kwargs.get("state"), attributes)
+                        return None
+                    except Exception as err:
+                        self._told_once("rest_write", f"Could not write {entity_id} to Home Assistant directly "
+                                                      f"({err!r}); using AppDaemon's set_state instead")
+                else:
+                    self._told_once("rest_altered", "AppDaemon's set_state changes attribute values (true becomes "
+                                                    "text, false, null and 0 are dropped) and this AppDaemon can't be "
+                                                    "bypassed; some PowerEngine attributes may be wrong", "WARNING")
+            return plain(entity_id, **kwargs)
+        return set_state
+
+    def _told_once(self, key, message, level="INFO"):
+        told = self.__dict__.setdefault("_told", set())
+        if key not in told:
+            told.add(key)
+            self.log(message, level=level)
+
+    def _quiet_set_state(self):
+        """set_state for the direct publisher. AppDaemon 4.5 and later warn "Entity ... not found" when set_state
+        creates an entity, unless told `check_existence=False`; we create our own entities, so say so. 4.4 has no such
+        argument (it would become an attribute), so it is only passed where set_state names it."""
+        raw = getattr(self, "set_state", None)
+        if raw is None:
+            return None
+        if not self._demo:                                  # (the demo gate has it underneath: see _demo_setup)
+            raw = self._lossless_set_state(raw)
+        try:
+            named = "check_existence" in inspect.signature(hass.Hass.set_state).parameters
+        except (TypeError, ValueError, AttributeError):
+            named = False
+        if not named:
+            return raw
+
+        def set_state(entity_id, **kwargs):
+            kwargs.setdefault("check_existence", False)
+            return raw(entity_id, **kwargs)
+        return set_state
 
     def _mqtt_api(self, quiet=False):
         try:
@@ -3092,7 +3255,8 @@ class PowerEngine(hass.Hass):
 
     def _publish_status(self):
         """The Monitoring page's Mode tile: one word, coloured by the dashboard. Stopped (writes couldn't be confirmed)
-        and Blocked (not configured, inputs not ready, or Active refused) are both shown red."""
+        and Blocked (a config with inputs not ready, or Active refused) are both shown red. Before there is a config the
+        word is "Not set up yet", shown neutral."""
         mode = getattr(self, "mode", None)
         if mode is None:
             return
@@ -3104,6 +3268,8 @@ class PowerEngine(hass.Hass):
             word, why = "Paused", mode.reason
         elif mode.effective == "passive" and mode.configured != "active":
             word, why = "Passive", mode.reason
+        elif self.cfg is None and not self.cfg_error:
+            word, why = NOT_SET_UP, mode.reason
         else:
             word, why = "Blocked", mode.reason
         self._publish_state("state_status", word, {"reason": why, "mode": mode.effective})

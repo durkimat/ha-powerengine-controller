@@ -30,8 +30,8 @@ views:
             icon_on: mdi:pause-circle
             icon_off: mdi:play-circle-outline
             grid_options: {columns: full, rows: 1}
-          # Mode, coloured: green Active, orange Paused, blue Passive, red Blocked (not configured, inputs not
-          # ready, or Active refused) or Stopped (inverter writes couldn't be confirmed)
+          # Mode, coloured: green Active, orange Paused, blue Passive, red Blocked (inputs not ready, or Active
+          # refused) or Stopped (inverter writes couldn't be confirmed); neutral "Not set up yet" before there is a config
           - type: tile
             entity: sensor.pe_state_status
             name: Mode
@@ -69,6 +69,14 @@ views:
                 entity: sensor.pe_state_status
                 state: [Blocked, Stopped]
           - type: tile
+            entity: sensor.pe_state_status
+            name: Mode
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_status
+                state: Not set up yet
+          - type: tile
             entity: sensor.pe_state_control_method
             name: Inverter control
             grid_options: {columns: 3}
@@ -92,6 +100,18 @@ views:
             tap_action:
               action: navigate
               navigation_path: costs
+          # before there is a config there is nothing to check yet
+          - type: tile
+            entity: sensor.pe_diag_health
+            name: Health
+            grid_options: {columns: full}
+            visibility:
+              - condition: state
+                entity: sensor.pe_diag_health
+                state: Not set up yet
+            tap_action:
+              action: navigate
+              navigation_path: health
           # only when the Health tab has something to say
           - type: tile
             entity: sensor.pe_diag_health
@@ -103,6 +123,9 @@ views:
               - condition: state
                 entity: sensor.pe_diag_health
                 state_not: ok
+              - condition: state
+                entity: sensor.pe_diag_health
+                state_not: Not set up yet
             tap_action:
               action: navigate
               navigation_path: health
