@@ -2,6 +2,27 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.64 (beta)
+
+### Behaviour changes
+- **No more flip-flopping at a charge target.** Once the battery reaches the plan's target for a half-hour it holds
+  for the rest of that half-hour, unless the charge falls 2% or more below the target or the plan changes. Before,
+  the inverter's whole-number charge reading (93% while charging, 94% while holding) made it switch between charge
+  and hold every 30 seconds.
+- **No forced charge at the peak rate when the plan only expects solar.** When the plan's charge in a non-cheap
+  half-hour would come entirely from solar surplus, it now uses self-use instead of a forced charge. A forced charge
+  draws its full power whatever the sun does, so on 29 Sep a cloudy spell meant a few pence of power were bought at
+  30.28p to sell at 15p. Cheap, free-power and car smart-charge slots still force-charge as before.
+
+### Fixes
+- A car smart-charge slot that EDF has planned but not yet priced now reads "tariff still 30.28p" rather
+  than naming the peak price as the slot's price.
+- When a required input is briefly missing, the log and status now say "waiting for inputs" instead of
+  "unconfigured".
+- Smart-slot statistics: the planned energy per slot is now scaled to the slot's actual length, and the total counts
+  only slots that ran. The total had included withdrawn and re-listed slots, giving impossible figures such as
+  5,345 kWh over two weeks.
+
 ## 0.9.63 (beta)
 
 ### Behaviour changes
