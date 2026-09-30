@@ -36,6 +36,7 @@ KNOWN_KEYS = frozenset(
         "tariff",
         "operation",
         "notifications",
+        "site",
         "remove_entities",
     }
 )
@@ -279,6 +280,63 @@ class SolarPlant:
     enabled: bool = True
 
 
+# Which plant this home has: one adapter (by name) per kind. The choices come from the adapter registry, so a new
+# definition file or adapter shows up here by itself; "none" is allowed where the app can run without that part.
+SITE_KEYS = ("inverter", "inverter_firmware", "ev_charger", "car", "tariff", "forecast", "events")
+SITE_KINDS = {"inverter": "inverter", "ev_charger": "ev", "tariff": "tariff", "forecast": "forecast", "events": "event"}
+SITE_EXTRA = {"ev_charger": ("none",), "car": ("none",), "tariff": ("auto",), "forecast": ("none",),
+              "events": ("none",)}          # not adapters: "auto" detects the tariff, "none" leaves the part out
+
+
+def site_choices() -> dict[str, tuple[str, ...]]:
+    """The valid values of each site key that takes a name (from the registry, plus the extras above)."""
+    from .adapters import registry
+    out = {}
+    for key in SITE_KEYS:
+        if key == "inverter_firmware":
+            continue
+        found = tuple(registry.names(SITE_KINDS[key])) if key in SITE_KINDS else ()
+        extra = SITE_EXTRA.get(key, ())
+        out[key] = (extra + found) if key == "tariff" else (found + extra)
+    return out
+
+
+@dataclass(frozen=True)
+class Site:
+    """The `site:` section. The defaults describe how PowerEngine has always run (the migration writes them)."""
+    inverter: str = "solis"
+    inverter_firmware: str | None = None
+    ev_charger: str = "zappi"
+    car: str = "none"
+    tariff: str = "auto"
+    forecast: str = "solcast"
+    events: str = "axle"
+
+    def as_dict(self) -> dict[str, Any]:
+        return {k: getattr(self, k) for k in SITE_KEYS}
+
+
+def _parse_site(data: Any) -> Site:
+    if data is None:
+        return Site()
+    if not isinstance(data, dict):
+        raise ConfigError("'site' must be a mapping")
+    unknown = sorted(set(data) - set(SITE_KEYS), key=str)
+    if unknown:
+        raise ConfigError(f"unknown site key(s): {', '.join(map(str, unknown))} (known: {', '.join(SITE_KEYS)})")
+    values = dict(data)
+    choices = site_choices()
+    for key, allowed in choices.items():
+        if key in values and values[key] not in allowed:
+            raise ConfigError(f"site '{key}' must be one of {', '.join(allowed)} (not {values[key]!r})")
+    fw = values.get("inverter_firmware")
+    if isinstance(fw, str):
+        values["inverter_firmware"] = fw.strip() or None
+    elif fw is not None:
+        raise ConfigError(f"site 'inverter_firmware' must be text in quotes or empty (not {fw!r})")
+    return Site(**values)
+
+
 @dataclass(frozen=True)
 class Config:
     mode: str = "passive"
@@ -289,6 +347,7 @@ class Config:
     notifications: dict[str, Any] = field(default_factory=lambda: _parse_notifications(None))
     inputs: dict[str, Any] = field(default_factory=dict)
     solar_plants: tuple[SolarPlant, ...] = ()
+    site: Site = field(default_factory=Site)
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -484,6 +543,7 @@ def parse_config(data: Any) -> Config:
         notifications=notifications,
         inputs=dict(inputs),
         solar_plants=_parse_plants(data.get("solar_plants")),
+        site=_parse_site(data.get("site")),
         raw=data,
     )
 

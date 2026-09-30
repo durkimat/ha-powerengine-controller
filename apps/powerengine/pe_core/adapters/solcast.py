@@ -30,6 +30,7 @@ class SolcastForecast:
     """Reads a Solcast forecast. See module docstring."""
 
     name = "solcast"
+    status = "verified"
     attribute = "detailedForecast"
 
     def __init__(self, role_entity: Callable[[str], str | None] | None = None, tz: tzinfo | None = None):

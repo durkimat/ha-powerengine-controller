@@ -32,6 +32,9 @@ brand: Solis
 model: S5-EH1P6K-L (SolaX Modbus)
 display_names: {inverter: Solis}     # words for the app's own text (the <<inverter>> name)
 card_model: solis             # the Sunsynk Power Flow Card's "inverter: model:" key
+status: verified              # verified | community | draft (default draft): shown in the card's "Your system"
+verified_firmware: ["420044"] # the firmware versions the supervised tests were run on
+# firmware_entity: {domain: sensor, tail: firmware_version}   # optional: where the inverter reports its firmware
 
 capabilities:
   supports_ram: true          # RAM remote control: the preferred method, listed first
@@ -89,7 +92,7 @@ the config card's supervised tests before letting PowerEngine drive it.
 
 ## What is not generalised yet
 
-The app still builds the Solis inverter directly (there is no inverter setting yet). The remote-control controller
+The app builds the inverter the config's `site.inverter` names (see docs/SITE.md). The remote-control controller
 works in the words `Off`, `Force charge`, `Force discharge` and the definition maps them to the inverter's own at the
 service call, so an inverter whose remote control is not a mode select plus two powers needs a new behaviour. The timed
 behaviour handles exactly three slots.

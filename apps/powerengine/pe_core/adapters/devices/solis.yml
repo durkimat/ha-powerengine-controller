@@ -11,6 +11,15 @@ name: solis
 brand: Solis
 model: S5-EH1P6K-L (SolaX Modbus)
 
+# How far this definition has been proven on real hardware: verified (a person ran the supervised tests on it),
+# community (reported working by someone else) or draft (written, not yet run). `verified_firmware` lists the
+# versions it was proven on.
+status: verified
+verified_firmware: ["420044"]
+# Where the inverter reports its own firmware, if it does ({domain, tail}, found by name like the RC entities).
+# The SolaX Modbus Solis plugin has no such entity, so none is named here and the firmware is set by hand in `site:`.
+# firmware_entity: {domain: sensor, tail: firmware_version}
+
 # Words the app uses for this inverter in its own text (the names map: <<inverter>>).
 display_names:
   inverter: Solis

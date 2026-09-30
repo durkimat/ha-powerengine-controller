@@ -32,6 +32,8 @@ SUPPLIERS = {
                 GRID_EVENT: "Octopus saving session"},
 }
 
+STATUS = {"edf": "verified", "octopus": "community"}   # site_options: what has run on a real home
+
 # the ready-by times offered when the entity doesn't list its own options (EDF currently offers mornings only)
 DEFAULT_READY_BY_OPTIONS = [f"{h:02d}:{m:02d}" for h in range(4, 12) for m in (0, 30)][:15]
 

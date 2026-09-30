@@ -172,6 +172,9 @@ class Replay:
         self.powerengine = powerengine
         self.folder = folder
         cfg = json.loads(json.dumps(fixture["config"]))
+        # what the site migration writes for his plant; a config without it would be migrated (and log a line)
+        cfg.setdefault("site", {"inverter": "solis", "inverter_firmware": None, "ev_charger": "zappi", "car": "none",
+                                "tariff": "auto", "forecast": "solcast", "events": "axle"})
         for section, values in (overrides or {}).items():
             cfg.setdefault(section, {}).update(values)
         (folder / "costs").mkdir(parents=True, exist_ok=True)

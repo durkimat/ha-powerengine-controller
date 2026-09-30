@@ -29,6 +29,7 @@ ACTIONS = ("grid_charge", "hold", "force_discharge", "export", "self_use", "none
 RC_OPTIONS = ("Off", "Force charge", "Force discharge")       # the RC controller's own words (ramcontrol.py)
 RC_ROLES = ("rc_mode", "rc_charge_power", "rc_discharge_power")
 RC_TESTS = ("rc_charge", "rc_discharge", "rc_hold", "rc_failsafe")
+STATUSES = ("verified", "community", "draft")               # how far a definition has been proven on real hardware
 TIMED_SLOT_COUNT = 3                                          # what the timed_hhmm behaviour is written for
 
 
@@ -134,6 +135,7 @@ def validate(data, source: str = "<definition>") -> None:
         _validate_clock(data, source)
     _validate_roles(data, source)
     _validate_firmware(data, source)
+    _validate_status(data, source)
 
 
 def _behaviour(data, section: str, source: str) -> None:
@@ -211,6 +213,20 @@ def _validate_roles(data, source: str) -> None:
         unknown = set(spec) - {"suggest", "suggest_not"}
         if unknown:
             raise DefinitionError(f"{source}: roles.{role} has unknown key(s) {sorted(unknown)}")
+
+
+def _validate_status(data, source: str) -> None:
+    """`status` (optional, default draft) and `verified_firmware`, the versions a person has proven it on; and
+    `firmware_entity`, where the inverter reports its own firmware (optional: {domain, tail}, found by name)."""
+    status = data.get("status", "draft")
+    if status not in STATUSES:
+        raise DefinitionError(f"{source}: 'status' must be one of {', '.join(STATUSES)} (not {status!r})")
+    if "verified_firmware" in data:
+        _strings(data, "verified_firmware", source)
+    ent = data.get("firmware_entity")
+    if ent is not None and not (isinstance(ent, dict) and isinstance(ent.get("domain"), str)
+                                and isinstance(ent.get("tail"), str)):
+        raise DefinitionError(f"{source}: 'firmware_entity' needs a 'domain' and a 'tail' (text)")
 
 
 def _validate_firmware(data, source: str) -> None:
