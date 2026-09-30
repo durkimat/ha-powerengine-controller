@@ -76,6 +76,25 @@ tools/release.sh <version> --app-notes <file> [--card-notes <file>] [--app-branc
   disown`, then `tail` the log in later calls. Always pass `--title "x.y.z: short summary"`, because the default title
   cuts the first notes line mid-word. Notes files go in `$HOME/mnt/powerengine/_to_delete/`.
 - Tokens: the script reads the token file only as a curl header or through git's credential helper. Never print it.
+- **When detached runs don't survive** (seen 30 Sep 2026, Cowork session: every background process, including
+  setsid, nohup and tmux, was killed when its device_bash call ended, so the script died in the test step): check
+  with `(setsid sh -c 'sleep 300' &)` and `ps` in the next call. Then run the release one call at a time with the
+  script's own functions: `head -n -2 tools/release.sh > $HOME/work/rel_lib.sh`, then in each call
+  `source rel_lib.sh; TMP=$(mktemp -d); DRY=0; WORK=$PWD` and run `change_file app_version|install|app_changelog`,
+  `commit_message`, `pr_body`, `gitn push`, `api POST .../pulls`; poll `.../check-runs` in calls of up to 170 s
+  (CI took about 6 minutes); `api PUT .../pulls/N/merge` (squash), `api POST .../releases`, then `git checkout main`,
+  pull and delete the branch. Run the test suite first in cloud `Bash` (background works there, about 210 s), not
+  on the device. Same steps, same commit and release format as the script.
+- **The cloud workspace cannot release:** its network proxy answers every `api.github.com` call with 403 "No linked
+  GitHub account", so the owner's token is refused there. Releases run on the device (`$HOME/mnt/dev-secrets`).
+- **Check `main` before choosing the version:** the owner may have released since the session started (0.9.72 went
+  out while #121 was in progress, so it became 0.9.73). `git fetch`, rebase the branch, rerun the tests, then pick
+  the next version. Don't reuse a branch name that already exists on GitHub after a rebase (a stale remote branch
+  blocks a plain push and the token can't delete refs); use a new name.
+- `release.sh` hard-codes the co-author trailer "Claude Opus 5.5"; set `CLAUDE_MODEL_NAME` to use the model's name,
+  and `CLAUDE_SESSION_URL` for the session link (the default points at an old session). Pass `--app-branch` when
+  the clone's main checkout is the one on the branch (the script otherwise wants a worktree).
+- Never `git clone` with the token in the URL (it lands in `.git/config`); use the credential helper.
 
 Tests-only or docs-only changes can merge without a release.
 
@@ -118,6 +137,17 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 - **Display wording vs mode keys:** `ModeDecision.label` ("waiting for inputs") is for logs and the summary only;
   `effective == "unconfigured"` stays the key the entity, the card and the code use.
 - **Deleting files:** only when he asks. Put scratch files in `$HOME/mnt/powerengine/_to_delete`.
+
+## Recent fixes
+
+- **#121, RAM control and BMS limits. Done in 0.9.73** (`pe_core/bms.py`, `ramcontrol.py`). Optional roles
+  `battery_bms_charge_limit` / `battery_bms_discharge_limit` (Solis suggestions) cap commands at limit A x 52 V
+  (`BATTERY_VOLTS`; no battery-voltage role, because it pushed `map_catalogue` over 15,000 bytes: it is 14.9 KB now, so
+  any new role needs a size check). Limit 0 = Hold on a charge, Off on a discharge. Cold-caution fallback when the charge
+  limit is unmapped. The follow check uses the expected power. A command not followed (battery under 20% of it, after the
+  3-minute alarm) steps down 1000 W to a floor of 3000 W, for up to 60 minutes. The diagnostics export has a `bms` section
+  (in-memory ring, lost on restart). **Not done:** Modbus read-back of 43136/43129 (no entity for it). To watch in the
+  first cold spell: the export's `bms` rows against the actual battery power; the conversion assumes battery-side watts.
 
 ## Current work: making it generic (Phase 0)
 
