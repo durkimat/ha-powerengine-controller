@@ -128,6 +128,21 @@ class DefinedInverter:
         self._rc_cache = (now, found)
         return found
 
+    def firmware_detected(self) -> str | None:
+        """The firmware the inverter reports, when the definition names an entity for it (else None)."""
+        spec = self.d.get("firmware_entity")
+        if not spec:
+            return None
+        try:
+            ids = list((self.ha.get_state() or {}).keys())
+            eid = find_entities(ids, {"firmware": (spec["domain"], spec["tail"])}, self._ram.get("prefer", "")).get(
+                "firmware")
+            state = self.ha.get_state(eid) if eid else None
+        except Exception:
+            return None
+        text = str(state).strip() if state is not None else ""
+        return None if text.lower() in ("", "none", "unknown", "unavailable") else text
+
     def rc_missing(self, rc: dict) -> list[str]:
         """Which of the RC roles weren't found."""
         return [r for r in RC_ROLES if not rc.get(r)]

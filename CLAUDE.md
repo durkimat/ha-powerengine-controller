@@ -195,6 +195,26 @@ behaviour change:
      words by the app's names, the timed behaviour handles exactly three slots, and `writes_needed` names the update button
      role. Those are the first things a second inverter would generalise.
 
+8. Site section (which plant this home has). **8a done** (branch `phase0/site-8`; byte-identical for his plant, replay and dashboard goldens unchanged); **8b next** (the card's "Your system" block):
+   - `config.yaml` gets an optional `site:` (`config.Site`, frozen; keys `inverter`, `inverter_firmware`, `ev_charger`, `car`, `tariff`, `forecast`,
+     `events`; unknown keys and names are `ConfigError`s). The valid names come from the registry (`config.site_choices()`: registry names
+     plus `none`, and `auto` for the tariff), never from lists in `config.py`. See `docs/SITE.md`.
+   - The app builds `_inverter()`, `_ev()`, `_forecast()`, `_events()`, `_tariff()` by name from `cfg.site` (`_adapter()` keeps each with the name it
+     was built for and rebuilds on change, so a config reload picks up a new site). `"none"` is a null adapter (`adapters/null.py`: `NoCharger`,
+     `NoForecast`, `NoEvents`; reads nothing, neutral words in the names map). Tariff `auto` keeps `supplier_of`. `inverter_firmware` goes to the
+     definition loader (`firmware=`), so firmware variants apply.
+   - Migration (`_add_site`): a real config with no `site` gets today's plant (solis, firmware from the definition's `firmware_entity` if any, zappi,
+     car none, tariff auto, solcast, axle), saved by `store.save_config` (backup kept), one INFO line "Site added to the configuration: ...". Not in
+     demo mode, not unconfigured, idempotent; a failed save warns and carries on in memory. Parts are never migrated to `none` (the words in texts
+     would change). The replay harness config carries the site instead, so the goldens stay as recorded.
+   - Definitions gained `status` (verified | community | draft; solis is verified on `verified_firmware: ["420044"]`) and an optional
+     `firmware_entity` ({domain, tail}). The SolaX Modbus Solis plugin exposes no firmware entity, so solis names none.
+   - `sensor.pe_diag_version` attributes add `site`, `site_options` (`adapters/options.py`, about 1 KB), `firmware_detected` and `retest_required`.
+   - Changing `site.inverter` or `site.inverter_firmware` in a saved config (`_on_save` -> `_site_guard`) switches to Passive, logs, notifies and sets
+     `retest_required` (`site_state.json` beside the config; cleared when a supervised RC test passes). The app has no stored RC-test results or
+     Active gate, so the flag is what the card reads; the card decides how to show it. A save without `site` keeps the saved one.
+   - 8b: the card's "Your system" block (reads the attributes above; saves with `pe_config_save`).
+
 Each step is a small PR that passes the replay unchanged.
 
 ## Demo mode plan

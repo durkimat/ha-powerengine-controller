@@ -24,6 +24,7 @@ class ZappiCharger:
     """Reads a myenergi Zappi. See module docstring."""
 
     name = "zappi"
+    status = "verified"
 
     def __init__(self, role_entity: Callable[[str], str | None] | None = None):
         self.role_entity = role_entity

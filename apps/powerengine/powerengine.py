@@ -7,6 +7,7 @@ Passive (the default) only monitors and simulates. Active writes the Solis timed
 feature is on, EDF smart-charge requests) behind the handover guards, the pause switch and the daily write limit.
 """
 
+import copy
 import dataclasses
 import json
 import os
@@ -19,13 +20,12 @@ import appdaemon.plugins.hass.hassapi as hass
 from pe_core import __version__, clock, damping, diagnostics, gridcheck, ramcontrol, rctest, releases, testwrite
 from pe_core import learn as learning
 from pe_core.activity import ActivityLog
-from pe_core.adapters.axle import AxleEvents
-from pe_core.adapters.kraken import KrakenTariff, supplier_of
-from pe_core.adapters.myenergi import ZappiCharger
+from pe_core.adapters import registry
+from pe_core.adapters.kraken import supplier_of
+from pe_core.adapters.null import NULL as NULL_ADAPTERS
+from pe_core.adapters.options import site_options
 from pe_core.adapters.publish import select_publisher
 from pe_core.adapters.solcast import ROLES as FORECAST_ROLES
-from pe_core.adapters.solcast import SolcastForecast
-from pe_core.adapters.solis import SolisInverter
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
 from pe_core.commands import from_pe_command, from_service
@@ -34,7 +34,9 @@ from pe_core.config import (
     LOCATION_LAG_H,
     NOTIFY_DEFAULT,
     ConfigError,
+    Site,
     load_config,
+    parse_config,
     required_roles,
     settings_catalogue,
     use_measured,
@@ -233,6 +235,7 @@ class PowerEngine(hass.Hass):
         elif self.cfg is not None:
             self.log(f"Loaded config from {self.cfg_path}: {len(self.cfg.inputs)} inputs, "
                      f"{len(self.cfg.solar_plants)} solar plant(s)")
+            self._add_site()
 
         try:                                           # the log from before this start (Health tab's log card)
             self.__dict__.get("_log_ring") or self.log("PowerEngine log starts")
@@ -1070,12 +1073,24 @@ class PowerEngine(hass.Hass):
                  f"{len(self.loadstore.means)} recorded by PowerEngine)")
         self._plan_sig = None                                       # re-plan with the new profile
 
+    def _site(self) -> Site:
+        """Which plant this home has (config.yaml's `site:`; today's plant until the config is read)."""
+        return self.cfg.site if self.cfg else Site()
+
+    def _adapter(self, attr, kind, key, *args):
+        """The adapter the site names for `key`, built once and rebuilt when the site changes it. "none" is the null
+        adapter (reads nothing). `attr` is where it is kept."""
+        name = getattr(self._site(), key)
+        held = getattr(self, attr, None)
+        if held is None or held[0] != name:
+            factory = NULL_ADAPTERS[key] if name == "none" else registry.get(kind, name)
+            held = (name, factory(self._role_entity, *args))
+            setattr(self, attr, held)
+        return held[1]
+
     def _forecast(self):
-        """The generation forecast adapter (Solcast)."""
-        fc = getattr(self, "_forecast_adapter", None)
-        if fc is None:
-            fc = self._forecast_adapter = SolcastForecast(self._role_entity, self.tz)
-        return fc
+        """The generation forecast adapter (the site's: Solcast, or none)."""
+        return self._adapter("_forecast_adapter", "forecast", "forecast", self.tz)
 
     def _solar_forecast(self):
         """The forecast as neutral half-hourly points, from every mapped forecast role."""
@@ -1334,26 +1349,31 @@ class PowerEngine(hass.Hass):
     # --- inverter control (Active mode; previewed in Passive) --------------------------------
 
     def _inverter(self):
-        """The inverter adapter (Solis for now; the config will name it once other inverters exist)."""
-        inv = getattr(self, "_inv", None)
-        if inv is None:
-            inv = self._inv = SolisInverter(self, self._role_entity, BATTERY_VOLTS)
-        return inv
+        """The inverter adapter the site names (from its definition, for the site's firmware). Rebuilt when the
+        inverter or its firmware changes."""
+        site = self._site()
+        key = (site.inverter, site.inverter_firmware)
+        held = getattr(self, "_inv", None)
+        if held is None or held[0] != key:
+            held = (key, registry.get("inverter", site.inverter)(self, self._role_entity, BATTERY_VOLTS,
+                                                                 firmware=site.inverter_firmware))
+            self._inv = held
+        return held[1]
 
     def _tariff(self):
-        """The tariff adapter (Kraken: EDF or Octopus, told apart by the rate sensor's integration)."""
+        """The tariff adapter: the site's, or (site tariff "auto") Kraken's EDF or Octopus, told apart by the rate
+        sensor's integration."""
         tariff = getattr(self, "_tariff_adapter", None)
-        name = supplier_of(self._role_entity("import_rate_now") if self.cfg else None)
-        if tariff is None or tariff.name != name:  # rebuilt if the rate sensor moves supplier
-            tariff = self._tariff_adapter = KrakenTariff(name, self._role_entity)
+        name = self._site().tariff
+        if name == "auto":
+            name = supplier_of(self._role_entity("import_rate_now") if self.cfg else None)
+        if tariff is None or tariff.name != name:  # rebuilt if the site or the rate sensor moves supplier
+            tariff = self._tariff_adapter = registry.get("tariff", name)(self._role_entity)
         return tariff
 
     def _ev(self):
-        """The car charger adapter (Zappi)."""
-        ev = getattr(self, "_ev_adapter", None)
-        if ev is None:
-            ev = self._ev_adapter = ZappiCharger(self._role_entity)
-        return ev
+        """The car charger adapter the site names (Zappi, or none)."""
+        return self._adapter("_ev_adapter", "ev", "ev_charger")
 
     def _names(self):
         """What this user's supplier and devices are called, from the adapters (neutral words before the config is
@@ -1369,14 +1389,93 @@ class PowerEngine(hass.Hass):
         """The version sensor carries the names map (a small attribute; the card fills its placeholders from it)."""
         attrs = {"names": self._names(), "setup": "configured" if self._real_config_exists() else "unconfigured",
                  "demo": self._demo_info() if self._demo else None}
+        attrs.update(self._site_attributes())
         self._publish_state("diag_version", __version__, attrs)
 
+    def _site_attributes(self):
+        """What the card's "Your system" block reads (compact: the version sensor's attributes must stay small):
+        `site` (the current choices), `site_options` (per key: {id, name, status, firmware_variants}),
+        `firmware_detected` (what the inverter reports, when its definition names an entity for that, else null) and
+        `retest_required` (the site's inverter or firmware changed and the supervised tests are still to be re-run)."""
+        try:
+            detected = self._inverter().firmware_detected()
+        except Exception:
+            detected = None
+        return {"site": self._site().as_dict(), "site_options": site_options(), "firmware_detected": detected,
+                "retest_required": self._retest_required()}
+
     def _events(self):
-        """The grid-event adapter (Axle)."""
-        events = getattr(self, "_events_adapter", None)
-        if events is None:
-            events = self._events_adapter = AxleEvents(self._role_entity)
-        return events
+        """The grid-event adapter the site names (Axle, or none)."""
+        return self._adapter("_events_adapter", "event", "events")
+
+    # --- the site: which plant this home has ---------------------------------------------------
+
+    def _add_site(self):
+        """A real config with no `site:` gets one describing how PowerEngine has always run (Solis, Zappi, tariff
+        detected, Solcast, Axle), saved through the usual save-with-backup path. Never in demo mode, never with no
+        real config (nothing to write), and once only: a config that has a `site` is left alone. If the save fails the
+        app carries on with the same choices in memory and tries again at the next start.
+        The parts are not left out ("none") when their inputs are unmapped: the adapters read nothing from an
+        unmapped role either way, but "none" would change the words in user text (the names map), so only the site's
+        owner picks it."""
+        cfg = self.cfg
+        if cfg is None or self._demo or "site" in cfg.raw or not self._real_config_exists():
+            return
+        if self.cfg_path not in self._real_paths:
+            return
+        try:
+            site = Site()
+            inverter = registry.get("inverter", site.inverter)(self, self._role_entity, BATTERY_VOLTS)
+            site = dataclasses.replace(site, inverter_firmware=inverter.firmware_detected())
+        except Exception as err:
+            self.log(f"Site: could not detect the inverter firmware: {err!r}", level="WARNING")
+            site = Site()
+        text = (f"inverter {site.inverter} (firmware {site.inverter_firmware or 'not set'}), "
+                f"ev_charger {site.ev_charger}, car {site.car}, tariff {site.tariff}, forecast {site.forecast}, "
+                f"events {site.events}")
+        try:
+            new = {**copy.deepcopy(cfg.raw), "site": site.as_dict()}
+            self.cfg, backup = save_config(self._save_path(), new)
+        except (ConfigError, OSError) as err:
+            self.log(f"Could not add the site to the configuration ({err}); carrying on with the same choices "
+                     f"in memory: {text}", level="WARNING")
+            return
+        self.log(f"Site added to the configuration: {text}; backup: {backup or 'none'}")
+
+    def _state_file(self):
+        return os.path.join(os.path.dirname(self._save_path()), "site_state.json")
+
+    def _retest_required(self):
+        """True after the site's inverter or firmware changed, until a supervised RC test passes."""
+        try:
+            with open(self._state_file(), encoding="utf-8") as fh:
+                return bool(json.load(fh).get("retest_required"))
+        except (OSError, ValueError, AttributeError):
+            return False
+
+    def _set_retest(self, required):
+        if self._demo or self._retest_required() == required:
+            return
+        try:
+            with open(self._state_file(), "w", encoding="utf-8") as fh:
+                json.dump({"retest_required": required}, fh)
+        except OSError as err:
+            self.log(f"Could not save the test state: {err}", level="WARNING")
+
+    def _site_guard(self, new):
+        """(the config to save, whether the inverter or its firmware changed from the saved site). A card that doesn't
+        know the `site:` section keeps the saved one. When the inverter or its firmware changes, PowerEngine goes to
+        Passive whatever was asked: the definition, and so the writes, are different now, and the supervised tests
+        have to be run again on it. Other site keys only rebuild their adapters."""
+        old = self.cfg.raw.get("site") if self.cfg else None
+        if old is not None and "site" not in new:
+            new = {**new, "site": old}
+        if old is None:
+            return new, False
+        before, after = parse_config({"site": old}).site, parse_config(new).site
+        if (before.inverter, before.inverter_firmware) == (after.inverter, after.inverter_firmware):
+            return new, False
+        return (with_operation(new, "passive") if (new.get("operation") or {}).get("mode") == "active" else new), True
 
     def _slot_map(self):
         """{slot n: {role: entity}} when all three inverter slots exist (SolaX '_2'/'_3' names), else None."""
@@ -2160,6 +2259,8 @@ class PowerEngine(hass.Hass):
         run.step(now, f"result: {run.verdict}", note=run.explanation, **self._battery_now())
         good = run.verdict in ("worked", "reverted") and not run.problems
         run.finish("stopped" if kwargs.get("stopped") else ("passed" if good else "failed"))
+        if good and not kwargs.get("stopped"):
+            self._set_retest(False)                        # the tests have been run again on this site
         self.log(f"Supervised RC test {run.status}: {run.verdict} ({run.explanation})"
                  + (f"; {run.problems}" if run.problems else ""), level="INFO" if good else "WARNING")
         self._logbook(f"supervised RC test {run.status}: {run.verdict}")
@@ -2581,6 +2682,7 @@ class PowerEngine(hass.Hass):
         try:
             if not isinstance(new, dict):
                 raise ConfigError("no configuration received")
+            new, switched = self._site_guard(new)
             _, backup = save_config(self._save_path(), new)
         except (ConfigError, OSError) as err:
             self.log(f"Config save by {user} rejected: {err}", level="WARNING")
@@ -2589,8 +2691,20 @@ class PowerEngine(hass.Hass):
         changed = self._changes(self.cfg.raw if self.cfg else {}, new)
         self.log(f"Config saved by {user} ({changed}); backup: {backup or 'none (first save)'}")
         self._logbook(f"configuration saved by {user}: {changed}")
+        if switched:
+            self._set_retest(True)
+            self.log(f"Site: the inverter or its firmware was changed by {user}; PowerEngine is Passive and the "
+                     f"supervised tests need running again", level="WARNING")
+            self._logbook(f"site changed by {user}: the inverter or its firmware; Passive until the tests are re-run")
         self._reload()
-        self.fire_event(RESULT_EVENT, ok=True, message=f"Saved. {changed}.")
+        if switched:
+            self._notify("health", (f"site:{new['site'].get('inverter')}:{new['site'].get('inverter_firmware')}",
+                                    "PowerEngine: inverter changed",
+                                    "The inverter or its firmware was changed in the site settings. PowerEngine is "
+                                    "Passive (nothing is controlled) until you run the supervised tests again."))
+        self.fire_event(RESULT_EVENT, ok=True, message=f"Saved. {changed}."
+                        + (" The inverter changed, so PowerEngine is Passive until the tests are re-run."
+                           if switched else ""))
 
     def _check_update(self, kwargs):
         """HACS replaces the app's files but AppDaemon keeps the old modules loaded. When the version on disk differs
@@ -2664,6 +2778,8 @@ class PowerEngine(hass.Hass):
             self.cfg, self.cfg_error = None, str(err)
         self._watch_controls()
         self._watch_ready_by()
+        if self.cfg is not None:
+            self._publish_names()                          # the site's adapters may have changed
         if self.cfg is not None and self.costbook is not None:
             fid = flow_id(self.cfg)
             if fid != self.costbook.flow_id:              # inputs that shape the flows changed: rebuild from history

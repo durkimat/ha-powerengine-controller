@@ -41,9 +41,15 @@ def _load_definitions() -> None:
         _registry["inverter"].setdefault(name, defined_factory(name))
 
 
+def _load_builtins() -> None:
+    """Import the adapter modules that register themselves (tariff, event, EV charger, forecast)."""
+    from . import axle, kraken, myenergi, solcast  # noqa: F401
+
+
 def get(kind: str, name: str) -> Callable:
     """The factory registered for (kind, name)."""
     _check_kind(kind)
+    _load_builtins()
     if kind == "inverter":
         _load_definitions()
     try:
@@ -56,6 +62,7 @@ def get(kind: str, name: str) -> Callable:
 def names(kind: str) -> list[str]:
     """The names registered under `kind`."""
     _check_kind(kind)
+    _load_builtins()
     if kind == "inverter":
         _load_definitions()
     return sorted(_registry[kind])

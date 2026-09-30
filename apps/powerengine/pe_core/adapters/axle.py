@@ -22,6 +22,7 @@ class AxleEvents:
     """Reads Axle's export events. See module docstring."""
 
     name = "axle"
+    status = "verified"
 
     def __init__(self, role_entity: Callable[[str], str | None] | None = None):
         self.role_entity = role_entity
