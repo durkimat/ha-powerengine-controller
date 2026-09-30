@@ -21,6 +21,10 @@ from datetime import datetime, timedelta
 from .readings import Window
 
 EPS = 1e-6
+CHEAP_BAND = 1.15       # a half-hour within 15% of the day's lowest rate counts as that day's cheap rate. EDF priced
+                        # its smart slots at the new 6.66p while that night still ran at the old 6.99p (30 Sep 2026):
+                        # with an exact match the night dropped out of the day's cheap set, the intersection emptied
+                        # the overnight window, and deep overnight selling stopped.
 HALF = timedelta(minutes=30)
 
 
@@ -46,7 +50,7 @@ def cheap_tods(rates: list[Window], tz=None) -> dict[str, set[int]]:
         if len(vals) < 46:                      # a partial list (or a DST day's odd count) can't define the window
             continue
         lo = min(vals.values())
-        out[day] = {k for k, v in vals.items() if v <= lo + EPS}
+        out[day] = {k for k, v in vals.items() if v <= lo * CHEAP_BAND + EPS}
     return out
 
 

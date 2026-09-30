@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.67 (beta)
+
+### Behaviour changes
+- **Deep overnight selling is back.** PowerEngine learns the fixed overnight window from the half-hours at each day's
+  lowest rate. On 30 Sep EDF priced the smart slots at its new 6.66p while that night still ran at the old 6.99p, so
+  the night dropped out of that day's cheap set and the window came out empty. Overnight arbitrage then stayed inside
+  the 75–90% band, as it does outside the window. A half-hour within 15% of the day's lowest rate now counts as cheap.
+  The window, and deep overnight selling with a guaranteed refill, return at the next plan.
+
 ## 0.9.66 (beta)
 
 ### Behaviour changes
