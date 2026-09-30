@@ -2,6 +2,14 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.74 (beta)
+
+### Behaviour changes
+- The app now asks for card 0.9.74 or newer, and warns you if the PowerEngine card is older. The "Savings for a date range" chart on the dashboard needs the new card to work properly. Press Update on the Configuration page to get both.
+
+### Other changes
+- Nothing else changes in how the app controls your battery.
+
 ## 0.9.73 (beta)
 
 ### Behaviour changes
