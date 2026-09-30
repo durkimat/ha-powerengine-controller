@@ -930,13 +930,13 @@ views:
               {%- if p and p.days %}
               {%- set paid = (p.steps[-1].value) | float(0) %}
               {%- set has_axle = 'Axle' in p.steps[-1].label %}
-              {%- set everyday = sv(p.steps, 'Day-to-day cost') | float(0) %}
-              {%- set carry = sv(p.steps, 'Battery carry-over') | float(0) %}
-              {%- set pe_step = sv(p.steps, 'PowerEngine') | float(0) %}
-              {%- set self_use = everyday - pe_step %}
               {%- set no_batt = sv(p.steps, 'No solar or battery') | float(0) %}
+              {%- set solar_step = sv(p.steps, 'Solar') | float(0) %}
+              {%- set tariff_step = sv(p.steps, 'EDF tariff') | float(0) %}
+              {%- set pe_step = sv(p.steps, 'PowerEngine') | float(0) %}
+              {%- set solar_tariff = no_batt + solar_step + tariff_step %}
 
-              **{{ label }}: you paid {{ gbp(paid) }}**{{ " after Axle's payments" if has_axle else "" }}. Day-to-day cost {{ gbp(everyday) }}: with a battery on plain self-use it would have been {{ gbp(self_use) }}, with no solar or battery {{ gbp(no_batt) }}. **PowerEngine saved {{ gbp(self_use - everyday) }}** on top of the hardware.
+              **{{ label }}: you paid {{ gbp(paid) }}**{{ " after Axle's payments" if has_axle else "" }}. With no solar or battery it would have been {{ gbp(no_batt) }}, with solar and your EDF tariff alone {{ gbp(solar_tariff) }}. **The battery and PowerEngine saved {{ gbp(-pe_step) }}** on top of that.
               {%- endif %}
               {%- endmacro %}
               {%- set periods = state_attr('sensor.pe_cost_waterfall', 'periods') or {} %}
@@ -960,12 +960,53 @@ views:
             content: |-
               **Reading the chart, left to right**
               - **No solar or battery:** what the period would have cost buying every kWh from the grid (including the standing charge).
-              - **Solar, Tariff, Self-use battery:** what your solar, your EDF tariff's cheap rates and a battery left on the inverter's default setting would each have saved.
-              - **PowerEngine:** what PowerEngine saved on top of that, by choosing when to charge, discharge and export.
-              - **Day-to-day cost:** the result, a subtotal of your normal half-hours. It leaves out the two items that follow, so days can be compared like for like.
-              - **Carry-over:** energy bought for later (a cost) or used from earlier (a credit). For example, charging at 7p tonight for tomorrow.
+              - **Solar, Tariff:** what your solar and your EDF tariff's cheap rates would each have saved.
+              - **PowerEngine:** what the battery and PowerEngine saved on top of that, by choosing when to charge, discharge and export. It is the real cost of your normal half-hours, with the value of energy carried in the battery from one day to the next taken into account (charging at 7p tonight for tomorrow doesn't make today look dear).
               - **Axle:** Axle and free-power events. Negative means money in: Axle's £1/kWh plus EDF's export payment.
               - **You paid:** the real total for the period, after Axle's payments.
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Savings for a date range
+          # the first and last day (both included); the app works the range out and publishes it as the 'custom' period
+          - type: tile
+            entity: select.pe_ui_cost_from
+            name: From
+            grid_options: {columns: 6}
+            features:
+              - type: select-options
+          - type: tile
+            entity: select.pe_ui_cost_to
+            name: To
+            grid_options: {columns: 6}
+            features:
+              - type: select-options
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
+              {%- macro sv(steps, label) -%}{%- for s in steps if s.label == label -%}{{ s.value }}{%- endfor -%}{%- endmacro %}
+              {%- set p = (state_attr('sensor.pe_cost_waterfall', 'periods') or {}).custom %}
+              {%- if p and p.days %}
+              {%- set paid = (p.steps[-1].value) | float(0) %}
+              {%- set no_batt = sv(p.steps, 'No solar or battery') | float(0) %}
+              {%- set solar_tariff = no_batt + sv(p.steps, 'Solar') | float(0) + sv(p.steps, 'EDF tariff') | float(0) %}
+              {%- set pe_step = sv(p.steps, 'PowerEngine') | float(0) %}
+              **{{ p.from }} to {{ p.to }} ({{ p.days }} day{{ '' if p.days == 1 else 's' }}): you paid {{ gbp(paid) }}**{{ " after Axle's payments" if 'Axle' in p.steps[-1].label else "" }}. With no solar or battery it would have been {{ gbp(no_batt) }}, with solar and your EDF tariff alone {{ gbp(solar_tariff) }}. **The battery and PowerEngine saved {{ gbp(-pe_step) }}** on top of that.
+              {%- elif p %}
+              **No costs for that range.**
+              {%- else %}
+              **Pick a first and last day above.**
+              {%- endif %}
+              {%- if p and p.note %}
+
+              {{ p.note }}
+              {%- endif %}
+          - type: custom:powerengine-waterfall-card
+            grid_options: {columns: full}
+            entity: sensor.pe_cost_waterfall
+            period: custom
       - type: grid
         column_span: 3
         cards:
@@ -1024,22 +1065,13 @@ views:
                     return (entity.attributes.days || []).filter(d => d.scenarios).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.tariff]).filter(p => p[0] >= from);
                 - entity: sensor.pe_cost_days
                   show: {legend_value: false}
-                  name: "+ battery on self-use"
-                  type: column
-                  color: "#42a5f5"
-                  extend_to: false
-                  data_generator: |
-                    const from = Date.now() - 8 * 86400000;
-                    return (entity.attributes.days || []).filter(d => d.scenarios).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.self_use_adj]).filter(p => p[0] >= from);
-                - entity: sensor.pe_cost_days
-                  show: {legend_value: false}
                   name: "PowerEngine"
                   type: column
                   color: "#424242"
                   extend_to: false
                   data_generator: |
                     const from = Date.now() - 8 * 86400000;
-                    return (entity.attributes.days || []).filter(d => d.scenarios).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.actual_adj]).filter(p => p[0] >= from);
+                    return (entity.attributes.days || []).filter(d => d.scenarios).map(d => [new Date(d.date + "T00:00:00").getTime(), Math.round((d.scenarios.actual_adj + d.scenarios.carry) * 100) / 100]).filter(p => p[0] >= from);
           - type: conditional
             grid_options: {columns: full, rows: auto}
             conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
@@ -1065,10 +1097,9 @@ views:
               | No solar or battery | Every kWh from the grid: the house at the standard rate, the car at the overnight rate; plus the standing charge. |
               | Solar | Your solar covers the house first, the surplus is exported; no battery. |
               | + EDF tariff | The same, but grid energy is priced at the real half-hourly rates (smart slots, overnight, peak). |
-              | + battery on self-use | Your battery in the inverter's default mode; it charges only from surplus solar and covers the house when it can. |
-              | PowerEngine | What you actually paid, from the meters. |
+              | PowerEngine | What your normal half-hours really cost, from the meters, with your battery and PowerEngine's control. It includes the carry-over: the day's change in battery charge valued at the overnight rate, so tonight's charging for tomorrow doesn't make today look dear. |
 
-              All scenarios use the same measured house, car and solar. The battery carry-over adjustment values the day's change in battery charge at the overnight rate, so tonight's charging for tomorrow doesn't make today look dear. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated. Axle and free-power events are shown separately.
+              These are the same steps as the savings chart above, day by day. All scenarios use the same measured house, car and solar. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated. Axle and free-power events are left out of these bars and shown separately.
       - type: grid
         column_span: 3
         cards:

@@ -1,3 +1,5 @@
+from datetime import date
+
 import yaml
 
 from pe_core.dashboard import SOURCE, sync_dashboard
@@ -9,7 +11,7 @@ def test_dashboard_is_valid_and_uses_only_pe_entities():
     yaml.safe_load(text)
     known = {e.entity_id for e in ENTITIES}
     import re
-    used = set(re.findall(r"\b(?:sensor|binary_sensor|switch)\.pe_[a-z0-9_]+", text))
+    used = set(re.findall(r"\b(?:sensor|binary_sensor|switch|select)\.pe_[a-z0-9_]+", text))
     assert used and used <= known, used - known
 
 
@@ -174,3 +176,36 @@ def test_sync_dashboard_splices_card_and_writes_only_on_change(tmp_path):
     assert updated != first
     assert "pv2_power_187: sensor.pe_state_solar_shed_power" in updated
     assert "# BEGIN energy-flow" in updated and "# END energy-flow" in updated
+
+
+def test_costs_tab_templates_read_the_new_waterfall_steps():
+    """The waterfall's headline and the custom-range text render against the real step labels (no old steps)."""
+    import jinja2
+
+    from pe_core.costs import waterfall, waterfall_range
+    d = yaml.safe_load(open(SOURCE))
+    cards = [c for v in d["views"] for s in v.get("sections", []) for c in s.get("cards", [])]
+    texts = [c["content"] for c in cards if c.get("type") == "markdown"]
+    headline = next(t for t in texts if "macro headline" in t)
+    custom = next(t for t in texts if "'custom'" in t or ").custom" in t)
+    for old in ("Day-to-day cost", "Battery carry-over", "Battery on self-use", "self-use"):
+        assert old not in headline and old not in custom, old
+
+    days = [{"date": f"2026-09-{n:02d}", "complete": True, "scenarios": {
+        "none": 10.0, "solar": 8.0, "tariff": 7.0, "self_use_adj": 6.0, "actual_adj": 4.0, "carry": 0.5,
+        "events_metered": 0.0, "axle_income": 0.0}} for n in range(1, 11)]
+    attrs = {"periods": {**{p: waterfall(days, p) for p in ("yesterday", "week", "month", "days30")},
+                         "custom": waterfall_range(days, date(2026, 9, 8), date(2026, 9, 3))}}
+    env = jinja2.Environment()
+    env.globals["state_attr"] = lambda ent, attr: attrs.get(attr) if ent == "sensor.pe_cost_waterfall" else None
+    ctx = lambda t: " ".join(env.from_string(t.replace("<<tariff>>", "EDF tariff").replace(  # noqa: E731
+        "<<event>>", "Axle").replace("<<supplier>>", "EDF")).render().split())
+    text = ctx(headline)
+    # week: 7 days x (10, 4.5 paid): none 70, solar+tariff 49, saved 3.5 x 7 = 24.5 from the battery and PowerEngine
+    assert "Last 7 days: you paid £31.50" in text and "£49.00" in text and "saved £17.50" in text
+    cust = ctx(custom)
+    assert "2026-09-03 to 2026-09-08 (6 days): you paid £27.00" in cust and "swapped" in cust
+    attrs["periods"]["custom"] = waterfall_range(days, None, None)
+    assert "No costs for that range" in ctx(custom)
+    del attrs["periods"]["custom"]
+    assert "Pick a first and last day" in ctx(custom)

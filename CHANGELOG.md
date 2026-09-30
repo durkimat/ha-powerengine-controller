@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.72 (beta)
+
+### Behaviour changes
+- **Costs tab, savings chart:** "Battery on self-use" and "Battery carry-over" were very small, so they are gone as separate bars. They are now part of **PowerEngine**, which shows everything the battery and PowerEngine did on top of solar and your tariff. The "Day-to-day cost" subtotal is gone too, because it would now equal the PowerEngine bar. "No solar or battery" and "You paid" are exactly the same as before.
+- **Costs tab, "Daily cost by scenario":** it now has the same steps as the savings chart (No solar or battery, Solar, tariff, PowerEngine). The "+ battery on self-use" bars are gone, and each PowerEngine bar is that day's real cost including the carry-over, so the days add up to the savings chart. The headline sentences and the "What the scenarios mean" text say the same.
+- **New: savings for any date range.** Under the savings chart there is a new "Savings for a date range" section with two pickers, **From** and **To** (for example "7 days ago" and "Yesterday"). Both days are included, up to 30 days back, and only complete days count. If From is after To the two are swapped, and if some days have no costs you are told how many days were used. Above the chart you see the first and last date and how many days it covers. It starts on the last 7 days.
+- The "Savings waterfall" sensor's value is now what the battery and PowerEngine saved yesterday (before it was only PowerEngine's part on top of a plain self-use battery), so it is larger.
+
+### Other changes
+- Two new dashboard settings, `select.pe_ui_cost_from` and `select.pe_ui_cost_to`, hold the chosen range.
+- The range is worked out from the days PowerEngine already keeps, so there are no extra calls to your supplier or any other outside service.
+
 ## 0.9.71 (beta)
 
 ### Behaviour changes
