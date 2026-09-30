@@ -57,7 +57,7 @@ def test_car_finishing_early_shows_less_than_planned_and_summary_counts():
     run(tr, range(200, 205), [])                                        # c withdrawn before it starts
     s = tr.summary(T0 + 205 * M)
     assert (s["slots"], s["used"], s["done_no_car"], s["cancelled"], s["cut_short"]) == (3, 1, 1, 1, 0)
-    assert abs(s["car_kwh"] - 7000 * 20 / 60 / 1000) < 0.05 and s["planned_kwh"] == 9.0     # rounded to 0.1
+    assert abs(s["car_kwh"] - 7000 * 20 / 60 / 1000) < 0.05 and s["planned_kwh"] == 6.0  # a, b ran; c never did
     assert s["recent"][0]["time"] == "22:00–23:00"
 
 

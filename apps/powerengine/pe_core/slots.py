@@ -45,12 +45,14 @@ class SlotTracker:
             if rec is None:
                 rec = self.slots[key] = {"start": key, "end": w.end.isoformat(),
                                          "planned_kwh": abs(w.value) if w.value is not None else None,
+                                         "listed_h": round((w.end - w.start).total_seconds() / 3600, 4),
                                          "first_seen": now.isoformat(timespec="seconds"), "status": "planned",
                                          "car_kwh": 0.0, "charging_min": 0.0, "confirmed": False}
                 changed = True
             rec["end"] = w.end.isoformat()
             if w.value is not None:
                 rec["planned_kwh"] = abs(w.value)                     # EDF/Octopus report it as negative
+            rec["listed_h"] = round((w.end - w.start).total_seconds() / 3600, 4)     # ...for this whole listing
         for key, rec in self.slots.items():
             start, end = datetime.fromisoformat(rec["start"]), datetime.fromisoformat(rec["end"])
             if key in done and not rec["confirmed"]:
@@ -104,8 +106,26 @@ class SlotTracker:
             json.dump(self.slots, fh)
         os.replace(tmp, self.path)
 
-    def summary(self, now: datetime, days: int = 14, tz=None) -> dict:
-        """Counts and recent slots for the Health tab."""
+    @staticmethod
+    def planned_kwh(rec: dict, max_kw: float = 7.4) -> float | None:
+        """The energy EDF planned for the slot as it ran: the listed energy, for the time the slot lasted.
+
+        EDF lists one energy for a whole dispatch (63 kWh for 19:00-04:00: the charger's rate over nine hours), and
+        re-lists a running dispatch from the current half-hour. The record keeps the first listing's energy while its
+        end moves to where it was cut or continued, so a 30-minute slot read 38.5 kWh (29 Sep 2026). Scale the listed
+        energy by the share of the listing the slot covers; a record from before `listed_h` was kept can't be scaled,
+        so it is capped at what the charger could deliver in the time (`max_kw`)."""
+        value = rec.get("planned_kwh")
+        if value is None:
+            return None
+        start, end = datetime.fromisoformat(rec["start"]), datetime.fromisoformat(rec["end"])
+        hours = max(0.0, (end - start).total_seconds() / 3600)
+        listed = rec.get("listed_h")
+        kwh = value * min(1.0, hours / listed) if listed else min(value, max_kw * hours)
+        return round(kwh, 2)
+
+    def summary(self, now: datetime, days: int = 14, tz=None, max_kw: float = 7.4) -> dict:
+        """Counts and recent slots for the Health tab. `max_kw`: the car charger's rating (caps old records)."""
         since = (now - timedelta(days=days)).isoformat()
         recent = sorted((r for k, r in self.slots.items() if k >= since), key=lambda r: r["start"])
         finished = [r for r in recent if r["status"] != "planned"]
@@ -116,7 +136,10 @@ class SlotTracker:
             "done_no_car": len([r for r in finished if r["status"] == "done" and r["car_kwh"] < 0.2]),
             "cancelled": len([r for r in finished if r["status"] == "cancelled"]),
             "cut_short": len([r for r in finished if r["status"] == "cut_short"]),
-            "planned_kwh": round(sum(r.get("planned_kwh") or 0.0 for r in finished), 1),
+            # what EDF planned for the slots that ran (a withdrawn slot never ran, and EDF re-plans often: counting
+            # those, and each re-listing of the same hours, gave 5345 kWh over 14 days)
+            "planned_kwh": round(sum(self.planned_kwh(r, max_kw) or 0.0 for r in finished
+                                     if r["status"] in ("done", "cut_short")), 1),
             "car_kwh": round(sum(r["car_kwh"] for r in finished), 1),
             "upcoming": len([r for r in recent if r["status"] == "planned"]),
         }
@@ -125,7 +148,7 @@ class SlotTracker:
             s, e = datetime.fromisoformat(r["start"]), datetime.fromisoformat(r["end"])
             ls, le = (s.astimezone(tz), e.astimezone(tz)) if tz else (s, e)
             rows.append({"day": ls.strftime("%a %d %b"), "time": f"{ls:%H:%M}–{le:%H:%M}", "status": r["status"],
-                         "planned_kwh": r.get("planned_kwh"), "car_kwh": round(r["car_kwh"], 2),
+                         "planned_kwh": self.planned_kwh(r, max_kw), "car_kwh": round(r["car_kwh"], 2),
                          "charging_min": r["charging_min"], "confirmed": r["confirmed"]})
         out["recent"] = rows
         return out

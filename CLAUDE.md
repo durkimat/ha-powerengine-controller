@@ -95,6 +95,15 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   `push --apply`. Commit there only right after he says he has pulled. He pushes and applies it.
 - **Never hard-code a supplier or device name in user text** (EDF, Zappi, Solcast, Solis, Axle): use the names map
   (`pe_core/names.py`, `N(term)` or a `<<term>>` placeholder). Stored names (entity ids, topics, keys) never change.
+- **A forced charge must never buy grid energy at a dear rate that the plan didn't count.** The plan drops a
+  grid-charge that needs no grid energy at a non-cheap price (`_solar_only_charges`, planner.py): with RAM control a
+  "charge" is a fixed-power Force charge, and less sun than forecast meant importing at 30.28p (29 Sep 2026). Sentences
+  must name the price the decision used (`_car_slot_p`: "tariff still 30.28p" for a planned slot not yet priced).
+- **Decisions at a charge target latch for the half-hour** (`_held_at_target`, decide.py). The inverter's SoC reads a
+  point lower while charging than while holding, so without it Force charge and Hold alternated every 30 s.
+  `Decision.details["reached"]` carries the latch; nothing else may use `details` for other purposes without care.
+- **Display wording vs mode keys:** `ModeDecision.label` ("waiting for inputs") is for logs and the summary only;
+  `effective == "unconfigured"` stays the key the entity, the card and the code use.
 - **Deleting files:** only when he asks. Put scratch files in `$HOME/mnt/powerengine/_to_delete`.
 
 ## Current work: making it generic (Phase 0)

@@ -94,7 +94,7 @@ def summary(r: Readings | None, mode: ModeDecision, tz: tzinfo | None = None,
             decision: Decision | None = None) -> str:
     """One paragraph: mode, the decision and why, then what is happening now."""
     if mode.effective == "unconfigured" or r is None:
-        return f"UNCONFIGURED. {mode.reason}"
+        return f"{'WAITING FOR INPUTS' if mode.waiting else 'UNCONFIGURED'}. {mode.reason}"
     prefix = "PASSIVE." if mode.effective == "passive" else "ACTIVE."
     lead = [decision.sentence(passive=mode.effective == "passive").rstrip(".")] if decision else []
     parts = lead + [p for p in (_battery(r), _flows(r), _price(r, tz)) if p] + _events(r, tz)

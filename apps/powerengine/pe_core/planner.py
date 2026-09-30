@@ -112,6 +112,16 @@ def _slot_p(s: Slot) -> str:
     return _p(s.slot_price if s.slot_price is not None else s.price)
 
 
+def _car_slot_p(s: Slot, p: Params) -> str:
+    """The price in a car smart-slot sentence where the battery only holds. A slot EDF has planned but not yet priced
+    still shows the tariff's ordinary rate (30.28p at 21:17 on 29 Sep 2026, 30 s before it showed 6.99p): say so,
+    rather than name a peak price as the slot's price."""
+    price = _tariff_price(s)
+    if price is not None and price * 100 > p.cheap_cap_p:
+        return f"tariff still {_p(price)}"
+    return _slot_p(s)
+
+
 def _p(gbp: float | None) -> str:
     return "?" if gbp is None else (f"{gbp * 100:.2f}".rstrip("0").rstrip(".") + "p")
 
@@ -280,7 +290,7 @@ def _default(s: Slot, p: Params, tz) -> PlanSlot:
                "forecast is wrong")
         return PlanSlot(s, GRID_CHARGE, why, target_soc=p.buffer_target)
     if car_slot(s, p):
-        return PlanSlot(s, HOLD, f"car smart-charge slot ({_slot_p(s)}): the battery mustn't feed the car")
+        return PlanSlot(s, HOLD, f"car smart-charge slot ({_car_slot_p(s, p)}): the battery mustn't feed the car")
     if cheap:
         why = f"cheap import ({_p(_tariff_price(s))}): the grid covers the house, the battery is saved for later"
         return PlanSlot(s, HOLD, why)
@@ -402,6 +412,8 @@ def _overlay(rules: Plan, opt: dict, soc: float, p: Params, now: datetime, tz) -
         reason = ps.reason if a == ps.action and a != GRID_CHARGE else _why(i, a, src, acts, cheap, p, now, tz)
         out.append(replace(ps, action=a, reason=reason, target_soc=target))
     simulate(out, soc, p)
+    if _solar_only_charges(out, cheap, p):
+        simulate(out, soc, p)
     plan = Plan(slots=out, made_at=now, cheap_p=rules.cheap_p, cost=sum(x.cost for x in out),
                 baseline_cost=rules.baseline_cost, strategy="optimiser")
     base_end = rules.slots[-1].soc_end - rules.extra_kwh / p.capacity_kwh * 100 if rules.slots else 0.0
@@ -410,6 +422,45 @@ def _overlay(rules: Plan, opt: dict, soc: float, p: Params, now: datetime, tz) -
     plan.extra_value = plan.extra_kwh * min(prices) if prices else 0.0
     plan.windows = windows(out, tz, now)
     return plan
+
+
+SOLAR_ONLY_KWH = 0.05      # grid energy into the battery below which a charge is "solar surplus only"
+
+
+def _solar_only_charges(out: list[PlanSlot], cheap: list[bool], p: Params) -> bool:
+    """Drop a grid-charge that needs no grid energy, when the slot is not cheap.
+
+    With the forecast's solar surplus covering the whole charge (or nothing to charge at all), "grid-charge" and
+    self-use / hold fill the battery the same in the plan, and the optimiser could pick either. But a forced charge is
+    not the same in the house: it draws the full charge power whatever the sun does, so with less sun than forecast
+    the shortfall was bought at the peak rate to sell later at the export rate (29 Sep 2026: 30.28p in,
+    15p out). Self-use (surplus to charge) or hold (nothing to charge) only ever use the surplus that is really
+    there. The sentence for it said "charge at 30.28p" although no grid energy was in the plan. Cheap slots,
+    free-power slots and a car's cheap smart slot keep their forced charge. Returns whether it changed anything (the
+    caller then re-simulates)."""
+    from .optimiser import car_cheap_charge
+    changed = False
+    for i, ps in enumerate(out):
+        s = ps.slot
+        if ps.action != GRID_CHARGE or cheap[i] or (p.free_enabled and s.free) or car_cheap_charge(s, p):
+            continue
+        house = _house_import(ps)
+        if ps.grid_import > house + SOLAR_ONLY_KWH:
+            continue                                   # the plan does buy this energy, at a price it weighed
+        if ps.grid_to_battery > SOLAR_ONLY_KWH:
+            out[i] = replace(ps, action=SELF_USE, target_soc=None,
+                             reason="the battery covers the house; any solar surplus goes into it")
+        else:
+            out[i] = replace(ps, action=HOLD, target_soc=None, reason="keep the charge for later")
+        changed = True
+    return changed
+
+
+def _house_import(ps: PlanSlot) -> float:
+    """What the slot would import for the house alone (no battery charge), in kWh."""
+    s = ps.slot
+    frac = ps.hours / DT_H if ps.hours != DT_H else 1.0
+    return max(0.0, (s.load_kwh - s.solar_kwh) * frac)
 
 
 def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool], p: Params, now, tz) -> str:
@@ -435,7 +486,7 @@ def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool]
         return f"sell at {_p(s.export)}: stored energy is worth more sold than used"
     if a == HOLD:
         if car_slot(s, p):
-            return f"car smart-charge slot ({_slot_p(s)}): the battery mustn't feed the car"
+            return f"car smart-charge slot ({_car_slot_p(s, p)}): the battery mustn't feed the car"
         if cheap[i]:
             return f"cheap import ({_p(_tariff_price(s))}): the grid covers the house, the battery is saved for later"
         for j in range(i + 1, len(src)):
