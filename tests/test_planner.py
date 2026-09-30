@@ -323,3 +323,34 @@ def test_optimiser_never_feeds_the_car_in_a_smart_slot():
 
 def test_rules_strategy_unchanged_by_default():
     assert make_plan(day(), soc=60.0, p=Params(), now=T0).strategy == "rules"
+
+
+# --- late-notice Axle event: the pre-event charge is credited to the event, not a later sale ---
+
+def _late_event_slots(event_slots):
+    t0 = datetime(2026, 10, 2, 13, 0, tzinfo=timezone.utc)   # 14:00 BST, peak, cheap only from 23:00
+    out = []
+    for i in range(36):
+        cheap = i >= 20
+        s = Slot(t0 + i * SLOT, 0.0666 if cheap else 0.2884, 0.15, load_kwh=0.4, overnight=cheap)
+        s.axle = 4 <= i < 4 + event_slots
+        out.append(s)
+    return t0, out
+
+
+def test_late_notice_event_precharge_is_credited_to_event():
+    t0, slots = _late_event_slots(4)
+    plan = make_plan(slots, 15.0, Params(capacity_kwh=18, arbitrage=True, axle_kw=6.0), t0, strategy="optimiser")
+    charges = [ps for ps in plan.slots[:4] if ps.action == GRID_CHARGE]
+    assert charges and all(round(ps.slot.price * 100, 2) == 28.84 for ps in charges)
+    assert all(ps.action == FORCE_DISCHARGE for ps in plan.slots[4:8])
+    for ps in charges:
+        assert "event" in ps.reason and "£1.15" in ps.reason and "28.84p" in ps.reason
+        assert "sell at 15p" not in ps.reason
+
+
+def test_event_with_enough_battery_has_no_precharge():
+    t0, slots = _late_event_slots(2)
+    plan = make_plan(slots, 60.0, Params(capacity_kwh=18, arbitrage=True, axle_kw=4.8), t0, strategy="optimiser")
+    assert all(ps.action != GRID_CHARGE for ps in plan.slots[:4])
+    assert all(ps.action == FORCE_DISCHARGE for ps in plan.slots[4:6])

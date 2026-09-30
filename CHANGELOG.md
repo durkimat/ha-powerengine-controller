@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.68 (beta)
+
+### Behaviour changes
+- None. Late-notice Axle events already worked: with no cheap slot before an event, PowerEngine charges at the peak
+  rate, but only as much as the event can sell at full power, because £1.15/kWh is worth far more than about 30p.
+
+### Fixes
+- The plan now says what a pre-event charge is for: "charge at 28.84p for the Axle event at 16:00: £1.15/kWh (£1
+  Axle + 15p export)". It used to read "charge at 28.84p to sell at 15p from 02:00 tomorrow", which looked like a
+  losing trade. New tests cover a late-notice event, and a battery that already holds enough.
+
 ## 0.9.67 (beta)
 
 ### Behaviour changes
