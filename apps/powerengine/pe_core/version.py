@@ -17,10 +17,11 @@ def installed_version(path: str) -> str | None:
     return m.group(1) if m else None
 
 
-# The oldest card this app works with, published as `min_card_version` on sensor.pe_diag_version. 0.9.70 is the card
-# that reloads the page after a demo change and reads the demo's text-typed flags. Raise it only when the app starts
+# The oldest card this app works with, published as `min_card_version` on sensor.pe_diag_version. 0.9.74 is the card
+# with the savings chart's Custom button (the dashboard's date-range card uses period: custom; 0.9.70 reloaded the page
+# after a demo change and read the demo's text-typed flags). Raise it only when the app starts
 # to need something a newer card does. The card holds the matching MIN_APP_VERSION for the other direction.
-MIN_CARD_VERSION = "0.9.70"
+MIN_CARD_VERSION = "0.9.74"
 
 _DOTTED = re.compile(r"^\s*v?(\d+(?:\.\d+)*)\s*$")
 

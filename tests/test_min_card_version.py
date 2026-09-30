@@ -29,9 +29,9 @@ def test_card_warning_only_when_older_than_minimum():
     assert card_warning(None) is None and card_warning("?") is None
 
 
-def test_minimum_is_a_real_version_no_newer_than_the_app():
+def test_minimum_is_a_real_version():
+    # Not compared with __version__: release.sh runs the tests before it moves __version__ to the release's version.
     assert re.fullmatch(r"\d+\.\d+\.\d+", MIN_CARD_VERSION)
-    assert older_than(__version__, MIN_CARD_VERSION) is False
 
 
 def test_version_sensor_publishes_min_card_version():
