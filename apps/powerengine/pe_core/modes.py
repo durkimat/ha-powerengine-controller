@@ -24,6 +24,14 @@ class ModeDecision:
     configured: str
     effective: str
     reason: str
+    waiting: bool = False          # "unconfigured" only because required inputs aren't ready yet (a config exists)
+
+    @property
+    def label(self) -> str:
+        """The words for logs and the summary. The key stays `effective` ("unconfigured"): entities, the card and the
+        code compare it. A configured app whose inputs are briefly missing (an HA restart) is waiting, not
+        unconfigured."""
+        return "waiting for inputs" if self.waiting else self.effective
 
 
 ABSENT = ("None", "unknown", "unavailable")
@@ -69,7 +77,8 @@ def effective_mode(cfg: Config | None, config_error: str | None = None,
         return ModeDecision(UNCONFIGURED, UNCONFIGURED, "No config.yaml yet; set PowerEngine up on the config page.")
     if missing_required:
         shown = ", ".join(list(missing_required)[:4]) + ("…" if len(missing_required) > 4 else "")
-        return ModeDecision(cfg.mode, UNCONFIGURED, f"{len(missing_required)} required input(s) not ready: {shown}")
+        return ModeDecision(cfg.mode, UNCONFIGURED, f"{len(missing_required)} required input(s) not ready: {shown}",
+                            waiting=True)
     if cfg.mode == PASSIVE:
         return ModeDecision(PASSIVE, PASSIVE, "Passive: monitoring and simulating only; nothing is controlled.")
     if not build_supports_active:

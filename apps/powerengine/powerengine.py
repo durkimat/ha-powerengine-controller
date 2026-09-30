@@ -506,7 +506,7 @@ class PowerEngine(hass.Hass):
             "save_path": self._save_path(),
             "error": self.cfg_error,
         })
-        self.log(f"Inputs: {overall}; mode {mode.effective} ({mode.reason})")
+        self.log(f"Inputs: {overall}; mode {mode.label} ({mode.reason})")
 
     # --- the monitoring cycle ------------------------------------------------------
 
@@ -1849,7 +1849,7 @@ class PowerEngine(hass.Hass):
         if old is None or old.effective != "active" or new.effective == "active":
             return
         if getattr(self, "_ram_was_on", False):
-            self._ram_off(f"leaving Active ({new.effective})")
+            self._ram_off(f"leaving Active ({new.label})")
         if guards and new.configured == "active":
             self.log(f"Leaving Active: {new.reason}", level="WARNING")
             self._notify("health", ("control:guard", "PowerEngine: control stopped", new.reason))
@@ -1861,7 +1861,7 @@ class PowerEngine(hass.Hass):
             self.log(f"Inputs not ready ({new.reason}); the inverter keeps its programmed windows for "
                      f"{INPUT_GRACE_SECONDS // 60} minutes while they come back", level="WARNING")
             return
-        self.log(f"Leaving Active ({new.effective}: {new.reason}); returning the inverter to Self-Use",
+        self.log(f"Leaving Active ({new.label}: {new.reason}); returning the inverter to Self-Use",
                  level="INFO" if new.effective == "paused" or new.configured == "passive" else "WARNING")
         if new.effective == "paused":
             self._logbook("control paused; inverter returned to Self-Use")
@@ -2504,7 +2504,8 @@ class PowerEngine(hass.Hass):
             return
         try:
             h = self.costbook.health(self._today(), getattr(self, "_checks", None))
-            h["slots"] = self.slots.summary(datetime.now(timezone.utc), tz=self.tz)
+            h["slots"] = self.slots.summary(datetime.now(timezone.utc), tz=self.tz,
+                                                max_kw=float(self.cfg.safety.get("ev_charger_kw", 7.4)))
             h["smart_requests"] = self.smart.summary(datetime.now(timezone.utc), tz=self.tz)
             f = clock.finding(getattr(self, "_clock_drift", None))
             if f:

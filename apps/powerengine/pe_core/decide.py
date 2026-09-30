@@ -135,7 +135,7 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
 
     # With a plan, live overrides first (Axle now, free power now, car charging now), then the plan.
     if plan is not None and plan.slots:
-        return _with_plan(r, cfg, plan, soc, price, cheap, target)
+        return _with_plan(r, cfg, plan, soc, price, cheap, target, previous)
 
     # 2. Keep enough charge for an upcoming Axle event
     soon = r.axle_state() == "scheduled" and r.axle_start - r.now <= timedelta(hours=s["pre_axle_lookahead_h"])
@@ -212,13 +212,43 @@ def _run_destination(plan, ps) -> float | None:
     return target
 
 
-def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bool, target: float) -> Decision:
+LATCH_BAND_SOC = 2.0     # a charge target reached this half-hour stays reached until the charge is this far below it
+
+
+def _reached_text(target: float) -> str:
+    return f"reached the {target:.0f}% charge target for this half-hour: holding until the next one"
+
+
+def _held_at_target(previous: Decision | None, ps, soc: float) -> Decision | None:
+    """The plan's charge target for this half-hour was reached (and held) a moment ago: keep holding until the half-hour
+    ends. The inverter's charge is a whole number that reads a point lower while it is charging than while it holds
+    (93 charging, 94 holding), so without this the app flipped between Force charge and Hold every 30 s at the target
+    (29 Sep 2026, 22:38-22:44 and twice more). It lets go when the charge has really dropped (at least
+    LATCH_BAND_SOC below the target), or the plan now wants a clearly higher target; the plan's action changing, or
+    the half-hour ending, means it is not asked at all."""
+    if (previous is None or previous.action != HOLD or previous.rule != "plan"
+            or ps.action != GRID_CHARGE or ps.target_soc is None):
+        return None
+    latch = previous.details.get("reached")
+    if not latch or latch.get("slot") != ps.slot.start.isoformat():
+        return None
+    held = latch["target"]
+    if soc <= held - LATCH_BAND_SOC or ps.target_soc >= held + LATCH_BAND_SOC:
+        return None
+    return previous
+
+
+def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bool, target: float,
+               previous: Decision | None = None) -> Decision:
     s, f = cfg.safety, cfg.features
     if f.get("free_power_days") and r.free_state() == "active":
         return Decision(GRID_CHARGE, "free_power", "free-electricity session: fill the battery", target_soc=100)
     ps = plan.slots[0]
+    held = _held_at_target(previous, ps, soc)
     if r.house_includes_ev and r.ev_state() == "charging":
         # the battery mustn't feed the car: follow the plan if it charges now; at a cheap rate charge it too
+        if held is not None:
+            return held
         if ps.action == GRID_CHARGE:
             return Decision(GRID_CHARGE, "car_charging", f"car is charging; {ps.reason}", target_soc=ps.target_soc,
                             label_target_soc=_run_destination(plan, ps))
@@ -233,10 +263,12 @@ def _with_plan(r: Readings, cfg: Config, plan, soc: float, price: str, cheap: bo
         return Decision(HOLD, "plan", f"{N('event')} event due now per the plan, but not started yet: holding charge")
     if ps.action == SELF_USE and soc <= s["min_reserve_soc"]:
         return Decision(HOLD, "reserve", f"battery at its {s['min_reserve_soc']:.0f}% minimum reserve")
+    if held is not None:
+        return held
     if ps.action == GRID_CHARGE and ps.target_soc is not None and soc >= ps.target_soc:
         # the plan charges only up to its target and lets the grid cover the house for the rest of the half-hour;
         # without this the inverter kept charging (RAM control: 63% -> 82% against a 76% target, 28 Sep 2026)
-        return Decision(HOLD, "plan", f"reached the {ps.target_soc:.0f}% charge target for this half-hour: "
-                        "holding until the next one", target_soc=ps.target_soc)
+        return Decision(HOLD, "plan", _reached_text(ps.target_soc), target_soc=ps.target_soc,
+                        details={"reached": {"slot": ps.slot.start.isoformat(), "target": ps.target_soc}})
     return Decision(ps.action, "plan", ps.reason, target_soc=ps.target_soc,
                     label_target_soc=_run_destination(plan, ps) if ps.action == GRID_CHARGE else None)

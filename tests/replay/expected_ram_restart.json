@@ -452,7 +452,7 @@ null
 },
 {
 "t": "2026-09-27T20:30:00+00:00",
-"plan": "sssEEECCCEEEECCCCCCssssssssCCCCC",
+"plan": "sssEEECCCEEEECCCCCCsssssssssHHHH",
 "soc": [
 91,
 58,
@@ -461,12 +461,12 @@ null
 78,
 97,
 94,
-95
+98
 ]
 },
 {
 "t": "2026-09-27T20:35:00+00:00",
-"plan": "sEsEEECCCCEEECCCCCCssssssssCCCCC",
+"plan": "sEsEEECCCCEEECCCCCCsssssssssHHHH",
 "soc": [
 90,
 44,
@@ -475,12 +475,12 @@ null
 90,
 97,
 94,
-95
+98
 ]
 },
 {
 "t": "2026-09-27T20:40:00+00:00",
-"plan": "ssHEEECCCEEEECCCCCCssssssssCCCCC",
+"plan": "ssHEEECCCEEEECCCCCCsssssssssHHHH",
 "soc": [
 89,
 58,
@@ -489,12 +489,12 @@ null
 78,
 97,
 94,
-95
+98
 ]
 },
 {
 "t": "2026-09-27T20:45:00+00:00",
-"plan": "sssEEECCCCEEECCCCCCssssssssCCCCC",
+"plan": "sssEEECCCCEEECCCCCCsssssssssHHHH",
 "soc": [
 87,
 55,
@@ -503,7 +503,7 @@ null
 90,
 97,
 94,
-95
+98
 ]
 },
 {
@@ -514,7 +514,7 @@ null
 },
 {
 "t": "2026-09-27T20:50:00+00:00",
-"plan": "sssEEECCCCEEECCCCCCssssssssCCCCC",
+"plan": "sssEEECCCCEEECCCCCCsssssssssHHHH",
 "soc": [
 87,
 54,
@@ -523,12 +523,12 @@ null
 90,
 97,
 94,
-95
+98
 ]
 },
 {
 "t": "2026-09-27T20:55:00+00:00",
-"plan": "sssEEECCCEEEECCCCCCssssssssCCCCC",
+"plan": "sssEEECCCEEEECCCCCCsssssssssHHHH",
 "soc": [
 89,
 57,
@@ -537,12 +537,12 @@ null
 76,
 97,
 94,
-95
+98
 ]
 },
 {
 "t": "2026-09-27T21:00:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCssssssssCCCCCC",
+"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
 "soc": [
 90,
 59,
@@ -551,12 +551,12 @@ null
 100,
 96,
 94,
-95
+100
 ]
 },
 {
 "t": "2026-09-27T21:07:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCssssssssCCCCCC",
+"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
 "soc": [
 91,
 60,
@@ -565,7 +565,7 @@ null
 100,
 96,
 94,
-95
+100
 ]
 },
 {
@@ -576,7 +576,7 @@ null
 },
 {
 "t": "2026-09-27T21:10:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCssssssssCCCCCC",
+"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
 "soc": [
 92,
 61,
@@ -585,7 +585,7 @@ null
 100,
 96,
 94,
-95
+100
 ]
 },
 {
@@ -612,7 +612,7 @@ null
 },
 {
 "t": "2026-09-27T21:15:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCssssssssCCCCCC",
+"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
 "soc": [
 93,
 63,
@@ -621,12 +621,12 @@ null
 100,
 96,
 94,
-95
+100
 ]
 },
 {
 "t": "2026-09-27T21:20:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCssssssssCCCCCC",
+"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
 "soc": [
 94,
 63,
@@ -635,7 +635,7 @@ null
 100,
 96,
 94,
-95
+100
 ]
 },
 {
@@ -649,7 +649,7 @@ null
 },
 {
 "t": "2026-09-27T21:25:00+00:00",
-"plan": "EEEECCCEEEECCCCCCCssssssssCCCCCC",
+"plan": "EEEECCCEEEECCCCCCCsssssssssHHHHH",
 "soc": [
 92,
 61,
@@ -658,7 +658,7 @@ null
 100,
 96,
 94,
-95
+100
 ]
 },
 {
@@ -689,7 +689,7 @@ null
 },
 {
 "t": "2026-09-27T21:26:00+00:00",
-"plan": "EEEECCCEEEECCCCCCCssssssssCCCCCC",
+"plan": "EEEECCCEEEECCCCCCCsssssssssHHHHH",
 "soc": [
 92,
 61,
@@ -698,7 +698,7 @@ null
 100,
 96,
 94,
-95
+100
 ]
 },
 {
@@ -785,7 +785,7 @@ null
 },
 {
 "t": "2026-09-27T21:30:00+00:00",
-"plan": "EEECCCEEEECCCCCCCsssssssCCCCCCCC",
+"plan": "EEECCCEEEECCCCCCCssssssssHHHHHHH",
 "soc": [
 79,
 77,
@@ -794,7 +794,7 @@ null
 100,
 95,
 94,
-94
+100
 ]
 },
 {
@@ -897,7 +897,7 @@ null
 },
 {
 "t": "2026-09-27T21:35:00+00:00",
-"plan": "EEECCCEEEECCCCCCCsssssssCCCCCCCC",
+"plan": "EEECCCEEEECCCCCCCssssssssHHHHHHH",
 "soc": [
 80,
 77,
@@ -906,7 +906,7 @@ null
 100,
 95,
 94,
-94
+100
 ]
 },
 {
@@ -1001,7 +1001,7 @@ null
 },
 {
 "t": "2026-09-27T21:40:00+00:00",
-"plan": "EEECCCEEEECCCCCCCsssssssCCCCCCCC",
+"plan": "EEECCCEEEECCCCCCCssssssssHHHHHHH",
 "soc": [
 81,
 78,
@@ -1010,7 +1010,7 @@ null
 100,
 95,
 94,
-94
+100
 ]
 },
 {
@@ -1105,7 +1105,7 @@ null
 },
 {
 "t": "2026-09-27T21:45:00+00:00",
-"plan": "EEEECCCCEEECCCCCCsssssssCCCCCCCC",
+"plan": "EEEECCCCEEECCCCCCssssssssHHHHHHH",
 "soc": [
 83,
 52,
@@ -1114,7 +1114,7 @@ null
 100,
 95,
 94,
-94
+100
 ]
 },
 {
@@ -1313,7 +1313,7 @@ null
 },
 {
 "t": "2026-09-27T21:55:00+00:00",
-"plan": "EEEECCCCEEECCCCCCsssssssCCCCCCCC",
+"plan": "EEEECCCCEEECCCCCCssssssssHHHHHHH",
 "soc": [
 86,
 55,
@@ -1322,7 +1322,7 @@ null
 100,
 95,
 94,
-94
+100
 ]
 },
 {
@@ -1437,7 +1437,7 @@ null
 },
 {
 "t": "2026-09-27T22:00:00+00:00",
-"plan": "EEECCCEEEECCCCCCsssssssCCCCCCCCE",
+"plan": "EEECCCEEEECCCCCCssssssssHHHHHHHE",
 "soc": [
 73,
 71,
@@ -1445,8 +1445,8 @@ null
 65,
 99,
 94,
-94,
-94
+95,
+100
 ]
 },
 {
@@ -1561,7 +1561,7 @@ null
 },
 {
 "t": "2026-09-27T22:05:00+00:00",
-"plan": "EEECCCEEEECCCCCCsssssssCCCCCCCCE",
+"plan": "EEECCCEEEECCCCCCssssssssHHHHHHHE",
 "soc": [
 76,
 73,
@@ -1569,8 +1569,8 @@ null
 67,
 99,
 94,
-94,
-94
+95,
+100
 ]
 },
 {
@@ -1685,7 +1685,7 @@ null
 },
 {
 "t": "2026-09-27T22:10:00+00:00",
-"plan": "EEECCCEEEECCCCCCsssssssCCCCCCCCE",
+"plan": "EEECCCEEEECCCCCCssssssssHHHHHHHE",
 "soc": [
 78,
 75,
@@ -1693,8 +1693,8 @@ null
 70,
 99,
 94,
-94,
-94
+95,
+100
 ]
 },
 {
@@ -1809,7 +1809,7 @@ null
 },
 {
 "t": "2026-09-27T22:15:00+00:00",
-"plan": "EEECCCEEEECCCCCCsssssssCCCCCCCCE",
+"plan": "EEECCCEEEECCCCCCssssssssHHHHHHHE",
 "soc": [
 82,
 79,
@@ -1817,8 +1817,8 @@ null
 71,
 99,
 94,
-94,
-94
+95,
+100
 ]
 },
 {
@@ -1933,7 +1933,7 @@ null
 },
 {
 "t": "2026-09-27T22:20:00+00:00",
-"plan": "EEEECCCCEEECCCCCsssssssCCCCCCCCE",
+"plan": "EEEECCCCEEECCCCCssssssssHHHHHHHE",
 "soc": [
 84,
 53,
@@ -1941,8 +1941,8 @@ null
 73,
 99,
 94,
-94,
-94
+95,
+100
 ]
 },
 {
@@ -2057,7 +2057,7 @@ null
 },
 {
 "t": "2026-09-27T22:25:00+00:00",
-"plan": "EEEECCCCEEECCCCCsssssssCCCCCCCCE",
+"plan": "EEEECCCCEEECCCCCssssssssHHHHHHHE",
 "soc": [
 87,
 56,
@@ -2065,8 +2065,8 @@ null
 73,
 99,
 94,
-94,
-94
+95,
+100
 ]
 },
 {
