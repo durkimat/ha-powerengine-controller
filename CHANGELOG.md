@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.71 (beta)
+
+### Behaviour changes
+- None.
+
+### Versions and tooling
+- The app and the card no longer have to be at the same version. Each says the oldest version of the other it works
+  with: the app needs card 0.9.70 or later, and the card needs app 0.9.69 or later. A warning shows only when one is
+  older than that. The card is now released only when it changes, so its version may skip numbers.
+- The app publishes `min_card_version` on `sensor.pe_diag_version`.
+- Developer tools: `tools/release.sh`, which releases in one command, and `tools/diag_summary.py`, a one-screen summary
+  of a diagnostics export.
+
 ## 0.9.70 (beta)
 
 ### Behaviour changes
