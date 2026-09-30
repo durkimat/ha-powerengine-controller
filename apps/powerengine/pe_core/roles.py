@@ -6,8 +6,9 @@ descriptions, units, sign conventions and suggestions live here only.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
+from .adapters.definition import role_suggestions
 from .names import fill
 
 # kind -> what the value is; drives unit checks and how the card shows it
@@ -73,16 +74,16 @@ GROUPS = (
 _GUARD = ("switch", "input_boolean", "automation", "binary_sensor")
 _E = r"^sensor\.edf_energy_electricity_"
 
-ROLES: tuple[Role, ...] = (
+_BASE_ROLES: tuple[Role, ...] = (
     # --- battery ---
     Role("battery_soc", "battery", "Battery state of charge", "How full the battery is. Used by every decision.",
-         "percent", suggest=(r"^sensor\.solis_battery_soc$",)),
+         "percent"),
     Role("battery_power", "battery", "Battery power", "Live charge/discharge power (unless the pair below is mapped).",
-         "power", signed=True, sign_note="+ discharging, - charging", suggest=(r"^sensor\.solis_battery_power$",)),
+         "power", signed=True, sign_note="+ discharging, - charging"),
     Role("battery_charge_power", "battery", "Battery charging power", "If Battery power has no sign: power in.",
-         "power", required="no", suggest=(r"^sensor\.solis_battery_input_energy$",)),
+         "power", required="no"),
     Role("battery_discharge_power", "battery", "Battery discharging power", "If Battery power has no sign: power out.",
-         "power", required="no", suggest=(r"^sensor\.solis_battery_output_energy$",)),
+         "power", required="no"),
     Role("battery_capacity", "battery", "Usable battery capacity", "Energy the battery can actually deliver.",
          "static", static_ok=True, static_unit="kWh", suggest_static=18.0, measurable=True),
     Role("battery_round_trip", "battery", "Battery round-trip efficiency", "Energy out ÷ energy in, all losses included.",
@@ -92,37 +93,36 @@ ROLES: tuple[Role, ...] = (
     Role("battery_max_discharge_power", "battery", "Max discharge power", "Fastest safe discharge rate.",
          "static", static_ok=True, static_unit="W", suggest_static=4800, measurable=True),
     Role("battery_charge_today", "battery", "Battery charged today", "Energy into the battery today, for losses.",
-         "energy", suggest=(r"^sensor\.solis_battery_charge_today$",)),
+         "energy"),
     Role("battery_discharge_today", "battery", "Battery discharged today", "Energy out of the battery today, for losses.",
-         "energy", suggest=(r"^sensor\.solis_battery_discharge_today$",)),
+         "energy"),
     Role("battery_soh", "battery", "Battery health", "State of health, shown on the Health view.",
-         "percent", required="no", suggest=(r"^sensor\.solis_battery_soh$",)),
+         "percent", required="no"),
     Role("outside_temperature", "battery", "Outside temperature", "Local sensor, used now instead of the forecast.",
          "temperature", required="no"),
     Role("battery_temperature", "battery", "Battery temperature", "The battery's own sensor, instead of the estimate.",
-         "temperature", required="no",
-         suggest=(r"^sensor\.solis_battery_temperature$",)),
+         "temperature", required="no"),
     Role("inverter_clock", "battery", "Inverter clock", "The inverter's own time, to check for drift.",
-         "text", required="no", suggest=(r"^sensor\.solis_rtc$",)),
+         "text", required="no"),
     Role("inverter_min_soc", "battery", "Inverter minimum SoC", "The inverter's own floor, as a safety cross-check.",
-         "percent", required="no", domains=("number", "sensor"), suggest=(r"^number\.solis_battery_minimum_soc$",)),
+         "percent", required="no", domains=("number", "sensor")),
     # --- grid and house ---
     Role("grid_power", "grid", "Grid power", "Live import/export at the meter.",
-         "power", signed=True, sign_note="+ importing, - exporting", suggest=(r"^sensor\.solis_meter_active_power$",)),
+         "power", signed=True, sign_note="+ importing, - exporting"),
     Role("grid_power_reference", "grid", "Check meter", "A second grid meter (e.g. <<ev_charger>> CT).", "power",
          required="no", signed=True, sign_note="+ in, - out", suggest=(r"^sensor\.myenergi_.*_power_grid$",)),
     Role("grid_import_today", "grid", "Grid import today", "Energy imported today, for costs and losses.",
-         "energy", suggest=(r"^sensor\.solis_grid_import_today$",)),
+         "energy"),
     Role("grid_export_today", "grid", "Grid export today", "Energy exported today, for costs and losses.",
-         "energy", suggest=(r"^sensor\.solis_grid_export_today$",)),
+         "energy"),
     Role("grid_import_today_check", "grid", "Check meter import today", "Preferred over the inverter's figure.",
          "energy", required="no", suggest=(r"^sensor\.myenergi_.*_grid_import_today$",)),
     Role("grid_export_today_check", "grid", "Check meter export today", "Preferred over the inverter's figure.",
          "energy", required="no", suggest=(r"^sensor\.myenergi_.*_grid_export_today$",)),
     Role("house_load_power", "grid", "House load", "Household consumption (the car is subtracted if included).",
-         "power", suggest=(r"^sensor\.solis_house_load$",)),
+         "power"),
     Role("house_load_today", "grid", "House load today", "Household energy used today, for costs and losses.",
-         "energy", suggest=(r"^sensor\.solis_house_load_today$",)),
+         "energy"),
     # --- solar forecast ---
     Role("solar_forecast_today", "solar", "Solar forecast today", "Half-hourly solar forecast for today.",
          "list", attribute="detailedForecast", suggest=(r"^sensor\.solcast_pv_forecast_forecast_today$",)),
@@ -187,33 +187,33 @@ ROLES: tuple[Role, ...] = (
     # --- control outputs (never written in Passive mode) ---
     # Solis timed charge/discharge slots (pre-FB00 firmware: values apply when the update button is pressed)
     Role("timed_charge_start_hour", "controls", "Charge window start (hour)", "Timed charge window start hour.",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_charge_start_hours$",)),
+         "control", required="no", domains=("number",)),
     Role("timed_charge_start_minute", "controls", "Charge window start (minute)", "Timed charge window start minute.",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_charge_start_minutes$",)),
+         "control", required="no", domains=("number",)),
     Role("timed_charge_end_hour", "controls", "Charge window end (hour)", "Timed charge window end hour.",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_charge_end_hours$",)),
+         "control", required="no", domains=("number",)),
     Role("timed_charge_end_minute", "controls", "Charge window end (minute)", "Timed charge window end minute.",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_charge_end_minutes$",)),
+         "control", required="no", domains=("number",)),
     Role("timed_charge_current", "controls", "Charge current", "Timed charge current (A).",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_charge_current$",)),
+         "control", required="no", domains=("number",)),
     Role("timed_discharge_start_hour", "controls", "Discharge window start (hour)", "Timed discharge window start hour.",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_discharge_start_hours$",)),
+         "control", required="no", domains=("number",)),
     Role("timed_discharge_start_minute", "controls", "Discharge window start (minute)", "Timed discharge start minute.",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_discharge_start_minutes$",)),
+         "control", required="no", domains=("number",)),
     Role("timed_discharge_end_hour", "controls", "Discharge window end (hour)", "Timed discharge window end hour.",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_discharge_end_hours$",)),
+         "control", required="no", domains=("number",)),
     Role("timed_discharge_end_minute", "controls", "Discharge window end (minute)", "Timed discharge end minute.",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_discharge_end_minutes$",)),
+         "control", required="no", domains=("number",)),
     Role("timed_discharge_current", "controls", "Discharge current", "Timed discharge current (A).",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_timed_discharge_current$",)),
+         "control", required="no", domains=("number",)),
     Role("timed_update_button", "controls", "Apply timed windows", "Button that sends the window times to the inverter.",
-         "control", required="no", domains=("button",), suggest=(r"^button\.solis_update_charge_discharge_times$",)),
+         "control", required="no", domains=("button",)),
     Role("storage_mode", "controls", "Storage mode", "Energy storage control switch (Self-Use etc.).",
-         "control", required="no", domains=("select",), suggest=(r"^select\.solis_energy_storage_control_switch$",)),
+         "control", required="no", domains=("select",)),
     Role("inverter_clock_sync", "controls", "Sync inverter clock", "Button that sets the inverter's clock to HA's.",
-         "control", required="no", domains=("button",), suggest=(r"^button\.solis_sync_rtc$",)),
+         "control", required="no", domains=("button",)),
     Role("inverter_export_limit", "controls", "Inverter export limit (entity)", "Export (backflow) power limit.",
-         "control", required="no", domains=("number",), suggest=(r"^number\.solis_backflow_power$",)),
+         "control", required="no", domains=("number",)),
     Role("smart_target_soc", "controls", "Smart-charge target", "Car charge target sent to <<supplier>>.",
          "control", required="no", domains=("number",),
          suggest=(r"^number\.edf_energy_.*_intelligent_charge_target$",)),
@@ -229,6 +229,27 @@ ROLES: tuple[Role, ...] = (
          "binary", required="no", domains=_GUARD, suggest=(r"^automation\.house_battery_start_charging$",)),
 )
 
+DEFAULT_INVERTER = "solis"
+
+
+def roles_for(inverter: str = DEFAULT_INVERTER, firmware: str | None = None) -> tuple[Role, ...]:
+    """The catalogue with the entity suggestions that the inverter's definition file adds (its `roles:` section:
+    brand-specific `suggest` / `suggest_not` regexes). Suggestions that belong to no brand (the tariff, the car
+    charger, the forecast) stay on the roles above."""
+    extra = role_suggestions(inverter, firmware)
+    unknown = sorted(set(extra) - {r.key for r in _BASE_ROLES})
+    if unknown:
+        raise ValueError(f"the {inverter} definition suggests entities for unknown role(s): {', '.join(unknown)}")
+    out = []
+    for role in _BASE_ROLES:
+        add = extra.get(role.key)
+        if add:
+            role = replace(role, suggest=role.suggest + add["suggest"], suggest_not=role.suggest_not + add["suggest_not"])
+        out.append(role)
+    return tuple(out)
+
+
+ROLES: tuple[Role, ...] = roles_for()
 ROLE_BY_KEY = {r.key: r for r in ROLES}
 
 # Inputs from earlier versions that no longer exist; dropped from a config.yaml on load (not an error).

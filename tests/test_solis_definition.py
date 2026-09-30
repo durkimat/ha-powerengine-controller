@@ -348,3 +348,202 @@ def test_the_recording_covers_every_protocol_method():
     for n in needed:
         assert any(k.startswith(n) for k in want), n
     assert sum(len(v) if isinstance(v, list) else 1 for v in want.values()) > 500
+
+
+ROLES_GOLDEN = Path(__file__).parent / "golden" / "roles_catalogue.json"
+
+
+def test_role_catalogue_and_suggestions_are_unchanged():
+    """The suggestions now come from the inverter's definition; what the config card is shown must not change."""
+    from pe_core.roles import ROLES, catalogue
+    got = {"catalogue": catalogue(),
+           "suggest": {r.key: [list(r.suggest), list(r.suggest_not), r.suggest_static] for r in ROLES}}
+    got = json.loads(json.dumps(got))
+    if os.environ.get("PE_PARITY_RECORD"):
+        ROLES_GOLDEN.write_text(json.dumps(got, indent=1) + "\n")
+        pytest.skip("recorded")
+    assert got == json.loads(ROLES_GOLDEN.read_text())
+
+
+# --- the definition itself ---------------------------------------------------------------------------------
+
+def base_data():
+    import yaml
+
+    from pe_core.adapters.definition import definition_path
+    return yaml.safe_load(definition_path("solis").read_text(encoding="utf-8"))
+
+
+def test_the_definition_ships_in_the_app_folder_and_is_not_an_appdaemon_config():
+    from pe_core.adapters.definition import DEVICES_DIR, available, load_definition
+    app = Path(__file__).resolve().parents[1] / "apps" / "powerengine"
+    assert DEVICES_DIR == app / "pe_core" / "adapters" / "devices"        # inside what HACS installs
+    assert available() == ["solis"] and (DEVICES_DIR / "solis.yml").is_file()
+    assert not list(DEVICES_DIR.glob("*.yaml"))                            # AppDaemon would load these as apps
+    d = load_definition("solis")
+    assert d.firmware is None and d.variant == "420044" and d["name"] == "solis"
+
+
+def test_ram_is_the_first_and_fully_described_path():
+    d = base_data()
+    assert d["capabilities"]["supports_ram"] and d["capabilities"]["supports_timed_slots"]
+    assert list(d).index("ram") < list(d).index("timed_slots")
+    assert set(d["ram"]["entities"]) == {"rc_mode", "rc_charge_power", "rc_discharge_power"}
+    assert d["ram"]["options"] == {"Off": "Off", "Force charge": "Force charge", "Force discharge": "Force discharge"}
+    assert (d["ram"]["failsafe_min"], d["ram"]["max_power_w"]) == (5, 5000)
+    inv = SolisInverter(FakeHA(), lambda role: None)
+    assert [m.name for m in inv.capabilities().methods] == ["ram_remote", "timed_windows"]
+
+
+def test_a_firmware_variant_overrides_keys():
+    from pe_core.adapters.defined import DefinedInverter
+    from pe_core.adapters.definition import parse_definition
+    data = base_data()
+    data["firmware"]["variants"] += [
+        {"match": "FB01", "note": "exact", "override": {"ram": {"max_power_w": 6000, "failsafe_min": 3},
+                                                       "capabilities": {"max_charge_w": 5000}}},
+        {"match": "re:^FC", "override": {"timed_slots": {"recheck_seconds": 60},
+                                         "display_names": {"inverter": "Solis (FC)"}}}]
+
+    def caps(fw):
+        d = parse_definition(data, fw)
+        inv = DefinedInverter(d, FakeHA(), lambda role: None)
+        return d, inv, inv.capabilities()
+    _d, inv, c = caps(None)                                              # his firmware: nothing overridden
+    assert c.method("ram_remote").max_power_w == 5000 and c.max_charge_w == 6000
+    d, inv, c = caps("FB01")
+    assert d.variant == "FB01" and c.method("ram_remote").max_power_w == 6000
+    assert c.method("ram_remote").failsafe_min == 3 and c.max_charge_w == 5000
+    assert c.max_discharge_w == 6000 and c.method("timed_windows") is not None       # the rest is the base
+    d, inv, c = caps("FC22")                                             # a pattern; mappings merge key by key
+    assert d.variant == "re:^FC" and inv.display_names() == {"inverter": "Solis (FC)"}
+    assert inv._slots["recheck_seconds"] == 60 and inv._slots["count"] == 3
+    d, inv, c = caps("FZ99")                                             # no variant matches: the base
+    assert d.variant is None and c.method("ram_remote").max_power_w == 5000
+    assert parse_definition(data, "420044").variant == "420044"
+    assert base_data()["ram"]["max_power_w"] == 5000                      # the merge never touches the source
+
+
+def test_solis_inverter_takes_a_firmware():
+    inv = SolisInverter(FakeHA(), lambda role: None, firmware="420044")
+    assert inv.definition.variant == "420044" and inv.capabilities().method("ram_remote").max_power_w == 5000
+
+
+def test_an_override_that_breaks_the_definition_is_refused():
+    from pe_core.adapters.definition import DefinitionError, parse_definition
+    data = base_data()
+    data["firmware"]["variants"].append({"match": "BAD", "override": {"ram": {"entities": {"rc_mode": {"tail": 5}}}}})
+    with pytest.raises(DefinitionError, match="firmware 'BAD'|variant BAD|ram.entities.rc_mode"):
+        parse_definition(data, "BAD")
+
+
+def test_a_definition_with_a_missing_key_names_it():
+    from pe_core.adapters.definition import DefinitionError, parse_definition
+    for path, shown in (("card_model", "card_model"), ("display_names", "display_names"),
+                        ("capabilities.max_charge_w", "capabilities.max_charge_w"),
+                        ("ram.entities.rc_mode", "ram.entities.rc_mode.domain"), ("ram.options.Off", "ram.options.Off"),
+                        ("ram.failsafe_min", "ram.failsafe_min"), ("timed_slots.suffix", "timed_slots.suffix"),
+                        ("timed_slots.first_slot_roles", "timed_slots.first_slot_roles"),
+                        ("clock.sync_role", "clock.sync_role")):
+        data = base_data()
+        cur = data
+        *head, last = path.split(".")
+        for part in head:
+            cur = cur[part]
+        del cur[last]
+        with pytest.raises(DefinitionError, match=f"solis.yml: missing '{shown}'"):
+            parse_definition(data, source="solis.yml")
+
+
+def test_a_definition_with_a_bad_value_is_refused_with_a_clear_message():
+    from pe_core.adapters.definition import DefinitionError, parse_definition
+    cases = [
+        (lambda d: d["ram"].update(behaviour="magic"), "ram.behaviour 'magic'"),
+        (lambda d: d["timed_slots"].update(behaviour="cron"), "timed_slots.behaviour 'cron'"),
+        (lambda d: d["timed_slots"].update(count=2), "exactly 3 slots"),
+        (lambda d: d["timed_slots"].update(suffix="_x"), "{n}"),
+        (lambda d: d["capabilities"].update(actions=["grid_charge", "teleport"]), "unknown action"),
+        (lambda d: d.update(definition=2), "'definition' must be 1"),
+        (lambda d: d["roles"].update(battery_soc={"suggest": ["(unclosed"]}), "bad pattern"),
+        (lambda d: d["roles"].update(battery_soc={"sugest": []}), "unknown key"),
+        (lambda d: d["ram"]["tests"].pop("rc_hold"), "missing ['rc_hold']"),
+        (lambda d: d["ram"]["tests"].update(rc_hold="Sideways"), "ram.tests.rc_hold"),
+        (lambda d: d["capabilities"].update(supports_ram=False, supports_timed_slots=False), "RAM remote control"),
+        (lambda d: d["firmware"]["variants"].append({"override": {}}), "firmware.variants[1]"),
+        (lambda d: d["ram"]["entities"]["rc_mode"].update(domain=7), "ram.entities.rc_mode.domain"),
+    ]
+    for edit, text in cases:
+        data = base_data()
+        edit(data)
+        with pytest.raises(DefinitionError) as err:
+            parse_definition(data, source="solis.yml")
+        assert text in str(err.value), (text, str(err.value))
+    with pytest.raises(DefinitionError, match="must be a mapping"):
+        parse_definition(["not", "a", "mapping"], source="x.yml")
+
+
+def test_the_suggestions_come_from_the_definition_and_add_to_the_roles():
+    from pe_core import roles
+    from pe_core.adapters.definition import role_suggestions
+    sug = role_suggestions("solis")
+    assert len(sug) == 29 and sug["battery_soc"]["suggest"] == (r"^sensor\.solis_battery_soc$",)
+    assert not any("solis" in p for r in roles._BASE_ROLES for p in r.suggest)          # none left in roles.py
+    assert roles.ROLE_BY_KEY["battery_soc"].suggest == (r"^sensor\.solis_battery_soc$",)
+    assert roles.ROLE_BY_KEY["grid_power_reference"].suggest == (r"^sensor\.myenergi_.*_power_grid$",)   # not a brand's
+
+
+def test_roles_take_the_selected_inverters_suggestions(monkeypatch):
+    from pe_core import roles
+    monkeypatch.setattr(roles, "role_suggestions", lambda name, fw=None: {
+        "battery_soc": {"suggest": (r"^sensor\.other_soc$",), "suggest_not": (r"backup",)},
+        "grid_power_reference": {"suggest": (r"^sensor\.x$",), "suggest_not": ()}})
+    other = {r.key: r for r in roles.roles_for("other")}
+    assert other["battery_soc"].suggest == (r"^sensor\.other_soc$",) and other["battery_soc"].suggest_not == ("backup",)
+    assert other["grid_power_reference"].suggest == (r"^sensor\.myenergi_.*_power_grid$", r"^sensor\.x$")   # merged
+    assert other["battery_power"].suggest == ()
+    monkeypatch.setattr(roles, "role_suggestions", lambda name, fw=None: {"no_such_role": {"suggest": ("x",),
+                                                                                           "suggest_not": ()}})
+    with pytest.raises(ValueError, match="no_such_role"):
+        roles.roles_for("other")
+
+
+def test_the_registry_resolves_solis_to_the_definition_driven_class():
+    from pe_core.adapters import get, names
+    from pe_core.adapters.defined import DefinedInverter
+    assert get("inverter", "solis") is SolisInverter and issubclass(SolisInverter, DefinedInverter)
+    assert "solis" in names("inverter")
+
+
+def test_another_inverter_is_only_a_yaml_file():
+    """A different inverter, written as data alone: other entity names, other option words, a firmware variant, no
+    timed slots. No Python for it."""
+    from pe_core.adapters.defined import DefinedInverter
+    from pe_core.adapters.definition import parse_definition
+    from pe_core.control import Write
+    data = base_data()
+    data.update(name="acme", card_model="acme", display_names={"inverter": "Acme"})
+    data["capabilities"].update(supports_timed_slots=False, max_charge_w=3000, actions=["grid_charge", "self_use"])
+    data.pop("timed_slots")
+    data["ram"].update(prefer="acme", failsafe_min=10, max_power_w=3000)
+    data["ram"]["entities"] = {"rc_mode": {"domain": "select", "tail": "remote_mode"},
+                               "rc_charge_power": {"domain": "number", "tail": "remote_charge_w"},
+                               "rc_discharge_power": {"domain": "number", "tail": "remote_discharge_w"}}
+    data["ram"]["options"] = {"Off": "Idle", "Force charge": "Charge", "Force discharge": "Discharge"}
+    ids = {"select.acme_remote_mode": "Idle", "number.acme_remote_charge_w": 0, "number.acme_remote_discharge_w": 0,
+           "select.zz_remote_mode": "x"}
+    ha = FakeHA(ids, {"select.acme_remote_mode": {"options": ["Idle", "Charge", "Discharge"]}})
+    inv = DefinedInverter(parse_definition(data, source="acme.yml"), ha, lambda role: None)
+    rc = inv.rc_entities(UTC_NOW)
+    assert rc == {"rc_mode": "select.acme_remote_mode", "rc_charge_power": "number.acme_remote_charge_w",
+                  "rc_discharge_power": "number.acme_remote_discharge_w"}
+    assert inv.name == "acme" and inv.card_model == "acme" and inv.display_names() == {"inverter": "Acme"}
+    assert inv.service_for(Write("rc_mode", "Force charge", "select")) == ("select/select_option",
+                                                                          {"option": "Charge"})
+    assert inv.service_for(Write("rc_charge_power", 900, "number")) == ("number/set_value", {"value": 900})
+    assert inv.rc_test_problem(rc, "rc_charge") is None                     # "Charge" is offered
+    ha.attrs["select.acme_remote_mode"] = {"options": ["Idle", "Discharge"]}
+    assert inv.rc_test_problem(rc, "rc_charge") == "select.acme_remote_mode has no 'Charge' option"
+    caps = inv.capabilities()
+    assert [m.name for m in caps.methods] == ["ram_remote"] and caps.method("ram_remote").max_power_w == 3000
+    assert caps.method("ram_remote").failsafe_min == 10 and caps.actions == {"grid_charge", "self_use"}
+    assert inv.slot_map(NOW) == (None, False) and inv.slot_keys is not None

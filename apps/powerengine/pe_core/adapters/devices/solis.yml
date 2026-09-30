@@ -1,0 +1,161 @@
+# Solis hybrid inverter (S5-EH1P6K-L and relatives) through the SolaX Modbus integration in Home Assistant.
+#
+# Everything here is DATA about the inverter. The few things that are algorithms (the timed-window arithmetic, the
+# remote-control command per decision, the clock-drift maths) stay in Python as named behaviours, chosen by the
+# `behaviour:` keys below. See docs/INVERTERS.md for the format.
+#
+# This file is not named .yaml on purpose: AppDaemon loads every .yaml under the apps folder as app config.
+
+definition: 1
+name: solis
+brand: Solis
+model: S5-EH1P6K-L (SolaX Modbus)
+
+# Words the app uses for this inverter in its own text (the names map: <<inverter>>).
+display_names:
+  inverter: Solis
+# The Sunsynk Power Flow Card's "inverter: model:" key for this brand.
+card_model: solis
+
+capabilities:
+  supports_ram: true              # RAM remote control (the primary path; see `ram`)
+  supports_timed_slots: true      # the three timed charge/discharge windows (see `timed_slots`)
+  max_charge_w: 6000              # defaults; the app passes the configured limits in
+  max_discharge_w: 6000
+  # the neutral actions this inverter can carry out (pe_core.decide's names)
+  actions: [grid_charge, hold, force_discharge, export, self_use]
+  # modes or options the app must never select
+  never_touch: [Backup, Off-Grid]
+
+# ---- RAM remote control: the primary, preferred way to drive this inverter ---------------------------------
+# SolaX Modbus's "Battery control override" register set (43135 mode, 43136 charge W, 43129 discharge W). Volatile:
+# the inverter drops the command about `failsafe_min` minutes after it stops being sent, so a stopped controller
+# hands the battery back to Self-Use by itself. Tested on firmware 420044 on 27 Sep 2026.
+ram:
+  behaviour: override_select      # a select (mode) plus two numbers (force powers); see pe_core/ramcontrol.py
+  storage: ram                    # writes are not EEPROM wear
+  failsafe_min: 5
+  max_power_w: 5000               # the most the inverter accepts for a force power
+  # The three entities, found by name among Home Assistant's entities (domain + how the entity id ends).
+  # If several match, ids containing `prefer` win.
+  lookup_minutes: 10              # how often to look again while some are not found
+  prefer: solis
+  entities:
+    rc_mode: {domain: select, tail: battery_control_override}
+    rc_charge_power: {domain: number, tail: battery_control_override_charge_power}
+    rc_discharge_power: {domain: number, tail: battery_control_override_discharge_power}
+  # which entity carries the power for each direction
+  power_roles: {charge: rc_charge_power, discharge: rc_discharge_power}
+  # The mode select's options. Left side: the app's own words (the RC controller works in these); right side: what
+  # this inverter's select is called. They are the same on Solis.
+  options:
+    "Off": "Off"
+    "Force charge": "Force charge"
+    "Force discharge": "Force discharge"
+  # Supervised tests (config card): which option each one forces.
+  tests:
+    rc_charge: "Force charge"
+    rc_discharge: "Force discharge"
+    rc_hold: "Force charge"         # Force charge at 0 W: does it hold the battery?
+    rc_failsafe: "Force charge"
+
+# ---- Timed windows: three charge and three discharge windows (EEPROM-backed; the second path) ------------
+timed_slots:
+  behaviour: timed_hhmm           # window times as hour and minute numbers, applied with an update button
+  storage: eeprom
+  count: 3
+  # Slot 1's entities are the mapped roles; slot n's entity id is slot 1's plus this suffix ({n} = 2, 3).
+  suffix: "_{n}"
+  first_slot_roles:
+    - timed_charge_start_hour
+    - timed_charge_start_minute
+    - timed_charge_end_hour
+    - timed_charge_end_minute
+    - timed_discharge_start_hour
+    - timed_discharge_start_minute
+    - timed_discharge_end_hour
+    - timed_discharge_end_minute
+    - timed_update_button
+  currents: [timed_charge_current, timed_discharge_current]
+  # the `storage_mode` role's option that hands the inverter back to plain Self-Use
+  self_use_option: Self-Use
+  write_only_match: update_button # roles containing this are never read back (the button has no value)
+  # Window times are kept in Home Assistant until the update button sends them, so setting them is not an
+  # inverter write ("staged"); a role or entity id containing one of these is staged.
+  staged_parts: [_start_hour, _start_minute, _end_hour, _end_minute]
+  recheck_seconds: 600            # look for slots 2 and 3 again this often when they are not found
+  # Every control role a supervised timed-window test needs mapped (the storage mode, the times, the currents).
+  test_roles:
+    - storage_mode
+    - timed_charge_start_hour
+    - timed_charge_start_minute
+    - timed_charge_end_hour
+    - timed_charge_end_minute
+    - timed_discharge_start_hour
+    - timed_discharge_start_minute
+    - timed_discharge_end_hour
+    - timed_discharge_end_minute
+    - timed_charge_current
+    - timed_discharge_current
+
+# ---- The inverter's clock: drift is measured, and a button sets it from Home Assistant's time ---------------
+clock:
+  behaviour: drift_button
+  clock_role: inverter_clock
+  sync_role: inverter_clock_sync
+
+# ---- Suggested entities per role (the config card pre-fills these; each is a regex on the entity id) ---------
+roles:
+  # Battery and inverter sensors
+  battery_soc: {suggest: ['^sensor\.solis_battery_soc$']}
+  battery_power: {suggest: ['^sensor\.solis_battery_power$']}
+  battery_charge_power: {suggest: ['^sensor\.solis_battery_input_energy$']}
+  battery_discharge_power: {suggest: ['^sensor\.solis_battery_output_energy$']}
+  battery_charge_today: {suggest: ['^sensor\.solis_battery_charge_today$']}
+  battery_discharge_today: {suggest: ['^sensor\.solis_battery_discharge_today$']}
+  battery_soh: {suggest: ['^sensor\.solis_battery_soh$']}
+  battery_temperature: {suggest: ['^sensor\.solis_battery_temperature$']}
+  inverter_clock: {suggest: ['^sensor\.solis_rtc$']}
+  inverter_min_soc: {suggest: ['^number\.solis_battery_minimum_soc$']}
+  # Grid and house sensors
+  grid_power: {suggest: ['^sensor\.solis_meter_active_power$']}
+  grid_import_today: {suggest: ['^sensor\.solis_grid_import_today$']}
+  grid_export_today: {suggest: ['^sensor\.solis_grid_export_today$']}
+  house_load_power: {suggest: ['^sensor\.solis_house_load$']}
+  house_load_today: {suggest: ['^sensor\.solis_house_load_today$']}
+  # Timed charge and discharge slot 1 (SolaX Modbus; slots 2 and 3 add _2 and _3)
+  timed_charge_start_hour: {suggest: ['^number\.solis_timed_charge_start_hours$']}
+  timed_charge_start_minute: {suggest: ['^number\.solis_timed_charge_start_minutes$']}
+  timed_charge_end_hour: {suggest: ['^number\.solis_timed_charge_end_hours$']}
+  timed_charge_end_minute: {suggest: ['^number\.solis_timed_charge_end_minutes$']}
+  timed_charge_current: {suggest: ['^number\.solis_timed_charge_current$']}
+  timed_discharge_start_hour: {suggest: ['^number\.solis_timed_discharge_start_hours$']}
+  timed_discharge_start_minute: {suggest: ['^number\.solis_timed_discharge_start_minutes$']}
+  timed_discharge_end_hour: {suggest: ['^number\.solis_timed_discharge_end_hours$']}
+  timed_discharge_end_minute: {suggest: ['^number\.solis_timed_discharge_end_minutes$']}
+  timed_discharge_current: {suggest: ['^number\.solis_timed_discharge_current$']}
+  timed_update_button: {suggest: ['^button\.solis_update_charge_discharge_times$']}
+  # Other controls
+  storage_mode: {suggest: ['^select\.solis_energy_storage_control_switch$']}
+  inverter_clock_sync: {suggest: ['^button\.solis_sync_rtc$']}
+  inverter_export_limit: {suggest: ['^number\.solis_backflow_power$']}
+
+# ---- Firmware variants ---------------------------------------------------------------------------------------
+# A variant overrides keys of the sections above for one firmware version. `match` is the version exactly as the
+# inverter reports it, or "re:" and a regular expression. The first variant that matches wins, and its `override`
+# is merged into the definition (mappings merge key by key; lists and values replace). The base file above is
+# firmware 420044, the one this was written and tested on, so its variant has nothing to override.
+firmware:
+  default: "420044"               # assumed when the app is not told the firmware
+  variants:
+    - match: "420044"
+      note: S5-EH1P6K-L as installed. The base definition applies unchanged.
+      override: {}
+    # Example (not active): a later firmware that accepts a higher force power and a different mode-select
+    # name. Copy, adjust, and uncomment.
+    # - match: "re:^FB"
+    #   note: FB00 and later
+    #   override:
+    #     ram:
+    #       max_power_w: 6000
+    #       prefer: solis_fb
