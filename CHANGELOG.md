@@ -2,6 +2,24 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.66 (beta)
+
+### Behaviour changes
+- None for your setup. On first start PowerEngine adds a `site:` section to your configuration describing the plant
+  it has always controlled: inverter Solis on firmware 420044, car charger Zappi, tariff detected automatically,
+  forecast Solcast and grid events Axle. A backup of the configuration is kept first. The firmware is recorded as
+  assumed, because the inverter doesn't report it.
+
+### Your system (making PowerEngine generic, step 8)
+- The configuration now says which plant this home has, and PowerEngine builds each driver from it by name instead
+  of assuming this one. The car charger, forecast and grid events can each be set to None.
+- The Configuration page has a new **Your system** block at the top, with a dropdown for each part and each option's
+  test status (verified, community or draft). If the inverter reports its firmware, the block shows whether it
+  matches the one chosen.
+- Changing the inverter, or to a firmware that works differently, switches PowerEngine to Passive. A banner then asks
+  you to run the supervised tests on the Tests page before going Active again.
+- `docs/SITE.md` describes the new `site:` keys.
+
 ## 0.9.65 (beta)
 
 ### Behaviour changes
