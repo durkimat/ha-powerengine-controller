@@ -58,6 +58,7 @@ from pe_core.eeprom import BlockWriteModel, WriteLog, WriteModel
 from pe_core.energy import Recorder
 from pe_core.entities import (
     ENTITIES,
+    RETIRED_ENTITIES,
     solar_plant_entity,
     solar_plant_id_from_entity,
     validate_definitions,
@@ -321,6 +322,7 @@ class PowerEngine(hass.Hass):
         for ent in ENTITIES:
             self._get_publisher().discover(ent, __version__)
         self._sync_solar_entities()
+        self._retire_old_entities()
         self._ui_defaults()
         self._get_publisher().available(True)
         self._publish_state("diag_version", __version__)
@@ -1003,9 +1005,7 @@ class PowerEngine(hass.Hass):
         if self.costbook is None or getattr(self, "mqtt", None) is None or not hasattr(self, "_published"):
             return
         sp = self._scenario_params() if self.cfg is not None else None
-        custom = (self.get_state("select.pe_ui_cost_from"), self.get_state("select.pe_ui_cost_to"))
-        for key, (state, attrs) in cost_entity_states(self.costbook, self._today(), self._months, sp,
-                                                      custom).items():
+        for key, (state, attrs) in cost_entity_states(self.costbook, self._today(), self._months, sp).items():
             self._publish_if_changed(key, state, attrs)
 
     def _logbook(self, message):
@@ -1247,10 +1247,6 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Could not save the plan snapshot: {err!r}", level="WARNING")
 
-    def _on_cost_range(self, entity, attribute, old, new, kwargs):
-        if old != new:
-            self._publish_costs()
-
     def _publish_history(self, *args, **kwargs):
         """The Plan history tab: the chosen day and plan against what happened."""
         if self.costbook is None or self._get_publisher() is None:
@@ -1378,8 +1374,6 @@ class PowerEngine(hass.Hass):
                 self._write_listeners.append(self._listen_state(self._on_guard_change, eid))
         for eid in ("select.pe_ui_history_day", "select.pe_ui_history_plan"):
             self._write_listeners.append(self._listen_state(self._publish_history, eid))
-        for eid in ("select.pe_ui_cost_from", "select.pe_ui_cost_to"):      # the custom range of the waterfall
-            self._write_listeners.append(self._listen_state(self._on_cost_range, eid))
         self._write_listeners = [h for h in self._write_listeners if h is not None]
 
     def _listen_state(self, callback, entity_id):
@@ -3074,6 +3068,17 @@ class PowerEngine(hass.Hass):
 
     # --- helpers -------------------------------------------------------------------
 
+    def _retire_old_entities(self):
+        """Remove entities an earlier release published (entities.RETIRED_ENTITIES). MQTT: clear their retained
+        topics (harmless to repeat). Direct: only those HA still has, so a fresh install gets no stray entity."""
+        pub = self._get_publisher()
+        for ent in RETIRED_ENTITIES:
+            try:
+                if pub.retains or self.get_state(ent.entity_id) is not None:
+                    pub.retire(ent)
+            except Exception as err:
+                self.log(f"Could not retire {ent.entity_id}: {err!r}", level="WARNING")
+
     def _ui_defaults(self):
         """Set dashboard preferences to their defaults once (HA and the broker keep them after that)."""
         path = os.path.join(os.path.dirname(self._save_path()), "ui.json")
@@ -3093,10 +3098,6 @@ class PowerEngine(hass.Hass):
             pub.preset("ui_history_day", "Yesterday")
             pub.preset("ui_history_plan", "Start of day")
             done["history"] = changed = True
-        if not done.get("cost_range"):
-            pub.preset("ui_cost_from", "7 days ago")         # the Costs tab's custom range: the last 7 days
-            pub.preset("ui_cost_to", "Yesterday")
-            done["cost_range"] = changed = True
         if changed and pub.retains:
             try:
                 with open(path, "w", encoding="utf-8") as fh:

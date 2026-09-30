@@ -1,5 +1,4 @@
-import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -227,11 +226,6 @@ def test_cost_waterfall_entity_only_with_scenario_params(tmp_path):
     assert isinstance(state, (int, float))
     periods = attrs["periods"]
     assert set(periods) == {"yesterday", "week", "month", "days30"}
-    with_custom = cost_entity_states(book, today, [], sp, ("7 days ago", "Yesterday"))["cost_waterfall"][1]["periods"]
-    assert set(with_custom) == {"yesterday", "week", "month", "days30", "custom"}
-    assert with_custom["custom"]["days"] == 1 and with_custom["custom"]["to"] == T0.date().isoformat()
-    assert with_custom["custom"]["steps"] == with_custom["yesterday"]["steps"]
-    assert len(json.dumps(with_custom)) < 15000
     for p in periods.values():
         assert p["steps"][0]["label"] == "No solar or battery"
         assert p["steps"][-1]["label"] == "You paid"
@@ -678,77 +672,3 @@ def test_waterfall_you_paid_and_no_solar_totals_are_unchanged_by_the_merge():
     assert steps[0]["value"] == round(10.111 + 12.126, 2)
     assert steps[-1]["value"] == round(3.111 + 0.501 + 1.0 - 0.4 + 4.201 - 0.201, 2)
 
-
-# --- custom range --------------------------------------------------------------------------
-
-def _month():
-    days = [_day(f"2026-09-{d:02d}", none=10.0, solar=8.0, tariff=7.0, actual_adj=4.0, carry=0.5) for d in range(1, 21)]
-    days.append(_day("2026-09-21", complete=False, none=99.0))                       # today: never counted
-    return days
-
-
-def test_custom_range_is_inclusive_and_chains():
-    from pe_core.costs import waterfall_range
-    w = waterfall_range(_month(), date(2026, 9, 5), date(2026, 9, 8))
-    assert w["period"] == "custom" and w["days"] == 4 and w["from"] == "2026-09-05" and w["to"] == "2026-09-08"
-    assert w["note"] == "" and w["asked_from"] == "2026-09-05" and w["asked_to"] == "2026-09-08"
-    by = {s["label"]: s["value"] for s in w["steps"]}
-    assert by["No solar or battery"] == 40.0 and by["Solar"] == -8.0 and by["EDF tariff"] == -4.0
-    assert by["PowerEngine"] == -10.0 and by["You paid"] == 18.0
-    running = 0.0
-    for s in w["steps"]:
-        running = s["value"] if s["kind"] == "total" else round(running + s["value"], 2)
-    assert running == w["steps"][-1]["value"]
-
-
-def test_custom_range_of_one_day_matches_yesterday():
-    from pe_core.costs import waterfall, waterfall_range
-    days = _month()
-    one = waterfall_range(days, date(2026, 9, 20), date(2026, 9, 20))
-    assert one["days"] == 1 and one["from"] == one["to"] == "2026-09-20" and one["note"] == ""
-    assert one["steps"] == waterfall(days, "yesterday")["steps"]
-
-
-def test_custom_range_reversed_is_swapped_with_a_note():
-    from pe_core.costs import waterfall_range
-    w = waterfall_range(_month(), date(2026, 9, 8), date(2026, 9, 5))
-    assert w["days"] == 4 and w["from"] == "2026-09-05" and w["to"] == "2026-09-08"
-    assert "swapped" in w["note"]
-
-
-def test_custom_range_is_clamped_to_the_days_available():
-    from pe_core.costs import waterfall_range
-    w = waterfall_range(_month(), date(2026, 8, 25), date(2026, 9, 3))
-    assert (w["from"], w["to"], w["days"]) == ("2026-09-01", "2026-09-03", 3)
-    assert "3 of the 10 days" in w["note"]
-    today_in = waterfall_range(_month(), date(2026, 9, 19), date(2026, 9, 21))        # 21st is today: incomplete
-    assert (today_in["from"], today_in["to"], today_in["days"]) == ("2026-09-19", "2026-09-20", 2)
-
-
-def test_custom_range_entirely_out_of_range_or_nothing_available():
-    from pe_core.costs import waterfall_range
-    out = waterfall_range(_month(), date(2026, 7, 1), date(2026, 7, 9))
-    assert out["days"] == 0 and out["from"] is None and out["to"] is None and "No complete day" in out["note"]
-    assert out["steps"][0]["value"] == 0.0 and out["steps"][-1]["value"] == 0.0
-    none = waterfall_range([], date(2026, 9, 1), date(2026, 9, 2))
-    assert none["days"] == 0 and none["note"]
-    only_today = waterfall_range([_day("2026-09-21", complete=False, none=5.0)], date(2026, 9, 21), date(2026, 9, 21))
-    assert only_today["days"] == 0
-    no_scenarios = waterfall_range([{"date": "2026-09-20", "complete": True}], date(2026, 9, 20), date(2026, 9, 20))
-    assert no_scenarios["days"] == 0
-
-
-def test_custom_range_with_a_missing_choice():
-    from pe_core.costs import waterfall_range
-    w = waterfall_range(_month(), None, date(2026, 9, 5))
-    assert w["days"] == 0 and w["asked_from"] is None and "Choose" in w["note"]
-
-
-def test_range_options_name_days_and_reject_anything_else():
-    from pe_core.history import RANGE_OPTIONS, range_day
-    today = date(2026, 9, 30)
-    assert RANGE_OPTIONS[0] == "Yesterday" and RANGE_OPTIONS[-1] == "30 days ago" and "Today" not in RANGE_OPTIONS
-    assert range_day("Yesterday", today) == date(2026, 9, 29)
-    assert range_day("30 days ago", today) == date(2026, 8, 31)
-    for bad in (None, "", "Today", "31 days ago", "unknown", "unavailable", "yesterday"):
-        assert range_day(bad, today) is None

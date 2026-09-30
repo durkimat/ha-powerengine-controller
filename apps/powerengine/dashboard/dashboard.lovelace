@@ -968,49 +968,6 @@ views:
         column_span: 3
         cards:
           - type: heading
-            heading: Savings for a date range
-          # the first and last day (both included); the app works the range out and publishes it as the 'custom' period
-          - type: tile
-            entity: select.pe_ui_cost_from
-            name: From
-            grid_options: {columns: 6}
-            features:
-              - type: select-options
-          - type: tile
-            entity: select.pe_ui_cost_to
-            name: To
-            grid_options: {columns: 6}
-            features:
-              - type: select-options
-          - type: markdown
-            grid_options: {columns: full}
-            content: |-
-              {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
-              {%- macro sv(steps, label) -%}{%- for s in steps if s.label == label -%}{{ s.value }}{%- endfor -%}{%- endmacro %}
-              {%- set p = (state_attr('sensor.pe_cost_waterfall', 'periods') or {}).custom %}
-              {%- if p and p.days %}
-              {%- set paid = (p.steps[-1].value) | float(0) %}
-              {%- set no_batt = sv(p.steps, 'No solar or battery') | float(0) %}
-              {%- set solar_tariff = no_batt + sv(p.steps, 'Solar') | float(0) + sv(p.steps, '<<tariff>>') | float(0) %}
-              {%- set pe_step = sv(p.steps, 'PowerEngine') | float(0) %}
-              **{{ p.from }} to {{ p.to }} ({{ p.days }} day{{ '' if p.days == 1 else 's' }}): you paid {{ gbp(paid) }}**{{ " after <<event>>'s payments" if '<<event>>' in p.steps[-1].label else "" }}. With no solar or battery it would have been {{ gbp(no_batt) }}, with solar and your <<tariff>> alone {{ gbp(solar_tariff) }}. **The battery and PowerEngine saved {{ gbp(-pe_step) }}** on top of that.
-              {%- elif p %}
-              **No costs for that range.**
-              {%- else %}
-              **Pick a first and last day above.**
-              {%- endif %}
-              {%- if p and p.note %}
-
-              {{ p.note }}
-              {%- endif %}
-          - type: custom:powerengine-waterfall-card
-            grid_options: {columns: full}
-            entity: sensor.pe_cost_waterfall
-            period: custom
-      - type: grid
-        column_span: 3
-        cards:
-          - type: heading
             heading: Daily cost by scenario
           # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
           - type: conditional

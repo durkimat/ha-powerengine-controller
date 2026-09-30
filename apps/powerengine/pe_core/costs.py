@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
-from datetime import date
 
 from .ledger import Ledger
 from .names import N
@@ -351,32 +350,3 @@ def waterfall(days_summaries: list[dict], period: str) -> dict:
     return {"period": period, "days": len(chosen), "from": chosen[0]["date"] if chosen else None,
             "to": chosen[-1]["date"] if chosen else None, "steps": _steps_for(chosen)}
 
-
-def waterfall_range(days_summaries: list[dict], start: date | None, end: date | None) -> dict:
-    """The waterfall for a chosen date range (both ends included), for the dashboard's custom period.
-
-    Only complete days with scenarios count. A reversed range (start after end) is swapped; a range that reaches
-    beyond the days available is clamped to them. The result is waterfall()'s shape with period 'custom', the
-    days actually used ('from', 'to', 'days'), the dates asked for ('asked_from', 'asked_to') and a plain-words
-    'note' ('' when nothing needed changing). With no usable day it has 'days': 0, no dates and no steps changed.
-    """
-    complete = [d for d in days_summaries if d.get("complete") and d.get("scenarios")]
-    notes: list[str] = []
-    if start is None or end is None:
-        chosen: list[dict] = []
-        notes.append("Choose a From and a To day.")
-    else:
-        if start > end:
-            start, end = end, start
-            notes.append("From was after To, so the two were swapped.")
-        chosen = [d for d in complete if start.isoformat() <= d["date"] <= end.isoformat()]
-        if not chosen:
-            notes.append("No complete day with costs in that range.")
-        else:
-            want = (end - start).days + 1
-            if len(chosen) < want:
-                notes.append(f"Only {len(chosen)} of the {want} days asked for have costs recorded.")
-    return {"period": "custom", "days": len(chosen), "from": chosen[0]["date"] if chosen else None,
-            "to": chosen[-1]["date"] if chosen else None,
-            "asked_from": start.isoformat() if start else None, "asked_to": end.isoformat() if end else None,
-            "note": " ".join(notes), "steps": _steps_for(chosen)}
