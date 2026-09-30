@@ -160,10 +160,13 @@ class PowerEngine(hass.Hass):
         if kind == "timer":                             # forget one-off timers that have already run (bounded list)
             now = datetime.now(timezone.utc)
             handles[:] = [h for h in handles if not (h[0] == "timer" and h[2] is not None and h[2] < now)]
+        if not isinstance(handle, asyncio.Future) and any(h[1] == handle for h in handles):
+            return handle                                # already recorded (see below)
         if isinstance(handle, asyncio.Future):
             real = self._resolved(handle)
             if real is not None:
-                handles.append((kind, real, due))
+                if not any(h[1] == real for h in handles):
+                    handles.append((kind, real, due))
             elif not handle.done():
                 generation = self.__dict__.get("_wipes", 0)
 
@@ -180,7 +183,8 @@ class PowerEngine(hass.Hass):
                         except Exception:
                             pass
                         return
-                    live.append((kind, real, due))
+                    if not any(h[1] == real for h in live):
+                        live.append((kind, real, due))
                 handle.add_done_callback(record)
             return handle
         handles.append((kind, handle, due))
@@ -219,6 +223,17 @@ class PowerEngine(hass.Hass):
         for name in ("cancel_timer", "cancel_listen_event", "cancel_listen_state"):
             d[name] = cancelling(getattr(self, name))
 
+    def _timer_gone(self, handle):
+        """True when AppDaemon says this timer is no longer scheduled (it ran, or was cancelled): cancelling it would
+        only log "Invalid callback handle". Where AppDaemon can't say (4.4 has no timer_running), False."""
+        check = getattr(self, "timer_running", None)
+        if check is None:
+            return False
+        try:
+            return check(handle) is False
+        except Exception:
+            return False
+
     def _wipe(self):
         """Undo a previous initialize(): stop and hand back the inverter, cancel every timer and listener it made, and
         delete every attribute it set (which also puts back the real get_state etc. that demo mode replaced)."""
@@ -229,9 +244,16 @@ class PowerEngine(hass.Hass):
         self.__dict__["_wipes"] = self.__dict__.get("_wipes", 0) + 1
         now = datetime.now(timezone.utc)
         cancel = {"timer": self.cancel_timer, "event": self.cancel_listen_event, "state": self.cancel_listen_state}
+        done = set()
         for kind, handle, due in list(self.__dict__.get("_handles") or []):
+            if handle in done:                              # once each: a second cancel is an "Invalid callback handle"
+                continue
+            done.add(handle)
             if kind == "timer" and due is not None and due <= now:
                 self._untrack(handle)                       # already ran
+                continue
+            if kind == "timer" and self._timer_gone(handle):
+                self._untrack(handle)
                 continue
             try:
                 cancel[kind](handle)
@@ -3219,9 +3241,22 @@ class PowerEngine(hass.Hass):
             return raw(entity_id, **kwargs)
         return set_state
 
+    def _plugin_configured(self, name):
+        """Is this plugin in AppDaemon's configuration? get_plugin_api logs a WARNING ("Unknown Plugin Configuration")
+        when it isn't, so ask the plugin list first. Where the list can't be read, say yes and let the call decide."""
+        try:
+            plugins = self.AD.plugins
+            for attr in ("config", "plugins"):
+                found = getattr(plugins, attr, None)
+                if isinstance(found, dict):
+                    return name in found
+        except Exception:
+            pass
+        return True
+
     def _mqtt_api(self, quiet=False):
         try:
-            api = self.get_plugin_api("MQTT")
+            api = self.get_plugin_api("MQTT") if self._plugin_configured("MQTT") else None
         except Exception as err:  # plugin not configured
             api = None
             if not quiet:

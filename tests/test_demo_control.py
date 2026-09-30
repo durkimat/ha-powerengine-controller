@@ -46,7 +46,11 @@ def load_app(monkeypatch, wrap=None):
             return self._add("timer", cb, "every")
 
         def run_daily(self, cb, *a, **k):
-            return self._add("timer", cb, "daily")
+            # AppDaemon 4.5 builds run_daily on self.run_every, so through the app's own tracking wrapper too
+            return self.run_every(cb, "now", 86400)
+
+        def timer_running(self, handle, **kw):
+            return handle in self.live
 
         def listen_event(self, cb, event=None, **k):
             return self._add("event", cb, event)
@@ -59,7 +63,8 @@ def load_app(monkeypatch, wrap=None):
                 self.invalid_cancels += 1
                 return
             self.timers[:] = [x for x in self.timers if x[3] != handle]  # in place: no new attribute
-            self.live.pop(handle, None)
+            if self.live.pop(handle, None) is None:          # AppDaemon: "Invalid callback handle"
+                self.invalid_cancels += 1
 
         def cancel_listen_event(self, handle, **kw):
             if isinstance(handle, asyncio.Future):

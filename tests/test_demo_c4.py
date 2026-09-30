@@ -385,3 +385,54 @@ def test_the_welcome_lists_the_days_with_the_names_the_demo_will_show(make):
 def test_a_configured_or_running_app_does_not_publish_the_preview(make):
     assert "demo_days" not in version(make(real_config=True))
     assert "demo_days" not in version(start(make))
+
+
+# --- round 2: "Invalid callback handle" at a wipe, and the plugin check -------------------------------------------
+
+@pytest.mark.parametrize("wrap", [None, task_handle])
+def test_a_wipe_cancels_each_timer_once_so_appdaemon_logs_no_invalid_handles(make, wrap):
+    """run_daily is built on run_every inside AppDaemon, so both wrappers recorded the same handle: the wipe cancelled
+    it twice and AppDaemon logged 'Invalid callback handle' for the second (five run_daily timers, five warnings)."""
+    app = make(wrap=wrap)
+    send(app, action="start", day="sunny")
+    send(app, action="day", day="dull")
+    send(app, action="exit")
+    send(app, action="start", day="car")
+    assert app.invalid_cancels == 0
+    handles = [h[1] for h in app.__dict__["_handles"]]
+    assert len(handles) == len(set(handles))
+    assert sorted(handles) == sorted(app.live)                  # nothing left over from earlier starts: no leak
+
+
+def test_a_timer_appdaemon_no_longer_has_is_not_cancelled(make):
+    app = make()
+    send(app, action="start", day="sunny")
+    gone = next(h for h, v in app.live.items() if v[1] == "_beat")
+    del app.live[gone]                                          # it ran (one-shot) or was cancelled elsewhere
+    send(app, action="day", day="dull")
+    assert app.invalid_cancels == 0
+
+
+def test_a_handle_is_recorded_once(make):
+    app = make()
+    n = len(app.__dict__["_handles"])
+    app._track("timer", 555)
+    app._track("timer", 555)
+    app._track("timer", task_handle(555))
+    assert len(app.__dict__["_handles"]) == n + 1
+
+
+def test_the_mqtt_check_does_not_ask_appdaemon_for_a_plugin_it_has_not_got(make):
+    """get_plugin_api logs a WARNING ('Unknown Plugin Configuration') when the plugin isn't configured."""
+    import types
+    app = make()
+    asked = []
+    type(app).get_plugin_api = lambda self, name: asked.append(name)
+    app.AD = types.SimpleNamespace(plugins=types.SimpleNamespace(config={"HASS": object()}))
+    assert app._mqtt_api(quiet=True) is None and asked == []
+    app.AD = types.SimpleNamespace(plugins=types.SimpleNamespace(config={"HASS": 1, "MQTT": 2}))
+    app._mqtt_api(quiet=True)
+    assert asked == ["MQTT"]
+    del app.AD                                                  # list unreadable (older AppDaemon): ask, as before
+    app._mqtt_api(quiet=True)
+    assert asked == ["MQTT", "MQTT"]
