@@ -486,7 +486,7 @@ def test_the_suggestions_come_from_the_definition_and_add_to_the_roles():
     from pe_core import roles
     from pe_core.adapters.definition import role_suggestions
     sug = role_suggestions("solis")
-    assert len(sug) == 29 and sug["battery_soc"]["suggest"] == (r"^sensor\.solis_battery_soc$",)
+    assert len(sug) == 31 and sug["battery_soc"]["suggest"] == (r"^sensor\.solis_battery_soc$",)
     assert not any("solis" in p for r in roles._BASE_ROLES for p in r.suggest)          # none left in roles.py
     assert roles.ROLE_BY_KEY["battery_soc"].suggest == (r"^sensor\.solis_battery_soc$",)
     assert roles.ROLE_BY_KEY["grid_power_reference"].suggest == (r"^sensor\.myenergi_.*_power_grid$",)   # not a brand's

@@ -27,6 +27,12 @@ METHODS = ("timed_windows", "ram_remote")
 POWER_STEP_W = 100            # a power change smaller than this isn't re-sent early (the refresh carries it)
 FOLLOW_GRACE = timedelta(seconds=90)     # after a change, time for the inverter to respond
 FOLLOW_ALARM = timedelta(minutes=3)      # not following for this long: reported
+STEP_DOWN_W = 1000            # a command that does not take is re-sent this much lower...
+STEP_DOWN_FLOOR_W = 3000      # ...down to this (5000 -> 4000 -> 3000), never lower
+STEP_DOWN_MOVING = 0.2        # only when the battery does less than this share of the command in its direction: a
+#                               write that was refused leaves the previous power, so the battery is idle or going
+#                               the other way; a battery doing some of it is limited by itself (BMS, taper), not refused
+CEILING_HOLD = timedelta(minutes=60)     # a stepped-down ceiling is forgotten after this, or at a new kind of command
 
 
 @dataclass(frozen=True)
@@ -86,10 +92,40 @@ class RamController:
         self.changes: dict[str, int] = {}          # day -> command changes sent
         self.refreshes: dict[str, int] = {}        # day -> refreshes sent
         self.errors = 0
+        self.ceiling_w: int | None = None          # stepped down after a command did not take (see step_down)
+        self.ceiling_option: str | None = None
+        self.ceiling_at: datetime | None = None
+
+    def apply_ceiling(self, now: datetime, want: Command) -> Command:
+        """The wanted command, no higher than a stepped-down ceiling for the same kind of command. The ceiling is
+        dropped when the option changes or it has stood for CEILING_HOLD."""
+        if self.ceiling_w is not None and (want.option != self.ceiling_option or self.ceiling_at is None
+                                           or now - self.ceiling_at >= CEILING_HOLD):
+            self.ceiling_w = self.ceiling_option = self.ceiling_at = None
+        if self.ceiling_w is not None and want.power_role and want.watts > self.ceiling_w:
+            return Command(want.option, self.ceiling_w)
+        return want
+
+    def step_down(self, now: datetime, battery_w: float | None) -> int | None:
+        """A charge or discharge that is not being followed: lower the ceiling one step (5000 -> 4000 -> 3000 W) so
+        the next cycle re-sends it lower. Returns the new ceiling, or None when it is already at the floor (or the
+        command is not a force power above it), so a battery that simply is not responding is reported, not chased
+        down to nothing. No EEPROM writes are involved: a remote-control command is volatile.
+        battery_w (+ discharging) must be known and show the battery doing under STEP_DOWN_MOVING of the command."""
+        s = self.sent
+        if s is None or not s.power_role or s.watts <= STEP_DOWN_FLOOR_W or battery_w is None:
+            return None
+        moving = -battery_w if s.option == OPTION_CHARGE else battery_w
+        if moving >= STEP_DOWN_MOVING * s.watts:
+            return None
+        self.ceiling_w = max(STEP_DOWN_FLOOR_W, s.watts - STEP_DOWN_W)
+        self.ceiling_option, self.ceiling_at = s.option, now
+        return self.ceiling_w
 
     def forget(self) -> None:
         """Something else touched remote control (a test, a restart): send the next command afresh."""
         self.sent, self.sent_at = None, None
+        self.ceiling_w = self.ceiling_option = self.ceiling_at = None
 
     def step(self, now: datetime, want: Command, refresh: timedelta) -> tuple[list[Write], str | None]:
         """(writes, 'change' | 'refresh' | None) for this cycle."""
@@ -112,8 +148,10 @@ class RamController:
                 del d[k]
 
     def check_following(self, now: datetime, battery_w: float | None, soc: float | None,
-                        floor_soc: float) -> str:
-        """'ok', 'waiting', 'not following' or 'n/a'. battery_w is + discharging."""
+                        floor_soc: float, expected_w: float | None = None) -> str:
+        """'ok', 'waiting', 'not following' or 'n/a'. battery_w is + discharging. expected_w: what the battery should
+        be doing (the command or the battery's own BMS limit, whichever is lower; bms.expected_w); None means the
+        command itself. A limit of 0 (or under 300 W) expects nothing, so there is nothing to follow."""
         s = self.sent
         if s is None or s.option == OPTION_OFF or battery_w is None:
             self.bad_since, self.follow = None, "n/a"
@@ -121,12 +159,13 @@ class RamController:
         if self.changed_at is not None and now - self.changed_at < FOLLOW_GRACE:
             self.follow = "waiting"
             return self.follow
+        watts = s.watts if expected_w is None else min(s.watts, max(0.0, expected_w))
         if s.option == OPTION_CHARGE and s.watts == 0:
             ok = battery_w <= 300                                  # hold: not discharging (solar may still charge)
         elif s.option == OPTION_CHARGE:
-            ok = (soc is not None and soc >= 95) or s.watts < 300 or battery_w <= -0.5 * s.watts
+            ok = (soc is not None and soc >= 95) or watts < 300 or battery_w <= -0.5 * watts
         else:
-            ok = (soc is not None and soc <= floor_soc + 5) or s.watts < 300 or battery_w >= 0.5 * s.watts
+            ok = (soc is not None and soc <= floor_soc + 5) or watts < 300 or battery_w >= 0.5 * watts
         if ok:
             self.bad_since = None
             self.follow = "ok"
