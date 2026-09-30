@@ -151,7 +151,8 @@ your existing apps (if any) starting as before.
 2. **HACS → ⋮ → Custom repositories**, add both:
    - `https://github.com/durkimat/ha-powerengine-controller`, category **AppDaemon**
    - `https://github.com/durkimat/ha-powerengine-card`, category **Dashboard**
-3. **Download both, at the same version.** While PowerEngine is in beta, turn
+3. **Download both, at the latest version of each.** The card is only released when it changes, so its version
+   can be behind the app's. While PowerEngine is in beta, turn
    on pre-releases for each repo in HACS, then pick the latest version.
 4. Restart AppDaemon: `ha apps restart a0d7b954_appdaemon`
 5. Reload the browser page (so the card's resource loads).
@@ -514,7 +515,8 @@ default). Doing it by hand instead:
 1. HACS shows updates under *Settings → Updates*, with the version number.
    With the handover package installed (0.8.3 or later), AppDaemon restarts by itself about a minute after
    the update is installed; you get a *PowerEngine updated* notification. Then refresh the browser.
-2. Update **both** repos to the **same** version. The card warns if they differ.
+2. Update **both** repos to the latest version of each. The card is only released when it changes, so its version
+   can be behind the app's; that's fine. Each warns only if the other is older than the minimum it needs.
 3. Restart AppDaemon (automatic with the handover package), then reload the browser.
 4. Read the release notes' **Behaviour changes** first: they list anything that changes what PowerEngine does.
 
@@ -548,7 +550,7 @@ for the card, then restart AppDaemon.
 | MQTT connection refused / not authorised | Wrong login in `secrets.yaml`, or the user is limited wrongly | Step 2 and 3.2; check the Mosquitto add-on log |
 | PowerEngine entities show *Unavailable* | App stopped or AppDaemon restarting | Check the AppDaemon log; the Heartbeat entity expires after 5 minutes without an update |
 | Card says *app not detected* | App not running, or MQTT not set up | Steps 3–4 |
-| Card warns about a version mismatch | App and card on different versions | Update both to the same version |
+| Card warns that the app (or the card) is too old | One of them is older than the other's minimum version | Update the one named in the warning to its latest version, then reload the page |
 | `Unknown command: ha` | Commands run on your own computer | Use HA's terminal add-on |
 | `Config problem: ...` in the log | `config.yaml` has an error | The message names the problem; fix or restore the backup |
 | Dashboard missing from the sidebar | `lovelace:` entry not added, or HA not restarted | Step 5 |

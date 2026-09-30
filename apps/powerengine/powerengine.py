@@ -95,7 +95,7 @@ from pe_core.smartcharge import SmartCharger, ask_message, worth_asking
 from pe_core.status import entity_states
 from pe_core.store import coerce_flags, save_config, with_operation
 from pe_core.tariff import overnight_window
-from pe_core.version import installed_version
+from pe_core.version import MIN_CARD_VERSION, installed_version
 from pe_core.weather import Weather
 
 HEARTBEAT_SECONDS = 60
@@ -1472,7 +1472,8 @@ class PowerEngine(hass.Hass):
 
     def _publish_names(self):
         """The version sensor carries the names map (a small attribute; the card fills its placeholders from it)."""
-        attrs = {"names": self._names(), "setup": "configured" if self._real_config_exists() else "unconfigured",
+        attrs = {"names": self._names(), "min_card_version": MIN_CARD_VERSION,
+                 "setup": "configured" if self._real_config_exists() else "unconfigured",
                  "demo": self._demo_info() if self._demo else None}
         if attrs["setup"] == "unconfigured" and not self._demo:
             attrs["demo_days"] = self._demo_days_preview()
@@ -2928,7 +2929,8 @@ class PowerEngine(hass.Hass):
         mode = getattr(self, "mode", None)
         run = getattr(self, "_test", None)
         return {
-            "app": {"version": __version__, "generated": now.isoformat(timespec="seconds"),
+            "app": {"version": __version__, "min_card_version": MIN_CARD_VERSION,
+                    "generated": now.isoformat(timespec="seconds"),
                     "timezone": str(self.tz) if self.tz else None},
             "mode": s(lambda: {"configured": mode.configured, "effective": mode.effective, "reason": mode.reason,
                                "halted": bool(getattr(self, "_halted", False)),

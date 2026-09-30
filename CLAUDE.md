@@ -17,6 +17,8 @@ diagnostics UI. The owner is Matthew. This is live on his house: mistakes cost m
 - `docs/INSTALL.md`: the install guide. Keep it current: any release that changes setup updates it in the same PR.
 - `docs/ha/powerengine_handover.yaml`: the HA package (handover scripts, update script, watchdog automations).
   The owner installs it into HA; see "HA config" below.
+- `tools/release.sh`: the release (below). `tools/diag_summary.py`: summarises a diagnostics export (below).
+  `tools/build_demo_pack.py`: rebuilds the demo pack.
 - `tests/`: pytest. `tests/test_replay.py` with `tests/replay_harness.py` replays a recorded night through the
   whole app (see "Replay safety net").
 - The card repo has one JS file, `ha-powerengine-card.js`, and `tests/helpers.test.cjs` (node --test).
@@ -27,7 +29,7 @@ diagnostics UI. The owner is Matthew. This is live on his house: mistakes cost m
 export PATH=$HOME/.local/bin:$PATH
 ruff check .                    # controller repo
 python3 -m pytest -q            # about 70 s, including the replay
-node --test tests/helpers.test.cjs   # card repo, when the card changes
+node --check ha-powerengine-card.js && node --test tests/*.test.cjs   # card repo, when the card changes
 ```
 
 ## Replay safety net
@@ -45,39 +47,45 @@ timed windows, and compares every plan, decision, service call and warning with 
 
 ## Releases (every user-visible change)
 
-Versions of app and card move together (0.9.x). For each release:
+Branch from `main`, make the change with tests, commit, then one command does the rest:
 
-1. Branch from `main`. Make the change, with tests.
-2. Bump the version:
-   - `apps/powerengine/pe_core/__init__.py`: `__version__`.
-   - `docs/INSTALL.md`: "Version this guide matches" and "PowerEngine x.y.z starting".
-   - card: `CARD_VERSION` in `ha-powerengine-card.js`.
-3. Update both `CHANGELOG.md` files:
-   - App entry: `## x.y.z (beta)`, then **### Behaviour changes** first ("None." if none), then other headings.
-   - Card entry: `## x.y.z`, or "No card changes; version kept in step with the app."
-   - The update card shows these sections to the user as "what's new", so write them for the owner, in plain words.
-4. Commit with these trailers:
-   ```
-   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-   Claude-Session: <the session link given in the conversation>
-   ```
-5. Push with the credential helper. The token is a file; never print it, echo it, or store it in git config.
-   ```
-   export TF=$HOME/mnt/dev-secrets/github_token.txt
-   HELPER='!f() { echo username=x-access-token; printf "password=%s\n" "$(tr -d "[:space:]" < "$TF")"; }; f'
-   git -c credential.helper= -c credential.helper="$HELPER" push -u origin <branch>
-   ```
-6. Open a PR with the GitHub API (`curl -H "Authorization: Bearer $(tr -d '[:space:]' < $TF)" ...`). PR bodies end
-   with `🤖 Generated with [Claude Code](https://claude.com/claude-code)` and the session link.
-7. Wait about 100 s, check the check-runs (Lint and tests, HACS validation), then squash-merge.
-8. Create the GitHub release `vx.y.z` on both repos (`prerelease: false`, `make_latest: "true"`). The body is that
-   version's CHANGELOG section.
-9. Run `git checkout main && git pull` in both repos.
+```
+tools/release.sh <version> --app-notes <file> [--card-notes <file>] [--app-branch <b>] [--card-branch <b>] \
+                 [--app-dir <d>] [--card-dir <d>] [--skip-checks] [--skip-replay] [--dry-run]
+```
+
+- Run it from the branch's worktree (or pass `--app-branch`). `--dry-run` shows every step and file change and pushes
+  nothing; do that first. The owner does the first real run of anything new.
+- It runs the checks (ruff, pytest, the replay), bumps `__version__` and both places in `docs/INSTALL.md`, adds the
+  `## x.y.z (beta)` CHANGELOG section from the notes file, commits with the trailers, pushes (credential helper), opens
+  the PR, polls CI every 20 s (up to 12 min; it never merges a red PR), squash-merges, creates the GitHub release
+  `vx.y.z` (`prerelease: false`, `make_latest: "true"`, body = the notes) and cleans up (`git checkout main && git pull`,
+  worktree and local branch removed). It prints PR numbers, release URLs and merge SHAs.
+- App notes start with **### Behaviour changes** ("None." if none), then other headings. The update card shows them to
+  the owner as "what's new", so write them in plain words. `--card-notes` is the same for the card's CHANGELOG.
+- **The card is released only when it changes** (give `--card-notes`; its changelog takes `## x.y.z`, `CARD_VERSION`
+  moves to that version). No `--card-notes`: the card repo is not touched. Versions stay in one sequence: a card
+  release takes the app version it ships with, so the card may go from 0.9.70 to 0.9.74.
+- **Minimum versions, not lockstep.** The card has `MIN_APP_VERSION` (oldest app it works with; 0.9.69, which added the
+  `demo_days` attribute). The app publishes `min_card_version` on `sensor.pe_diag_version` (`pe_core/version.py`
+  `MIN_CARD_VERSION`, 0.9.70). Each side warns only when the other is older than its minimum, not when they differ
+  (card: `versionWarnings`). Raise a minimum in the PR that makes one side need something the other only newer
+  versions have, and release both.
+- Tokens: the script reads the token file only as a curl header or through git's credential helper. Never print it.
 
 Tests-only or docs-only changes can merge without a release.
 
 The owner updates with the **Update** button on the dashboard's Configuration page: it refreshes HACS, installs
 both and restarts AppDaemon. PowerEngine also checks GitHub for new versions every 5 minutes.
+
+## Working routines
+
+- **Routine check of a diagnostics export** (Health tab's export): run `tools/diag_summary.py <export.json>` (add
+  `--since <ISO>` for a window, `--json` for machine-readable output). It prints one screen: versions, mode, log
+  levels, deduplicated warnings, decisions per hour and flip-flops, RAM commands, smart-slot requests and slots, Axle
+  events, restarts, attributes above 12 KB, the next 12 plan slots and the write budget. Open the full JSON only for
+  what the summary flags.
+- Prefer fresh sub-agents per task over resuming long-lived ones.
 
 ## Guardrails (don't break these)
 
