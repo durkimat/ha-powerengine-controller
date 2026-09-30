@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.75 (beta)
+
+### Behaviour changes
+- **The savings chart's date-range section is gone.** The "Savings for a date range" section on the Costs tab (the From and To pickers, the summary line and the second chart) did not work the way you wanted, so it has been removed. The two settings behind it, "Costs range from" and "Costs range to", disappear from Home Assistant when the app starts.
+- The savings chart itself is unchanged: the combined **PowerEngine** step (with the battery carry-over included), "No solar or battery" and "You paid" show exactly the same numbers as in 0.9.72, and so does the "Daily cost by scenario" chart. Yesterday, Last 7 days, This month and Last 30 days still work as before.
+- The app asks for card 0.9.70 or newer again, as it did before 0.9.72.
+
+### Other changes
+- Nothing else changes in how the app controls your battery.
+
 ## 0.9.74 (beta)
 
 ### Behaviour changes
