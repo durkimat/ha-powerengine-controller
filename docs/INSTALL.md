@@ -365,6 +365,16 @@ below* (4 °C) the plan expects charging at *Cold charge rate* (50%), and stays 
 slows at 5 °C raises the threshold to about 5.5 °C, and normal charging seen at 3 °C lowers it to 3 °C. The Plan
 tab lists the cautious periods; the Health tab shows the estimated battery temperature.
 
+**Battery limits (optional, RAM remote control):** a cold or nearly full battery may take less than the power asked
+for. Two optional inputs in the battery section let PowerEngine keep every remote-control command within what the
+battery allows: **BMS charge limit** and **BMS discharge limit** (Solis: `sensor.solis_bms_battery_charge_limit` and
+`sensor.solis_bms_battery_discharge_limit`, in amps, normally 100 A). The command is limited to amps times 52 V, the
+"following" check judges the battery against that lower figure, and a limit of 0 becomes a hold (charge) or
+Self-Use (discharge). Unmapped or unavailable sensors change nothing, except that with no charge limit the
+cold-battery caution's charge rate caps the command while the battery is cold. The diagnostics export lists the limits
+and the recent command, expected and actual battery power. If a charge or discharge still isn't followed after 3
+minutes, PowerEngine re-sends it lower (down to 3000 W) and tells you once.
+
 ## Active mode
 
 In Active mode PowerEngine writes the Solis timed-slot settings (storage mode stays Self-Use). With all three
