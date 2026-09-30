@@ -20,8 +20,8 @@ APP_REPO_SLUG="${PE_APP_REPO:-durkimat/ha-powerengine-controller}"
 CARD_REPO_SLUG="${PE_CARD_REPO:-durkimat/ha-powerengine-card}"
 TF="${PE_TOKEN_FILE:-$HOME/mnt/dev-secrets/github_token.txt}"
 SESSION_URL="${CLAUDE_SESSION_URL:-https://claude.ai/code/session_01LkznDwr2XBgEZmAma9wpfW}"
-POLL_SECONDS=20
-POLL_MAX_SECONDS=720
+POLL_SECONDS="${PE_POLL_SECONDS:-20}"
+POLL_MAX_SECONDS="${PE_POLL_MAX_SECONDS:-720}"
 export TF
 
 die() { printf 'release.sh: error: %s\n' "$*" >&2; exit 1; }
@@ -30,6 +30,7 @@ note() { printf '    %s\n' "$*"; }
 dry() { printf '    [dry-run] would: %s\n' "$*"; }
 usage() { sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
+# shellcheck disable=SC2016  # single quotes on purpose: git runs this, and $TF is read then
 HELPER='!f() { echo username=x-access-token; printf "password=%s\n" "$(tr -d "[:space:]" < "$TF")"; }; f'
 # git with network access (push, fetch, pull): the token comes from the credential helper only.
 gitn() { git -c credential.helper= -c credential.helper="$HELPER" "$@"; }
@@ -103,8 +104,8 @@ clean_tree() { [ -z "$(git -C "$1" status --porcelain --untracked-files=no)" ]; 
 worktree_of_branch() {
   git -C "$1" worktree list --porcelain | awk -v b="refs/heads/$2" '/^worktree /{d=substr($0,10)} $1=="branch" && $2==b {print d; exit}'
 }
-first_line() {           # the first non-empty line of the notes that is not a heading, as a short title
-  awk 'NF && !/^[[:space:]]*#/ { print; exit }' "$1" | sed -e 's/^[[:space:]]*[-*][[:space:]]*//' -e 's/\*\*//g' | cut -c1-70
+first_line() {           # the first line of the notes that is not a heading or "None.", as a short title
+  awk 'NF && !/^[[:space:]]*#/ && !/^[[:space:]]*[-*]?[[:space:]]*[Nn]one\.?[[:space:]]*$/ { print; exit }' "$1" | sed -e 's/^[[:space:]]*[-*][[:space:]]*//' -e 's/\*\*//g' | cut -c1-70
 }
 
 # --- file edits (pure: write the new content to a temp file; apply or, in a dry run, show the diff) -------------------
@@ -363,7 +364,9 @@ main() {
     [ -r "$TF" ] || die "token file not readable: $TF"
     code="$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(tr -d '[:space:]' < "$TF")" https://api.github.com/user)" || die "cannot reach api.github.com"
     [ "$code" = 200 ] || die "the GitHub token was refused (HTTP $code)"
-    api GET "/repos/$APP_REPO_SLUG/releases/tags/v$VERSION" >/dev/null 2>&1 && die "release v$VERSION already exists in $APP_REPO_SLUG" || true
+    if (api GET "/repos/$APP_REPO_SLUG/releases/tags/v$VERSION") >/dev/null 2>&1; then
+      die "release v$VERSION already exists in $APP_REPO_SLUG"
+    fi
   else
     dry "check the token file is readable and GitHub accepts it, and that release v$VERSION does not exist yet"
   fi
