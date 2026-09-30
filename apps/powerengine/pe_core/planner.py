@@ -472,7 +472,7 @@ def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool]
         for j in range(i + 1, len(src)):
             if p.axle_enabled and src[j].slot.axle and acts[j] == FORCE_DISCHARGE:
                 return (f"charge at {_p(_tariff_price(s))} for the {N('event')} event at "
-                        f"{_when(src[j].slot.start, now, tz)} ({axle_words(p, src[j].slot.export)})")
+                        f"{_when(src[j].slot.start, now, tz)}: {axle_words(p, src[j].slot.export)}")
             if acts[j] == EXPORT and src[j].slot.export is not None:
                 return (f"charge at {_p(_tariff_price(s))} to sell at {_p(src[j].slot.export)} from "
                         f"{_when(src[j].slot.start, now, tz)}")
