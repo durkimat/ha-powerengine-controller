@@ -12,8 +12,6 @@ from datetime import date, datetime, timedelta, timezone
 
 DAYS_BACK = 30
 DAY_OPTIONS = ["Today", "Yesterday"] + [f"{n} days ago" for n in range(2, DAYS_BACK + 1)]
-# the Costs tab's custom range: whole past days only (today is not complete), the same words as the day select
-RANGE_OPTIONS = DAY_OPTIONS[1:]
 PLAN_OPTIONS = ["Start of day"] + [f"{h:02d}:00" for h in range(24)]
 HALF = timedelta(minutes=30)
 
@@ -35,13 +33,6 @@ def chosen_day(option: str | None, today: date) -> date:
     if option in (None, "", "Yesterday") or option not in DAY_OPTIONS:
         return today - timedelta(days=1)
     return today - timedelta(days=int(option.split()[0]))
-
-
-def range_day(option: str | None, today: date) -> date | None:
-    """The day a Costs-range select names ("Yesterday", "5 days ago"), or None for anything else."""
-    if option not in RANGE_OPTIONS:
-        return None
-    return chosen_day(option, today)
 
 
 def chosen_plan(option: str | None, start_of_day: dict | None,

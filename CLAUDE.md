@@ -66,9 +66,9 @@ tools/release.sh <version> --app-notes <file> [--card-notes <file>] [--app-branc
 - **The card is released only when it changes** (give `--card-notes`; its changelog takes `## x.y.z`, `CARD_VERSION`
   moves to that version). No `--card-notes`: the card repo is not touched. Versions stay in one sequence: a card
   release takes the app version it ships with, so the card may go from 0.9.70 to 0.9.74.
-- **Minimum versions, not lockstep.** The card has `MIN_APP_VERSION` (oldest app it works with; 0.9.72, which added the
-  `custom` waterfall period). The app publishes `min_card_version` on `sensor.pe_diag_version` (`pe_core/version.py`
-  `MIN_CARD_VERSION`, 0.9.74). Each side warns only when the other is older than its minimum, not when they differ
+- **Minimum versions, not lockstep.** The card has `MIN_APP_VERSION` (oldest app it works with; 0.9.69, which added the
+  `demo_days` attribute). The app publishes `min_card_version` on `sensor.pe_diag_version` (`pe_core/version.py`
+  `MIN_CARD_VERSION`, 0.9.70). Each side warns only when the other is older than its minimum, not when they differ
   (card: `versionWarnings`). Raise a minimum in the PR that makes one side need something the other only newer
   versions have, and release both.
 - **Run it detached** (CI takes about 5 minutes, and a device_bash call is killed after 180 s, taking plain `&` or
@@ -137,6 +137,12 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 - **Display wording vs mode keys:** `ModeDecision.label` ("waiting for inputs") is for logs and the summary only;
   `effective == "unconfigured"` stays the key the entity, the card and the code use.
 - **Deleting files:** only when he asks. Put scratch files in `$HOME/mnt/powerengine/_to_delete`.
+
+## Backlog
+
+- Custom date range for the Costs savings waterfall: tried in 0.9.72-0.9.74 (relative-day From/To selects + a `custom`
+  period), removed in 0.9.75 because it didn't work as the owner wanted; re-ask him what he wants before building it
+  again. Ideas: real calendar date pickers; per-day data summed in the card.
 
 ## Recent fixes
 
