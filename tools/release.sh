@@ -193,7 +193,7 @@ run_card_checks() {
 # --- commit, PR, CI, merge, release ------------------------------------------------------------------------------
 commit_message() {       # commit_message TITLE  -> file
   local f; f="$(mktemp "$TMP/msg.XXXXXX")"
-  printf '%s\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: %s\n' "$1" "$SESSION_URL" > "$f"
+  printf '%s\n\nCo-Authored-By: %s <noreply@anthropic.com>\nClaude-Session: %s\n' "$1" "${CLAUDE_MODEL_NAME:-Claude Opus 5.5}" "$SESSION_URL" > "$f"
   echo "$f"
 }
 pr_body() {              # pr_body NOTES_FILE -> file
