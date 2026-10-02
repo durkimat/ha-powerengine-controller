@@ -161,6 +161,14 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 - Custom date range for the Costs savings waterfall: tried in 0.9.72-0.9.74 (relative-day From/To selects + a `custom`
   period), removed in 0.9.75 because it didn't work as the owner wanted; re-ask him what he wants before building it
   again. Ideas: real calendar date pickers; per-day data summed in the card.
+- Rework the release so a cloud session can do it (raised 2 Oct 2026): `tools/release.sh` needs the owner's `gh` login, and
+  the cloud proxy refuses `api.github.com` for `gh`, so every release runs on his machine. Idea: a `release.yml` GitHub
+  Actions workflow (`workflow_dispatch`: version, title, notes file) that bumps `__version__` and the two `docs/INSTALL.md`
+  places, adds the CHANGELOG section, squash-merges a green PR and creates the `vX.Y.Z` release; a cloud session commits
+  the notes file and starts it (`actions_run_trigger`). Needs a `RELEASE_TOKEN` repo secret (fine-grained PAT, Contents
+  and Pull requests read/write, on both repos, so a card release can go in the same run and CI re-runs on the bump
+  commit), `main` branch protection to allow the merge, and a dry-run mode. Keep `release.sh` as the fallback and the two
+  in step. First check whether his existing token already covers both repos.
 
 ## Recent fixes
 
