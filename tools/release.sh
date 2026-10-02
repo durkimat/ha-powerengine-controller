@@ -10,19 +10,17 @@
 # The notes files are the release notes as Markdown. App notes start with "### Behaviour changes" (the update card shows
 # them to the owner). They become the CHANGELOG section, the PR body and the GitHub release body.
 #
-# The GitHub token is only ever read at run time, from a file, and only inside the two constructs below: a curl header
-# and a git credential helper. It is never printed, stored in git config, or passed any other way. Set PE_TOKEN_FILE to
-# use another file. CLAUDE_SESSION_URL overrides the session line in commits and PR bodies.
+# The GitHub token comes from `gh auth token` (log in once with `gh auth login`) and is only ever read at run time,
+# inside the two constructs below: a curl header and a git credential helper. It is never printed, stored in git config,
+# or passed any other way. CLAUDE_SESSION_URL overrides the session line in commits and PR bodies.
 
 set -euo pipefail
 
 APP_REPO_SLUG="${PE_APP_REPO:-durkimat/ha-powerengine-controller}"
 CARD_REPO_SLUG="${PE_CARD_REPO:-durkimat/ha-powerengine-card}"
-TF="${PE_TOKEN_FILE:-$HOME/mnt/dev-secrets/github_token.txt}"
 SESSION_URL="${CLAUDE_SESSION_URL:-https://claude.ai/code/session_01LkznDwr2XBgEZmAma9wpfW}"
 POLL_SECONDS="${PE_POLL_SECONDS:-20}"
 POLL_MAX_SECONDS="${PE_POLL_MAX_SECONDS:-720}"
-export TF
 
 die() { printf 'release.sh: error: %s\n' "$*" >&2; exit 1; }
 step() { printf '\n==> %s\n' "$*"; }
@@ -30,8 +28,8 @@ note() { printf '    %s\n' "$*"; }
 dry() { printf '    [dry-run] would: %s\n' "$*"; }
 usage() { sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
-# shellcheck disable=SC2016  # single quotes on purpose: git runs this, and $TF is read then
-HELPER='!f() { echo username=x-access-token; printf "password=%s\n" "$(tr -d "[:space:]" < "$TF")"; }; f'
+# shellcheck disable=SC2016  # single quotes on purpose: git runs this, and the token is read then
+HELPER='!f() { echo username=x-access-token; printf "password=%s\n" "$(gh auth token)"; }; f'
 # git with network access (push, fetch, pull): the token comes from the credential helper only.
 gitn() { git -c credential.helper= -c credential.helper="$HELPER" "$@"; }
 
@@ -46,7 +44,7 @@ api() {
   local args=(-sS -o "$out" -w '%{http_code}' -X "$method" -H "Accept: application/vnd.github+json"
               -H "X-GitHub-Api-Version: 2022-11-28")
   [ -n "$data" ] && args+=(-H "Content-Type: application/json" --data-binary "@$data")
-  code="$(curl "${args[@]}" -H "Authorization: Bearer $(tr -d '[:space:]' < "$TF")" "https://api.github.com$path")" \
+  code="$(curl "${args[@]}" -H "Authorization: Bearer $(gh auth token)" "https://api.github.com$path")" \
     || die "could not reach api.github.com ($method $path)"
   if [ "${code:0:1}" != "2" ]; then
     die "GitHub answered $code to $method $path: $(jq -r '.message // empty' "$out" 2>/dev/null | head -c 300)"
@@ -314,7 +312,7 @@ resolve_app() {
 }
 # resolve_card: sets CARD_MAIN, CARD_WORK, CARD_BR, CARD_WT, CARD_CREATE (1 to create release/<version> from main)
 resolve_card() {
-  CARD_DIR="${CARD_DIR:-$HOME/mnt/powerengine/ha-powerengine-card}"
+  CARD_DIR="${CARD_DIR:-$HOME/Projects/powerengine/ha-powerengine-card}"
   [ -d "$CARD_DIR" ] || die "card directory not found: $CARD_DIR (use --card-dir)"
   CARD_DIR="$(cd "$CARD_DIR" && pwd)"
   [ -f "$CARD_DIR/ha-powerengine-card.js" ] || die "$CARD_DIR is not the PowerEngine card repo"
@@ -361,8 +359,9 @@ main() {
   fi
 
   if [ "$DRY" = 0 ]; then
-    [ -r "$TF" ] || die "token file not readable: $TF"
-    code="$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(tr -d '[:space:]' < "$TF")" https://api.github.com/user)" || die "cannot reach api.github.com"
+    command -v gh >/dev/null || die "gh is not installed (needed for its token)"
+    gh auth token >/dev/null 2>&1 || die "gh is not logged in (run: gh auth login)"
+    code="$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(gh auth token)" https://api.github.com/user)" || die "cannot reach api.github.com"
     [ "$code" = 200 ] || die "the GitHub token was refused (HTTP $code)"
     if (api GET "/repos/$APP_REPO_SLUG/releases/tags/v$VERSION") >/dev/null 2>&1; then
       die "release v$VERSION already exists in $APP_REPO_SLUG"

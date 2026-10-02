@@ -47,56 +47,7 @@ timed windows, and compares every plan, decision, service call and warning with 
 
 ## Releases (every user-visible change)
 
-Branch from `main`, make the change with tests, commit, then one command does the rest:
-
-```
-tools/release.sh <version> --app-notes <file> [--card-notes <file>] [--app-branch <b>] [--card-branch <b>] \
-                 [--app-dir <d>] [--card-dir <d>] [--skip-checks] [--skip-replay] [--dry-run]
-```
-
-- Run it from the branch's worktree (or pass `--app-branch`). `--dry-run` shows every step and file change and pushes
-  nothing; do that first. The owner does the first real run of anything new.
-- It runs the checks (ruff, pytest, the replay), bumps `__version__` and both places in `docs/INSTALL.md`, adds the
-  `## x.y.z (beta)` CHANGELOG section from the notes file, commits with the trailers, pushes (credential helper), opens
-  the PR, polls CI every 20 s (up to 12 min; it never merges a red PR), squash-merges, creates the GitHub release
-  `vx.y.z` (`prerelease: false`, `make_latest: "true"`, body = the notes) and cleans up (`git checkout main && git pull`,
-  worktree and local branch removed). It prints PR numbers, release URLs and merge SHAs.
-- App notes start with **### Behaviour changes** ("None." if none), then other headings. The update card shows them to
-  the owner as "what's new", so write them in plain words. `--card-notes` is the same for the card's CHANGELOG.
-- **The card is released only when it changes** (give `--card-notes`; its changelog takes `## x.y.z`, `CARD_VERSION`
-  moves to that version). No `--card-notes`: the card repo is not touched. Versions stay in one sequence: a card
-  release takes the app version it ships with, so the card may go from 0.9.70 to 0.9.74.
-- **Minimum versions, not lockstep.** The card has `MIN_APP_VERSION` (oldest app it works with; 0.9.69, which added the
-  `demo_days` attribute). The app publishes `min_card_version` on `sensor.pe_diag_version` (`pe_core/version.py`
-  `MIN_CARD_VERSION`, 0.9.70). Each side warns only when the other is older than its minimum, not when they differ
-  (card: `versionWarnings`). Raise a minimum in the PR that makes one side need something the other only newer
-  versions have, and release both.
-- **Run it detached** (CI takes about 5 minutes, and a device_bash call is killed after 180 s, taking plain `&` or
-  `nohup` children with it): `setsid nohup tools/release.sh ... > ../_to_delete/release-x.y.z.log 2>&1 < /dev/null &
-  disown`, then `tail` the log in later calls. Always pass `--title "x.y.z: short summary"`, because the default title
-  cuts the first notes line mid-word. Notes files go in `$HOME/mnt/powerengine/_to_delete/`.
-- Tokens: the script reads the token file only as a curl header or through git's credential helper. Never print it.
-- **When detached runs don't survive** (seen 30 Sep 2026, Cowork session: every background process, including
-  setsid, nohup and tmux, was killed when its device_bash call ended, so the script died in the test step): check
-  with `(setsid sh -c 'sleep 300' &)` and `ps` in the next call. Then run the release one call at a time with the
-  script's own functions: `head -n -2 tools/release.sh > $HOME/work/rel_lib.sh`, then in each call
-  `source rel_lib.sh; TMP=$(mktemp -d); DRY=0; WORK=$PWD` and run `change_file app_version|install|app_changelog`,
-  `commit_message`, `pr_body`, `gitn push`, `api POST .../pulls`; poll `.../check-runs` in calls of up to 170 s
-  (CI took about 6 minutes); `api PUT .../pulls/N/merge` (squash), `api POST .../releases`, then `git checkout main`,
-  pull and delete the branch. Run the test suite first in cloud `Bash` (background works there, about 210 s), not
-  on the device. Same steps, same commit and release format as the script.
-- **The cloud workspace cannot release:** its network proxy answers every `api.github.com` call with 403 "No linked
-  GitHub account", so the owner's token is refused there. Releases run on the device (`$HOME/mnt/dev-secrets`).
-- **Check `main` before choosing the version:** the owner may have released since the session started (0.9.72 went
-  out while #121 was in progress, so it became 0.9.73). `git fetch`, rebase the branch, rerun the tests, then pick
-  the next version. Don't reuse a branch name that already exists on GitHub after a rebase (a stale remote branch
-  blocks a plain push and the token can't delete refs); use a new name.
-- `release.sh` hard-codes the co-author trailer "Claude Opus 5.5"; set `CLAUDE_MODEL_NAME` to use the model's name,
-  and `CLAUDE_SESSION_URL` for the session link (the default points at an old session). Pass `--app-branch` when
-  the clone's main checkout is the one on the branch (the script otherwise wants a worktree).
-- Never `git clone` with the token in the URL (it lands in `.git/config`); use the credential helper.
-
-Tests-only or docs-only changes can merge without a release.
+Load the `release` skill for the full routine (branching, `tools/release.sh`, minimum-version rules). Tests-only or docs-only changes can merge without a release.
 
 The owner updates with the **Update** button on the dashboard's Configuration page: it refreshes HACS, installs
 both and restarts AppDaemon. PowerEngine also checks GitHub for new versions every 5 minutes.
@@ -123,7 +74,7 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   write budget, dampening, read-back checks and the RAM refresh behaviour intact.
 - **Attributes of published sensors must stay under 16 KB** (HA's recorder skips larger ones). `_publish_state`
   measures them and warns above 15,000 bytes. The role catalogue is about 14.5 KB.
-- **HA config:** a git copy lives at `$HOME/mnt/HA/config`, synced by the owner with `./ha-sync.sh pull` /
+- **HA config:** a git copy lives at `/home/matthew/HA/config`, synced by the owner with `./ha-sync.sh pull` /
   `push --apply`. Commit there only right after he says he has pulled. He pushes and applies it.
 - **Never hard-code a supplier or device name in user text** (EDF, Zappi, Solcast, Solis, Axle): use the names map
   (`pe_core/names.py`, `N(term)` or a `<<term>>` placeholder). Stored names (entity ids, topics, keys) never change.
@@ -136,7 +87,7 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   `Decision.details["reached"]` carries the latch; nothing else may use `details` for other purposes without care.
 - **Display wording vs mode keys:** `ModeDecision.label` ("waiting for inputs") is for logs and the summary only;
   `effective == "unconfigured"` stays the key the entity, the card and the code use.
-- **Deleting files:** only when he asks. Put scratch files in `$HOME/mnt/powerengine/_to_delete`.
+- **Deleting files:** only when he asks. Put scratch files in `~/Projects/powerengine/_to_delete`.
 
 ## Backlog
 
@@ -157,200 +108,11 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Current work: making it generic (Phase 0)
 
-Plan: `docs/plans/making-it-generic.md` (index: `docs/plans/README.md`; each plan opens with a Status box, and the box is updated in the PR that lands a step). Phase 0 restructures the code behind adapters, with no
-behaviour change:
-
-0. Replay safety net. **Done** (PR #152).
-1. Adapter interfaces and neutral vocabulary, with no code moved. **Done** (`pe_core/adapters`; built by a Sonnet sub-agent, reviewed).
-2. Solis inverter adapter (timed windows, RAM control, tests/clock). Done (2a timed windows, 2b RAM control, 2c tests and clock), pending a night's running.
-3. EDF tariff adapter (Kraken rates, smart slots/dispatches, Axle as a grid event). **Done** (branch `tariff-adapter-3`):
-   - `pe_core/adapters/kraken.py`: `KrakenTariff("edf" | "octopus")` holds the Octopus-Energy-integration parsing that was in
-     `readings.read()` (`read_import_rate/export_rate/standing_charge/rates/dispatches/offpeak/free_sessions`, pure, taking a
-     `role -> state` accessor), the `TariffAdapter` wrappers, `display_names()`, `supplier_of(entity_id)` (was inline in the
-     simulator context) and the smart-request translation (`ready_by_call`, `charge_target_call`, `ready_by_options`).
-   - `pe_core/adapters/axle.py`: `AxleEvents.read_event()` (was in `read()`) and `grid_events()` as export `GridEvent`s. New
-     registry kind `"event"`; `GridEventAdapter` protocol in `base.py`.
-   - `pe_core/parsing.py`: `Window`, `parse_time`, `parse_windows` and friends moved out of `readings` (still importable
-     from there) so adapters need not import `readings`.
-   - `read(cfg, get_state, now, tariff=None, events=None)` calls the adapters (defaults built inside); the app builds them
-     lazily with `_tariff()` / `_events()`. `SmartCharger` policy (when, back-off, settle, attempts file) stays in the core.
-   - Step 6 to-do, EDF-named texts left as they were: `powerengine.py:2132` (log "Asking EDF for smart-charge slots"),
-     `pe_core/costs.py:335` (waterfall label "EDF tariff", also the docstring at :297), `dashboard/dashboard.lovelace`
-     (lines 265, 315, 928, 932, 983, 1032, 1060, 1111, 1119, 1384, 1394, 1397, 1412, 1414), `pe_core/roles.py` (63, 164, 214,
-     217 role descriptions/group; the `suggest` regexes name `edf_energy`, which is discovery, not text), `docs/INSTALL.md`
-     (25, 278, 279), and comments/docstrings in `smartcharge.py`, `slots.py`, `certainty.py`, `tariff.py`, `forecast.py`,
-     `optimiser.py`, `planner.py`.
-4. Zappi EV adapter (plug/charge states, car-full detection, check meter). **Done** (branch `ev-adapter-4`):
-   - `pe_core/adapters/myenergi.py`: `ZappiCharger` (`read(state)` for plug/status/mode/session kWh/power, pure
-     `classify(plug, power_w)` = the old `ev_state()` logic, `complete(plug_state, status)`, plus the `EVAdapter` protocol and
-     `display_names()`); registered as `("ev", "zappi")`.
-   - `Readings.ev_state()` delegates to the adapter's `classify` (optional non-compared field `ev`, default module-level Zappi
-     adapter, so `Readings(**kw)` still works); new `Readings.ev_complete()` replaces the `"complet" in ev_status` test in
-     `forecast.py`. `read(..., ev=None)`; the app builds `_ev()` lazily. `_power_w`/`_energy_kwh` moved to `pe_core/parsing.py`.
-   - Left: role `suggest` regexes (step 7), `slots.car_idle`, `gridcheck`. Zappi-named texts for step 6: `pe_core/config.py:126`
-     (setting help "32 A Zappi"), `pe_core/roles.py:109` (check meter "e.g. Zappi CT"), `docs/INSTALL.md:25, 278`, and comments in
-     `gridcheck.py:1,16` and `checks.py:95`.
-5. Solcast forecast adapter. **Done** (branch `forecast-adapter-5`):
-   - `pe_core/adapters/solcast.py`: `SolcastForecast` (`attribute = "detailedForecast"`): `points(items)` -> `ForecastPoint`s
-     (kWh = pv_estimate x 0.5, optional 10/90 bands; the slot builder's old skip rules), `day_kwh(items)` (was
-     `readings.forecast_kwh`, which stays as a wrapper), `read(get_attribute, entity_ids)` (was the loop in the app's
-     `_solar_forecast`), and `half_hourly(ha, day)`. Registered as `("forecast", "solcast")`.
-   - `build_slots(r, solar, ...)` takes `ForecastPoint`s or raw dicts (raw go through the default adapter); the app's
-     `_solar_forecast()` now returns points, via `_forecast()`. `read(..., forecast=None)`. Nothing serialises the solar list.
-   - Left: the roles' `attribute="detailedForecast"` and `suggest` regexes (step 7). Step 6 texts naming Solcast:
-     `docs/INSTALL.md:25`; the stored config value `solcast_site` (`config.py:43` `FORECAST_SOURCES`) is a key, not text.
-6. Neutral names; display names come from the adapters. **Done** (branch `neutral-names-6`; identical text for EDF/Zappi/Solcast/Solis/Axle):
-   - **Rule: never hard-code a supplier or device name in user-visible text; use the names map.** Stored or addressed
-     things keep their names (entity ids, MQTT topics, attribute/config keys and values, cost-history fields, file names).
-   - `pe_core/names.py`: one map of terms (`supplier`, `tariff`, `dispatch`, `dispatch_short`, `smart_charge`, `ev_charger`,
-     `forecast`, `inverter`, `event`) built from the adapters' `display_names()` (`build_names`). `N(term)` reads the current map
-     (defaults are his words, so unit tests and the replay see EDF/Zappi/...; the app calls `set_current()` via `_names()`).
-     `fill(text)` replaces `<<term>>` placeholders and raises on an unknown one. Unknown terms fall back to neutral words
-     (`adapters/vocabulary.py`: "your supplier", "smart-charge slot", ...).
-   - Python texts use `N(...)` (decide, planner, costs, status, notify, `smartcharge.ask_message`) or `<<term>>` in static
-     tables (role help in `roles.py`, setting help in `config.py`), filled when the catalogues are built.
-   - Dashboard (`dashboard.lovelace`): user text carries `<<term>>`; `sync_dashboard(..., names=)` fills it after the
-     energy-flow splice (`dashboard.render`). `tests/golden/dashboard_edf_zappi_solcast_solis_axle.lovelace` is the frozen
-     rendered original; a test keeps the render with his names byte-identical to it.
-   - The app publishes the map as attribute `names` on `sensor.pe_diag_version` (small; not `map_catalogue`, which is near the
-     15.5 KB limit). The card fills its own placeholders from it (`fillNames`), with neutral fallbacks.
-   - Left: comments/docstrings (incl. dated history notes), the `state_axle` entity's display name, the roles' `suggest`
-     regexes, `FORECAST_SOURCES`, `docs/INSTALL.md` (his hardware's setup guide), the dashboard's and the simulator's
-     EDF-versus-Octopus comparison sentences, and the card's "Forecast: Solcast site" option (names that config value).
-7. Solis as a definition file (YAML plus a small driver; firmware variants; RAM first). **Done** (branch `phase0/solis-definition-7`; byte-identical for his S5-EH1P6K-L on firmware 420044):
-   - `pe_core/adapters/devices/solis.yml` holds all Solis data: display names, `card_model`, capability flags and limits, the
-     RAM remote-control entities/options/limits/tests first, then the timed slots (three, `_2`/`_3` suffix, staged parts, test
-     roles), the clock roles, the 29 brand `suggest` regexes per role, and `firmware:` variants (his 420044 is the base; a
-     commented `re:^FB` example). **It is `.yml`, not `.yaml`, on purpose:** AppDaemon loads every file ending `.yaml` under
-     the apps folder as app config; `test_no_stray_yaml_in_app_folder` allows only `powerengine.yaml` and `devices/*.yml`.
-   - `adapters/definition.py` loads, validates (clear `DefinitionError`s naming the missing key) and merges firmware variants
-     (`match` = exact version or `re:pattern`; first match wins; mappings merge key by key). It imports nothing else from
-     pe_core, so `roles.py` can use it. `adapters/defined.py`: `DefinedInverter(definition, ha, role_entity, ...)` implements
-     the whole inverter surface. `adapters/solis.py`: `SolisInverter(DefinedInverter)` keeps the old constructor, class
-     `DISPLAY_NAMES`, `card_model` and the registry entry. `registry.py` registers every `devices/*.yml` as an inverter on
-     first use (a class registered under the same name wins).
-   - Stays in Python, chosen by `behaviour:` (`timed_hhmm`, `override_select`, `drift_button`): the window arithmetic
-     (`control.py`, `schedule.py`), the RC command per decision, refresh and following check (`ramcontrol.py`), the RC tests'
-     verdicts (`rctest.py`), clock-drift maths (`clock.py`). The neutral role names (`timed_charge_start_hour`, `rc_mode`,
-     `storage_mode`) and the RC option words the controller works in (`Off`, `Force charge`, `Force discharge`) are the
-     app's vocabulary; a definition maps them to its inverter's own words (applied at the service call and the option check).
-   - `roles.py`: the brand `suggest` regexes are gone from it; `roles_for(inverter)` merges them from the definition
-     (`ROLES = roles_for()`), so the catalogue is unchanged (`tests/golden/roles_catalogue.json`).
-   - `tests/test_solis_definition.py` + `tests/golden/solis_parity.json` (recorded from the hand-written class before the
-     refactor) pin every protocol method's output; re-record only for a deliberate behaviour change
-     (`PE_PARITY_RECORD=1`). The replay goldens are untouched. See `docs/INVERTERS.md` for the file format.
-   - Left: the app still builds `SolisInverter` directly (no inverter setting yet), the RC controller compares option
-     words by the app's names, the timed behaviour handles exactly three slots, and `writes_needed` names the update button
-     role. Those are the first things a second inverter would generalise.
-
-8. Site section (which plant this home has). **8a done** (branch `phase0/site-8`; byte-identical for his plant, replay and dashboard goldens unchanged); **8b next** (the card's "Your system" block):
-   - `config.yaml` gets an optional `site:` (`config.Site`, frozen; keys `inverter`, `inverter_firmware`, `ev_charger`, `car`, `tariff`, `forecast`,
-     `events`; unknown keys and names are `ConfigError`s). The valid names come from the registry (`config.site_choices()`: registry names
-     plus `none`, and `auto` for the tariff), never from lists in `config.py`. See `docs/SITE.md`.
-   - The app builds `_inverter()`, `_ev()`, `_forecast()`, `_events()`, `_tariff()` by name from `cfg.site` (`_adapter()` keeps each with the name it
-     was built for and rebuilds on change, so a config reload picks up a new site). `"none"` is a null adapter (`adapters/null.py`: `NoCharger`,
-     `NoForecast`, `NoEvents`; reads nothing, neutral words in the names map). Tariff `auto` keeps `supplier_of`. `inverter_firmware` goes to the
-     definition loader (`firmware=`), so firmware variants apply.
-   - Migration (`_add_site`): a real config with no `site` gets today's plant (solis, firmware from the definition's `firmware_entity` if any, else the definition's default ("420044", logged as assumed), zappi,
-     car none, tariff auto, solcast, axle), saved by `store.save_config` (backup kept), one INFO line "Site added to the configuration: ...". Not in
-     demo mode, not unconfigured, idempotent; a failed save warns and carries on in memory. Parts are never migrated to `none` (the words in texts
-     would change). The replay harness config carries the site instead, so the goldens stay as recorded.
-   - Definitions gained `status` (verified | community | draft; solis is verified on `verified_firmware: ["420044"]`) and an optional
-     `firmware_entity` ({domain, tail}). The SolaX Modbus Solis plugin exposes no firmware entity, so solis names none.
-   - `sensor.pe_diag_version` attributes add `site`, `site_options` (`adapters/options.py`, about 1 KB), `firmware_detected` and `retest_required`.
-   - Changing `site.inverter`, or `site.inverter_firmware` so that a different firmware variant applies (null and "420044" are the same for solis), (`_on_save` -> `_site_guard`) switches to Passive, logs, notifies and sets
-     `retest_required` (`site_state.json` beside the config; cleared when a supervised RC test passes). The app has no stored RC-test results or
-     Active gate, so the flag is what the card reads; the card decides how to show it. A save without `site` keeps the saved one.
-   - 8b: the card's "Your system" block (reads the attributes above; saves with `pe_config_save`).
-
-Each step is a small PR that passes the replay unchanged.
+Plan: `docs/plans/making-it-generic.md` (index: `docs/plans/README.md`). Load the `phase0-generic` skill for the
+step-by-step implementation status (steps 0-8, file-level detail, what's left per step).
 
 ## Demo mode plan
 
-Plan: `docs/plans/demo-and-easier-install.md`. A2, A3 and D1 are parked; the options are in #192.
-
-Goal: PowerEngine runs with no MQTT broker and no real inverter (a demo), and installs more easily.
-
-- **B1, publisher adapter. Done** (`pe_core/adapters/publish.py`): `StatePublisher` (`discover`, `publish`, `preset`,
-  `retire`, `retire_all`, `available`) with `MqttPublisher` (exactly the old topics, payloads, QoS 1, retained) and
-  `DirectPublisher(set_state, remove_state=None)` (HA states through AppDaemon, same entity ids as MQTT discovery's
-  `default_entity_id`). System setting `publisher`: `auto` (MQTT if the AppDaemon MQTT plugin is there, else direct) /
-  `mqtt` / `direct`. **Rule: all entity output goes through `self._get_publisher()`; never call `mqtt_publish` or build a
-  topic in the app.** Direct-mode gaps: no entity registry (no unique ids, gone when HA restarts until the next publish),
-  no retire from HA (marked `unavailable`), and no commands from HA (switches and selects are read-only) until B2.
-- **B2, commands in direct mode. Done** (`pe_core/commands.py`, `powerengine.py` `_listen_for_commands` / `_on_command`).
-  With MQTT the app never receives a command message: HA's switch publishes to the retained command topic, the state
-  changes, and the app's `listen_state` handlers (pause, guards, history) react. Direct mode does the same by setting the
-  entity's state itself: `_on_command(key, value)` validates, then `publisher.preset`. Direct mode only (no listeners in
-  MQTT mode) hears HA's `call_service` event (`switch.turn_on/turn_off/toggle`, `select.select_option/select_next/
-  select_previous`, `number.set_value`; `service_data.entity_id` as string, comma string or list; other entities ignored) and
-  the card's fallback event **`pe_command`**: `{"entity_id": "switch.pe_ctl_pause", "value": "ON"}` (`value`: "ON" / "OFF" /
-  "toggle" for a switch, one of the select's options, a number). Fire it from the card with
-  `hass.connection.sendMessagePromise({type: "fire_event", event_type: "pe_command", event_data: {...}})` (admin only)
-  when HA refuses a service call because the domain has no platform. Invalid values are ignored.
-- **C1, demo data pack. Done** (`apps/powerengine/demo/pack.json`, about 19 KB, inside the app folder HACS installs;
-  pure reader `pe_core/demo/pack.py`: `load_pack`, `days`, `day_at`, `row_at`, `smart_slots`, `axle_events`). Four
-  recorded, scrubbed days, picked by rule from the owner's cost records: `sunny` (most solar), `dull` (least solar),
-  `axle` (largest grid-services export; its title is `<<event>> event day`, fill it with `names.fill`) and `car` (most
-  car kWh); a day that wins two rules gives the later rule its next best. It is September data: no "winter" names.
-  Per half-hour: house, car, solar, a derived solar forecast (recorded solar smoothed over 2 h, scaled per day within
-  10%), rates (act, std, ovn, exp, standing), recorded SoC at the start, smart-slot, axle and free flags, and a small
-  `as_recorded` grid/battery section. Times are offsets from local midnight (Europe/London); `day_at` maps wall-clock
-  times, so a spring-forward date has 46 rows and an autumn one 50 (the repeated hour plays twice).
-  - **Rebuild:** `python3 tools/build_demo_pack.py <config>/powerengine/costs [--glob "2026-09-*.json"]`. It prints
-    the chosen days and their totals and writes the pack. Only complete days count (48 consecutive records from local
-    midnight, at least 95% coverage, no duplicate starts).
-  - **Scrub rule:** the pack holds numbers, times and flags only. The builder refuses (exit 2) any string in a source
-    record except `start`, `source: "history"`, `fv` (a rates tag, dropped) and `v.event` (`axle` or `free_power`), so an
-    entity id, account number, MPAN, serial or site id can never be copied in. Never commit a pack from an unscrubbed
-    source, never put private day files in tests (they use synthetic days), and don't loosen the whitelist without
-    looking at what the new string is.
-- **C2, the demo world. Done** (`pe_core/demo/world.py`, `gate.py`, `demo/config.template`, the `_demo_*` methods in
-  `powerengine.py`). **Start it** with `demo: sunny` (or `dull`, `axle`, `car`) in the app's apps.yaml entry, and restart
-  AppDaemon; remove the line to go back. The app then runs on a simulated home: `DemoWorld` (18 kWh battery, 95% each
-  way, 5 kW, 12% floor, remote-control failsafe after 5 min) moves one pack day onto today, and the real Solis/Kraken/
-  Zappi/Solcast/Axle adapters read its `demo_*` entities unmodified (`world.IDS` lists them; RC discovery finds the
-  `battery_control_override` ones). The settings are a fresh copy of `demo/config.template` in `<config>/powerengine/demo/`
-  (the folder is wiped at each demo start; nothing else there or in `<config>/powerengine/` is touched; not `.yaml`, or
-  AppDaemon would load it as app config). Publishing is direct. Off: smart-charge requests, tariff simulator, cold-battery
-  weather, the GitHub release check. `sensor.pe_diag_version` carries `attributes.demo` (`day`, `title` with the names
-  filled, `note`) for C3's banner.
-  - **The gate rule: in demo mode every call to Home Assistant goes through `DemoGate`.** The app replaces its own
-    `get_state`, `get_history`, `call_service`, `set_state` and `fire_event` on the instance: service calls go only to the
-    world (what it refuses, such as notifications and logbook entries, is dropped and logged once); `set_state` only for
-    `pe_` entities; `fire_event` only the card's answers; `get_state` sees demo entities and PowerEngine's own `pe_`
-    entities, nothing else (no `zone.home`). So **always call `self.call_service` / `self.fire_event` in `powerengine.py`;
-    never call them on anything else** (an adapter's `ha`, `hass.Hass...`). `test_no_direct_call_to_home_assistant_bypasses_
-    the_gate` reads the source and fails on a new call anywhere else.
-- **C3, controller side. Done** (`_on_demo`, `_saved_demo_day`, `_wipe` in `powerengine.py`; `tests/test_demo_control.py`).
-  The card's contract:
-  - `sensor.pe_diag_version` attributes: `setup` is `"unconfigured"` (no real config.yaml) or `"configured"`; `demo` is
-    `null`, or `{"day", "title" (names filled), "days": [{"key","title"}, ...all pack days], "note": "Recorded data from a
-    real home. Nothing is controlled."}`. An unconfigured app publishes the sensor (direct publishing when there is no MQTT).
-  - Event **`pe_demo`** (admin, over the websocket): `{"action":"start","day":"sunny"}`, `{"action":"day","day":"dull"}`,
-    `{"action":"exit"}`. Answer event **`pe_demo_result`**: `{"ok": true|false, "message": "<plain words>"}`. Only that
-    event name is handled. `start` is refused (`ok:false`) when a real config.yaml exists and no demo is running, so a demo
-    never takes over a real system. Bad days, unknown actions and `day` with no demo running are refused. The app arg
-    `demo` still wins (then start/day/exit are refused, with a message).
-  - `start`/`day` write `<save dir>/demo.json` `{"day": ...}` and re-initialise; `exit` removes it and re-initialises
-    (unconfigured, or back to the real config). A saved demo.json is ignored when a real config exists. Demo settings are
-    discarded because the config copy is remade on every start.
-  - **Re-initialise = `initialize()` again, after `_wipe()`** (no `restart_app`). From the first `initialize()` the app
-    records every attribute it sets (`__setattr__` into `_touched`) and every timer/listener handle (instance wrappers on
-    `run_in/run_every/run_daily/listen_event/listen_state`). `_wipe()` runs `terminate()`, cancels the handles (skipping
-    `run_in` timers already due) and deletes the attributes (this also puts the real `get_state` etc. back).
-    **Rule: keep `initialize()` and what it sets in `self`; don't set attributes from AppDaemon threads outside it.**
-    `test_no_duplicate_timers_or_listeners_after_start_day_exit_start` compares the live handle set with the fresh one.
-  - **Handles can be Tasks.** AppDaemon 4.5 returns an asyncio Task/Future (not the handle string) from `run_every`,
-    `run_in`, `listen_state` etc. when called on its event loop; 4.4 returns the string. `_track` records the handle
-    inside a finished Task, or records it when a pending one finishes (and cancels it at once if a wipe came first).
-  - **Direct publishing and AppDaemon 4.5's `set_state`.** Its REST write cleans the payload: `true` becomes "true",
-    and `false`, `null` and every 0 are dropped from attributes (series lose their zeros and shift; config booleans
-    arrive as text). So `_lossless_set_state` posts attributes with such values to HA's states endpoint itself
-    (`_rest_states_poster`, `pe_` entities only, so the gate rule holds) and `check_existence=False` stops the
-    "Entity not found" warnings on creation (only passed where `set_state` names it: 4.4 would make it an attribute).
-  - **The demo's clock is the pack's zone** (Europe/London), not AppDaemon's `time_zone` (often UTC on a fresh install,
-    which put the recorded day an hour out), and the app's `tz` is set to it while a demo runs.
-  - Dashboard: with no real config a demo also writes `<save dir>/dashboard.yaml` (plus C2's `demo/` copy). Every view of
-    `dashboard.lovelace` starts with `- type: custom:powerengine-demo-card` (full width, no options); the golden fixture
-    has exactly those 24 lines more.
+Plan: `docs/plans/demo-and-easier-install.md`. A2, A3 and D1 are parked; the options are in #192. Load the
+`demo-mode` skill for the implementation detail (publisher adapter, the DemoGate rule, the data pack, the
+`pe_demo`/`pe_demo_result` event contract).
