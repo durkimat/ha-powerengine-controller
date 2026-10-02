@@ -100,6 +100,78 @@ views:
             tap_action:
               action: navigate
               navigation_path: costs
+          # what is happening now: each tile turns green while it is active (car charging, in a smart-charge slot,
+          # an event or free power under way)
+          - type: tile
+            entity: sensor.pe_state_ev
+            name: Car
+            color: green
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_ev
+                state: Charging
+          - type: tile
+            entity: sensor.pe_state_ev
+            name: Car
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_ev
+                state_not: Charging
+          - type: tile
+            entity: sensor.pe_state_smart_charge
+            name: EDF smart charge
+            state_content: [state, detail]
+            color: green
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_smart_charge
+                state: In slot
+          - type: tile
+            entity: sensor.pe_state_smart_charge
+            name: EDF smart charge
+            state_content: [state, detail]
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_smart_charge
+                state_not: In slot
+          - type: tile
+            entity: sensor.pe_state_axle
+            name: Axle
+            color: green
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_axle
+                state: Event in progress
+          - type: tile
+            entity: sensor.pe_state_axle
+            name: Axle
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_axle
+                state_not: Event in progress
+          - type: tile
+            entity: sensor.pe_state_free_power
+            name: Free power
+            color: green
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_free_power
+                state: Free power now
+          - type: tile
+            entity: sensor.pe_state_free_power
+            name: Free power
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_free_power
+                state_not: Free power now
           # before there is a config there is nothing to check yet
           - type: tile
             entity: sensor.pe_diag_health
@@ -221,18 +293,6 @@ views:
               - {from: 0, color: "#90caf9"}
               - {from: 3000, color: "#fb8c00"}
               - {from: 7000, color: "#e53935"}
-          - type: tile
-            entity: sensor.pe_state_ev
-            name: Car
-          - type: tile
-            entity: sensor.pe_state_smart_charge
-            name: EDF smart charge
-          - type: tile
-            entity: sensor.pe_state_axle
-            name: Axle
-          - type: tile
-            entity: sensor.pe_state_free_power
-            name: Free power
           - type: markdown
             content: |-
               {% set t = state_attr('sensor.pe_state_solar_power', 'forecast_today_kwh') %}

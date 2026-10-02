@@ -155,13 +155,15 @@ def entity_states(r: Readings | None, mode: ModeDecision, tz: tzinfo | None = No
                             "session_kwh": r.ev_session_kwh, "power_w": num(r.ev_power)})
 
     nxt_slot = r.next_dispatch()
+    # fixed words for the state, so the dashboard can colour the tile while a slot is on; the time is in `detail`
     if slot:
-        smart = f"Slot until {hhmm(slot.end, tz)}"
+        smart, detail = "In slot", f"until {hhmm(slot.end, tz)}"
     elif nxt_slot:
-        smart = f"Next slot {hhmm(nxt_slot.start, tz)}"
+        smart, detail = "Slot planned", f"from {hhmm(nxt_slot.start, tz)}"
     else:
-        smart = "No slots planned"
-    out["state_smart_charge"] = (smart, {"slots": [{"start": w.start.isoformat(), "end": w.end.isoformat(),
+        smart, detail = "No slots planned", "none"
+    out["state_smart_charge"] = (smart, {"detail": detail,
+                                         "slots": [{"start": w.start.isoformat(), "end": w.end.isoformat(),
                                                     "kwh": w.value} for w in r.dispatches]})
 
     ax = r.axle_state()
