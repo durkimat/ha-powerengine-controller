@@ -130,7 +130,7 @@ def test_plan_windows_are_capped_to_a_byte_budget_soonest_first():
 
     from pe_core.planner import WINDOWS_BUDGET, windows_within
     ws = [{"start": f"2026-09-29T{h:02d}:00:00+00:00", "end": f"2026-09-29T{h:02d}:30:00+00:00", "action": "export",
-           "reason": "sell at 15p: refilled at 6.99p from 13:30", "target_soc": None, "soc_start": 90, "soc_end": 80,
+           "reason": "sell at 15p, buy back at 6.99p from 13:30", "target_soc": None, "soc_start": 90, "soc_end": 80,
            "cost": -0.5, "estimated": False, "price": "6.99p", "from": "10:00", "to": "10:30", "day": ""}
           for h in range(24)] * 3
     shown, more = windows_within(ws)

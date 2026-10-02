@@ -408,7 +408,7 @@ views:
             grid_options: {columns: full}
             content: |-
               {% set made = states('sensor.pe_plan') -%}
-              **{{ state_attr('sensor.pe_plan_headline', 'text') or 'No plan yet.' }}**
+              <details><summary><b>{{ state_attr('sensor.pe_plan_headline', 'text') or 'No plan yet.' }}</b></summary>
 
               Plan made {{ as_timestamp(made) | timestamp_custom('%H:%M') if made not in ['unknown', 'unavailable', ''] else '–' }}
               · re-plans every 5 minutes and when prices, slots or events change
@@ -431,6 +431,8 @@ views:
               · cold battery ({{ cold.battery_c_now }}°C estimated now; caution below {{ cold.threshold_c }}°C{{ ', learned' if cold.learned else '' }}): charging planned at {{ (cold.factor * 100) | round | int }}% of the normal rate {% for p in cold.periods %}{{ p.from }}–{{ p.to }}{{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}
               {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}
               · prices after {{ as_timestamp(state_attr('sensor.pe_plan', 'estimated_prices_from')) | timestamp_custom('%a %H:%M') }} are estimated (not yet published){% endif %}
+
+              </details>
           # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
           - type: conditional
             grid_options: {columns: full, rows: auto}

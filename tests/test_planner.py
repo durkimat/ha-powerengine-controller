@@ -205,7 +205,7 @@ def test_arbitrage_sells_surplus_just_before_the_cheap_refill():
     assert plan.slots[13].soc_end >= arb.min_reserve_soc + arb.arbitrage_keep_soc - 0.01   # the house stays covered
     assert all(plan.slots[i].grid_import < 0.01 for i in range(0, 14) if plan.slots[i].action != EXPORT)
     without = make_plan(day(), soc=90.0, p=Params(), now=T0)
-    assert plan.cost < without.cost and "refilled at 7p" in plan.slots[13].reason
+    assert plan.cost < without.cost and "buy back at 7p" in plan.slots[13].reason
 
 
 def test_no_arbitrage_when_it_does_not_pay_or_is_off():
