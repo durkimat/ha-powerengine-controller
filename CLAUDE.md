@@ -93,6 +93,8 @@ tools/release.sh <version> --app-notes <file> [--card-notes <file>] [--app-branc
   disown`, then `tail` the log in later calls. Always pass `--title "short summary"` (the script prefixes the version itself; including it
   doubles it), because the default title cuts the first notes line mid-word. Pass `--app-dir` and `--card-dir` unless
   the repos live under `$HOME/mnt/powerengine/`. Notes files go in `../_to_delete/` (beside the repos).
+- If a PR is already open on the branch (e.g. made by a cloud session), the script reuses it: it pushes the version commit, updates
+  the PR's title and body, and carries on from there (it used to fail opening a second PR).
 - Auth: the script uses the `gh` CLI (logged in as the owner) and git's credential helper; it never reads or prints a token.
 - **When detached runs don't survive** (seen 30 Sep 2026, Cowork session: every background process, including
   setsid, nohup and tmux, was killed when its device_bash call ended, so the script died in the test step): check
