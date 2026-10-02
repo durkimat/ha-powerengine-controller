@@ -214,18 +214,26 @@ wait_for_ci() {          # wait_for_ci SLUG SHA PR_URL
   done
 }
 
+# open_pr_for SLUG BRANCH: the number of an open PR whose head is BRANCH (empty if none). Read-only.
+open_pr_for() {
+  api GET "/repos/$1/pulls?state=open&head=${1%%/*}:$2" | jq -r '.[0].number // empty'
+}
+
 # release_repo LABEL SLUG WORK MAIN BRANCH VERSION NOTES TITLE FILES... (files are relative to WORK, already changed)
 # Commits, pushes, opens the PR, waits for CI, squash-merges and creates the release. Sets REL_PR, REL_URL, REL_SHA.
 release_repo() {
   local label="$1" slug="$2" work="$3" branch="$4" version="$5" notes="$6" title="$7"; shift 7
-  local msg body req pr pr_url pr_num head merged merge_sha rel
+  local msg body req pr pr_url pr_num head merged merge_sha rel existing
   msg="$(commit_message "$title")"; body="$(pr_body "$notes")"
   step "$label: commit, push, PR"
   if [ "$DRY" = 1 ]; then
     dry "git add $*  (in $work)"
     dry "git commit, with message:"; sed 's/^/        | /' "$msg"
     dry "git push -u origin $branch  (credentials from git)"
-    dry "POST /repos/$slug/pulls  title: \"$title\"  head: $branch  base: main"; dry "  body:"; sed 's/^/        | /' "$body" | head -n 14
+    existing="$(open_pr_for "$slug" "$branch" 2>/dev/null || true)"
+    if [ -n "$existing" ]; then dry "PATCH /repos/$slug/pulls/$existing (PR #$existing is already open on $branch: reused, not a new PR)  title: \"$title\""
+    else dry "POST /repos/$slug/pulls  title: \"$title\"  head: $branch  base: main"; fi
+    dry "  body:"; sed 's/^/        | /' "$body" | head -n 14
     dry "poll GET /repos/$slug/commits/<sha>/check-runs every ${POLL_SECONDS}s for up to $((POLL_MAX_SECONDS / 60)) minutes; stop on any failure"
     dry "PUT /repos/$slug/pulls/<n>/merge  merge_method: squash"
     dry "POST /repos/$slug/releases  tag v$version  prerelease false  make_latest \"true\"  body: the notes"
@@ -238,7 +246,13 @@ release_repo() {
   gitn -C "$work" push -u origin "$branch" 2>&1 | sed 's/^/    /'
   req="$(mktemp "$TMP/req.XXXXXX")"
   jq -n --arg t "$title" --arg h "$branch" --rawfile b "$body" '{title: $t, head: $h, base: "main", body: $b}' > "$req"
-  pr="$(api POST "/repos/$slug/pulls" "$req")"
+  existing="$(open_pr_for "$slug" "$branch")"
+  if [ -n "$existing" ]; then                  # a PR is already open on this branch (e.g. from a cloud session): reuse it
+    jq -n --arg t "$title" --rawfile b "$body" '{title: $t, body: $b}' > "$req"
+    pr="$(api PATCH "/repos/$slug/pulls/$existing" "$req")"
+  else
+    pr="$(api POST "/repos/$slug/pulls" "$req")"
+  fi
   pr_num="$(jq -r .number <<<"$pr")"; pr_url="$(jq -r .html_url <<<"$pr")"
   note "PR #$pr_num: $pr_url"
 
