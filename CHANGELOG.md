@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.79 (beta)
+
+### Behaviour changes
+
+- Monitoring tab: a new **Car** gauge shows the car charger's power (0 to 7.4 kW, green while charging). It sits in the Now section beside the Solar and House gauges, which are a little narrower to make room.
+
+### Other changes
+
+- Nothing else changes in how the app controls your battery.
+
 ## 0.9.78 (beta)
 
 ### Behaviour changes
