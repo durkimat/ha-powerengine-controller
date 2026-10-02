@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.81 (beta)
+
+### Behaviour changes
+
+- The summary block at the top of the planner page is now collapsed to its headline line; click it to expand.
+- Export headlines no longer show the import price in brackets. They now read "sell at 15p, buy back at 6.66p from 13:30".
+
+### Other changes
+
+- Nothing else changes in how the app controls your battery.
+
 ## 0.9.80 (beta)
 
 ### Behaviour changes
