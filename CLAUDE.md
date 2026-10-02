@@ -75,7 +75,7 @@ tools/release.sh <version> --app-notes <file> [--card-notes <file>] [--app-branc
   `nohup` children with it): `setsid nohup tools/release.sh ... > ../_to_delete/release-x.y.z.log 2>&1 < /dev/null &
   disown`, then `tail` the log in later calls. Always pass `--title "x.y.z: short summary"`, because the default title
   cuts the first notes line mid-word. Notes files go in `$HOME/mnt/powerengine/_to_delete/`.
-- Tokens: the script reads the token file only as a curl header or through git's credential helper. Never print it.
+- Auth: the script uses the `gh` CLI (logged in as the owner) and git's credential helper; it never reads or prints a token.
 - **When detached runs don't survive** (seen 30 Sep 2026, Cowork session: every background process, including
   setsid, nohup and tmux, was killed when its device_bash call ended, so the script died in the test step): check
   with `(setsid sh -c 'sleep 300' &)` and `ps` in the next call. Then run the release one call at a time with the
@@ -86,7 +86,7 @@ tools/release.sh <version> --app-notes <file> [--card-notes <file>] [--app-branc
   pull and delete the branch. Run the test suite first in cloud `Bash` (background works there, about 210 s), not
   on the device. Same steps, same commit and release format as the script.
 - **The cloud workspace cannot release:** its network proxy answers every `api.github.com` call with 403 "No linked
-  GitHub account", so the owner's token is refused there. Releases run on the device (`$HOME/mnt/dev-secrets`).
+  GitHub account", so `gh` is refused there. Releases run on the device, where `gh auth status` is logged in.
 - **Check `main` before choosing the version:** the owner may have released since the session started (0.9.72 went
   out while #121 was in progress, so it became 0.9.73). `git fetch`, rebase the branch, rerun the tests, then pick
   the next version. Don't reuse a branch name that already exists on GitHub after a rebase (a stale remote branch
