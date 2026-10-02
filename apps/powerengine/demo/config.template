@@ -123,6 +123,7 @@ safety:
   ram_refresh_min: 1
   ram_switch_cost_p: 0.5
   ram_max_power_w: 5000
+  inverter_max_output_w: 6000
   damp_restart_min: 5
 system:
   house_load_includes_ev: true

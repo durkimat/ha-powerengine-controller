@@ -82,6 +82,19 @@ def command_for(action: str, power_w: float | None, max_charge_w: float, max_dis
     return Command(OPTION_OFF, 0)
 
 
+def inverter_expected_w(cmd: Command | None, expected_w: float | None, max_output_w: float | None,
+                        solar_w: float | None) -> float | None:
+    """expected_w (the command or the battery's own limit; None = the command) lowered for a discharge to what the
+    inverter can still put out: its total AC output limit less the solar passing through it. A force discharge of
+    5000 W with 4500 W of sun on a 6000 W inverter can only give 1500 W, and that is the inverter working, not a
+    command that failed. A charge is left alone: solar goes into the battery on the DC side, so it can only help.
+    Unknown solar or limit changes nothing."""
+    if cmd is None or cmd.option != OPTION_DISCHARGE or not max_output_w or solar_w is None:
+        return expected_w
+    room = max(0.0, max_output_w - max(0.0, solar_w))
+    return min(float(cmd.watts if expected_w is None else expected_w), room)
+
+
 class RamController:
     def __init__(self):
         self.sent: Command | None = None

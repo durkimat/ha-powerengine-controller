@@ -85,6 +85,7 @@ SAFETY = {
     "ram_refresh_min": (1.0, 0.5, 4.0),       # RAM remote control: re-send the command this often (min)
     "ram_switch_cost_p": (0.5, 0, 100),       # optimiser: cost per switch with RAM remote control (no EEPROM wear)
     "ram_max_power_w": (5000, 500, 10000),    # RAM remote control: the most the inverter accepts (W)
+    "inverter_max_output_w": (6000, 1000, 30000),  # RAM remote control: inverter total AC output (W)
     "overnight_switch_cost_p": (3.0, 0, 100),  # deeper selling overnight: cost per charge/sell switch there (p)
     "damp_restart_min": (5.0, 1, 30),         # restart hold-off: no writes this long after a start or resume (min)
     "damp_burst_window_min": (10.0, 2, 60),   # burst damping: something written this recently counts as a burst
@@ -176,6 +177,11 @@ SETTING_TEXT = {
                         "With RAM remote control: the highest force charge/discharge power the inverter accepts. "
                         "A higher value is refused and the inverter keeps its previous power (yours accepts 5000 W, "
                         "not 5200 W). PowerEngine never asks for more than this."),
+    "inverter_max_output_w": ("Inverter max output", "W",
+                              "With RAM remote control: the most the inverter can put out in total, solar and battery "
+                              "together (6000 W for a 6 kW model). When the sun is using part of it, a force discharge "
+                              "can only get the rest, so a battery giving less than the command then is not reported "
+                              "as not following."),
     "overnight_switch_cost_p": ("Overnight switch cost", "p",
                                 "With deeper selling overnight: the cost counted for each switch between charging and "
                                 "selling inside the fixed overnight window. Higher favours one deep sale and one "
@@ -242,7 +248,7 @@ SETTING_SECTIONS = (
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p", "overnight_switch_cost_p")),
     ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p", "ram_refresh_min",
-                                           "ram_switch_cost_p", "ram_max_power_w")),
+                                           "ram_switch_cost_p", "ram_max_power_w", "inverter_max_output_w")),
     ("cold", "Cold battery", ("cold_caution_temp_c", "cold_charge_pct", "cold_release_c", "battery_temp_lag_h")),
     ("damping", "Dampening tuning", ("damp_restart_min", "damp_burst_window_min", "damp_burst_settle_min")),
     # (battery_location, a choice, is shown at the top of this section)

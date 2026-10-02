@@ -1754,9 +1754,11 @@ class PowerEngine(hass.Hass):
                     if why == "change" and want.power_role:        # and once more once the mode has landed
                         self.run_in(self._ram_relatch, 5, role=want.power_role, watts=want.watts)
                 floor = float(self.cfg.safety.get("min_reserve_soc", 12))
-                follow = ram.check_following(now, r.battery_power, r.battery_soc, floor,
-                                             bms.expected_w(ram.sent, limits))
-                self._bms_sample(now, r, ram, limits, follow)
+                expected = ramcontrol.inverter_expected_w(
+                    ram.sent, bms.expected_w(ram.sent, limits),
+                    float(self.cfg.safety.get("inverter_max_output_w", 6000)), r.solar_power)
+                follow = ram.check_following(now, r.battery_power, r.battery_soc, floor, expected)
+                self._bms_sample(now, r, ram, limits, follow, expected)
                 if follow == "not following" and self._ram_step_down(now, ram, r):
                     pass                                   # re-sent lower next cycle; reported once by _ram_step_down
                 elif follow == "not following":
@@ -1818,7 +1820,7 @@ class PowerEngine(hass.Hass):
             if capped:
                 self.log(f"RAM remote control: command {capped}")
 
-    def _bms_sample(self, now, r, ram, limits, follow):
+    def _bms_sample(self, now, r, ram, limits, follow, expected=None):
         """One row for the diagnostics export: command, expected and actual battery power, BMS limits."""
         sent = ram.sent
         if sent is None or sent.option == rctest.OPTION_OFF:
@@ -1826,8 +1828,9 @@ class PowerEngine(hass.Hass):
         ring = self.__dict__.get("_bms_ring")
         if ring is None:
             ring = self.__dict__["_bms_ring"] = bms.SampleRing()
-        exp = bms.expected_w(sent, limits)
-        ring.add(now, sent.text(), {"expected_w": exp, "battery_w": r.battery_power, "soc": r.battery_soc,
+        exp = bms.expected_w(sent, limits) if expected is None else expected
+        ring.add(now, sent.text(), {"expected_w": exp, "solar_w": r.solar_power, "battery_w": r.battery_power,
+                                    "soc": r.battery_soc,
                                     "follow": follow, "limits": limits.as_dict()})
 
     def _ram_step_down(self, now, ram, r):

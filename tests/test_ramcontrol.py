@@ -73,7 +73,7 @@ def ramapp(app):  # noqa: F811
 
 
 def R(now, bw=0.0, soc=50.0):
-    return type("R", (), {"now": now, "battery_power": bw, "battery_soc": soc})()
+    return type("R", (), {"now": now, "battery_power": bw, "battery_soc": soc, "solar_power": None})()
 
 
 def test_ram_control_in_the_adapter(ramapp):

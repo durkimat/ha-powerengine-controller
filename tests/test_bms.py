@@ -253,3 +253,45 @@ def test_sample_ring_is_bounded():
     for i in range(10):
         ring.add(T + timedelta(minutes=i * 5), f"cmd {i}", {})
     assert [r["command"] for r in ring.as_list()] == ["cmd 7", "cmd 8", "cmd 9"]
+
+
+# --- inverter output limit shared with solar ---------------------------------------------------------
+
+def test_a_discharge_squeezed_by_solar_on_the_inverter_limit_is_not_an_error():
+    from pe_core.ramcontrol import inverter_expected_w
+    exp = inverter_expected_w(DIS, bms.expected_w(DIS, None), 6000, 4500)            # 4.5 kW of sun: 1.5 kW left
+    assert exp == 1500
+    c = RamController()
+    c.done(T, "d", DIS, "change")
+    for minutes in (2, 4, 10):
+        assert c.check_following(T + timedelta(minutes=minutes), 1500, 50, 12, exp) == "ok"
+    assert c.step_down(T, 1500) is None
+
+
+def test_inverter_limit_leaves_everything_else_alone():
+    from pe_core.ramcontrol import inverter_expected_w
+    assert inverter_expected_w(DIS, 5000.0, 6000, 0) == 5000                          # no sun
+    assert inverter_expected_w(DIS, 5000.0, 6000, None) == 5000                       # solar unknown
+    assert inverter_expected_w(DIS, 5000.0, None, 4500) == 5000                       # no limit known
+    assert inverter_expected_w(DIS, 2000.0, 6000, 4500) == 1500                       # BMS limit and sun: the lower
+    assert inverter_expected_w(CH, 5000.0, 6000, 4500) == 5000  # a charge: sun feeds the battery
+    assert inverter_expected_w(Command("Off"), None, 6000, 4500) is None
+    assert inverter_expected_w(None, None, 6000, 4500) is None
+
+
+def test_a_discharge_with_sun_still_alarms_when_the_battery_does_less_than_the_room_left():
+    from pe_core.ramcontrol import inverter_expected_w
+    exp = inverter_expected_w(DIS, 5000.0, 6000, 2000)                                # 4 kW of room
+    c = RamController()
+    c.done(T, "d", DIS, "change")
+    assert c.check_following(T + timedelta(minutes=2), 500, 50, 12, exp) == "waiting"
+    assert c.check_following(T + timedelta(minutes=6), 500, 50, 12, exp) == "not following"
+
+
+def test_a_sun_filled_inverter_expects_nothing_from_the_battery():
+    from pe_core.ramcontrol import inverter_expected_w
+    exp = inverter_expected_w(DIS, 5000.0, 6000, 6500)
+    assert exp == 0
+    c = RamController()
+    c.done(T, "d", DIS, "change")
+    assert c.check_following(T + timedelta(minutes=6), 0, 50, 12, exp) == "ok"
