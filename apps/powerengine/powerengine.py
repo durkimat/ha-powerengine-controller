@@ -96,6 +96,7 @@ from pe_core.smartcharge import SmartCharger, ask_message, worth_asking
 from pe_core.status import entity_states
 from pe_core.store import coerce_flags, save_config, with_operation
 from pe_core.tariff import overnight_window
+from pe_core.verification import active_refusal
 from pe_core.version import MIN_CARD_VERSION, installed_version
 from pe_core.weather import Weather
 
@@ -538,7 +539,8 @@ class PowerEngine(hass.Hass):
         guards, absent = guard_status(self.cfg, self._guard_state) if self.cfg is not None else ([], [])
         self._note_absent_guards(absent)
         paused = self.get_state(PAUSE_ENTITY) == "on"
-        mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused)
+        mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused,
+                              unverified=self._unverified())
         self._leave_active(getattr(self, "mode", None), mode, guards)
         prev = getattr(self, "mode", None)
         if mode.effective == "active" and (prev is None or prev.effective != "active"):
@@ -1146,6 +1148,14 @@ class PowerEngine(hass.Hass):
     def _site(self) -> Site:
         """Which plant this home has (config.yaml's `site:`; today's plant until the config is read)."""
         return self.cfg.site if self.cfg else Site()
+
+    def _unverified(self):
+        """Why Active is refused for the site's inverter (a definition not yet proven on real hardware), or None.
+        Not checked in a demo: nothing there is controlled."""
+        if self._demo or self.cfg is None:
+            return None
+        site = self._site()
+        return active_refusal(site.inverter, site.inverter_firmware)
 
     def _adapter(self, attr, kind, key, *args):
         """The adapter the site names for `key`, built once and rebuilt when the site changes it. "none" is the null

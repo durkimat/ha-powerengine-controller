@@ -295,6 +295,19 @@ behaviour change:
 
 Each step is a small PR that passes the replay unchanged.
 
+## Current work: Phase 1 (generic core)
+
+Plan status box: `docs/plans/making-it-generic.md`. Done so far:
+
+- **Active guard for unverified definitions** (`pe_core/verification.py` `active_refusal(inverter, firmware)`, wired into
+  `effective_mode(..., unverified=)` by the app's `_unverified()`). Active is refused (effective Passive, reason "Active
+  refused: ...") unless the definition's `status` is `verified` and, when it lists `verified_firmware`, the firmware that applies
+  (the site's, else the definition's default) is listed. A definition that won't load is refused too. Not applied in a demo.
+  Byte-identical for his Solis on 420044 (replay unchanged). The config keeps saying `active`; only the effective mode is Passive.
+
+Open: the "candidate entities" pre-setup export, the device-first setup wizard, licence and CONTRIBUTING, low-write mode for
+EEPROM-only inverters (#189), and the step 7 "Left" items (three timed slots, RC option words, `writes_needed`).
+
 ## Demo mode plan
 
 Plan: `docs/plans/demo-and-easier-install.md`. A2, A3 and D1 are parked; the options are in #192.
