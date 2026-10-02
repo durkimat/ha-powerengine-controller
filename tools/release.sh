@@ -10,19 +10,16 @@
 # The notes files are the release notes as Markdown. App notes start with "### Behaviour changes" (the update card shows
 # them to the owner). They become the CHANGELOG section, the PR body and the GitHub release body.
 #
-# The GitHub token is only ever read at run time, from a file, and only inside the two constructs below: a curl header
-# and a git credential helper. It is never printed, stored in git config, or passed any other way. Set PE_TOKEN_FILE to
-# use another file. CLAUDE_SESSION_URL overrides the session line in commits and PR bodies.
+# GitHub access goes through the gh CLI (gh auth login) and git's own credentials; no token is read or handled here.
+# CLAUDE_SESSION_URL overrides the session line in commits and PR bodies.
 
 set -euo pipefail
 
 APP_REPO_SLUG="${PE_APP_REPO:-durkimat/ha-powerengine-controller}"
 CARD_REPO_SLUG="${PE_CARD_REPO:-durkimat/ha-powerengine-card}"
-TF="${PE_TOKEN_FILE:-$HOME/mnt/dev-secrets/github_token.txt}"
 SESSION_URL="${CLAUDE_SESSION_URL:-https://claude.ai/code/session_01LkznDwr2XBgEZmAma9wpfW}"
 POLL_SECONDS="${PE_POLL_SECONDS:-20}"
 POLL_MAX_SECONDS="${PE_POLL_MAX_SECONDS:-720}"
-export TF
 
 die() { printf 'release.sh: error: %s\n' "$*" >&2; exit 1; }
 step() { printf '\n==> %s\n' "$*"; }
@@ -30,10 +27,8 @@ note() { printf '    %s\n' "$*"; }
 dry() { printf '    [dry-run] would: %s\n' "$*"; }
 usage() { sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
-# shellcheck disable=SC2016  # single quotes on purpose: git runs this, and $TF is read then
-HELPER='!f() { echo username=x-access-token; printf "password=%s\n" "$(tr -d "[:space:]" < "$TF")"; }; f'
-# git with network access (push, fetch, pull): the token comes from the credential helper only.
-gitn() { git -c credential.helper= -c credential.helper="$HELPER" "$@"; }
+# git with network access (push, fetch, pull): credentials come from git's own helper (gh auth setup-git).
+gitn() { git "$@"; }
 
 TMP=""
 SUMMARY=()
@@ -41,17 +36,11 @@ SUMMARY=()
 # --- GitHub REST API ---------------------------------------------------------------------------------------------
 # api METHOD PATH [JSON_FILE]: prints the response body; dies with GitHub's message on an HTTP error.
 api() {
-  local method="$1" path="$2" data="${3:-}" out code
-  out="$(mktemp "$TMP/api.XXXXXX")"
-  local args=(-sS -o "$out" -w '%{http_code}' -X "$method" -H "Accept: application/vnd.github+json"
-              -H "X-GitHub-Api-Version: 2022-11-28")
-  [ -n "$data" ] && args+=(-H "Content-Type: application/json" --data-binary "@$data")
-  code="$(curl "${args[@]}" -H "Authorization: Bearer $(tr -d '[:space:]' < "$TF")" "https://api.github.com$path")" \
-    || die "could not reach api.github.com ($method $path)"
-  if [ "${code:0:1}" != "2" ]; then
-    die "GitHub answered $code to $method $path: $(jq -r '.message // empty' "$out" 2>/dev/null | head -c 300)"
-  fi
-  cat "$out"
+  local method="$1" path="$2" data="${3:-}" out
+  local args=(api -X "$method" -H "Accept: application/vnd.github+json" "$path")
+  [ -n "$data" ] && args+=(--input "$data")
+  out="$(gh "${args[@]}" 2>&1)" || die "GitHub refused $method $path: $(printf '%s' "$out" | head -c 300)"
+  printf '%s\n' "$out"
 }
 
 # --- arguments ---------------------------------------------------------------------------------------------------
@@ -235,7 +224,7 @@ release_repo() {
   if [ "$DRY" = 1 ]; then
     dry "git add $*  (in $work)"
     dry "git commit, with message:"; sed 's/^/        | /' "$msg"
-    dry "git push -u origin $branch  (token from the credential helper)"
+    dry "git push -u origin $branch  (credentials from git)"
     dry "POST /repos/$slug/pulls  title: \"$title\"  head: $branch  base: main"; dry "  body:"; sed 's/^/        | /' "$body" | head -n 14
     dry "poll GET /repos/$slug/commits/<sha>/check-runs every ${POLL_SECONDS}s for up to $((POLL_MAX_SECONDS / 60)) minutes; stop on any failure"
     dry "PUT /repos/$slug/pulls/<n>/merge  merge_method: squash"
@@ -346,7 +335,7 @@ main() {
   TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
   APP_NEEDS_CHECKOUT=0; CARD_NEEDS_CHECKOUT=0
   [ "$DRY" = 1 ] && printf 'DRY RUN: nothing is pushed, written to GitHub, or changed on disk.\n'
-  for c in git curl jq python3; do command -v "$c" >/dev/null || die "$c is required"; done
+  for c in git gh jq python3; do command -v "$c" >/dev/null || die "$c is required"; done
 
   step "Plan"
   resolve_app
@@ -361,14 +350,12 @@ main() {
   fi
 
   if [ "$DRY" = 0 ]; then
-    [ -r "$TF" ] || die "token file not readable: $TF"
-    code="$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $(tr -d '[:space:]' < "$TF")" https://api.github.com/user)" || die "cannot reach api.github.com"
-    [ "$code" = 200 ] || die "the GitHub token was refused (HTTP $code)"
+    gh auth status >/dev/null 2>&1 || die "gh is not logged in (gh auth login)"
     if (api GET "/repos/$APP_REPO_SLUG/releases/tags/v$VERSION") >/dev/null 2>&1; then
       die "release v$VERSION already exists in $APP_REPO_SLUG"
     fi
   else
-    dry "check the token file is readable and GitHub accepts it, and that release v$VERSION does not exist yet"
+    dry "check gh is logged in, and that release v$VERSION does not exist yet"
   fi
   preflight_tree "app" "$APP_WORK"
   [ "$APP_WORK" = "$APP_MAIN" ] || preflight_tree "app main checkout" "$APP_MAIN"
