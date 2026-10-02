@@ -35,7 +35,8 @@ def test_entity_states_cover_every_state_entity():
             | {"state_solar_main_power", "state_solar_garage_power"}) == set(out)
     assert out["state_import_rate"][1]["pence"] == 30.28
     assert out["state_ev"][0] == "Plugged in"
-    assert out["state_smart_charge"][0] == "Next slot 21:00"
+    assert out["state_smart_charge"][0] == "Slot planned"
+    assert out["state_smart_charge"][1]["detail"] == "from 21:00"
     assert all(len(str(state)) <= MAX_STATE_LEN for state, _ in out.values())
 
 
