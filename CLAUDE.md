@@ -6,6 +6,23 @@ PowerEngine is a Home Assistant energy manager, run as an AppDaemon app. It plan
 companion Lovelace card (`../ha-powerengine-card`) provides the configuration, test, health, update and
 diagnostics UI. The owner is Matthew. This is live on his house: mistakes cost money or inverter wear.
 
+## Two repos
+
+Changes often touch both repos: this one (the app, `durkimat/ha-powerengine-controller`) and the card
+(`durkimat/ha-powerengine-card`, one JS file). A session that needs both must have the card cloned **beside this
+repo as `../ha-powerengine-card`**, which is where `tools/release.sh` and the card's `CLAUDE.md` look. If it is not
+there, say so and stop; don't guess its contents. Pairs that must move together:
+
+- A new setting in `pe_core/config.py` (`SAFETY`, `SETTING_SECTIONS`) needs adding to the card's section lists in
+  `ha-powerengine-card.js` (search for a neighbouring key, e.g. `ram_max_power_w`), or it never shows on the config page.
+- `MIN_APP_VERSION` (card) and `MIN_CARD_VERSION` (app, `pe_core/version.py`): raise one in the PR that makes the other
+  side need something new, and release both (see Releases).
+- A changed state text or attribute on a published sensor (`pe_core/status.py`) can break the card or the dashboard
+  (`dashboard.lovelace`, and its frozen render in `tests/golden/`): search both repos for the old text.
+
+Releases run on the owner's machine (they need `gh` logged in as him); a cloud session can write code, tests and PRs
+but should not attempt a release.
+
 ## Layout
 
 - `apps/powerengine/powerengine.py`: the AppDaemon app (large; wiring, control, scheduling).
@@ -73,8 +90,9 @@ tools/release.sh <version> --app-notes <file> [--card-notes <file>] [--app-branc
   versions have, and release both.
 - **Run it detached** (CI takes about 5 minutes, and a device_bash call is killed after 180 s, taking plain `&` or
   `nohup` children with it): `setsid nohup tools/release.sh ... > ../_to_delete/release-x.y.z.log 2>&1 < /dev/null &
-  disown`, then `tail` the log in later calls. Always pass `--title "x.y.z: short summary"`, because the default title
-  cuts the first notes line mid-word. Notes files go in `$HOME/mnt/powerengine/_to_delete/`.
+  disown`, then `tail` the log in later calls. Always pass `--title "short summary"` (the script prefixes the version itself; including it
+  doubles it), because the default title cuts the first notes line mid-word. Pass `--app-dir` and `--card-dir` unless
+  the repos live under `$HOME/mnt/powerengine/`. Notes files go in `../_to_delete/` (beside the repos).
 - Auth: the script uses the `gh` CLI (logged in as the owner) and git's credential helper; it never reads or prints a token.
 - **When detached runs don't survive** (seen 30 Sep 2026, Cowork session: every background process, including
   setsid, nohup and tmux, was killed when its device_bash call ended, so the script died in the test step): check
@@ -123,7 +141,7 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   write budget, dampening, read-back checks and the RAM refresh behaviour intact.
 - **Attributes of published sensors must stay under 16 KB** (HA's recorder skips larger ones). `_publish_state`
   measures them and warns above 15,000 bytes. The role catalogue is about 14.5 KB.
-- **HA config:** a git copy lives at `$HOME/mnt/HA/config`, synced by the owner with `./ha-sync.sh pull` /
+- **HA config:** a git copy lives at `~/HA/config` on the owner's machine (not in either repo), synced by the owner with `./ha-sync.sh pull` /
   `push --apply`. Commit there only right after he says he has pulled. He pushes and applies it.
 - **Never hard-code a supplier or device name in user text** (EDF, Zappi, Solcast, Solis, Axle): use the names map
   (`pe_core/names.py`, `N(term)` or a `<<term>>` placeholder). Stored names (entity ids, topics, keys) never change.
@@ -136,7 +154,7 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   `Decision.details["reached"]` carries the latch; nothing else may use `details` for other purposes without care.
 - **Display wording vs mode keys:** `ModeDecision.label` ("waiting for inputs") is for logs and the summary only;
   `effective == "unconfigured"` stays the key the entity, the card and the code use.
-- **Deleting files:** only when he asks. Put scratch files in `$HOME/mnt/powerengine/_to_delete`.
+- **Deleting files:** only when he asks. Put scratch files in `../_to_delete` (beside the repos).
 
 ## Backlog
 
