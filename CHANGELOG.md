@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.77 (beta)
+
+### Behaviour changes
+
+- With RAM remote control, a force discharge that gives less than the command because the sun is using part of the inverter's output is no longer reported as "inverter not following". The check now allows for the inverter's total output limit (solar plus battery) and expects only what is left for the battery. A battery doing too little for that room is still reported.
+- New setting **Inverter max output** (Inverter control, default 6000 W): the most the inverter can put out in total. Set it to your inverter's real rating.
+- Charging is checked as before: solar goes into the battery, so it can only help.
+
+### Other changes
+
+- The diagnostics export's remote-control rows now include the solar power and the expected battery power after the inverter limit.
+
 ## 0.9.76 (beta)
 
 ### Behaviour changes
