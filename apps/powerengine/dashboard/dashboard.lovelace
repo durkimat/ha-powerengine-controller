@@ -278,7 +278,7 @@ views:
             needle: true
             min: 0
             max: 6000
-            grid_options: {columns: 6}
+            grid_options: {columns: 4}
             segments:
               - {from: 0, color: "#9e9e9e"}
               - {from: 150, color: "#f9a825"}
@@ -288,11 +288,22 @@ views:
             needle: true
             min: 0
             max: 10000
-            grid_options: {columns: 6}
+            grid_options: {columns: 4}
             segments:
               - {from: 0, color: "#90caf9"}
               - {from: 3000, color: "#fb8c00"}
               - {from: 7000, color: "#e53935"}
+          # the car charger's power (7.4 kW is a 32 A charger); the same reading the Car tile above is based on
+          - type: gauge
+            entity: sensor.pe_state_ev_power
+            name: Car
+            needle: true
+            min: 0
+            max: 7400
+            grid_options: {columns: 4}
+            segments:
+              - {from: 0, color: "#9e9e9e"}
+              - {from: 150, color: "#43a047"}
           - type: markdown
             content: |-
               {% set t = state_attr('sensor.pe_state_solar_power', 'forecast_today_kwh') %}
