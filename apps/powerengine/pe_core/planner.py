@@ -352,7 +352,7 @@ def _add_arbitrage(plan: list[PlanSlot], soc: float, p: Params, now: datetime, t
             if margin_p < p.min_margin_p:
                 break
             before_imports = [ps.grid_import for ps in plan[j:i]]
-            why = (f"sell at {_p(c.slot.export)}: refilled at {_p(buy)} from {refill} "
+            why = (f"sell at {_p(c.slot.export)}, buy back at {_p(buy)} from {refill} "
                    f"(about {margin_p:.1f}p/kWh after losses and wear)")
             plan[j] = replace(c, action=EXPORT, reason=why)
             simulate(plan, soc, p)
@@ -484,7 +484,7 @@ def _why(i: int, a: str, src: list[PlanSlot], acts: list[str], cheap: list[bool]
     if a == EXPORT:
         for j in range(i + 1, len(src)):
             if acts[j] == GRID_CHARGE and cheap[j]:
-                return (f"sell at {_p(s.export)}: refilled at {_p(_tariff_price(src[j].slot))} from "
+                return (f"sell at {_p(s.export)}, buy back at {_p(_tariff_price(src[j].slot))} from "
                         f"{_when(src[j].slot.start, now, tz)}")
         return f"sell at {_p(s.export)}: stored energy is worth more sold than used"
     if a == HOLD:
@@ -629,7 +629,9 @@ def headline(plan: Plan) -> str:
     when = "Now" if nxt is now_w else f"{day}{nxt['from']}–{nxt['to']}"
     saving = plan.saving
     tail = f" Plan saves £{saving:.2f} vs plain self-use over this period." if saving > 0.005 else ""
-    return f"{when}: {verb.lower() if when != 'Now' else verb} ({nxt['price']}): {nxt['reason']}.{tail}"
+    # an export's reason already names its sell and buy-back prices; the window's own (import) price would confuse
+    price = "" if nxt["action"] in (EXPORT, FORCE_DISCHARGE) else f" ({nxt['price']})"
+    return f"{when}: {verb.lower() if when != 'Now' else verb}{price}: {nxt['reason']}.{tail}"
 
 
 WINDOWS_BUDGET = 6000      # bytes of sensor.pe_plan's attributes for the windows list (HA drops history over 16 KB)
