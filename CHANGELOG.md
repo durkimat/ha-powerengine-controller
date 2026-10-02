@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.78 (beta)
+
+### Behaviour changes
+
+- Monitoring tab: the Car, smart-charge, event and Free power tiles moved up to the top row, beside Mode, Inverter control and Saved today, so all the status tiles are together. They no longer sit under the Now gauges.
+- Each of those tiles turns green while it is active: the car charging, a smart-charge slot under way, an event in progress, free power now. Mode keeps its own colours.
+- The smart-charge sensor now reads "In slot", "Slot planned" or "No slots planned", with the time on a second line ("until 06:30", "from 21:00"). It used to read "Slot until 06:30" / "Next slot 21:00"; the fixed words are what let the tile change colour.
+
+### Other changes
+
+- Nothing else changes in how the app controls your battery.
+
 ## 0.9.77 (beta)
 
 ### Behaviour changes
