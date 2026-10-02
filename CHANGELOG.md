@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.76 (beta)
+
+### Behaviour changes
+
+- Monitoring tab: the current status now comes first (control tiles, then the Now gauges and tiles), followed by the energy-flow card.
+- Monitoring tab: the text status and "Earlier today" list moved to the bottom, in an Activity section that is folded by default. The folded line shows what PowerEngine is doing now; open it for the reason, the next change and the earlier decisions.
+
 ## 0.9.75 (beta)
 
 ### Behaviour changes

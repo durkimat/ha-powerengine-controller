@@ -144,68 +144,6 @@ views:
             tap_action:
               action: navigate
               navigation_path: config
-          # today's decisions, newest first: the top line is what PowerEngine is doing now
-          - type: markdown
-            grid_options: {columns: full}
-            content: |-
-              {%- set m = states('sensor.pe_state_operation_mode') %}
-              {%- if m != 'active' %}*{{ state_attr('sensor.pe_state_operation_mode', 'reason') }}*
-              {% endif %}
-              {%- set entries = state_attr('sensor.pe_state_activity', 'entries') or [] %}
-              {%- set today = now().strftime('%Y-%m-%d') %}
-              {%- set todays = entries | selectattr('time', 'search', '^' ~ today) | list %}
-              {%- set shown = todays if todays else entries[:1] %}
-              {%- if not shown %}No decisions yet.{% endif %}
-              {%- for e in shown %}
-              {%- if loop.first %}
-              **{{ e.hhmm }} · {{ e.text }}**
-              {%- set nx = states('sensor.pe_plan_next') %}
-              {%- if nx not in ['unknown', 'unavailable', '', 'no change planned'] %}
-              <br>Next: {{ nx }}{% endif %}
-              {% if shown | count > 1 %}
-              <small>Earlier today:</small>
-              {% endif %}
-              {%- else %}
-              - {{ e.hhmm }} {{ e.text }}
-              {%- endif %}
-              {%- endfor %}
-      - type: grid
-        column_span: 2
-        cards:
-          - type: heading
-            heading: Energy flow
-          # BEGIN energy-flow (generated from your configuration; edits here are replaced)
-          - type: custom:sunsynk-power-flow-card
-            grid_options: {columns: full}
-            cardstyle: lite
-            show_solar: true
-            inverter:
-              model: solis
-              modern: false
-              autarky: "no"
-            battery:
-              energy: 18000
-              shutdown_soc: 12
-              # PowerEngine's battery power is + discharging; this card animates it the other way unless inverted
-              invert_power: true
-            solar:
-              mppts: 1
-            load:
-              show_daily: false
-              additional_loads: 1
-              load1_name: Car
-              load1_icon: mdi:car-electric
-            grid:
-              show_nonessential: false
-            entities:
-              battery_power_190: sensor.pe_state_battery_power
-              battery_soc_184: sensor.pe_state_battery_soc
-              grid_ct_power_172: sensor.pe_state_grid_power
-              # the load circle is the total (house + car); the car is shown as one of the loads within it
-              essential_power: sensor.pe_state_load_power
-              essential_load1: sensor.pe_state_ev_power
-              pv1_power_186: sensor.pe_state_solar_power
-          # END energy-flow
       - type: grid
         cards:
           - type: heading
@@ -300,6 +238,82 @@ views:
               {% set t = state_attr('sensor.pe_state_solar_power', 'forecast_today_kwh') %}
               {% set m = state_attr('sensor.pe_state_solar_power', 'forecast_tomorrow_kwh') %}
               **Solar forecast** today {{ t if t is not none else '–' }} kWh · tomorrow {{ m if m is not none else '–' }} kWh
+      - type: grid
+        column_span: 2
+        cards:
+          - type: heading
+            heading: Energy flow
+          # BEGIN energy-flow (generated from your configuration; edits here are replaced)
+          - type: custom:sunsynk-power-flow-card
+            grid_options: {columns: full}
+            cardstyle: lite
+            show_solar: true
+            inverter:
+              model: solis
+              modern: false
+              autarky: "no"
+            battery:
+              energy: 18000
+              shutdown_soc: 12
+              # PowerEngine's battery power is + discharging; this card animates it the other way unless inverted
+              invert_power: true
+            solar:
+              mppts: 1
+            load:
+              show_daily: false
+              additional_loads: 1
+              load1_name: Car
+              load1_icon: mdi:car-electric
+            grid:
+              show_nonessential: false
+            entities:
+              battery_power_190: sensor.pe_state_battery_power
+              battery_soc_184: sensor.pe_state_battery_soc
+              grid_ct_power_172: sensor.pe_state_grid_power
+              # the load circle is the total (house + car); the car is shown as one of the loads within it
+              essential_power: sensor.pe_state_load_power
+              essential_load1: sensor.pe_state_ev_power
+              pv1_power_186: sensor.pe_state_solar_power
+          # END energy-flow
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Activity
+          # today's decisions, newest first, folded away: the summary line is what PowerEngine is doing now; open it for
+          # the reason, the next change and the earlier decisions (a long list by evening)
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set entries = state_attr('sensor.pe_state_activity', 'entries') or [] %}
+              {%- set today = now().strftime('%Y-%m-%d') %}
+              {%- set todays = entries | selectattr('time', 'search', '^' ~ today) | list %}
+              {%- set shown = todays if todays else entries[:1] %}
+              {%- if not shown %}No decisions yet.
+              {%- else %}
+              <details><summary><b>{{ shown[0].hhmm }} · {{ shown[0].text }}</b></summary>
+
+              {%- set m = states('sensor.pe_state_operation_mode') %}
+              {%- if m != 'active' %}
+
+              *{{ state_attr('sensor.pe_state_operation_mode', 'reason') }}*
+              {%- endif %}
+              {%- set nx = states('sensor.pe_plan_next') %}
+              {%- if nx not in ['unknown', 'unavailable', '', 'no change planned'] %}
+
+              Next: {{ nx }}
+              {%- endif %}
+              {%- if shown | count > 1 %}
+
+              <small>Earlier today:</small>
+
+              {% for e in shown[1:] -%}
+              - {{ e.hhmm }} {{ e.text }}
+              {% endfor -%}
+              {%- endif %}
+
+              </details>
+              {%- endif %}
   - title: Plan
     path: plan
     icon: mdi:calendar-clock
