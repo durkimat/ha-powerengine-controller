@@ -271,7 +271,7 @@ behaviour change:
      words by the app's names, the timed behaviour handles exactly three slots, and `writes_needed` names the update button
      role. Those are the first things a second inverter would generalise.
 
-8. Site section (which plant this home has). **8a done** (branch `phase0/site-8`; byte-identical for his plant, replay and dashboard goldens unchanged); **8b next** (the card's "Your system" block):
+8. Site section (which plant this home has). **Done.** 8a (controller, branch `phase0/site-8`; byte-identical for his plant, replay and dashboard goldens unchanged) and 8b (the card's "Your system" block, card 0.9.66, PR #147):
    - `config.yaml` gets an optional `site:` (`config.Site`, frozen; keys `inverter`, `inverter_firmware`, `ev_charger`, `car`, `tariff`, `forecast`,
      `events`; unknown keys and names are `ConfigError`s). The valid names come from the registry (`config.site_choices()`: registry names
      plus `none`, and `auto` for the tariff), never from lists in `config.py`. See `docs/SITE.md`.
@@ -289,7 +289,9 @@ behaviour change:
    - Changing `site.inverter`, or `site.inverter_firmware` so that a different firmware variant applies (null and "420044" are the same for solis), (`_on_save` -> `_site_guard`) switches to Passive, logs, notifies and sets
      `retest_required` (`site_state.json` beside the config; cleared when a supervised RC test passes). The app has no stored RC-test results or
      Active gate, so the flag is what the card reads; the card decides how to show it. A save without `site` keeps the saved one.
-   - 8b: the card's "Your system" block (reads the attributes above; saves with `pe_config_save`).
+   - 8b (card, `siteInfo`, `_renderSite`, `siteNeedsWarning` in `ha-powerengine-card.js`): the "Your system" block reads the attributes above and
+     saves `site` with `pe_config_save`. It is hidden, and sends no `site`, when the app publishes no `site_options`, so it needs no
+     `MIN_APP_VERSION` bump. Shows the inverter-change warning and confirm, and the `retest_required` banner. Not yet tried on a live HA.
 
 Each step is a small PR that passes the replay unchanged.
 
