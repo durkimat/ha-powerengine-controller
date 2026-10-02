@@ -157,7 +157,7 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Current work: making it generic (Phase 0)
 
-Plan doc: "PowerEngine: making it generic" (Claude Docs). Phase 0 restructures the code behind adapters, with no
+Plan: `docs/plans/making-it-generic.md` (index: `docs/plans/README.md`; each plan opens with a Status box, and the box is updated in the PR that lands a step). Phase 0 restructures the code behind adapters, with no
 behaviour change:
 
 0. Replay safety net. **Done** (PR #152).
@@ -266,6 +266,8 @@ behaviour change:
 Each step is a small PR that passes the replay unchanged.
 
 ## Demo mode plan
+
+Plan: `docs/plans/demo-and-easier-install.md`. A2, A3 and D1 are parked; the options are in #192.
 
 Goal: PowerEngine runs with no MQTT broker and no real inverter (a demo), and installs more easily.
 
