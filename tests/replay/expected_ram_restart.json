@@ -10,7 +10,7 @@ null
 },
 {
 "t": "2026-09-27T20:00:00+00:00",
-"plan": "ssssCECCECCECCECCECCssssssssssss",
+"plan": "ssssCECCECCECCECCECCsssssssssssH",
 "soc": [
 88,
 90,
@@ -45,7 +45,7 @@ null
 },
 {
 "t": "2026-09-27T20:05:00+00:00",
-"plan": "EsssCCECCECCECCECCECsssssHHHHHHH",
+"plan": "EsssCCECCECCECCECCECsssssHHHHHHs",
 "soc": [
 77,
 86,
@@ -163,7 +163,7 @@ null
 },
 {
 "t": "2026-09-27T20:10:00+00:00",
-"plan": "EsssCCECCECCECCECCECsssssHHHHHHH",
+"plan": "EsssCCECCECCECCECCECsssssHHHHHHs",
 "soc": [
 79,
 88,
@@ -285,7 +285,7 @@ null
 },
 {
 "t": "2026-09-27T20:15:00+00:00",
-"plan": "EsssCCECCECCECCECCECsssssHHHHHHH",
+"plan": "EsssCCECCECCECCECCECsssssHHHHHHs",
 "soc": [
 81,
 89,
@@ -408,7 +408,7 @@ null
 },
 {
 "t": "2026-09-27T20:20:00+00:00",
-"plan": "sEssCCECCECCECCECCECsssssHHHHHHH",
+"plan": "sEssCCECCECCECCECCECsssssHHHHHHs",
 "soc": [
 90,
 85,
@@ -436,25 +436,25 @@ null
 },
 {
 "t": "2026-09-27T20:25:00+00:00",
-"plan": "ssssCECCECCECCECCECCssssssssssss",
+"plan": "sEssCCECCECCECCECCECsssssHHHHHHs",
 "soc": [
 91,
+86,
 90,
 75,
 89,
-90,
-89,
-84,
+87,
+83,
 85
 ]
 },
 {
 "t": "2026-09-27T20:30:00+00:00",
-"plan": "sssEEECCCEEEECCCCCCsssssssssHHHH",
+"plan": "sssEEEECCCEEECCCCCCssssssssHHHHH",
 "soc": [
 91,
 58,
-83,
+56,
 25,
 78,
 97,
@@ -464,7 +464,7 @@ null
 },
 {
 "t": "2026-09-27T20:35:00+00:00",
-"plan": "sEsEEECCCCEEECCCCCCsssssssssHHHH",
+"plan": "sEsEEECCCEEECCCCCCCssssssssHHHHH",
 "soc": [
 90,
 44,
@@ -478,13 +478,13 @@ null
 },
 {
 "t": "2026-09-27T20:40:00+00:00",
-"plan": "ssHEEECCCEEEECCCCCCsssssssssHHHH",
+"plan": "sssEEEECCCEEECCCCCCssssssssHHHHH",
 "soc": [
 89,
-58,
-83,
-25,
-78,
+57,
+54,
+23,
+76,
 97,
 94,
 98
@@ -492,12 +492,12 @@ null
 },
 {
 "t": "2026-09-27T20:45:00+00:00",
-"plan": "sssEEECCCCEEECCCCCCsssssssssHHHH",
+"plan": "sssEEEECCCCCEECCCCCssssssssHHHHH",
 "soc": [
 87,
 55,
-80,
-46,
+52,
+75,
 90,
 97,
 94,
@@ -512,12 +512,12 @@ null
 },
 {
 "t": "2026-09-27T20:50:00+00:00",
-"plan": "sssEEECCCCEEECCCCCCsssssssssHHHH",
+"plan": "sssEEEECCCCCEECCCCCssssssssHHHHH",
 "soc": [
 87,
 54,
-79,
-46,
+51,
+75,
 90,
 97,
 94,
@@ -526,11 +526,11 @@ null
 },
 {
 "t": "2026-09-27T20:55:00+00:00",
-"plan": "sssEEECCCEEEECCCCCCsssssssssHHHH",
+"plan": "sssEEEECCCEEECCCCCCssssssssHHHHH",
 "soc": [
 89,
 57,
-82,
+54,
 23,
 76,
 97,
@@ -540,10 +540,10 @@ null
 },
 {
 "t": "2026-09-27T21:00:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
+"plan": "sEEEECCCEEECCCCCCCsssssssssHHHHH",
 "soc": [
 90,
-59,
+31,
 56,
 53,
 100,
@@ -554,10 +554,10 @@ null
 },
 {
 "t": "2026-09-27T21:07:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
+"plan": "sEEEECCCEEECCCCCCCsssssssssHHHHH",
 "soc": [
 91,
-60,
+32,
 57,
 55,
 100,
@@ -574,10 +574,10 @@ null
 },
 {
 "t": "2026-09-27T21:10:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
+"plan": "sEEEECCCEEECCCCCCCsssssssssHHHHH",
 "soc": [
 92,
-61,
+34,
 59,
 56,
 100,
@@ -610,10 +610,10 @@ null
 },
 {
 "t": "2026-09-27T21:15:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
+"plan": "sEEEECCCEEECCCCCCCsssssssssHHHHH",
 "soc": [
 93,
-63,
+35,
 60,
 57,
 100,
@@ -624,10 +624,10 @@ null
 },
 {
 "t": "2026-09-27T21:20:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
+"plan": "sEEEECCCEEECCCCCCCsssssssssHHHHH",
 "soc": [
 94,
-63,
+35,
 60,
 57,
 100,
@@ -647,10 +647,10 @@ null
 },
 {
 "t": "2026-09-27T21:25:00+00:00",
-"plan": "EEEECCCEEEECCCCCCCsssssssssHHHHH",
+"plan": "EEEEECCCEEECCCCCCCsssssssssHHHHH",
 "soc": [
 92,
-61,
+33,
 58,
 55,
 100,
@@ -687,10 +687,10 @@ null
 },
 {
 "t": "2026-09-27T21:26:00+00:00",
-"plan": "EEEECCCEEEECCCCCCCsssssssssHHHHH",
+"plan": "EEEEECCCEEECCCCCCCsssssssssHHHHH",
 "soc": [
 92,
-61,
+34,
 59,
 56,
 100,
@@ -783,10 +783,10 @@ null
 },
 {
 "t": "2026-09-27T21:30:00+00:00",
-"plan": "EEECCCEEEECCCCCCCssssssssHHHHHHH",
+"plan": "EEEECCCEEECCCCCCCssssssssHHHHHHH",
 "soc": [
 79,
-77,
+49,
 46,
 71,
 100,
@@ -1317,12 +1317,12 @@ null
 },
 {
 "t": "2026-09-27T21:55:00+00:00",
-"plan": "EEEECCCCEEECCCCCCssssssssHHHHHHH",
+"plan": "EEEEECCCEEECCCCCCssssssssHHHHHHH",
 "soc": [
 86,
-55,
-75,
-73,
+27,
+52,
+49,
 100,
 95,
 94,
@@ -1435,10 +1435,10 @@ null
 },
 {
 "t": "2026-09-27T22:00:00+00:00",
-"plan": "EEECCCEEEECCCCCCssssssssHHHHHHHE",
+"plan": "EEEECCCEEECCCCCCssssssssHHHHHHHE",
 "soc": [
 73,
-71,
+43,
 40,
 65,
 99,
@@ -1559,10 +1559,10 @@ null
 },
 {
 "t": "2026-09-27T22:05:00+00:00",
-"plan": "EEECCCEEEECCCCCCssssssssHHHHHHHE",
+"plan": "EEEECCCEEECCCCCCssssssssHHHHHHHE",
 "soc": [
 76,
-73,
+45,
 42,
 67,
 99,
@@ -1683,10 +1683,10 @@ null
 },
 {
 "t": "2026-09-27T22:10:00+00:00",
-"plan": "EEECCCEEEECCCCCCssssssssHHHHHHHE",
+"plan": "EEEECCCEEECCCCCCssssssssHHHHHHHE",
 "soc": [
 78,
-75,
+48,
 45,
 70,
 99,
@@ -1931,12 +1931,12 @@ null
 },
 {
 "t": "2026-09-27T22:20:00+00:00",
-"plan": "EEEECCCCEEECCCCCssssssssHHHHHHHE",
+"plan": "EEEEECCEECCCCCCCssssssssHHHHHHHE",
 "soc": [
 84,
-53,
-75,
-73,
+26,
+23,
+76,
 99,
 94,
 95,
@@ -2055,12 +2055,12 @@ null
 },
 {
 "t": "2026-09-27T22:25:00+00:00",
-"plan": "EEEECCCCEEECCCCCssssssssHHHHHHHE",
+"plan": "EEEEECCEECCCCCCCssssssssHHHHHHHE",
 "soc": [
 87,
-56,
-75,
-73,
+28,
+25,
+78,
 99,
 94,
 95,

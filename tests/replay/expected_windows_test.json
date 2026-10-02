@@ -10,11 +10,11 @@ null
 },
 {
 "t": "2026-09-27T19:30:00+00:00",
-"plan": "sssssCCCCCCCCCCCCCCCCsssssHHHHHH",
+"plan": "ssssssssssCCCCCCCCCCCsssssHHHHHH",
 "soc": [
 89,
 83,
-90,
+77,
 90,
 90,
 90,
@@ -87,7 +87,7 @@ true
 },
 {
 "t": "2026-09-27T19:35:00+00:00",
-"plan": "sssssCCCCCCCCCCCCCCCCsssssHHHHHH",
+"plan": "ssssssCCCCCCCCCCCCCCCsssssHHHHHH",
 "soc": [
 88,
 82,
@@ -137,12 +137,26 @@ true
 "svc": "persistent_notification/create"
 },
 {
+"t": "2026-09-27T19:40:00+00:00",
+"plan": "sssssssssCCCCCCCCCCCCsssssHHHHHH",
+"soc": [
+88,
+82,
+76,
+90,
+90,
+90,
+85,
+85
+]
+},
+{
 "t": "2026-09-27T19:45:00+00:00",
-"plan": "sssssCCCCCCCCCCCCCCCCsssssHHHHHH",
+"plan": "ssssssssssCCCCCCCCCCCsssssHHHHHH",
 "soc": [
 89,
 83,
-90,
+78,
 90,
 90,
 90,
@@ -170,11 +184,11 @@ true
 },
 {
 "t": "2026-09-27T19:55:00+00:00",
-"plan": "sssssCCCCCCCCCCCCCCCCsssssHHHHHH",
+"plan": "sssssssssssCCCCCCCCCCsssssHHHHHH",
 "soc": [
 90,
 84,
-90,
+78,
 90,
 90,
 90,

@@ -98,3 +98,17 @@ def test_overnight_switches_cost_more_with_deeper_selling():
     assert switch_cost(HOLD_K, CHARGE_K, p, overnight=True) == 0.001          # hold <-> charge stays cheap
     off = Params(arbitrage=True, deep_overnight=False, switch_cost_p=0.5, overnight_switch_cost_p=3.0)
     assert switch_cost(CHARGE_K, DISCHARGE_K, off, overnight=True) == 0.005
+
+
+def test_arbitrage_starts_selling_as_soon_as_it_can_not_after_an_idle_hour():
+    # 22:00-06:00 cheap, battery fills to the band's top by 22:30. The sale-and-refill cycles tile the night in
+    # threes, so where the spare half-hours go is a tie in cash: they must come first (bank the sale now, leave the
+    # slack at the end where a replan can still use it), not sit as an hour of 90% to 90% before the first sale.
+    t0 = T0.replace(hour=22)
+    slots = [Slot(t0 + i * SLOT, CHEAP if i < 16 else PEAK, 0.15, load_kwh=0.25) for i in range(24)]
+    p = Params(arbitrage=True, max_charge_kw=4.8, max_discharge_kw=4.8, capacity_kwh=18.0, switch_cost_p=0.5)
+    opt = optimise(slots, 73.0, p, wear=0.02)
+    first_sale = opt["actions"].index("export")
+    assert first_sale <= 2, (opt["actions"], opt["soc"])
+    idle = [i for i in range(first_sale) if abs(opt["soc"][i] - opt["soc"][i - 1 if i else 0]) < 0.05 and i > 1]
+    assert not idle, opt["soc"]

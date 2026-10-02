@@ -103,6 +103,9 @@ KIND = {SELF_USE: NONE_K, HOLD: HOLD_K, GRID_CHARGE: CHARGE_K, EXPORT: DISCHARGE
 HIGH_DWELL = 1.5e-3                   # GBP/kWh above the band per half-hour there (arbitrage on): fill it last
 EARLY_BIAS = 5e-4                     # GBP per kWh per half-hour of delay, in the fixed overnight window only: charge
                                       # early there (same price all night) rather than leave it all to the last hours
+SELL_BIAS = 5e-4                      # GBP per kWh per half-hour of delay, for a sale: banked sooner is surer (a
+                                      # dispatch can be withdrawn, a forecast revised), and a plan that waits has
+                                      # nothing over one that sells now, so a tie goes to selling early
 FULL_PENALTY = 1.0                    # GBP per kWh short of the target at the end of the fixed overnight window
 
 
@@ -182,6 +185,8 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
                     total += (end - p.arbitrage_max_soc) / 100 * cap * HIGH_DWELL
                 if ends[t] and p.fill_when_cheap and end < p.target_soc:
                     total += (p.target_soc - end) / 100 * cap * FULL_PENALTY
+                if a == EXPORT and end < lv:
+                    total += (lv - end) / 100 * cap * SELL_BIAS * t     # a tie sells now, not later
                 if a == GRID_CHARGE and end > lv and s.overnight:
                     total += (end - lv) / 100 * cap * EARLY_BIAS * t     # same price all night: charge sooner
                 options.append((total, a, k))
