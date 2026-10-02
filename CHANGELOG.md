@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.80 (beta)
+
+### Behaviour changes
+
+- Arbitrage sales are now planned as early as they can be. Before, when a cheap window had spare half-hours, the optimiser could leave them before the first sale, so the battery sat idle at 90% for an hour and then sold later with the same cash result. It now sells first and the spare half-hours move later in the night, where a replan can still use them.
+- No change to the limits, the arbitrage band, the floors, the switch costs or the write budget. Total energy sold is unchanged. On the 27 Sep replay night the first sale moves from 00:00 to 23:00, and there is less flip-flopping (decision changes 53 to 20).
+
+### Other changes
+
+- The recorded replay nights were re-recorded for this intended change.
+
 ## 0.9.79 (beta)
 
 ### Behaviour changes

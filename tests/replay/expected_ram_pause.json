@@ -487,13 +487,27 @@ null
 },
 {
 "t": "2026-09-27T20:00:00+00:00",
-"plan": "ssssEEECCCCEEECCCCCCsssssssssHHH",
+"plan": "ssssEEECCCCEEECCCCCCssssssssHHHH",
 "soc": [
 88,
 69,
 66,
 61,
 86,
+99,
+94,
+95
+]
+},
+{
+"t": "2026-09-27T20:05:00+00:00",
+"plan": "ssssEEEECCCCCEECCCCCssssssssHHHH",
+"soc": [
+88,
+69,
+38,
+90,
+87,
 99,
 94,
 95
@@ -508,7 +522,7 @@ true
 },
 {
 "t": "2026-09-27T20:15:00+00:00",
-"plan": "ssssEEECCCCEEECCCCCCsssssssssHHH",
+"plan": "ssssEEECCCCEEECCCCCCssssssssHHHH",
 "soc": [
 87,
 68,
@@ -544,13 +558,13 @@ true
 },
 {
 "t": "2026-09-27T20:20:00+00:00",
-"plan": "sEssEEECCCCCEEECCCCCsssssssssHHH",
+"plan": "sEssEEECCCEEECCCCCCCssssssssHHHH",
 "soc": [
 90,
 57,
 54,
-75,
-73,
+24,
+77,
 99,
 94,
 95
@@ -558,13 +572,13 @@ true
 },
 {
 "t": "2026-09-27T20:25:00+00:00",
-"plan": "sssHEEECCCEEEECCCCCCsssssssssHHH",
+"plan": "sEssEEECCCEEECCCCCCCssssssssHHHH",
 "soc": [
 91,
-73,
-70,
-40,
-65,
+59,
+56,
+25,
+78,
 99,
 94,
 95
@@ -572,11 +586,11 @@ true
 },
 {
 "t": "2026-09-27T20:30:00+00:00",
-"plan": "sssEEECCCEEEECCCCCCsssssssssHHHH",
+"plan": "sssEEEECCCEEECCCCCCsssssssssHHHH",
 "soc": [
 91,
 58,
-83,
+56,
 25,
 78,
 97,
@@ -586,7 +600,7 @@ true
 },
 {
 "t": "2026-09-27T20:35:00+00:00",
-"plan": "sEsEEECCCCEEECCCCCCsssssssssHHHH",
+"plan": "sEsEEECCCEEECCCCCCCsssssssssHHHH",
 "soc": [
 90,
 44,
@@ -600,13 +614,13 @@ true
 },
 {
 "t": "2026-09-27T20:40:00+00:00",
-"plan": "ssHEEECCCEEEECCCCCCsssssssssHHHH",
+"plan": "sssEEEECCCEEECCCCCCsssssssssHHHH",
 "soc": [
 89,
-58,
-83,
-25,
-78,
+57,
+54,
+23,
+76,
 97,
 94,
 98
@@ -621,12 +635,12 @@ false
 },
 {
 "t": "2026-09-27T20:45:00+00:00",
-"plan": "sssEEECCCCEEECCCCCCsssssssssHHHH",
+"plan": "sssEEEECCCCCEECCCCCsssssssssHHHH",
 "soc": [
 87,
 55,
-80,
-46,
+52,
+75,
 90,
 97,
 94,
@@ -649,12 +663,12 @@ false
 },
 {
 "t": "2026-09-27T20:50:00+00:00",
-"plan": "sssEEECCCCEEECCCCCCsssssssssHHHH",
+"plan": "sssEEEECCCCCEECCCCCsssssssssHHHH",
 "soc": [
 87,
 54,
-79,
-46,
+51,
+75,
 90,
 97,
 94,
@@ -663,11 +677,11 @@ false
 },
 {
 "t": "2026-09-27T20:55:00+00:00",
-"plan": "sssEEECCCEEEECCCCCCsssssssssHHHH",
+"plan": "sssEEEECCCEEECCCCCCsssssssssHHHH",
 "soc": [
 89,
 57,
-82,
+54,
 23,
 76,
 97,
@@ -677,10 +691,10 @@ false
 },
 {
 "t": "2026-09-27T21:00:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
+"plan": "sEEEECCCEEECCCCCCCsssssssssHHHHH",
 "soc": [
 90,
-59,
+31,
 56,
 53,
 100,
@@ -695,10 +709,10 @@ false
 },
 {
 "t": "2026-09-27T21:07:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
+"plan": "sEEEECCCEEECCCCCCCsssssssssHHHHH",
 "soc": [
 91,
-60,
+32,
 57,
 55,
 100,
@@ -709,24 +723,10 @@ false
 },
 {
 "t": "2026-09-27T21:12:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
+"plan": "sEEEECCCEEECCCCCCCsssssssssHHHHH",
 "soc": [
 93,
-62,
-60,
-57,
-100,
-96,
-94,
-100
-]
-},
-{
-"t": "2026-09-27T21:15:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
-"soc": [
-93,
-63,
+35,
 60,
 57,
 100,
@@ -737,10 +737,10 @@ false
 },
 {
 "t": "2026-09-27T21:20:00+00:00",
-"plan": "sEEECCCEEEECCCCCCCsssssssssHHHHH",
+"plan": "sEEEECCCEEECCCCCCCsssssssssHHHHH",
 "soc": [
 94,
-63,
+35,
 60,
 57,
 100,
@@ -760,10 +760,10 @@ null
 },
 {
 "t": "2026-09-27T21:30:00+00:00",
-"plan": "EEECCCEEEECCCCCCCssssssssHHHHHHH",
+"plan": "EEEECCCEEECCCCCCCssssssssHHHHHHH",
 "soc": [
 79,
-77,
+49,
 46,
 71,
 100,
@@ -1298,12 +1298,12 @@ null
 },
 {
 "t": "2026-09-27T21:55:00+00:00",
-"plan": "EEEECCCCEEECCCCCCssssssssHHHHHHH",
+"plan": "EEEEECCCEEECCCCCCssssssssHHHHHHH",
 "soc": [
 86,
-55,
-75,
-73,
+27,
+52,
+49,
 100,
 95,
 94,
@@ -1412,10 +1412,10 @@ null
 },
 {
 "t": "2026-09-27T22:00:00+00:00",
-"plan": "EEECCCEEEECCCCCCsssssssssHHHHHHE",
+"plan": "EEEECCCEEECCCCCCsssssssssHHHHHHE",
 "soc": [
 73,
-71,
+43,
 40,
 65,
 99,
@@ -1526,10 +1526,10 @@ null
 },
 {
 "t": "2026-09-27T22:05:00+00:00",
-"plan": "EEECCCEEEECCCCCCsssssssssHHHHHHE",
+"plan": "EEEECCCEEECCCCCCsssssssssHHHHHHE",
 "soc": [
 76,
-73,
+45,
 42,
 67,
 99,
@@ -1654,10 +1654,10 @@ null
 },
 {
 "t": "2026-09-27T22:10:00+00:00",
-"plan": "EEECCCEEEECCCCCCsssssssssHHHHHHE",
+"plan": "EEEECCCEEECCCCCCsssssssssHHHHHHE",
 "soc": [
 78,
-75,
+48,
 45,
 70,
 99,
@@ -1942,12 +1942,12 @@ null
 },
 {
 "t": "2026-09-27T22:21:00+00:00",
-"plan": "EEEECCCCEEECCCCCsssssssssHHHHHHE",
+"plan": "EEEEECCEECCCCCCCsssssssssHHHHHHE",
 "soc": [
 85,
-54,
-75,
-73,
+26,
+23,
+76,
 99,
 94,
 95,
@@ -2066,11 +2066,11 @@ null
 },
 {
 "t": "2026-09-27T22:26:00+00:00",
-"plan": "EEEECCCEEECCCCCCsssssssssHHHHHHE",
+"plan": "EEEEECCEECCCCCCCsssssssssHHHHHHE",
 "soc": [
 87,
-56,
-54,
+29,
+26,
 78,
 99,
 94,
@@ -2190,10 +2190,10 @@ null
 },
 {
 "t": "2026-09-27T22:31:00+00:00",
-"plan": "EEECCCEEECCCCCCsssssssssHHHHHHEs",
+"plan": "EEEECCEECCCCCCCsssssssssHHHHHHEs",
 "soc": [
 75,
-72,
+44,
 41,
 90,
 97,
@@ -2302,10 +2302,10 @@ null
 },
 {
 "t": "2026-09-27T22:36:00+00:00",
-"plan": "EEECCCEEECCCCCCsssssssssHHHHHHEs",
+"plan": "EEEECCEECCCCCCCsssssssssHHHHHHEs",
 "soc": [
 75,
-72,
+45,
 42,
 90,
 97,
@@ -2406,10 +2406,10 @@ null
 },
 {
 "t": "2026-09-27T22:41:00+00:00",
-"plan": "EEECCCEEECCCCCCsssssssssHHHHHHEs",
+"plan": "EEEECCEECCCCCCCsssssssssHHHHHHEs",
 "soc": [
 76,
-73,
+45,
 42,
 90,
 97,
@@ -2510,10 +2510,10 @@ null
 },
 {
 "t": "2026-09-27T22:46:00+00:00",
-"plan": "EEECCCEEECCCCCCsssssssssHHHHHHEs",
+"plan": "EEEECCEECCCCCCCsssssssssHHHHHHEs",
 "soc": [
 76,
-73,
+46,
 43,
 90,
 97,
@@ -2614,10 +2614,10 @@ null
 },
 {
 "t": "2026-09-27T22:51:00+00:00",
-"plan": "EEECCCEEECCCCCCsssssssssHHHHHHEs",
+"plan": "EEEECCEECCCCCCCsssssssssHHHHHHEs",
 "soc": [
 78,
-75,
+47,
 44,
 90,
 97,
@@ -2718,10 +2718,10 @@ null
 },
 {
 "t": "2026-09-27T22:56:00+00:00",
-"plan": "EEECCCEEECCCCCCsssssssssHHHHHHEs",
+"plan": "EEEECCEECCCCCCCsssssssssHHHHHHEs",
 "soc": [
 77,
-74,
+46,
 44,
 90,
 97,
