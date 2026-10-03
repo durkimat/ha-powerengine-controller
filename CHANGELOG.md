@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.84 (beta)
+
+### Behaviour changes
+
+- Plan history has a new "As run" choice in "Plan made at". It shows the plan exactly as it stood in each half-hour that actually ran, so it matches what happened even though the plan is re-made many times a day. It is kept for 400 days (the first plan of each hour is still kept for 60 days). Days before this release have no "As run" plan and show the start-of-day plan as before.
+- Plan history has a "Pick any day" date picker (any day PowerEngine still holds, up to 400 days back). The Day select still works and wins if you use it.
+- The Plan history charts now re-read the chosen day every 5 seconds, so changing the day or plan updates the charts, not just the text. (If the charts still don't follow, tell Claude.)
+
+### Other changes
+
+- The note under the Plan history charts describes what is kept and for how long.
+- Needs card 0.9.84 or newer (the card is released with this).
+
 ## 0.9.83 (beta)
 
 ### Behaviour changes

@@ -19,7 +19,7 @@ from .readings import Readings
 from .tariff import cheap_tods, overnight_window, rates_at, reclassify
 
 KEEP_DAYS = 400
-HISTORY_KEEP_DAYS = 60     # hourly plan snapshots (Plan history tab)
+HISTORY_KEEP_DAYS = 60     # hourly plan snapshots (Plan history tab); the plan that ran is kept KEEP_DAYS
 WINDOW_DAYS = 14
 SHOW_DAYS = 14
 MEASURE_DAYS = 30
@@ -80,6 +80,8 @@ class CostBook:
         for name in os.listdir(self.folder):
             if name.startswith("plans-"):
                 day, limit = name[6:16], history_cutoff
+            elif name.startswith("ran-"):
+                day, limit = name[4:14], cutoff
             else:
                 day, limit = (name[5:15] if name.startswith("plan-") else name[:10]), cutoff
             if day < limit and name.endswith(".json") and day[:4].isdigit():
@@ -203,6 +205,22 @@ class CostBook:
         plans = self.plan_history(day)
         plans[hour] = snapshot
         _write_json(os.path.join(self.folder, f"plans-{day.isoformat()}.json"), plans)
+
+    def ran_plan(self, day: date) -> dict | None:
+        """The plan that actually ran on that day: each half-hour as the plan had it when that half-hour came."""
+        return _read_json(os.path.join(self.folder, f"ran-{day.isoformat()}.json"), None)
+
+    def record_ran(self, day: date, slot: dict, window: dict | None) -> None:
+        """Store the plan's slot (and the window it sat in) for the half-hour now running, replacing an earlier
+        version of the same half-hour (a replan changes it). Windows are keyed by start and action."""
+        data = self.ran_plan(day) or {"made_at": None, "slots": [], "windows": []}
+        data["slots"] = sorted([x for x in data["slots"] if x["start"] != slot["start"]] + [slot],
+                               key=lambda x: x["start"])
+        if window:
+            data["windows"] = sorted([w for w in data["windows"] if (w.get("start"), w.get("action")) !=
+                                      (window.get("start"), window.get("action"))] + [window],
+                                     key=lambda w: w.get("start") or "")
+        _write_json(os.path.join(self.folder, f"ran-{day.isoformat()}.json"), data)
 
     def health(self, today: date, checks: dict | None, days: int = SHOW_DAYS) -> dict:
         """Findings (inputs + yesterday's data) and plan-vs-actual accuracy for recent days."""
