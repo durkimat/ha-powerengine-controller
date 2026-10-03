@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.82 (beta)
+
+### Behaviour changes
+
+None.
+
+### Other changes
+
+- This release carries a card fix (the Tests page no longer shows "Configuration error"); see the card notes. The only change to the app itself is in the notes for developers.
+
 ## 0.9.81 (beta)
 
 ### Behaviour changes
