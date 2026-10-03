@@ -262,6 +262,32 @@ def solar_plant_entity(plant_id: str, name: str) -> EntityDef:
                      {**POWER, "icon": "mdi:solar-power"})
 
 
+DEVICE_PREFIX = "sensor.pe_state_dev_"
+DEVICE_FIELDS = {          # reading field -> (entity key suffix, label, options)
+    "soc": ("soc", "battery", {"device_class": "battery", "unit_of_measurement": "%", "state_class": "measurement"}),
+    "battery_power": ("battery_power", "battery power", {**POWER, "icon": "mdi:home-battery"}),
+    "solar_power": ("solar_power", "solar power", {**POWER, "icon": "mdi:solar-power"}),
+}
+
+
+def device_entity(device_id: str, name: str, field_name: str) -> EntityDef:
+    """One sensor of a read-only device (M1: not in ENTITIES; published and retired dynamically as `cfg.devices`
+    changes, see PowerEngine._sync_device_entities). field_name is a key of DEVICE_FIELDS."""
+    suffix, label, options = DEVICE_FIELDS[field_name]
+    return EntityDef("sensor", f"state_dev_{device_id}_{suffix}", f"{name} {label}", options)
+
+
+def device_ref_from_entity(entity_id: str) -> tuple[str, str] | None:
+    """(device id, reading field) of a device sensor's entity id, or None if it isn't one."""
+    if not entity_id.startswith(DEVICE_PREFIX):
+        return None
+    rest = entity_id[len(DEVICE_PREFIX):]
+    for field_name, (suffix, _label, _opts) in DEVICE_FIELDS.items():
+        if rest.endswith("_" + suffix) and len(rest) > len(suffix) + 1:
+            return rest[:-len(suffix) - 1], field_name
+    return None
+
+
 SOLAR_PLANT_PREFIX, SOLAR_PLANT_SUFFIX = "sensor.pe_state_solar_", "_power"
 
 

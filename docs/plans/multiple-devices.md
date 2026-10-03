@@ -53,8 +53,14 @@ The wizard's "Your system" block becomes the one place to add a device and to ch
 site:
   inverter: solis            # unchanged: the first controlled hybrid; old configs load as they are
 devices:                     # optional; absent = the one inverter above (identical to today)
-  - {id: garage, adapter: solis, firmware: "420044", control: read only}
-  - {id: shed,   adapter: some_battery_unit, control: controlled}
+  - id: garage
+    adapter: solis
+    firmware: "420044"
+    control: read_only        # M1: the only value; "controlled" arrives with M3
+    inputs:                   # the device's own readings (not in the shared `inputs`; see M1 below)
+      battery_soc: {entity: sensor.garage_battery_soc}
+      battery_power: {entity: sensor.garage_battery_power, invert: true}
+      solar_power: {entity: sensor.garage_pv_power}
 ```
 
 `site.inverter` stays readable as the device with id `main` so a one-inverter config does not change. The existing `solar_plants`
@@ -62,10 +68,11 @@ list keeps working and is shown as solar-only devices that need no definition (a
 
 ### Inputs per device
 
-Roles are keyed by role name today (`battery_soc`, `battery_power`, ...). A device other than `main` uses `<id>.<role>`
-(`shed.battery_soc`), so the catalogue, saved configs and the `main` device's entities do not change. The role catalogue is near its
-15 KB limit, so a device's roles are published **per definition** (the card asks for the roles of the definition it is configuring),
-not all at once in `map_catalogue`.
+Roles are keyed by role name today (`battery_soc`, `battery_power`, ...). A device other than `main` keeps its own readings under
+`devices[].inputs` (`battery_soc`, `battery_power`, `solar_power`), so the shared `inputs`, the catalogue and the `main` device's
+entities do not change. (The first draft keyed them `<id>.<role>` in the shared `inputs`; the per-device mapping is simpler and
+needs no catalogue change.) The role catalogue is near its 15 KB limit, so when a device needs more roles they are published **per
+definition** (the card asks for the roles of the definition it is configuring), not all at once in `map_catalogue`.
 
 ### One plan per battery, mirroring the main one
 
@@ -134,7 +141,16 @@ Each stage is shippable and passes the replay unchanged for a single-inverter ho
 
 - **M0, detect and list. Done.** The wizard and "Your system" show every candidate per part and mark the one in use; unsupported
   energy devices are listed with a way to send their entity list (docs/WIZARD.md).
-- **M1, the device model, read only.** `devices` in the config (`config.Device`: id, adapter, firmware, control), capabilities in
+- **M1, the device model, read only. M1a (controller) built, not released; M1b (card) to do.** M1a: `devices` in the config
+  (`config.Device`, parsed by `_parse_devices`: unique ids, `main` reserved, adapter from the registry, `control: read_only`, inputs
+  checked against the definition's capabilities `has_solar` / `has_battery`, both default true; `definition.device_capabilities`),
+  `Readings.devices` (only the inputs mapped; a device's solar counts in total solar), one sensor per mapped input
+  (`sensor.pe_state_dev_<id>_soc|battery_power|solar_power`, discovered and retired by `_sync_device_entities`) and a `devices`
+  attribute on `sensor.pe_diag_version` (present only when there are devices, so one-inverter homes publish exactly what they did).
+  `tests/test_devices.py`; the replay is unchanged. Not done: M1b, the card's devices list, the wizard offering a device, Health and
+  Monitoring tiles; a definition for a battery-only unit (`validate` still requires RAM or timed slots, so a read-only-only
+  definition needs that rule relaxed, and `site.inverter` must then refuse a definition that can't be driven). Original text:
+  `devices` in the config (`config.Device`: id, adapter, firmware, control), capabilities in
   definitions (`solar`, `battery`, `drive`), per-device role mapping (`<id>.<role>`) with per-definition role catalogues in the card,
   and the card's devices list. A device contributes its readings only: battery power and SoC on Health and Monitoring, solar in
   the totals. Solar plants are shown as solar-only devices. No planning or control change. Needs: a definition for a battery-only unit

@@ -118,6 +118,9 @@ def validate(data, source: str = "<definition>") -> None:
     caps = _need(data, "capabilities", dict, source)
     for flag in ("supports_ram", "supports_timed_slots"):
         _need(caps, flag, bool, f"{source}: capabilities")
+    for flag in ("has_solar", "has_battery"):                  # optional, default true: what the device reports
+        if flag in caps and not isinstance(caps[flag], bool):
+            raise DefinitionError(f"{source}: capabilities.{flag} must be true or false")
     for key in ("max_charge_w", "max_discharge_w"):
         _need(data, f"capabilities.{key}", (int, float), source)
     acts = _strings(data, "capabilities.actions", source)
@@ -339,3 +342,11 @@ def role_suggestions(name: str, firmware: str | None = None) -> dict[str, dict[s
 
 __all__ = ["Definition", "DefinitionError", "load_definition", "parse_definition", "apply_firmware", "validate",
            "available", "role_suggestions", "detect_info", "definition_path", "DEVICES_DIR"]
+
+
+def device_capabilities(name: str, firmware: str | None = None) -> dict[str, bool]:
+    """What a device built from this definition can do: reports solar (`has_solar`, default true), reports a battery
+    (`has_battery`, default true), and can be driven (RAM remote control or timed slots)."""
+    caps = load_definition(name, firmware).get("capabilities") or {}
+    return {"solar": bool(caps.get("has_solar", True)), "battery": bool(caps.get("has_battery", True)),
+            "drive": bool(caps.get("supports_ram") or caps.get("supports_timed_slots"))}
