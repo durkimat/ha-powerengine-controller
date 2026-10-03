@@ -199,3 +199,28 @@ def test_costs_tab_templates_read_the_new_waterfall_steps():
     text = ctx(headline)
     # week: 7 days x (10, 4.5 paid): none 70, solar+tariff 49, saved 3.5 x 7 = 24.5 from the battery and PowerEngine
     assert "Last 7 days: you paid £31.50" in text and "£49.00" in text and "saved £17.50" in text
+
+
+def _costs_view():
+    text = open(SOURCE, encoding="utf-8").read()
+    start = text.index("  - title: Costs\n")
+    return text[start:text.index("  - title: Health\n")]
+
+
+def test_costs_chart_shows_the_last_seven_complete_days_never_today():
+    """The daily chart is the waterfall's 'Last 7 days' day by day: complete days only, 7 of them, the window ending
+    at noon on the last complete day (end of today minus 36 h) on desktop and phone alike."""
+    view = _costs_view()
+    assert view.count("filter(d => d.scenarios && d.complete).slice(-7)") == 4        # one per series
+    assert "Date.now()" not in view
+    assert view.count('offset: "-36h"') == 1 and view.count('"offset": "-36h"') == 1
+    assert view.count("graph_span: 7d") == 1 and view.count('graph_span: "7d"') == 1
+
+
+def test_costs_page_no_longer_describes_the_old_cost_layers():
+    """The waterfall is Solar, tariff and PowerEngine, then events. The page's tables and text follow it."""
+    view = _costs_view()
+    for stale in ("Unexplained", "Carried in battery", "How the layers", "Battery control", "carry-over", "S0",
+                  "Ledger correction", "first-in-first-out"):
+        assert stale not in view, stale
+    assert "Savings by day (the waterfall's steps)" in view and "How the numbers are worked out" in view

@@ -149,7 +149,7 @@ def test_dashboard_with_octopus_names_has_no_edf_in_user_text():
         if "EDF" in line:
             # only YAML comments and the supplier-comparison sentence may still name EDF
             assert line.lstrip().startswith("#") or "EDF tariffs keep your export rate" in line, (i, line)
-    assert "Octopus smart slot" not in text and "Octopus intelligent dispatch" in text
+    assert "Octopus smart slot" not in text and "EDF slot" not in text and "Octopus dispatch" in text
     assert "<<" not in text
 
 
