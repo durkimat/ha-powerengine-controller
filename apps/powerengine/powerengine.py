@@ -2986,6 +2986,9 @@ class PowerEngine(hass.Hass):
             if not isinstance(new, dict):
                 raise ConfigError("no configuration received")
             new = coerce_flags(new)          # true/false that arrived as text or 0/1 (the demo's settings save)
+            old_devices = self.cfg.raw.get("devices") if self.cfg else None
+            if old_devices is not None and "devices" not in new:     # a card that doesn't know devices keeps them
+                new = {**new, "devices": old_devices}
             new, switched = self._site_guard(new)
             _, backup = save_config(self._save_path(), new)
         except (ConfigError, OSError) as err:

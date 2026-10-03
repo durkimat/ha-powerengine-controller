@@ -211,8 +211,10 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   is a capability set (`solar`, `battery`, `drive`) in its definition; roles per device as `<id>.<role>` (`main` keeps today's names);
   a `BatteryProfile` per battery; **residual planning in priority order** (not a joint optimiser) with shared grid limits and a shared
   grid-event export; per-device controller, write budget, Active guard and supervised tests; the demo world gains a second device so
-  M3 can be tested without hardware. Stages: M1 device model and read-only devices, M2 a plan per battery shown not executed, M3
-  control of more than one device (long Passive trial first). The owner's second inverter is solar-only and stays a read-only
+  M3 can be tested without hardware. Stages: **M1 device model and read-only devices: done in 0.9.93** (app `config.Device`, `Readings.devices`, sensors
+  `sensor.pe_state_dev_<id>_*`, `devices` attribute; card "Other devices" in "Your system", shown for app 0.9.93+; docs/SITE.md), M2 a plan per battery
+  shown not executed, M3 control of more than one device (long Passive trial first). Not in M1: the wizard offering a device, a Monitoring tile,
+  and a definition for a battery-only unit (`definition.validate` still requires RAM or timed slots). The owner's second inverter is solar-only and stays a read-only
   `solar_plants` entry. Open for M2: default priority, splitting a grid event, planning around a non-autonomous read-only battery.
 - Phase 1, still open: low-write mode for EEPROM-only inverters (#189). **Designed; L1 shadow study built** (`docs/plans/low-write-mode.md`;
   evidence from `tools/low_write_study.py` on the demo days: the overnight cycle alone keeps 83-94% of the full plan's benefit for

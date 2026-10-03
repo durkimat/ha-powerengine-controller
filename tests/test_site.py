@@ -330,3 +330,28 @@ def test_a_definition_without_a_status_is_a_draft(tmp_path):
     data = copy.deepcopy(_read(str(definition_path("solis"))))
     del data["status"], data["verified_firmware"]
     assert parse_definition(data).get("status", "draft") == "draft"
+
+
+GARAGE = {"id": "garage", "adapter": "solis", "name": "Garage", "control": "read_only",
+          "inputs": {"battery_soc": {"entity": "sensor.garage_soc"}}}
+
+
+def test_devices_are_saved_published_and_kept_by_a_card_that_does_not_send_them(make):
+    app = make(ACTIVE)
+    assert "devices" not in version(app)
+    assert save_event(app, {**app.cfg.raw, "devices": [GARAGE]})["ok"]
+    assert saved(make)["devices"] == [GARAGE] and app.cfg.devices[0].id == "garage"
+    assert version(app)["devices"] == [{"id": "garage", "name": "Garage", "adapter": "solis",
+                                        "control": "read_only", "inputs": ["battery_soc"]}]
+    raw = {k: v for k, v in app.cfg.raw.items() if k != "devices"}          # an older card saves without them
+    assert save_event(app, raw)["ok"] and saved(make)["devices"] == [GARAGE]
+    assert save_event(app, {**app.cfg.raw, "devices": []})["ok"]            # an empty list is a choice: none
+    assert saved(make)["devices"] == [] and "devices" not in version(app)
+
+
+def test_a_bad_device_is_refused_and_nothing_changes(make):
+    app = make(ACTIVE)
+    before = make.config.read_text()
+    result = save_event(app, {**app.cfg.raw, "devices": [{**GARAGE, "control": "controlled"}]})
+    assert result["ok"] is False and "control must be read_only" in result["message"]
+    assert make.config.read_text() == before

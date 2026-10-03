@@ -141,14 +141,14 @@ Each stage is shippable and passes the replay unchanged for a single-inverter ho
 
 - **M0, detect and list. Done.** The wizard and "Your system" show every candidate per part and mark the one in use; unsupported
   energy devices are listed with a way to send their entity list (docs/WIZARD.md).
-- **M1, the device model, read only. M1a (controller) built, not released; M1b (card) to do.** M1a: `devices` in the config
+- **M1, the device model, read only. Done in 0.9.93 (controller and card).** Controller: `devices` in the config
   (`config.Device`, parsed by `_parse_devices`: unique ids, `main` reserved, adapter from the registry, `control: read_only`, inputs
   checked against the definition's capabilities `has_solar` / `has_battery`, both default true; `definition.device_capabilities`),
   `Readings.devices` (only the inputs mapped; a device's solar counts in total solar), one sensor per mapped input
   (`sensor.pe_state_dev_<id>_soc|battery_power|solar_power`, discovered and retired by `_sync_device_entities`) and a `devices`
   attribute on `sensor.pe_diag_version` (present only when there are devices, so one-inverter homes publish exactly what they did).
-  `tests/test_devices.py`; the replay is unchanged. Not done: M1b, the card's devices list, the wizard offering a device, Health and
-  Monitoring tiles; a definition for a battery-only unit (`validate` still requires RAM or timed slots, so a read-only-only
+  `tests/test_devices.py`; the replay is unchanged. Card: an "Other devices" list in "Your system" (add, edit inputs, remove, live readings), shown only for app 0.9.93 or newer, always sent as a list
+  so an empty one removes them; a save with no `devices` key keeps the saved ones. Not done: the wizard offering a device, a Monitoring tile; a definition for a battery-only unit (`validate` still requires RAM or timed slots, so a read-only-only
   definition needs that rule relaxed, and `site.inverter` must then refuse a definition that can't be driven). Original text:
   `devices` in the config (`config.Device`: id, adapter, firmware, control), capabilities in
   definitions (`solar`, `battery`, `drive`), per-device role mapping (`<id>.<role>`) with per-definition role catalogues in the card,
