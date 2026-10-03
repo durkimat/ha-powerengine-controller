@@ -2,6 +2,25 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.88 (beta)
+
+### Behaviour changes
+
+None for a home with a car charger, a solar forecast and grid events set up, which includes yours: nothing PowerEngine does to your system changes. One change for homes that leave a part out: when the system settings say there is no car charger, no solar forecast or no grid-events provider, the inputs for that part are no longer counted as required, so they no longer hold PowerEngine at "inputs missing".
+
+### Setup wizard (needs card 0.9.88)
+
+- A new **Setup wizard** card at the top of the Config tab gets a new home to a working Passive install in five steps: what you'll need (required and optional parts, with what it found in Home Assistant and links to install what's missing), your devices, mapping the inputs from each device's own entities, live checks of the battery and grid signs and that the numbers add up, and a review before saving. It starts in Passive, keeps a backup of any existing configuration, and never turns control on.
+- Parts you don't have (car charger, solar forecast, grid events) can be skipped. Smart-charge optimisation, grid events and free-power sessions are switched off when their part or inputs are missing.
+- On a system that is already set up, each part has a "Change this part" tick, so you can redo one part without touching the others.
+- For hardware PowerEngine doesn't support yet, the wizard can write a **candidate entities** file: a list of the device's entities with their units, options and limits, with long numbers (meter and account numbers, serials), email addresses and postcodes removed first. It's what's needed to write a definition for that hardware. `tools/candidates_summary.py` reads one.
+- The app now tells the wizard how to recognise each inverter, tariff, car charger, forecast and grid-event provider, so a new inverter definition shows up in the wizard by itself (docs/WIZARD.md).
+
+### Other
+
+- The dashboard's Config tab carries the wizard card, and the app now asks for card 0.9.88 or newer.
+- Docs: new docs/WIZARD.md; the install guide, the inverter guide and the site guide mention the wizard.
+
 ## 0.9.87 (beta)
 
 ### Behaviour changes

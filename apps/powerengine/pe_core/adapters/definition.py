@@ -136,6 +136,7 @@ def validate(data, source: str = "<definition>") -> None:
     _validate_roles(data, source)
     _validate_firmware(data, source)
     _validate_status(data, source)
+    _validate_detect(data, source)
 
 
 def _behaviour(data, section: str, source: str) -> None:
@@ -229,6 +230,34 @@ def _validate_status(data, source: str) -> None:
         raise DefinitionError(f"{source}: 'firmware_entity' needs a 'domain' and a 'tail' (text)")
 
 
+def _validate_detect(data, source: str) -> None:
+    """`detect` (optional): how the setup wizard recognises this inverter in Home Assistant. `integration` is
+    {name, url?}; `domains`, `manufacturers`, `models` and `entities` are lists of text (the last three are regular
+    expressions, checked here so a typo is a clear error and not a silent miss in the card)."""
+    detect = data.get("detect")
+    if detect is None:
+        return
+    if not isinstance(detect, dict):
+        raise DefinitionError(f"{source}: 'detect' must be a mapping")
+    unknown = sorted(set(detect) - {"integration", "domains", "manufacturers", "models", "entities"})
+    if unknown:
+        raise DefinitionError(f"{source}: 'detect' has unknown key(s) {unknown}")
+    integ = detect.get("integration")
+    if integ is not None and not (isinstance(integ, dict) and isinstance(integ.get("name"), str)
+                                  and isinstance(integ.get("url", ""), str)):
+        raise DefinitionError(f"{source}: 'detect.integration' needs a 'name' (and may have a 'url'), as text")
+    for key in ("domains", "manufacturers", "models", "entities"):
+        items = detect.get(key, [])
+        if not isinstance(items, list) or not all(isinstance(x, str) and x for x in items):
+            raise DefinitionError(f"{source}: 'detect.{key}' must be a list of text")
+        if key != "domains":
+            for pattern in items:
+                try:
+                    re.compile(pattern)
+                except re.error as err:
+                    raise DefinitionError(f"{source}: 'detect.{key}' has a bad pattern {pattern!r}: {err}") from None
+
+
 def _validate_firmware(data, source: str) -> None:
     fw = data.get("firmware")
     if fw is None:
@@ -288,6 +317,11 @@ def available() -> list[str]:
     return sorted(p.name[: -len(SUFFIX)] for p in DEVICES_DIR.glob(f"*{SUFFIX}"))
 
 
+def detect_info(name: str) -> dict | None:
+    """The `detect:` block of the inverter's definition (what the setup wizard looks for), or None if it has none."""
+    return load_definition(name).get("detect")
+
+
 def role_suggestions(name: str, firmware: str | None = None) -> dict[str, dict[str, tuple[str, ...]]]:
     """{role: {"suggest": (...), "suggest_not": (...)}} from the inverter's definition."""
     out = {}
@@ -297,4 +331,4 @@ def role_suggestions(name: str, firmware: str | None = None) -> dict[str, dict[s
 
 
 __all__ = ["Definition", "DefinitionError", "load_definition", "parse_definition", "apply_firmware", "validate",
-           "available", "role_suggestions", "definition_path", "DEVICES_DIR"]
+           "available", "role_suggestions", "detect_info", "definition_path", "DEVICES_DIR"]

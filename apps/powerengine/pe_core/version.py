@@ -17,11 +17,11 @@ def installed_version(path: str) -> str | None:
     return m.group(1) if m else None
 
 
-# The oldest card this app works with, published as `min_card_version` on sensor.pe_diag_version. 0.9.86 is the card
-# with the Plan history day picker and its previous/next arrows (the dashboard's tab names it). Raise it only
+# The oldest card this app works with, published as `min_card_version` on sensor.pe_diag_version. 0.9.88 is the card
+# with the setup wizard (`powerengine-wizard-card`, which the dashboard's Config page now holds). Raise it only
 # when the app starts to need something a newer card does. The card holds the matching MIN_APP_VERSION for the
 # other direction.
-MIN_CARD_VERSION = "0.9.86"
+MIN_CARD_VERSION = "0.9.88"
 
 _DOTTED = re.compile(r"^\s*v?(\d+(?:\.\d+)*)\s*$")
 

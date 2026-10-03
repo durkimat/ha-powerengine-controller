@@ -222,7 +222,7 @@ def test_the_version_sensor_carries_the_site_for_the_card(make):
     a = version(app)
     assert a["site"] == {**TODAYS, "tariff": "edf"} and a["firmware_detected"] is None and a["retest_required"] is False
     assert a["site_options"] == site_options() and a["names"]["supplier"] == "EDF"
-    assert len(json.dumps(a, separators=(",", ":"))) < 4000
+    assert len(json.dumps(a, separators=(",", ":"))) < 9000       # the wizard data is about 3.5 KB of it
 
 
 def test_a_firmware_entity_is_reported_when_the_definition_names_one(make, monkeypatch):

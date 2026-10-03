@@ -9,8 +9,10 @@
 >   AppDaemon loads any `.yaml`), and the `site:` config section with the "Your system" block. See CLAUDE.md, "Phase 0".
 > - **Phase 1 has started** (2 Oct 2026). The owner wants the system fully modular before looking for testers, who may have any
 >   brand. Done: Active is refused on an inverter definition that is not `verified`, or on firmware not in its
->   `verified_firmware` (`pe_core/verification.py`). Open items: a pre-setup "candidate entities" diagnostics export, the
->   device-first setup wizard, the licence and CONTRIBUTING, and the low-write mode for EEPROM-only inverters (issue #189).
+>   `verified_firmware` (`pe_core/verification.py`). Open items: the licence and CONTRIBUTING, and the low-write mode for EEPROM-only inverters (issue #189).
+> - **Wizard and candidate export** (3 Oct 2026, branch `ccr-6832e975-2wkm5i`, card 0.9.88): done in the card, with the app
+>   publishing what to look for (`pe_core/wizard.py`, `adapters/detect.py`, definitions' `detect:`). A skipped part (`none`) no
+>   longer leaves its inputs required. See `docs/WIZARD.md`. Not yet run on a live Home Assistant.
 > - The **UK inverter survey** section below (30 Sep) is the current evidence on RAM vs EEPROM control.
 > - Where this document says "you", it means the owner, Matthew. The sentences addressed to him are kept as written.
 > - Never use or copy Predbat; the reason is at the end.

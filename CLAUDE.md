@@ -15,6 +15,8 @@ there, say so and stop; don't guess its contents. Pairs that must move together:
 
 - A new setting in `pe_core/config.py` (`SAFETY`, `SETTING_SECTIONS`) needs adding to the card's section lists in
   `ha-powerengine-card.js` (search for a neighbouring key, e.g. `ram_max_power_w`), or it never shows on the config page.
+- A new adapter (tariff, charger, forecast, events) or inverter definition needs a detect entry for the setup wizard
+  (`pe_core/adapters/detect.py`, or the definition's `detect:`); see Phase 1 below.
 - `MIN_APP_VERSION` (card) and `MIN_CARD_VERSION` (app, `pe_core/version.py`): raise one in the PR that makes the other
   side need something new, and release both (see Releases).
 - A changed state text or attribute on a published sensor (`pe_core/status.py`) can break the card or the dashboard
@@ -200,6 +202,16 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   (`s0`, `smart`, `s3a`, `s3b`), so its numbers don't match the Costs page's waterfall (No solar or battery, Solar, tariff,
   PowerEngine, events, You paid). Align it with the waterfall's steps; `tests/test_notify.py` pins the current text.
 
+- Setup wizard, still to do (see docs/WIZARD.md, "Not done yet"): (1) try it on the live HA and check the guessed details: the Solis
+  `detect:` manufacturer pattern, the integration domains in `adapters/detect.py` (`solax_modbus`, `octopus_energy`/`edf_energy`,
+  `myenergi`, `solcast_solar`, Axle's unknown) and that `hass.entities[].platform` / `hass.devices` are what the card expects; (2) install
+  links for myenergi and Axle (left out because the addresses weren't known); (3) a second inverter's `suggest` regexes reaching the
+  card (the catalogue holds only the default inverter's, and `map_catalogue` is near its 15 KB limit, so ship them per definition
+  some other way); (4) Octopus tariff suggestions and a fixed-rate tariff adapter (Phase 2), since the tariff suggestions are the
+  EDF ones; (5) the GitHub issue form that the candidate export attaches to (the wizard links to a plain new issue).
+- Phase 1, still open: licence and CONTRIBUTING; low-write mode for EEPROM-only inverters (#189); the step 7 "Left" items (three timed
+  slots, RC option words, `writes_needed`).
+
 ## Recent fixes
 
 - **#121, RAM control and BMS limits. Done in 0.9.73** (`pe_core/bms.py`, `ramcontrol.py`). Optional roles
@@ -333,8 +345,26 @@ Plan status box: `docs/plans/making-it-generic.md`. Done so far:
   (the site's, else the definition's default) is listed. A definition that won't load is refused too. Not applied in a demo.
   Byte-identical for his Solis on 420044 (replay unchanged). The config keeps saying `active`; only the effective mode is Passive.
 
-Open: the "candidate entities" pre-setup export, the device-first setup wizard, licence and CONTRIBUTING, low-write mode for
-EEPROM-only inverters (#189), and the step 7 "Left" items (three timed slots, RC option words, `writes_needed`).
+- **Setup wizard and candidate export. Written on branch `ccr-6832e975-2wkm5i`, not released** (docs/WIZARD.md; needs card and
+  app 0.9.88 or the next free version: `MIN_CARD_VERSION` is already 0.9.88, so release both together). The wizard is the card
+  `powerengine-wizard-card` (one JS file, section "setup wizard and candidate export": pure `wizard*` helpers, then the class),
+  placed on the Config tab (dashboard and its golden both carry it). The app only says what to look for:
+  `pe_core/wizard.py` `wizard_info()`, published as attribute `wizard` of `sensor.pe_diag_version` (about 3.5 KB: keep it, the
+  version sensor's attributes share 16 KB). Per part (inverter, tariff, ev_charger, forecast, events; the first two required, the
+  rest skippable as `none`): its adapters with how to recognise them (`adapters/detect.py` for the non-inverters, the
+  definition's `detect:` block for inverters, validated in `definition.py`), and its role keys (`GROUP_PART` / `ROLE_PART`).
+  **Rule: a new adapter or definition needs a detect entry, or the wizard can't find it.** `config.required_roles` now leaves out
+  the roles of a part the site sets to `none` (`SKIPPED_PART_GROUPS`, `left_out_roles`; no car charger also drops the
+  smart-charge group), which is what makes "skip" work. The card hides the wizard when `wizard` is absent (no `MIN_APP_VERSION`
+  bump). The candidate export (`buildCandidateExport` in the card, `pe_core/candidates.py` format and checks,
+  `tools/candidates_summary.py`) is scrubbed in the card (long digits to `<n>`, emails and postcodes dropped; firmware keeps its
+  digits) and checked again by `candidates.unscrubbed`; never commit an unscrubbed one. **Not yet run on a live HA**: the card uses
+  `hass.entities[].platform/device_id` and `hass.devices`, and the Solis `detect:` values and other adapters' integration domains
+  (`solax_modbus`, `octopus_energy`/`edf_energy`, `myenergi`, `solcast_solar`, Axle's unknown) are best knowledge. Not done: a second
+  inverter's `suggest` regexes reaching the card (the catalogue holds only the default's), Octopus tariff suggestions.
+
+Open: licence and CONTRIBUTING, low-write mode for EEPROM-only inverters (#189), and the step 7 "Left" items (three timed
+slots, RC option words, `writes_needed`).
 
 ## Demo mode plan
 

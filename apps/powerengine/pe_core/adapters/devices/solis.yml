@@ -36,6 +36,19 @@ capabilities:
   # modes or options the app must never select
   never_touch: [Backup, Off-Grid]
 
+# ---- How the setup wizard finds this inverter in Home Assistant -------------------------------------------------
+# Only a suggestion for the wizard; nothing here changes what the app does. `domains` are integration domains (the
+# entity registry's platform); `manufacturers`, `models` and `entities` are regular expressions (device manufacturer
+# and model, case insensitive; entity ids). Any one match counts as a find.
+detect:
+  integration:
+    name: SolaX Modbus
+    url: https://github.com/wills106/homeassistant-solax-modbus
+  domains: [solax_modbus]
+  manufacturers: ['^(solis|ginlong|solax)']
+  models: []
+  entities: ['^sensor\.solis_']
+
 # ---- RAM remote control: the primary, preferred way to drive this inverter ---------------------------------
 # SolaX Modbus's "Battery control override" register set (43135 mode, 43136 charge W, 43129 discharge W). Volatile:
 # the inverter drops the command about `failsafe_min` minutes after it stops being sent, so a stopped controller
