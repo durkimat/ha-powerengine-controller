@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.92 (beta)
+
+### Behaviour changes
+
+None. PowerEngine plans and controls exactly as before.
+
+### What's new
+
+- **The daily notification now matches the Costs page.** It used to report "Solar, smart charge, battery" from older cost layers, so its numbers didn't add up against the Costs savings waterfall. It now says what you paid yesterday against what you'd have paid with no solar or battery, then each step of the waterfall: solar, your tariff, PowerEngine, and grid events and free power when they moved money. A minus sign is a saving.
+
 ## 0.9.91 (beta)
 
 ### Behaviour changes

@@ -48,7 +48,7 @@ from pe_core.config import (
 )
 from pe_core.control import KINDS, Write, readback_mismatches, release, writes_needed
 from pe_core.costbook import KEEP_DAYS, MIN_MEASURE_DAYS, CostBook, cost_entity_states
-from pe_core.costs import METHOD_VERSION
+from pe_core.costs import METHOD_VERSION, waterfall
 from pe_core.dashboard import energy_flow_card, sync_dashboard
 from pe_core.decide import cheap_limit, decide
 from pe_core.demo.gate import DemoGate
@@ -2869,9 +2869,11 @@ class PowerEngine(hass.Hass):
         if self.costbook is None:
             return
         today = self._today()
-        s = self.costbook.summary(today - timedelta(days=1), today)
+        sp = self._scenario_params() if self.cfg is not None else None
+        s = self.costbook.summary(today - timedelta(days=1), today, scenario_params=sp)
         if s:
-            self._notify("daily", daily_message(s))
+            steps = waterfall([s], "yesterday")["steps"] if s.get("scenarios") and s.get("complete") else None
+            self._notify("daily", daily_message(s, steps))
 
     def _health(self):
         if self.costbook is None or self._get_publisher() is None:

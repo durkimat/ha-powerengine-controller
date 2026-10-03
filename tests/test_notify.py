@@ -49,7 +49,17 @@ def test_messages():
     assert key.startswith("axle:") and "17:00 today to 18:00" in msg
     s = {"date": "2026-09-25", "s0": 4.72, "actual": 1.40, "solar": 1.03, "smart": 0.05, "s3a": 0.01, "s3b": 1.70}
     key, title, msg = daily_message(s)
-    assert key == "daily:2026-09-25" and "£1.40" in title and "saved £3.32" in msg
+    assert key == "daily:2026-09-25" and "£1.40" in title and "You paid £1.40 against £4.72" in msg
+    steps = [{"label": "No solar or battery", "kind": "total", "value": 4.72},
+             {"label": "Solar", "kind": "step", "value": -1.03},
+             {"label": "EDF tariff", "kind": "step", "value": 0.10},
+             {"label": "PowerEngine", "kind": "step", "value": -2.39},
+             {"label": "Axle & free power", "kind": "step", "value": -0.05},
+             {"label": "You paid", "kind": "total", "value": 1.35}]
+    key, title, msg = daily_message(s, steps)
+    assert "£1.35" in title
+    assert msg == ("You paid £1.35 against £4.72 with no solar or battery. Solar −£1.03, EDF tariff +£0.10, "
+                   "PowerEngine −£2.39, Axle & free power −£0.05.")
 
 
 def test_notification_area_create_and_dismiss(monkeypatch, tmp_path):
