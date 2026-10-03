@@ -93,11 +93,21 @@ def free_message(start: datetime, end: datetime | None, now: datetime, tz=None) 
             f"Free electricity from {_when(start, now, tz)}{until}.")
 
 
-def daily_message(summary: dict) -> tuple[str, str, str]:
+def daily_message(summary: dict, steps: list[dict] | None = None) -> tuple[str, str, str]:
+    """Yesterday's costs in the Costs page's waterfall steps (`costs.waterfall`'s `steps`: dicts with label, kind,
+    value; negative steps are savings). Without steps (no scenario figures for the day), just paid against no solar
+    or battery."""
     s = summary
-    saved = s["s0"] - s["actual"]
     def gbp(v: float) -> str:
         return f"−£{-v:.2f}" if v < -0.005 else f"£{abs(v) if abs(v) < 0.005 else v:.2f}"
-    return (f"daily:{s['date']}", f"PowerEngine: yesterday {gbp(s['actual'])}",
-            f"Actual {gbp(s['actual'])} vs {gbp(s['s0'])} with no solar or battery (saved {gbp(saved)}). "
-            f"Solar {gbp(s['solar'])}, smart charge {gbp(s['smart'])}, battery {gbp(s['s3a'] + s['s3b'])}.")
+    def signed(v: float) -> str:
+        return f"+£{v:.2f}" if v > 0.005 else gbp(v)
+    totals = [x for x in steps or [] if x["kind"] == "total"]
+    if len(totals) == 2:
+        base, paid = totals[0]["value"], totals[1]["value"]
+        parts = ", ".join(f"{x['label']} {signed(x['value'])}" for x in steps if x["kind"] == "step")
+        body = f"You paid {gbp(paid)} against {gbp(base)} with no solar or battery. {parts}."
+    else:
+        paid = s["actual"]
+        body = f"You paid {gbp(paid)} against {gbp(s['s0'])} with no solar or battery."
+    return (f"daily:{s['date']}", f"PowerEngine: yesterday {gbp(paid)}", body)

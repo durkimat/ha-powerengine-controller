@@ -198,9 +198,6 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   and a slow CI (the script waits up to 12 minutes). `RELEASE_TOKEN` is a fine-grained token with an expiry: when it lapses
   the checkout steps fail with an auth error, and the owner renews it and replaces the secret. The expiry date isn't recorded
   here; ask him. The throwaway branch `claude/release-dryrun` is still on GitHub (delete only when he asks).
-- The daily notification (`notify.daily_message`) still reports "Solar, smart charge, battery" from the older cost layers
-  (`s0`, `smart`, `s3a`, `s3b`), so its numbers don't match the Costs page's waterfall (No solar or battery, Solar, tariff,
-  PowerEngine, events, You paid). Align it with the waterfall's steps; `tests/test_notify.py` pins the current text.
 
 - Setup wizard, still to do (see docs/WIZARD.md, "Not done yet"): (1) try it on the live HA and check the guessed details: the Solis
   `detect:` manufacturer pattern, the integration domains in `adapters/detect.py` (`solax_modbus`, `octopus_energy`/`edf_energy`,
