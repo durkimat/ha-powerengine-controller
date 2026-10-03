@@ -20,8 +20,8 @@ there, say so and stop; don't guess its contents. Pairs that must move together:
 - A changed state text or attribute on a published sensor (`pe_core/status.py`) can break the card or the dashboard
   (`dashboard.lovelace`, and its frozen render in `tests/golden/`): search both repos for the old text.
 
-Releases run on the owner's machine (they need `gh` logged in as him); a cloud session can write code, tests and PRs
-but should not attempt a release.
+A cloud session can write code, tests and PRs and start a release through the **Release workflow** (see Releases): the
+owner approves each run on GitHub. It can't run `tools/release.sh` itself (it needs the owner's `gh` login).
 
 ## Layout
 
@@ -64,6 +64,33 @@ timed windows, and compares every plan, decision, service call and warning with 
 
 ## Releases (every user-visible change)
 
+### From a cloud session: the Release workflow (preferred)
+
+`.github/workflows/release.yml` runs `tools/release.sh` on GitHub with `RELEASE_TOKEN` (a secret of the `release`
+environment, so **every run waits for the owner to press Approve and deploy**). First used for 0.9.87 (3 Oct 2026). A
+cloud session does everything except the approval:
+
+1. Branch from `main`, make the change with tests, run the checks (below), re-record the replay if the change is meant to.
+2. Commit the notes as `release-notes/<version>.md` on the branch (starts `### Behaviour changes`, plain words; card notes
+   in a second file if the card is released). Push the branch. No PR is needed: the script opens one, or reuses an open one.
+3. Fetch `main` and pick the next version. Tell the owner the version, title, notes and whether the card is included, and
+   **wait for his yes in chat.**
+4. Start it with `actions_run_trigger` (`run_workflow`, `release.yml`, ref `main`) and inputs `version`, `title`,
+   `app_branch`, `app_notes` (path in the branch), optional `card_branch` and `card_notes`, `dry_run` (`"true"` the first
+   time anything about the workflow or the card path is new; nothing is pushed), `skip_replay`, `model_name` (the
+   Co-Authored-By name).
+5. Ask him to open the run in the Actions tab, click **Review deployments**, tick `release` and press **Approve and
+   deploy**. Nothing runs until he does.
+6. Watch with `actions_list` (`list_workflow_jobs`) and `subscribe_pr_activity` on the PR it opens (about 10 minutes). The
+   script merges and creates the release itself: **don't merge the PR or create the release by hand.** Then check
+   `main`'s `__version__`, the CHANGELOG section and `get_latest_release`.
+
+The script always comes from `main`; the code and notes come from the branch. A cloud session can't read the run's log (the
+proxy blocks the log host); the run's summary page shows the command and the script's summary, so ask the owner to paste
+it if you need it. The notes file stays in `release-notes/` as a record.
+
+### On the owner's machine (fallback)
+
 Branch from `main`, make the change with tests, commit, then one command does the rest:
 
 ```
@@ -105,8 +132,9 @@ tools/release.sh <version> --app-notes <file> [--card-notes <file>] [--app-branc
   (CI took about 6 minutes); `api PUT .../pulls/N/merge` (squash), `api POST .../releases`, then `git checkout main`,
   pull and delete the branch. Run the test suite first in cloud `Bash` (background works there, about 210 s), not
   on the device. Same steps, same commit and release format as the script.
-- **The cloud workspace cannot release:** its network proxy answers every `api.github.com` call with 403 "No linked
-  GitHub account", so `gh` is refused there. Releases run on the device, where `gh auth status` is logged in.
+- **A cloud session can't run this script:** its network proxy answers every `api.github.com` call with 403 "No linked
+  GitHub account", so `gh` is refused there. Use the Release workflow above, or run it on the device, where
+  `gh auth status` is logged in.
 - **Check `main` before choosing the version:** the owner may have released since the session started (0.9.72 went
   out while #121 was in progress, so it became 0.9.73). `git fetch`, rebase the branch, rerun the tests, then pick
   the next version. Don't reuse a branch name that already exists on GitHub after a rebase (a stale remote branch
@@ -163,14 +191,14 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 - Custom date range for the Costs savings waterfall: tried in 0.9.72-0.9.74 (relative-day From/To selects + a `custom`
   period), removed in 0.9.75 because it didn't work as the owner wanted; re-ask him what he wants before building it
   again. Ideas: real calendar date pickers; per-day data summed in the card.
-- Rework the release so a cloud session can do it (raised 2 Oct 2026): `tools/release.sh` needs the owner's `gh` login, and
-  the cloud proxy refuses `api.github.com` for `gh`, so every release runs on his machine. Idea: a `release.yml` GitHub
-  Actions workflow (`workflow_dispatch`: version, title, notes file) that bumps `__version__` and the two `docs/INSTALL.md`
-  places, adds the CHANGELOG section, squash-merges a green PR and creates the `vX.Y.Z` release; a cloud session commits
-  the notes file and starts it (`actions_run_trigger`). Needs a `RELEASE_TOKEN` repo secret (fine-grained PAT, Contents
-  and Pull requests read/write, on both repos, so a card release can go in the same run and CI re-runs on the bump
-  commit), `main` branch protection to allow the merge, and a dry-run mode. Keep `release.sh` as the fallback and the two
-  in step. First check whether his existing token already covers both repos.
+- Release workflow, still to do (the workflow itself is done and used for 0.9.87): untested are a card release in the same
+  run (the card branch pushed in the card repo, `card_notes` given), a run where CI is red (it should stop without merging)
+  and a slow CI (the script waits up to 12 minutes). `RELEASE_TOKEN` is a fine-grained token with an expiry: when it lapses
+  the checkout steps fail with an auth error, and the owner renews it and replaces the secret. The expiry date isn't recorded
+  here; ask him. The throwaway branch `claude/release-dryrun` is still on GitHub (delete only when he asks).
+- The daily notification (`notify.daily_message`) still reports "Solar, smart charge, battery" from the older cost layers
+  (`s0`, `smart`, `s3a`, `s3b`), so its numbers don't match the Costs page's waterfall (No solar or battery, Solar, tariff,
+  PowerEngine, events, You paid). Align it with the waterfall's steps; `tests/test_notify.py` pins the current text.
 
 ## Recent fixes
 
