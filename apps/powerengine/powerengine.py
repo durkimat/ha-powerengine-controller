@@ -1312,11 +1312,8 @@ class PowerEngine(hass.Hass):
             now = datetime.now(timezone.utc)
             today = now.astimezone(tz).date()
             day = self._history_date or chosen_day(self.get_state("select.pe_ui_history_day"), today)
-            hourly = self.costbook.plan_history(day)
-            start_of_day, ran = self.costbook.plan_snapshot(day), self.costbook.ran_plan(day)
-            label, snap = chosen_plan(self.get_state("select.pe_ui_history_plan"), start_of_day, hourly, ran)
-            available = (["As run"] if ran else []) + (["Start of day"] if start_of_day else []) + sorted(hourly)
-            view = day_view(day, self.costbook.day_records(day), snap, label, tz, now, available)
+            label, snap = chosen_plan(self.costbook.plan_snapshot(day), self.costbook.ran_plan(day))
+            view = day_view(day, self.costbook.day_records(day), snap, label, tz, now)
             recorded = self.costbook.recorded_days()
             view["earliest"] = min(recorded[0], day.isoformat()) if recorded else day.isoformat()  # for the picker
             view["latest"] = today.isoformat()
@@ -1433,7 +1430,6 @@ class PowerEngine(hass.Hass):
             if eid:                                   # re-check the mode as soon as a guard or pause changes
                 self._write_listeners.append(self._listen_state(self._on_guard_change, eid))
         self._write_listeners.append(self._listen_state(self._on_history_select, "select.pe_ui_history_day"))
-        self._write_listeners.append(self._listen_state(self._publish_history, "select.pe_ui_history_plan"))
         self._write_listeners = [h for h in self._write_listeners if h is not None]
 
     def _listen_state(self, callback, entity_id):
@@ -3159,7 +3155,6 @@ class PowerEngine(hass.Hass):
             done["right_align"] = changed = True
         if not done.get("history"):
             pub.preset("ui_history_day", "Yesterday")
-            pub.preset("ui_history_plan", "Start of day")
             done["history"] = changed = True
         if changed and pub.retains:
             try:
