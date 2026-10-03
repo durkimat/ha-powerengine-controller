@@ -17,10 +17,11 @@ def installed_version(path: str) -> str | None:
     return m.group(1) if m else None
 
 
-# The oldest card this app works with, published as `min_card_version` on sensor.pe_diag_version. 0.9.84 is the card
-# with the Plan history date picker (the dashboard's tab names it). Raise it only when the app starts
-# to need something a newer card does. The card holds the matching MIN_APP_VERSION for the other direction.
-MIN_CARD_VERSION = "0.9.84"
+# The oldest card this app works with, published as `min_card_version` on sensor.pe_diag_version. 0.9.86 is the card
+# with the Plan history day picker and its previous/next arrows (the dashboard's tab names it). Raise it only
+# when the app starts to need something a newer card does. The card holds the matching MIN_APP_VERSION for the
+# other direction.
+MIN_CARD_VERSION = "0.9.86"
 
 _DOTTED = re.compile(r"^\s*v?(\d+(?:\.\d+)*)\s*$")
 

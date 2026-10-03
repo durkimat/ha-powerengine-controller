@@ -11,6 +11,7 @@ from pe_core.config import ConfigError, parse_config, settings_catalogue
 from pe_core.entities import (
     AVAILABILITY_TOPIC,
     ENTITIES,
+    EntityDef,
     discovery_payload,
     entity_removal_messages,
     removal_messages,
@@ -94,10 +95,13 @@ def test_direct_switch_and_select():
     d.discover(ent("diag_config_ok"), VERSION)
     d.publish("diag_config_ok", "OFF")
     assert ha.last("binary_sensor.pe_diag_config_ok")[1] == "off"
-    d.discover(ent("ui_history_day"), VERSION)
-    d.preset("ui_history_day", "Yesterday")
-    eid, state, attrs = ha.last("select.pe_ui_history_day")
-    assert state == "Yesterday" and attrs["options"] == ent("ui_history_day").options["options"]
+    choice = EntityDef("select", "ui_test_choice", "Test choice",
+                       {"icon": "mdi:calendar-search", "options": ["Today", "Yesterday"],
+                        "command_topic": "powerengine/ui_test_choice/set"})
+    d.discover(choice, VERSION)
+    d.preset("ui_test_choice", "Yesterday")
+    eid, state, attrs = ha.last("select.pe_ui_test_choice")
+    assert state == "Yesterday" and attrs["options"] == ["Today", "Yesterday"]
     assert attrs["icon"] == "mdi:calendar-search"
 
 
@@ -164,10 +168,10 @@ def test_mqtt_presets_go_to_the_retained_command_topics():
     m = MqttPublisher(api)
     m.preset("ctl_pause", "ON")
     m.preset("ui_right_align", "ON")
-    m.preset("ui_history_day", "Yesterday")
+    m.preset("ui_test_choice", "Yesterday")
     assert [(t, p) for t, p, *_ in api.sent] == [
         ("powerengine/ctl_pause/set", "ON"), ("powerengine/ui_right_align/set", "ON"),
-        ("powerengine/ui_history_day/set", "Yesterday")]
+        ("powerengine/ui_test_choice/set", "Yesterday")]
 
 
 # --- choosing one --------------------------------------------------------------------------------

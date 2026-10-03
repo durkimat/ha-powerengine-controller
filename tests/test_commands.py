@@ -74,9 +74,15 @@ def test_command_path_is_the_one_place(app):
     assert seen == [("ctl_pause", "ON"), ("ui_right_align", "OFF")]
 
 
-def test_select_option_is_validated(app):
-    from pe_core.entities import ENTITIES
-    options = next(e for e in ENTITIES if e.key == "ui_history_day").options["options"]
+def test_select_option_is_validated(app, monkeypatch):
+    """PowerEngine has no select of its own now, so the validation is exercised on a test one."""
+    from pe_core import commands
+    from pe_core.adapters import publish
+    from pe_core.entities import EntityDef
+    options = ["Today", "Yesterday", "2 days ago", "3 days ago"]
+    test_select = EntityDef("select", "ui_history_day", "Test choice", {"options": options})
+    monkeypatch.setitem(commands.BY_ENTITY_ID, "select.pe_ui_history_day", test_select)
+    monkeypatch.setitem(publish._BY_KEY, "ui_history_day", test_select)
     call(app, "select", "select_option", entity_id="select.pe_ui_history_day", option=options[1])
     assert app.ha.states["select.pe_ui_history_day"] == options[1]
     call(app, "select", "select_option", entity_id="select.pe_ui_history_day", option="not an option")

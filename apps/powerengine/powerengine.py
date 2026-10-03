@@ -75,7 +75,7 @@ from pe_core.forecast import (
 )
 from pe_core.health import WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
 from pe_core.heatpump import HeatPumpSettings
-from pe_core.history import chosen_day, chosen_plan, day_view
+from pe_core.history import chosen_plan, day_view
 from pe_core.journal import WriteJournal, day_summary, is_staged
 from pe_core.loadstore import LoadStore
 from pe_core.modes import GUARDS, UNVERIFIED, effective_mode, guard_problems, guard_status
@@ -1284,11 +1284,6 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Could not save the plan that ran: {err!r}", level="WARNING")
 
-    def _on_history_select(self, *args, **kwargs):
-        """The Day select was used: it wins over a day picked earlier with the date picker."""
-        self._history_date = None
-        self._publish_history()
-
     def _on_history_day(self, event_name, data, kwargs):
         """The card's date picker (pe_history_day {date}): show that day, if the app can still hold it."""
         if event_name != HISTORY_DAY_EVENT or self.costbook is None:
@@ -1311,7 +1306,7 @@ class PowerEngine(hass.Hass):
             tz = self.tz or timezone.utc
             now = datetime.now(timezone.utc)
             today = now.astimezone(tz).date()
-            day = self._history_date or chosen_day(self.get_state("select.pe_ui_history_day"), today)
+            day = self._history_date or today - timedelta(days=1)
             label, snap = chosen_plan(self.costbook.plan_snapshot(day), self.costbook.ran_plan(day))
             view = day_view(day, self.costbook.day_records(day), snap, label, tz, now)
             recorded = self.costbook.recorded_days()
@@ -1429,7 +1424,6 @@ class PowerEngine(hass.Hass):
         for eid in [self._role_entity(key) for key, _ in GUARDS] + [PAUSE_ENTITY]:
             if eid:                                   # re-check the mode as soon as a guard or pause changes
                 self._write_listeners.append(self._listen_state(self._on_guard_change, eid))
-        self._write_listeners.append(self._listen_state(self._on_history_select, "select.pe_ui_history_day"))
         self._write_listeners = [h for h in self._write_listeners if h is not None]
 
     def _listen_state(self, callback, entity_id):
@@ -3153,9 +3147,6 @@ class PowerEngine(hass.Hass):
         if not done.get("right_align"):
             pub.preset("ui_right_align", "ON")               # right-aligned numbers by default
             done["right_align"] = changed = True
-        if not done.get("history"):
-            pub.preset("ui_history_day", "Yesterday")
-            done["history"] = changed = True
         if changed and pub.retains:
             try:
                 with open(path, "w", encoding="utf-8") as fh:
