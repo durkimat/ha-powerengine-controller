@@ -83,11 +83,33 @@ def band_penalty(a: str, lv: float, end: float, p: Params, overnight: bool = Fal
     return kwh * p.arbitrage_band_penalty_p / 100
 
 
+def _tiered(acts: list[str], s: Slot, p: Params) -> list[str]:
+    """The actions a low-write plan tier allows (docs/plans/low-write-mode.md): 0 is plain self-use, 1 charges only
+    inside the fixed overnight window, 2 also sells inside it, 3 charges and holds anywhere, 4 (the default) is the
+    whole plan."""
+    t = p.plan_tier
+    if t >= 4:
+        return acts
+    if t <= 0:
+        return [SELF_USE]
+    keep = []
+    for a in acts:
+        charge_ok = t >= 3 or s.overnight
+        sell_ok = t >= 2 and s.overnight
+        if a == SELF_USE or (a in (GRID_CHARGE, HOLD) and charge_ok) or (a == EXPORT and sell_ok):
+            keep.append(a)
+    return keep or [SELF_USE]
+
+
 def _actions(s: Slot, p: Params) -> list[str]:
     if p.axle_enabled and s.axle:
         return [FORCE_DISCHARGE]
     if p.free_enabled and s.free:
         return [GRID_CHARGE]
+    return _tiered(_untiered_actions(s, p), s, p)
+
+
+def _untiered_actions(s: Slot, p: Params) -> list[str]:
     if car_slot(s, p):
         if car_cheap_charge(s, p):
             return [GRID_CHARGE]                   # the car charges cheaply: so does the battery (to the top-up level)

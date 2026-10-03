@@ -1,9 +1,12 @@
 # Low-write mode (issue #189)
 
-> **Status (3 Oct 2026).** Design agreed with the owner (see "Decided"); not built. Built so far: `tools/low_write_study.py`, which runs the real optimiser over the demo
-> pack's recorded days to put numbers on the options below (and a test that keeps it working). No change to what PowerEngine
-> does. Nothing in this plan applies to a RAM-control install such as the owner's Solis on 420044: RAM control is not worn by
-> writes and is never capped. This is for inverters whose only way of being driven is persistent (EEPROM or flash) settings.
+> **Status (3 Oct 2026).** Design agreed with the owner (see "Decided"). Built: `tools/low_write_study.py` (the study on the demo
+> pack's recorded days) and **L1, shadow accounting**: `pe_core/lowwrite.py` plans the owner's own recorded days overnight under
+> four profiles (self-use, the full plan, the overnight cycle, overnight charge only) and publishes the result as
+> `sensor.pe_diag_lowwrite` (Health tab, "Low-write study"). It changes nothing PowerEngine does; the optimiser gained `Params.plan_tier`
+> (default 4, the whole plan). L2 to L4 are not built. Nothing in this plan applies to a RAM-control install such as the owner's Solis
+> on 420044: RAM control is not worn by writes and is never capped. This is for inverters whose only way of being driven is
+> persistent (EEPROM or flash) settings.
 
 ## The problem
 
@@ -158,7 +161,7 @@ the card's section lists); `docs/INVERTERS.md` gets a definition key for the bra
 Each stage is small, passes the replay unchanged for RAM installs, and can be stopped after.
 
 - **L0. Study and plan. Done.** `tools/low_write_study.py`, this document.
-- **L1. Shadow accounting.** Count real counted writes per window change on timed-window installs, and run the low-write plan in
+- **L1. Shadow accounting. Built (0.9.91).** Count real counted writes per window change on timed-window installs, and run the low-write plan in
   shadow beside the live plan (any control method), reporting would-be window changes, writes and the cost difference on the
   Health tab and in the diagnostics export. No behaviour change. Gives the owner his own numbers.
 - **L2. The credit balance and the price,** for installs without RAM control, behind `write_profile`. Replaces the blunt pause with
@@ -181,38 +184,22 @@ replay with the mode on, pinned.
 - **Paid events may overdraw** the balance by about a day's worth.
 - **Daytime smart slots are a setting, not a fixed rule.** The battery's behaviour around daytime smart slots is configurable in
   low-write mode (`daytime_policy`), because many smart slots would use many writes: `plan` (the default: priced by the credit, so
-  slots are used only when worth it), `no holds` (the battery may help the car; costs stored energy), and `hold by day` (the battery
-  neither charges nor discharges until an hour you choose, one 0 A window instead of a window per slot; Axle events still honoured;
-  self-use after that hour). See "The daytime policy" below.
+  slots are used only when worth it) and `no holds` (the battery may help the car; costs stored energy). Holding the battery by
+  day was considered and **rejected** by the owner (see "The daytime policy").
 - **Shadow first.** Run the low-write plan in shadow on the owner's own install before anything is switched on (L1), so the profile
   is chosen on his tariff and days. It is worth building whatever else is decided.
 - **No EEPROM-only tester yet.** The supervised trial (L4) waits for one.
 
 ## The daytime policy
 
-`tools/low_write_study.py --daytime hold [--hold-until 17]` models the hold. A hold is a charge window at 0 A, so going between
-hold and charge changes only a current (one write), and a hold all day is no changes at all. On the four recorded days, 10p per
-change:
-
-| Daytime | Overnight cycle (T2) saves GBP/day | Window changes/day |
-|---|---|---|
-| Self-use, the plan priced by the credit (default) | 1.43 | 5.2 |
-| Hold until 14:00, then self-use | 1.41 | 6.2 (5.2 full, 1.0 current-only) |
-| Hold until 17:00, then self-use | 1.34 | 6.2 |
-| Hold all day | 0.79 | 4.5 (3.2 full, 1.2 current-only) |
-
-So holding all day does avoid the daytime writes, and Axle is still honoured, but it throws away about 45% of the benefit: the
-battery sits idle while the house pays the peak rate. Holding until the afternoon costs almost nothing in money but does not
-save window changes on these days, because with a priced change the plan already ignores most daytime smart slots (adding them
-back, T3, costs 0.8 more changes at 10p and 3.3 more at 2p). It starts to pay only on a day with many fragmented smart slots, or
-with a cheap price per change. So the default is the priced plan, and `hold by day` is there for homes where smart slots are
-frequent. Whether the counted writes of a hold window are really lower than those of a slot window is one of the things the shadow
-measurement (L1) settles.
+Considered and rejected: holding the battery by day (a charge window at 0 A, so going between hold and charge changes only a
+current) to avoid the writes of daytime smart slots. Modelled on the four recorded days at 10p per change, the overnight cycle
+saved GBP 1.43/day with 5.2 window changes on the priced plan, 1.41 with 6.2 when held until 14:00, 1.34 with 6.2 until 17:00 and
+0.79 with 4.5 when held all day: it saves no window changes except at the price of the battery sitting idle while the house pays the
+peak rate. With a priced change the plan already ignores most daytime smart slots, so the default is the priced plan.
 
 ## Still open
 
-- Which hour should `hold by day` default to (17:00 here, ahead of the evening peak), and should it apply on days with no
-  smart slot at all?
 - The credit starts at half the cap on a new install: is that right, or should a new install start empty until it has a week of
   history?
 - Where should the balance be shown (Health tab, and a Monitoring tile)?

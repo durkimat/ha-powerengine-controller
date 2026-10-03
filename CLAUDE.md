@@ -217,15 +217,16 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   per-device inputs); M2 a pooled battery in the plan; M3 control of more than one device (command split, per-device write budget,
   RAM refresh, failsafe, Active guard, a two-device replay fixture, a long Passive trial). Cars and grid-event providers as lists are
   independent of those.
-- Phase 1, still open: low-write mode for EEPROM-only inverters (#189). **Designed, not built** (`docs/plans/low-write-mode.md`;
+- Phase 1, still open: low-write mode for EEPROM-only inverters (#189). **Designed; L1 shadow study built** (`docs/plans/low-write-mode.md`;
   evidence from `tools/low_write_study.py` on the demo days: the overnight cycle alone keeps 83-94% of the full plan's benefit for
   about 5 window changes a day; daytime smart-slot top-ups add nothing; value per write falls steeply). Recommended: a write credit
   (token bucket, 10 counted writes/day, 3 days' cap) that sets the optimiser's price per window change, paid events may overdraw,
   overnight-only arbitrage with a band derived from battery size and spread. Stages L1 shadow accounting (any install, no behaviour
   change), L2 credit and price, L3 overnight tier and derived band, L4 card/wizard/docs and a supervised EEPROM trial. Decided
   (owner, 3 Oct): 10 writes/day (4 for unknown brands), 3-day credit, paid events may overdraw, a `daytime_policy` setting
-  (`plan` default / `no holds` / `hold by day`), shadow on his install first (L1), no EEPROM tester yet. Still open: the
-  `hold by day` hour, the starting balance, where the balance shows. RAM-control installs are never capped. (Licence, CONTRIBUTING and the step 7
+  (`plan` default / `no holds`; hold by day was considered and rejected), shadow on his install first (L1, built in 0.9.91:
+  `pe_core/lowwrite.py`, nightly at 02:40, `sensor.pe_diag_lowwrite`, Health tab; `Params.plan_tier`), no EEPROM tester yet. Still
+  open: the starting balance, where the balance shows. RAM-control installs are never capped. (Licence, CONTRIBUTING and the step 7
   leftovers are done: see Phase 1 below.)
 
 ## Recent fixes
@@ -394,7 +395,7 @@ Plan status box: `docs/plans/making-it-generic.md`. Done so far:
   test's "still shows" check). The app reads `slot_count` and `button_role` from `self._inverter()`. Not done: a timed behaviour that
   isn't hour/minute numbers plus a button, and a remote control that isn't a mode select plus two powers (each is a new `behaviour:`).
 
-Open: low-write mode for EEPROM-only inverters (#189), designed in `docs/plans/low-write-mode.md` (L0 study done, L1 to L4 to build).
+Open: low-write mode for EEPROM-only inverters (#189), designed in `docs/plans/low-write-mode.md` (L0 study and L1 shadow study done, L2 to L4 to build).
 
 ## Demo mode plan
 

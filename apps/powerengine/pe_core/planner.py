@@ -58,6 +58,8 @@ class Params:
     arbitrage_keep_soc: float = 10.0  # hard: reach the refill with at least the reserve plus this (%)
     deep_overnight: bool = True       # inside the fixed overnight window, arbitrage may sell below the band's bottom
     switch_cost_p: float = 5.0        # optimiser: cost of changing the inverter's timed windows (EEPROM wear), p
+    plan_tier: int = 4                # optimiser: how much it may do. 4 all; 3 sells only inside the overnight window;
+                                      # 2 also charges only inside it; 1 no selling; 0 self-use (the low-write profiles)
     overnight_switch_cost_p: float = 3.0  # with deep_overnight: at least this per full switch inside the window, p
     taper: tuple = ()                 # learned: ((soc_from, fraction of the charge rate), ...) near full
     dtaper: tuple = ()                # learned: ((below soc, fraction of the discharge rate), ...) near empty
