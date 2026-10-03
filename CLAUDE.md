@@ -190,11 +190,13 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Backlog
 
-- Release workflow, still to do (the workflow itself is done and used for 0.9.87): untested are a card release in the same
-  run (the card branch pushed in the card repo, `card_notes` given), a run where CI is red (it should stop without merging)
-  and a slow CI (the script waits up to 12 minutes). `RELEASE_TOKEN` is a fine-grained token with an expiry: when it lapses
-  the checkout steps fail with an auth error, and the owner renews it and replaces the secret. Created about 26 Sep 2026 with a 90-day
-  expiry (the owner can't see the exact date), so it lapses around 25 Dec 2026: ask him to renew it in early December. The throwaway branch `claude/release-dryrun` is still on GitHub (delete only when he asks).
+- Release workflow, still to do (the workflow itself is done and used for 0.9.87 to 0.9.92): the card path ran as a **dry run** on 3 Oct
+  (card branch checked out, script ran, nothing pushed), but a **real** card release in the same run (card PR pushed, merged, card
+  release created, `card_notes` given) is untested; it needs a real card change to ride along. Untested too: a slow CI (the script
+  waits up to 12 minutes). The owner chose not to test a red-CI run. `RELEASE_TOKEN` is a fine-grained token with an expiry: when it
+  lapses the checkout steps fail with an auth error, and the owner renews it and replaces the secret. Created about 26 Sep 2026
+  with a 90-day expiry (the owner can't see the exact date), so it lapses around 25 Dec 2026: ask him to renew it in early December.
+  A cloud session's token can't delete branches (403), so ask the owner to delete stale ones.
 
 - Setup wizard, still to do (see docs/WIZARD.md, "Not done yet"): (1) try it on the live HA and check the guessed details: the Solis
   `detect:` manufacturer pattern, the integration domains in `adapters/detect.py` (`solax_modbus`, `octopus_energy`/`edf_energy`,
