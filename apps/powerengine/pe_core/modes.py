@@ -70,7 +70,8 @@ def guard_problems(cfg: Config | None, get_state) -> list[str]:
 def effective_mode(cfg: Config | None, config_error: str | None = None,
                    build_supports_active: bool = BUILD_SUPPORTS_ACTIVE,
                    missing_required: list[str] | tuple[str, ...] = (),
-                   guards: list[str] | tuple[str, ...] = (), paused: bool = False) -> ModeDecision:
+                   guards: list[str] | tuple[str, ...] = (), paused: bool = False,
+                   unverified: str | None = None) -> ModeDecision:
     if config_error:
         return ModeDecision(UNCONFIGURED, UNCONFIGURED, f"Config problem: {config_error}")
     if cfg is None:
@@ -83,6 +84,8 @@ def effective_mode(cfg: Config | None, config_error: str | None = None,
         return ModeDecision(PASSIVE, PASSIVE, "Passive: monitoring and simulating only; nothing is controlled.")
     if not build_supports_active:
         return ModeDecision(ACTIVE, PASSIVE, "Active was requested, but this build only supports Passive.")
+    if unverified:
+        return ModeDecision(ACTIVE, PASSIVE, f"Active refused: {unverified}.")
     if guards:
         return ModeDecision(ACTIVE, PASSIVE, "Active refused: another controller may be in charge ("
                             + "; ".join(guards) + ").")

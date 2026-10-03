@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.83 (beta)
+
+### Behaviour changes
+
+PowerEngine now refuses Active, and stays Passive with the reason shown, when the inverter's definition has not been proven on real hardware (status not "verified") or the firmware is not one that was verified. Nothing changes for the Solis on firmware 420044.
+
+### Other changes
+
+- Documentation updated for Phase 1 (the inverter definition guide and the plan's status box).
+
 ## 0.9.82 (beta)
 
 ### Behaviour changes

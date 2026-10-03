@@ -7,8 +7,9 @@
 > - **Phase 0 is done** (steps 1–8, releases up to 0.9.66). It covers the adapters (Solis, Kraken EDF/Octopus, Zappi,
 >   Solcast, Axle), the neutral names map, Solis as a YAML definition (`adapters/devices/solis.yml`, `.yml` because
 >   AppDaemon loads any `.yaml`), and the `site:` config section with the "Your system" block. See CLAUDE.md, "Phase 0".
-> - **Phase 1 has not started.** The owner wants the system fully modular before looking for testers, who may have any
->   brand. Its open items are guarding Active on unverified definitions, a pre-setup "candidate entities" diagnostics export, the
+> - **Phase 1 has started** (2 Oct 2026). The owner wants the system fully modular before looking for testers, who may have any
+>   brand. Done: Active is refused on an inverter definition that is not `verified`, or on firmware not in its
+>   `verified_firmware` (`pe_core/verification.py`). Open items: a pre-setup "candidate entities" diagnostics export, the
 >   device-first setup wizard, the licence and CONTRIBUTING, and the low-write mode for EEPROM-only inverters (issue #189).
 > - The **UK inverter survey** section below (30 Sep) is the current evidence on RAM vs EEPROM control.
 > - Where this document says "you", it means the owner, Matthew. The sentences addressed to him are kept as written.
