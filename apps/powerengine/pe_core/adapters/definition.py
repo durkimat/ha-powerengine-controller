@@ -30,7 +30,7 @@ RC_OPTIONS = ("Off", "Force charge", "Force discharge")       # the RC controlle
 RC_ROLES = ("rc_mode", "rc_charge_power", "rc_discharge_power")
 RC_TESTS = ("rc_charge", "rc_discharge", "rc_hold", "rc_failsafe")
 STATUSES = ("verified", "community", "draft")               # how far a definition has been proven on real hardware
-TIMED_SLOT_COUNT = 3                                          # what the timed_hhmm behaviour is written for
+MAX_TIMED_SLOTS = 8                                           # most charge (and discharge) windows an inverter may have
 
 
 class DefinitionError(ValueError):
@@ -174,9 +174,9 @@ def _validate_ram(data, source: str) -> None:
 def _validate_timed(data, source: str) -> None:
     _behaviour(data, "timed_slots", source)
     n = _need(data, "timed_slots.count", int, source)
-    if n != TIMED_SLOT_COUNT:
-        raise DefinitionError(f"{source}: timed_slots.count is {n}, but timed_hhmm handles exactly "
-                              f"{TIMED_SLOT_COUNT} slots")
+    if not 1 <= n <= MAX_TIMED_SLOTS:
+        raise DefinitionError(f"{source}: timed_slots.count is {n}; timed_hhmm handles 1 to {MAX_TIMED_SLOTS} slots "
+                              "of each kind")
     suffix = _need(data, "timed_slots.suffix", str, source)
     if "{n}" not in suffix:
         raise DefinitionError(f"{source}: timed_slots.suffix must contain {{n}} (the slot number)")
@@ -189,6 +189,13 @@ def _validate_timed(data, source: str) -> None:
     _need(data, "timed_slots.recheck_seconds", (int, float), source)
     if not first:
         raise DefinitionError(f"{source}: timed_slots.first_slot_roles is empty")
+    button = data["timed_slots"].get("button_role", "timed_update_button")
+    if not isinstance(button, str) or button not in first:
+        raise DefinitionError(f"{source}: timed_slots.button_role '{button}' must be one of first_slot_roles "
+                              "(the button has one entity per slot)")
+    if data["timed_slots"]["write_only_match"] not in button:
+        raise DefinitionError(f"{source}: timed_slots.write_only_match must be part of the button role "
+                              f"'{button}', or the button would be read back")
 
 
 def _validate_clock(data, source: str) -> None:

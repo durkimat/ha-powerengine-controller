@@ -28,3 +28,14 @@ ruff check . && pytest -q
 
 Decision logic lives in `apps/powerengine/pe_core/` and has no Home Assistant
 dependency; `powerengine.py` is a thin AppDaemon adapter.
+
+## Contributing
+
+New inverters and other hardware are added as data where possible. See **[CONTRIBUTING.md](CONTRIBUTING.md)** for how to send a
+device list from the setup wizard, write a definition, and open a pull request, and
+[docs/WIZARD.md](docs/WIZARD.md) and [docs/INVERTERS.md](docs/INVERTERS.md) for the details.
+
+## Licence
+
+[Apache-2.0](LICENSE). Copyright 2026 Matthew Durkin. PowerEngine controls real equipment: use it at your own risk, and run the
+supervised tests on your own inverter and firmware before letting it control anything. The licence disclaims all warranty.

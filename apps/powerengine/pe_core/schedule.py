@@ -1,4 +1,4 @@
-"""Programming the inverter's three charge and three discharge windows from the plan (the "slots" strategy).
+"""Programming the inverter's charge and discharge windows (three of each on Solis) from the plan ("slots" strategy).
 
 The plan's next charge periods (grid charge or hold) and discharge periods (sell or Axle) within 24 hours are set
 into the inverter's timed windows in one go, so a normal night is written once and repeats without further writes.
@@ -16,13 +16,14 @@ from datetime import datetime, timedelta
 
 from .decide import EXPORT, FORCE_DISCHARGE, GRID_CHARGE, HOLD
 
-SLOTS = 3
+SLOTS = 3                      # the default (Solis); a definition's `timed_slots.count` says how many an inverter has
 HORIZON = timedelta(hours=24)
 TOLERANCE = timedelta(minutes=30)
 NEAR = timedelta(hours=2)
 CHARGE_ACTIONS = (GRID_CHARGE, HOLD)
 DISCHARGE_ACTIONS = (EXPORT, FORCE_DISCHARGE)
 CLOSED = (0, 0, 0, 0)
+BUTTON_ROLE = "timed_update_button"        # the control role that sends the window times (a definition may change it)
 
 
 @dataclass
@@ -102,8 +103,8 @@ def _starts_in(w: tuple, now_local: datetime) -> timedelta | None:
 
 
 def assign(wanted: list[Period], programmed: list[tuple], now_local: datetime,
-           pressing: set[int] | None = None) -> list[tuple]:
-    """New contents of the SLOTS windows of one kind, changing as little as possible:
+           pressing: set[int] | None = None, slots: int = SLOTS) -> list[tuple]:
+    """New contents of the `slots` windows of one kind (three on Solis), changing as little as possible:
 
     - a window already programmed for a period is kept: exactly, within the tolerance for periods more than NEAR
       ahead, or, for a period that's running, any running window with the same end (its start is in the past and
@@ -114,19 +115,19 @@ def assign(wanted: list[Period], programmed: list[tuple], now_local: datetime,
     - a new window goes, where there's a choice, into a slot whose update button is being pressed anyway
       (`pressing`: slots the other kind is changing), since one press sends that slot's charge AND discharge times.
     """
-    wanted = wanted[:SLOTS]
-    result: list[tuple | None] = [None] * SLOTS
+    wanted = wanted[:slots]
+    result: list[tuple | None] = [None] * slots
     todo = []
     for p in wanted:
         w = window_of(p)
         running = p.start <= now_local
-        exact = next((i for i in range(SLOTS) if result[i] is None and tuple(programmed[i]) == w), None)
+        exact = next((i for i in range(slots) if result[i] is None and tuple(programmed[i]) == w), None)
         if exact is None and running:
-            exact = next((i for i in range(SLOTS) if result[i] is None and _starts_in(programmed[i], now_local)
+            exact = next((i for i in range(slots) if result[i] is None and _starts_in(programmed[i], now_local)
                           == timedelta(0) and tuple(programmed[i])[2:] == w[2:]), None)
         loose = None
         if exact is None and p.start - now_local > NEAR:
-            loose = next((i for i in range(SLOTS) if result[i] is None and tuple(programmed[i]) != CLOSED
+            loose = next((i for i in range(slots) if result[i] is None and tuple(programmed[i]) != CLOSED
                           and _close(tuple(programmed[i]), w)), None)
         i = exact if exact is not None else loose
         if i is not None:
@@ -138,7 +139,7 @@ def assign(wanted: list[Period], programmed: list[tuple], now_local: datetime,
         d = _starts_in(programmed[k], now_local)
         return d is not None and d > AHEAD
     for w in todo:                     # into the free slot needing the fewest changed values (fewest writes)
-        free = [i for i in range(SLOTS) if result[i] is None]
+        free = [i for i in range(slots) if result[i] is None]
         i = min(free, key=lambda k: (later(k), (k + 1) not in (pressing or set()),
                                      sum(1 for x, y in zip(programmed[k], w, strict=True) if x != y), k))
         result[i] = w
@@ -170,10 +171,10 @@ def _amps(w: float, volts: float) -> int:
     return int(round(w / volts / STEP_A) * STEP_A)
 
 
-def programmed(have: dict, kind: str) -> list[tuple]:
+def programmed(have: dict, kind: str, slots: int = SLOTS) -> list[tuple]:
     """The windows of one kind as currently held (have: key -> value, keys 'role#n')."""
     out = []
-    for n in range(1, SLOTS + 1):
+    for n in range(1, slots + 1):
         vals = []
         for role in TIME_KEYS[kind]:
             try:
@@ -185,15 +186,16 @@ def programmed(have: dict, kind: str) -> list[tuple]:
 
 
 def desired_state(pers: list[Period], have: dict, now_local: datetime, current_action: str | None,
-                  current_power_w: float | None, volts: float, max_charge_w: float, max_discharge_w: float) -> dict:
-    """key -> value wanted for all six windows, both currents and the storage mode."""
+                  current_power_w: float | None, volts: float, max_charge_w: float, max_discharge_w: float,
+                  slots: int = SLOTS) -> dict:
+    """key -> value wanted for every window (`slots` of each kind), both currents and the storage mode."""
     from .control import SELF_USE_MODE
     want: dict = {"storage_mode": SELF_USE_MODE}
     pressing: set[int] = set()                  # slots whose update button will be pressed (1-based)
     for kind in ("charge", "discharge"):
-        before = programmed(have, kind)
-        slots = assign([p for p in pers if p.kind == kind], before, now_local, pressing)
-        for n, w in enumerate(slots, start=1):
+        before = programmed(have, kind, slots)
+        windows = assign([p for p in pers if p.kind == kind], before, now_local, pressing, slots)
+        for n, w in enumerate(windows, start=1):
             if tuple(w) != tuple(before[n - 1]):
                 pressing.add(n)
             for role, v in zip(TIME_KEYS[kind], w, strict=True):
@@ -211,8 +213,9 @@ def desired_state(pers: list[Period], have: dict, now_local: datetime, current_a
     return want
 
 
-def writes_for(want: dict, have: dict):
-    """Writes to go from have to want: values that differ, then each changed slot's update button."""
+def writes_for(want: dict, have: dict, button_role: str = BUTTON_ROLE):
+    """Writes to go from have to want: values that differ, then each changed slot's update button (`button_role`,
+    "timed_update_button" unless the definition names another)."""
     from .control import Write, _same
     out, slots_changed = [], set()
     for key, value in want.items():
@@ -225,7 +228,7 @@ def writes_for(want: dict, have: dict):
         if "#" in key:
             slots_changed.add(int(key.split("#")[1]))
     for n in sorted(slots_changed):
-        out.append(Write(f"timed_update_button#{n}", None, "button"))
+        out.append(Write(f"{button_role}#{n}", None, "button"))
     return out
 
 

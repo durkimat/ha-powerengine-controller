@@ -460,7 +460,10 @@ def test_a_definition_with_a_bad_value_is_refused_with_a_clear_message():
     cases = [
         (lambda d: d["ram"].update(behaviour="magic"), "ram.behaviour 'magic'"),
         (lambda d: d["timed_slots"].update(behaviour="cron"), "timed_slots.behaviour 'cron'"),
-        (lambda d: d["timed_slots"].update(count=2), "exactly 3 slots"),
+        (lambda d: d["timed_slots"].update(count=0), "handles 1 to 8 slots"),
+        (lambda d: d["timed_slots"].update(count=9), "handles 1 to 8 slots"),
+        (lambda d: d["timed_slots"].update(button_role="nope"), "button_role 'nope' must be one of first_slot_roles"),
+        (lambda d: d["timed_slots"].update(write_only_match="zzz"), "write_only_match must be part of the button role"),
         (lambda d: d["timed_slots"].update(suffix="_x"), "{n}"),
         (lambda d: d["capabilities"].update(actions=["grid_charge", "teleport"]), "unknown action"),
         (lambda d: d.update(definition=2), "'definition' must be 1"),
@@ -547,3 +550,83 @@ def test_another_inverter_is_only_a_yaml_file():
     assert [m.name for m in caps.methods] == ["ram_remote"] and caps.method("ram_remote").max_power_w == 3000
     assert caps.method("ram_remote").failsafe_min == 10 and caps.actions == {"grid_charge", "self_use"}
     assert inv.slot_map(NOW) == (None, False) and inv.slot_keys is not None
+
+
+# --- an inverter with another number of timed slots, another button, other option words ----------------------
+
+def _slots_inverter(count, **over):
+    from pe_core.adapters.defined import DefinedInverter
+    from pe_core.adapters.definition import parse_definition
+    data = base_data()
+    data["timed_slots"].update(count=count, **over)
+    return DefinedInverter(parse_definition(data), FakeHA(), lambda role: None)
+
+
+def _periods(n, tz):
+    from datetime import datetime, timedelta
+
+    from pe_core.schedule import Period
+    t0 = datetime(2026, 10, 3, 1, 0, tzinfo=tz)
+    return [Period("charge", t0 + timedelta(hours=2 * i), t0 + timedelta(hours=2 * i, minutes=30), "grid_charge")
+            for i in range(n)]
+
+
+def test_the_slot_count_comes_from_the_definition_and_three_is_unchanged():
+    from datetime import datetime, timezone
+
+    from pe_core.schedule import desired_state
+    tz = timezone.utc
+    now = datetime(2026, 10, 3, 0, 30, tzinfo=tz)
+    default = desired_state(_periods(5, tz), {}, now, None, None, 52.0, 4800, 4800)
+    assert sorted({k.split("#")[1] for k in default if "#" in k}) == ["1", "2", "3"]
+    assert desired_state(_periods(5, tz), {}, now, None, None, 52.0, 4800, 4800, 3) == default      # explicit three
+    five = desired_state(_periods(5, tz), {}, now, None, None, 52.0, 4800, 4800, 5)
+    assert sorted({k.split("#")[1] for k in five if "#" in k}) == ["1", "2", "3", "4", "5"]
+    one = desired_state(_periods(5, tz), {}, now, None, None, 52.0, 4800, 4800, 1)
+    assert sorted({k.split("#")[1] for k in one if "#" in k}) == ["1"]
+    assert _slots_inverter(6).slot_count == 6 and _slots_inverter(3).slot_count == 3
+
+
+def test_a_four_slot_inverter_gets_four_windows_in_its_writes():
+    from datetime import datetime, timezone
+    tz = timezone.utc
+    inv = _slots_inverter(4)
+    want, writes = inv.slot_writes(_periods(6, tz), {}, datetime(2026, 10, 3, 0, 30, tzinfo=tz), "grid_charge", 4000,
+                                   4800, 4800)
+    assert {k.split("#")[1] for k in want if "#" in k} == {"1", "2", "3", "4"}
+    buttons = {w.role for w in writes if w.kind == "button"}
+    assert buttons and buttons <= {f"timed_update_button#{n}" for n in range(1, 5)}       # only the slots that changed
+
+
+def test_the_update_button_role_comes_from_the_definition():
+    from datetime import datetime, timezone
+
+    from pe_core.control import writes_needed
+    tz = timezone.utc
+    assert _slots_inverter(3).button_role == "timed_update_button"
+    inv = _slots_inverter(3, button_role="timed_apply_button", write_only_match="apply_button",
+                          first_slot_roles=[*[r for r in base_data()["timed_slots"]["first_slot_roles"]
+                                              if r != "timed_update_button"], "timed_apply_button"])
+    assert inv.button_role == "timed_apply_button"
+    _want, writes = inv.slot_writes(_periods(1, tz), {}, datetime(2026, 10, 3, 0, 30, tzinfo=tz), "grid_charge", 4000,
+                                    4800, 4800)
+    buttons = [w.role for w in writes if w.kind == "button"]
+    assert buttons and all(r.startswith("timed_apply_button#") for r in buttons)
+    rolling = writes_needed({"timed_charge_start_hour": 3}, {}, "timed_apply_button")
+    assert [w.role for w in rolling if w.kind == "button"] == ["timed_apply_button"]
+    default = writes_needed({"timed_charge_start_hour": 3}, {})
+    assert [w.role for w in default if w.kind == "button"] == ["timed_update_button"]
+
+
+def test_the_remote_control_words_read_back_in_the_apps_vocabulary():
+    from pe_core.adapters.defined import DefinedInverter
+    from pe_core.adapters.definition import parse_definition
+    data = base_data()
+    data["ram"]["options"] = {"Off": "Disabled", "Force charge": "Charge battery",
+                              "Force discharge": "Discharge battery"}
+    inv = DefinedInverter(parse_definition(data), FakeHA(), lambda role: None)
+    assert inv.app_option("Disabled") == "Off" and inv.app_option("Charge battery") == "Force charge"
+    assert inv.app_option("Discharge battery") == "Force discharge" and inv.app_option(None) is None
+    assert inv.app_option("Something else") == "Something else"
+    assert inv._real_option("Off") == "Disabled"                      # the round trip with the word written
+    assert _slots_inverter(3).app_option("Force charge") == "Force charge"        # the same words on Solis

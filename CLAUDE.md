@@ -217,8 +217,7 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   per-device inputs); M2 a pooled battery in the plan; M3 control of more than one device (command split, per-device write budget,
   RAM refresh, failsafe, Active guard, a two-device replay fixture, a long Passive trial). Cars and grid-event providers as lists are
   independent of those.
-- Phase 1, still open: licence and CONTRIBUTING; low-write mode for EEPROM-only inverters (#189); the step 7 "Left" items (three timed
-  slots, RC option words, `writes_needed`).
+- Phase 1, still open: low-write mode for EEPROM-only inverters (#189). (Licence, CONTRIBUTING and the step 7 leftovers are done: see Phase 1 below.)
 
 ## Recent fixes
 
@@ -376,8 +375,17 @@ Plan status box: `docs/plans/making-it-generic.md`. Done so far:
   place; the Config tab order is demo banner, update, setup checklist, wizard, handover, config. Config page wording now says
   **grid events** (run by `<<event>>`, i.e. Axle) in the role, setting, feature, notification and topic texts (`axle` stays the key).
 
-Open: licence and CONTRIBUTING, low-write mode for EEPROM-only inverters (#189), and the step 7 "Left" items (three timed
-slots, RC option words, `writes_needed`).
+- **Licence and CONTRIBUTING. Done.** Apache-2.0 in both repos (`LICENSE`, `NOTICE`, README sections; copyright 2026 Matthew Durkin;
+  they were MIT before, which stays true for copies already taken). `CONTRIBUTING.md` in each repo: what to send, how to add a
+  definition, the PR checks and the replay, the rules the code keeps, safety on other people's hardware.
+- **Step 7 "Left" items. Done** (byte-identical for his Solis, replay unchanged): the timed-slot count is a definition value
+  (`timed_slots.count`, 1 to 8; `schedule.assign/programmed/desired_state(..., slots=)`), the update button role is a definition value
+  (`timed_slots.button_role`, default `timed_update_button`; `writes_needed(..., button_role)`, `schedule.writes_for(..., button_role)`),
+  and the remote-control mode the select reads is mapped back to the app's words (`DefinedInverter.app_option`, used by the supervised
+  test's "still shows" check). The app reads `slot_count` and `button_role` from `self._inverter()`. Not done: a timed behaviour that
+  isn't hour/minute numbers plus a button, and a remote control that isn't a mode select plus two powers (each is a new `behaviour:`).
+
+Open: low-write mode for EEPROM-only inverters (#189).
 
 ## Demo mode plan
 
