@@ -11,8 +11,6 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-DAYS_BACK = 30
-DAY_OPTIONS = ["Today", "Yesterday"] + [f"{n} days ago" for n in range(2, DAYS_BACK + 1)]
 HALF = timedelta(minutes=30)
 
 
@@ -25,14 +23,6 @@ def _imp(rec: dict):
 def _exp(rec: dict):
     v = rec.get("export_rate")
     return v if v is not None else (rec.get("v") or {}).get("exp")
-
-
-def chosen_day(option: str | None, today: date) -> date:
-    if option == "Today":
-        return today
-    if option in (None, "", "Yesterday") or option not in DAY_OPTIONS:
-        return today - timedelta(days=1)
-    return today - timedelta(days=int(option.split()[0]))
 
 
 def chosen_plan(start_of_day: dict | None, ran: dict | None) -> tuple[str | None, dict | None]:
