@@ -12,8 +12,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .history import DAY_OPTIONS
-
 BASE_TOPIC = "powerengine"
 DISCOVERY_PREFIX = "homeassistant"
 AVAILABILITY_TOPIC = f"{BASE_TOPIC}/status"
@@ -188,23 +186,20 @@ CONTROL_SWITCHES: tuple[EntityDef, ...] = (
                "optimistic": False, "retain": True}),
 )
 
-# Plan history tab: which day to show (same retained command/state pattern).
-HISTORY_DAY_TOPIC = f"{BASE_TOPIC}/ui_history_day/set"
+# Plan history tab: the day is picked with the card's date picker (event pe_history_day), so only the sensor is left.
 HISTORY_ENTITIES: tuple[EntityDef, ...] = (
-    EntityDef("select", "ui_history_day", "History day",
-              {"icon": "mdi:calendar-search", "options": DAY_OPTIONS, "command_topic": HISTORY_DAY_TOPIC,
-               "state_topic": HISTORY_DAY_TOPIC, "optimistic": False, "retain": True}),
     EntityDef("sensor", "plan_history", "Plan history", {"icon": "mdi:history"}),
 )
 
 # Entities an earlier release published that no longer exist. The app retires them at every start (the retained
 # discovery, state and command topics are cleared; direct mode removes or marks the HA state), so an upgrade leaves
 # nothing behind. Only the fields retirement reads are kept. 0.9.72-0.9.74: the Costs tab's custom date range.
-# 0.9.84: the Plan history tab's plan choice.
+# 0.9.84: the Plan history tab's plan and day choices.
 RETIRED_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("select", "ui_cost_from", "Costs range from", {"command_topic": f"{BASE_TOPIC}/ui_cost_from/set"}),
     EntityDef("select", "ui_cost_to", "Costs range to", {"command_topic": f"{BASE_TOPIC}/ui_cost_to/set"}),
     EntityDef("select", "ui_history_plan", "History plan", {"command_topic": f"{BASE_TOPIC}/ui_history_plan/set"}),
+    EntityDef("select", "ui_history_day", "History day", {"command_topic": f"{BASE_TOPIC}/ui_history_day/set"}),
 )
 
 ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES + UI_ENTITIES + CONTROL_SWITCHES + HISTORY_ENTITIES

@@ -1,20 +1,11 @@
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from pe_core.history import DAY_OPTIONS, chosen_day, chosen_plan, day_view
+from pe_core.history import chosen_plan, day_view
 
 LON = ZoneInfo("Europe/London")
-UTC = timezone.utc
 TODAY = date(2026, 9, 26)
-
-
-def test_day_choice():
-    assert chosen_day("Today", TODAY) == TODAY
-    assert chosen_day("Yesterday", TODAY) == date(2026, 9, 25)
-    assert chosen_day("7 days ago", TODAY) == date(2026, 9, 19)
-    assert chosen_day(None, TODAY) == date(2026, 9, 25)
-    assert len(DAY_OPTIONS) == 31
-
+UTC = timezone.utc
 
 def _day(day):
     start = datetime(day.year, day.month, day.day, tzinfo=LON).astimezone(UTC)
@@ -100,7 +91,7 @@ def test_ran_plan_keeps_latest_version_of_each_half_hour_and_is_pruned_after_400
     assert book.ran_plan(day) is None
 
 
-def _picker_app(monkeypatch, tmp_path, select="Yesterday"):
+def _picker_app(monkeypatch, tmp_path):
     """Just enough of the app to run the date picker's handlers, bound from the real class."""
     import sys
     import types
@@ -122,23 +113,22 @@ def _picker_app(monkeypatch, tmp_path, select="Yesterday"):
     monkeypatch.setattr(pe, "datetime", FakeDT)
     book = CostBook(str(tmp_path), LON)
     published = []
-    app = types.SimpleNamespace(costbook=book, tz=LON, _history_date=None, select=select, published=published)
-    app.get_state = lambda eid: app.select if eid == "select.pe_ui_history_day" else "As run"
+    app = types.SimpleNamespace(costbook=book, tz=LON, _history_date=None, published=published)
     app._get_publisher = lambda: object()
     app._publish_state = lambda key, state, attrs=None: published.append((key, state, attrs))
     app.log = lambda *a, **k: None
-    for name in ("_publish_history", "_on_history_day", "_on_history_select"):
+    for name in ("_publish_history", "_on_history_day"):
         setattr(app, name, types.MethodType(getattr(pe.PowerEngine, name), app))
     return app, pe
 
 
-def test_date_picker_shows_the_picked_day_until_the_select_is_used(monkeypatch, tmp_path):
+def test_date_picker_shows_the_picked_day_and_yesterday_until_then(monkeypatch, tmp_path):
     app, pe = _picker_app(monkeypatch, tmp_path)
+    app._publish_history()
+    assert app.published[-1][1] == "2026-10-02"                  # nothing picked yet: yesterday
     app._on_history_day("pe_history_day", {"date": "2026-03-04"}, {})
     assert app.published[-1][1] == "2026-03-04"
     assert app.published[-1][2]["latest"] == "2026-10-03" and app.published[-1][2]["earliest"] <= "2026-03-04"
-    app._on_history_select("select.pe_ui_history_day", "state", "7 days ago", "Yesterday", {})
-    assert app._history_date is None and app.published[-1][1] == "2026-10-02"
 
 
 def test_date_picker_ignores_bad_future_and_too_old_days(monkeypatch, tmp_path):

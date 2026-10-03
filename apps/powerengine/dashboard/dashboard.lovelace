@@ -706,13 +706,7 @@ views:
           # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
           - type: custom:powerengine-demo-card
             grid_options: {columns: full}
-          - type: tile
-            entity: select.pe_ui_history_day
-            name: Day
-            grid_options: {columns: 12}
-            features:
-              - type: select-options
-          # any day the app still holds (the Day select only reaches back 30); hides itself on an older app
+          # the day: previous / next arrows and a date box (any day the app still holds); hides itself on an older app
           - type: custom:powerengine-history-date-card
             entity: sensor.pe_plan_history
             grid_options: {columns: full}
@@ -736,7 +730,7 @@ views:
               </details>
               {%- endif %}
               {%- else %}
-              Choose a day above.
+              Pick a day above.
               {%- endif %}
           # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
           - type: conditional
