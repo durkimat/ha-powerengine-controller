@@ -196,8 +196,8 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 - Release workflow, still to do (the workflow itself is done and used for 0.9.87): untested are a card release in the same
   run (the card branch pushed in the card repo, `card_notes` given), a run where CI is red (it should stop without merging)
   and a slow CI (the script waits up to 12 minutes). `RELEASE_TOKEN` is a fine-grained token with an expiry: when it lapses
-  the checkout steps fail with an auth error, and the owner renews it and replaces the secret. The expiry date isn't recorded
-  here; ask him. The throwaway branch `claude/release-dryrun` is still on GitHub (delete only when he asks).
+  the checkout steps fail with an auth error, and the owner renews it and replaces the secret. Created about 26 Sep 2026 with a 90-day
+  expiry (the owner can't see the exact date), so it lapses around 25 Dec 2026: ask him to renew it in early December. The throwaway branch `claude/release-dryrun` is still on GitHub (delete only when he asks).
 
 - Setup wizard, still to do (see docs/WIZARD.md, "Not done yet"): (1) try it on the live HA and check the guessed details: the Solis
   `detect:` manufacturer pattern, the integration domains in `adapters/detect.py` (`solax_modbus`, `octopus_energy`/`edf_energy`,
