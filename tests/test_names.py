@@ -123,8 +123,9 @@ def test_waterfall_labels():
 def test_role_and_setting_help_read_the_same():
     text = json.dumps(catalogue(), ensure_ascii=False) + json.dumps(settings_catalogue(), ensure_ascii=False)
     assert "<<" not in text
-    assert "Car charge target sent to EDF." in text and "Axle event active" in text
-    assert "7.4 kW for a 32 A Zappi" in text and "Extra charge kept above what an Axle event needs." in text
+    assert "Car charge target sent to EDF." in text and "Grid event active" in text
+    assert "On during a grid event run by Axle" in text and "7.4 kW for a 32 A Zappi" in text
+    assert "Extra charge kept above what a grid event needs." in text
 
 
 def test_role_and_setting_help_follow_the_names():

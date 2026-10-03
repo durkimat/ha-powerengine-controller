@@ -14,7 +14,7 @@ control on: Passive stays until the supervised tests have passed (see INSTALL.md
    found. A skipped part is saved as `none` in `site:` and PowerEngine leaves it out (docs/SITE.md, "What none does");
    its inputs stop being required. The page also lists what to have to hand (battery size and rates, tariff details,
    an admin login).
-2. **Your devices.** For each part that is in use, pick the device: Home Assistant's own devices that match, listed first.
+2. **Your devices.** For each part that is in use, pick the device: Home Assistant's own devices that match, listed first (the one in use is marked).
    "My device isn't listed" opens the candidate export (below). The inverter's definition status (verified, community or
    draft) is shown, and its firmware is chosen here.
 3. **Map inputs.** Each input is filled from the picked device's own entities, with the live value beside it. The picker is
@@ -30,8 +30,15 @@ control on: Passive stays until the supervised tests have passed (see INSTALL.md
    Changing the inverter or its firmware variant on an already configured system asks for confirmation and sets
    `retest_required`, as the "Your system" block does.
 
-On a system that is already set up the wizard starts from the saved configuration, and each part has a **Change this part**
-tick: only the ticked parts are asked about, and the others are left exactly as they are.
+On a system that is already set up the wizard starts folded away (open it from its heading), reads the saved configuration, and
+shows what PowerEngine **already uses** for each part ("In use now: EDF on Electricity meter"). The device PowerEngine uses is
+the one holding an entity mapped in the saved config, so a home with both the EDF and the Octopus integrations is shown as EDF.
+Anything else Home Assistant has for that part is listed as "Also found, not used by PowerEngine", and picking it is a choice
+you make with **Change this part**. Only the ticked parts are asked about; the others are left exactly as they are.
+
+**More than one of something.** Every matching device is offered, with the one in use marked. Energy equipment no adapter owns
+(a device with a battery, a power and an energy sensor, such as a second inverter of another brand) is listed as "not supported
+yet" with the entity-list export. PowerEngine uses one device of each kind for now: see docs/plans/multiple-devices.md.
 
 ## What the app provides
 

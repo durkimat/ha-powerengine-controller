@@ -28,7 +28,7 @@ for the owner; the migration never picks it.
 Leaving a part out also stops its inputs being required: with `ev_charger: none` the car charger's and the smart-charge
 inputs are not needed, with `forecast: none` the solar forecast inputs, with `events: none` the grid-event inputs
 (`config.required_roles`, `left_out_roles`). The inverter and the tariff are always required. The card's setup wizard
-(docs/WIZARD.md) sets these for you.
+(docs/WIZARD.md) sets these for you. One device of each kind is used for now; docs/plans/multiple-devices.md is the design for more.
 
 ## Migration
 

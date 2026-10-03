@@ -7,6 +7,7 @@ rules and for what the code does now, and GitHub issues are the backlog.
 | Plan | Covers | Read when |
 |---|---|---|
 | [making-it-generic.md](making-it-generic.md) | Adapters, plant definitions, firmware variants, RAM vs EEPROM (UK survey), contribution workflow, setup wizard, safety, roadmap phases 0–3 | Adding an inverter, tariff or charger, Phase 1 work, the low-write mode (#189), the setup wizard, the licence |
+| [multiple-devices.md](multiple-devices.md) | More than one inverter, car, charger, tariff or grid-event provider: what exists, what the code assumes, stages M0 to M3 | Anything that adds a second device of a kind |
 | [demo-and-easier-install.md](demo-and-easier-install.md) | Demo mode design, install simplification, steps A1–D1, decisions, risks | Demo or install work (#192), the native integration (#177) |
 
 Keep these up to date: when a step lands, update the plan's Status box in the same PR.

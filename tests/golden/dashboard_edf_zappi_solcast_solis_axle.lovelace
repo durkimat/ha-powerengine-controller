@@ -1717,17 +1717,18 @@ views:
           # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
           - type: custom:powerengine-demo-card
             grid_options: {columns: full}
-          # setup checklist: what PowerEngine needs, with one-button HACS installs (admins only)
+          # one-button update, first for a set-up system (the demo banner above hides itself there): HACS checks GitHub now, then the handover package's script installs what's new and
+          # restarts AppDaemon (admins only)
+          - type: custom:powerengine-update-card
+            grid_options: {columns: full}
+          # setup checklist: what PowerEngine needs, with one-button HACS installs (admins only); hides itself once
+          # everything is in place
           - type: custom:powerengine-setup-card
             grid_options: {columns: full}
           # setup wizard: finds your devices, maps PowerEngine's inputs from them and saves a Passive setup; also
           # exports a device's entity list for hardware PowerEngine doesn't support yet (hides itself when the app
           # is too old to publish what it needs)
           - type: custom:powerengine-wizard-card
-            grid_options: {columns: full}
-          # one-button update: HACS checks GitHub now, then the handover package's script installs what's new and
-          # restarts AppDaemon (admins only)
-          - type: custom:powerengine-update-card
             grid_options: {columns: full}
           # Predbat <-> PowerEngine switch (needs docs/ha/powerengine_handover.yaml installed as a package)
           - type: custom:powerengine-handover-card

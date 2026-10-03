@@ -452,8 +452,8 @@
    },
    {
     "key": "axle_event_active",
-    "label": "Axle event active",
-    "description": "On during an Axle event (triggers force discharge).",
+    "label": "Grid event active",
+    "description": "On during a grid event run by Axle (triggers force discharge).",
     "kind": "binary",
     "required": "axle",
     "domains": [
@@ -466,8 +466,8 @@
    },
    {
     "key": "axle_event_start",
-    "label": "Axle event start",
-    "description": "Start of the next event, to hold charge for it.",
+    "label": "Grid event start",
+    "description": "Start of the next grid event, to hold charge for it.",
     "kind": "timestamp",
     "required": "axle",
     "suggest": [
@@ -476,8 +476,8 @@
    },
    {
     "key": "axle_event_end",
-    "label": "Axle event end",
-    "description": "End of the next event.",
+    "label": "Grid event end",
+    "description": "End of the next grid event.",
     "kind": "timestamp",
     "required": "axle",
     "suggest": [
@@ -486,7 +486,7 @@
    },
    {
     "key": "axle_direction",
-    "label": "Axle event direction",
+    "label": "Grid event direction",
     "description": "Import or export event (only export is acted on).",
     "kind": "text",
     "required": "no",

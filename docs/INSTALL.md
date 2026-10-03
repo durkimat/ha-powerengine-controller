@@ -247,7 +247,7 @@ read-only.
 
 ## Step 6: configure PowerEngine
 
-**Prefer to be guided?** The **Setup wizard** card at the top of the Config tab lists what you need, finds your devices in
+**Prefer to be guided?** The **Setup wizard** card on the Config tab (open on a new system, folded away once PowerEngine is set up) lists what you need, finds your devices in
 Home Assistant, fills the inputs from them, checks the signs and saves a Passive setup (see
 [WIZARD.md](WIZARD.md)). It needs card 0.9.88 or newer. If you use it, check its result against the notes below, then carry on from
 step 3. The rest of this step describes the full page, which is also how you change things later.

@@ -209,6 +209,11 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   card (the catalogue holds only the default inverter's, and `map_catalogue` is near its 15 KB limit, so ship them per definition
   some other way); (4) Octopus tariff suggestions and a fixed-rate tariff adapter (Phase 2), since the tariff suggestions are the
   EDF ones; (5) the GitHub issue form that the candidate export attaches to (the wizard links to a plain new issue).
+- Multiple devices (docs/plans/multiple-devices.md): only detection and display are built (wizard and "Your system" list every candidate,
+  mark the one in use, flag unsupported energy devices). Still one inverter, charger, tariff, forecast and grid-event provider in the
+  planner and control. Next, in order: ask the owner what his second inverter is (brand, role); M1 a second device that is read but not
+  controlled (`site.inverters` list, per-device inputs, readings only); M2 pooled battery in the plan; M3 control of more than one
+  device (per-device write budget, RAM refresh, Active guard); cars and grid-event providers as lists, independent of those.
 - Phase 1, still open: licence and CONTRIBUTING; low-write mode for EEPROM-only inverters (#189); the step 7 "Left" items (three timed
   slots, RC option words, `writes_needed`).
 
@@ -362,6 +367,11 @@ Plan status box: `docs/plans/making-it-generic.md`. Done so far:
   `hass.entities[].platform/device_id` and `hass.devices`, and the Solis `detect:` values and other adapters' integration domains
   (`solax_modbus`, `octopus_energy`/`edf_energy`, `myenergi`, `solcast_solar`, Axle's unknown) are best knowledge. Not done: a second
   inverter's `suggest` regexes reaching the card (the catalogue holds only the default's), Octopus tariff suggestions.
+  Since 0.9.89 (card and app): on a configured system the wizard starts folded away and reads what PowerEngine already uses (the
+  device holding a saved mapped entity, else the site's name), so EDF stays chosen when the Octopus integration is also there; other
+  candidates are listed as "also found"; "Your system" lists them too; the setup checklist card hides itself when everything is in
+  place; the Config tab order is demo banner, update, setup checklist, wizard, handover, config. Config page wording now says
+  **grid events** (run by `<<event>>`, i.e. Axle) in the role, setting, feature, notification and topic texts (`axle` stays the key).
 
 Open: licence and CONTRIBUTING, low-write mode for EEPROM-only inverters (#189), and the step 7 "Left" items (three timed
 slots, RC option words, `writes_needed`).

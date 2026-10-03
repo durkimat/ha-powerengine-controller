@@ -111,7 +111,7 @@ LOCATION_LAG_H = {"garage": 24.0, "outside": 6.0, "indoors": 72.0}
 NOTIFY_EVENTS = {
     "health": (True, "Health problems", "When the Health tab finds a problem (checked after start-up and each night)."),
     "inputs": (True, "Inputs not working", "When a required input has been unavailable or stale for 15 minutes."),
-    "axle": (True, "<<event>> events", "When an <<event>> event is scheduled, with its time."),
+    "axle": (True, "Grid events", "When a grid event (<<event>>) is scheduled, with its time."),
     "free_power": (True, "Free-power sessions", "When a free-electricity session is announced."),
     "daily": (False, "Daily summary", "Each morning: yesterday's cost and savings."),
     "simulator": (True, "Tariff opportunities", "When the overnight Simulator finds a tariff that would have cost "
@@ -137,10 +137,10 @@ SETTING_TEXT = {
                           "most it can be; the day's prices can set it lower."),
     "grid_charge_target_soc": ("Grid-charge target", "%", "How full to charge from the grid when import is cheap."),
     "charge_hysteresis_soc": ("Charge restart margin", "%", "Once full, restart only below target minus this."),
-    "pre_axle_lookahead_h": ("<<event>> look-ahead", "h",
-                             "How long before an <<event>> event to start protecting charge."),
-    "axle_margin_soc": ("<<event>> safety margin", "%",
-                        "Extra charge kept above what an <<event>> event needs."),
+    "pre_axle_lookahead_h": ("Grid-event look-ahead", "h",
+                             "How long before a grid event to start protecting charge."),
+    "axle_margin_soc": ("Grid-event safety margin", "%",
+                        "Extra charge kept above what a grid event needs."),
     "main_fuse_a": ("Main supply fuse", "A",
                     "Rating of the main fuse at the supply cutout. PowerEngine plans grid charging so house + car + "
                     "battery import stays under 90% of it (230 V), reducing battery charging first. Change it if "
@@ -243,7 +243,7 @@ SETTING_SECTIONS = (
     ("battery", "Battery and charging", ("min_reserve_soc", "cheap_threshold_p", "grid_charge_target_soc",
                                          "charge_hysteresis_soc")),
     ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
-    ("axle", "<<event>> events", ("pre_axle_lookahead_h", "axle_margin_soc")),
+    ("axle", "Grid events", ("pre_axle_lookahead_h", "axle_margin_soc")),
     ("smart", "Smart-charge requests", ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h")),
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p", "overnight_switch_cost_p")),
