@@ -25,6 +25,11 @@ The part is left out: its readings are empty (no charger power, no forecast, no 
 app's texts fall back to the neutral ones ("car charger", "forecast", "grid-services"). Leaving a part out is a choice
 for the owner; the migration never picks it.
 
+Leaving a part out also stops its inputs being required: with `ev_charger: none` the car charger's and the smart-charge
+inputs are not needed, with `forecast: none` the solar forecast inputs, with `events: none` the grid-event inputs
+(`config.required_roles`, `left_out_roles`). The inverter and the tariff are always required. The card's setup wizard
+(docs/WIZARD.md) sets these for you.
+
 ## Migration
 
 A real config with no `site` gets one on start: solis, the firmware from the definition's `firmware_entity` if it names
@@ -45,4 +50,4 @@ saved one.
 
 `sensor.pe_diag_version` attributes: `site` (the current values), `site_options` (per key, a list of
 `{id, name, status, firmware_variants}`; inverters also carry `verified_firmware`), `firmware_detected` (what the
-inverter reports, or null) and `retest_required`. `status` is `verified`, `community` or `draft`.
+inverter reports, or null), `retest_required` and `wizard` (what the setup wizard looks for: docs/WIZARD.md). `status` is `verified`, `community` or `draft`.

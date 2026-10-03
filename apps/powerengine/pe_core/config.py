@@ -585,12 +585,27 @@ def use_measured(cfg: Config | None, role_key: str) -> bool:
     return spec.get("use_measured", True) is not False
 
 
+# The role groups a part of the site brings with it. When the site leaves the part out ("none"), these roles are not
+# needed, so a home with no car charger, no forecast or no grid-event provider is not held at "inputs missing".
+# (A car charger takes the smart-charge group with it: smart-charge slots are for the car.)
+SKIPPED_PART_GROUPS = {"ev_charger": ("ev", "smart"), "forecast": ("solar",), "events": ("axle",)}
+
+
+def left_out_roles(site: Site) -> set[str]:
+    """Role keys that belong to parts the site leaves out."""
+    groups = {g for part, gs in SKIPPED_PART_GROUPS.items() if getattr(site, part) == "none" for g in gs}
+    return {r.key for r in ROLE_BY_KEY.values() if r.group in groups}
+
+
 def required_roles(cfg: Config) -> list[str]:
-    """Role keys that must be mapped, given which features are switched on."""
+    """Role keys that must be mapped, given which features are switched on and which parts the site leaves out."""
     feature_for = {"axle": "axle", "free_power": "free_power_days"}
     pair = uses_battery_pair(cfg)
+    left_out = left_out_roles(cfg.site)
     keys = []
     for role in ROLE_BY_KEY.values():
+        if role.key in left_out:
+            continue
         if role.required == "yes" or (role.required in feature_for and cfg.features.get(feature_for[role.required])):
             keys.append(role.key)
     if pair:                               # the pair replaces the single sensor, and both become required

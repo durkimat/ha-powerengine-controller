@@ -99,6 +99,7 @@ from pe_core.tariff import overnight_window
 from pe_core.verification import active_refusal
 from pe_core.version import MIN_CARD_VERSION, installed_version
 from pe_core.weather import Weather
+from pe_core.wizard import wizard_info
 
 HEARTBEAT_SECONDS = 60
 SIM_START = "01:30:00"            # after the midnight jobs (00:05-00:20), well before the morning
@@ -1536,13 +1537,14 @@ class PowerEngine(hass.Hass):
         """What the card's "Your system" block reads (compact: the version sensor's attributes must stay small):
         `site` (the current choices), `site_options` (per key: {id, name, status, firmware_variants}),
         `firmware_detected` (what the inverter reports, when its definition names an entity for that, else null) and
-        `retest_required` (the site's inverter or firmware changed and the supervised tests are still to be re-run)."""
+        `retest_required` (the site's inverter or firmware changed and the supervised tests are still to be re-run),
+        and `wizard` (what the card's setup wizard looks for: pe_core/wizard.py)."""
         try:
             detected = self._inverter().firmware_detected()
         except Exception:
             detected = None
-        return {"site": self._site().as_dict(), "site_options": site_options(), "firmware_detected": detected,
-                "retest_required": self._retest_required()}
+        return {"site": self._site().as_dict(), "site_options": site_options(), "wizard": wizard_info(),
+                "firmware_detected": detected, "retest_required": self._retest_required()}
 
     def _events(self):
         """The grid-event adapter the site names (Axle, or none)."""
