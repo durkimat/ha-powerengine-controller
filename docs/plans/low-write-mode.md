@@ -118,7 +118,7 @@ Plus `write_budget_per_day` (default 10; 4 for a brand with no evidence) and `wr
 
 **The credit balance.** `balance = min(cap, balance + budget * dt) - counted writes`, with `cap = write_credit_days * budget`. It is
 derived from the journal's counted writes, not a second count, so the two cannot disagree, and is kept in a small file beside the
-config (like `site_state.json`), so a restart keeps it. A new install starts at half the cap.
+config (like `site_state.json`), so a restart keeps it. A new install starts at one day's budget (10 writes, a third of the cap).
 
 **The price.** For the optimiser: price per window change in pence `P(b) = P_min + (P_max - P_min) * (1 - b)^2`, `b = balance / cap`,
 `P_min = 2`, `P_max = 60`, times the writes-per-change in use. At full credit a change costs about 2p, at half about 16p, near empty
@@ -189,6 +189,7 @@ replay with the mode on, pinned.
 - **Shadow first.** Run the low-write plan in shadow on the owner's own install before anything is switched on (L1), so the profile
   is chosen on his tariff and days. It is worth building whatever else is decided.
 - **No EEPROM-only tester yet.** The supervised trial (L4) waits for one.
+- **Starting balance** is one day's budget (10 writes). **The balance shows on the Health tab and on a Monitoring tile.**
 
 ## The daytime policy
 
@@ -200,6 +201,7 @@ peak rate. With a priced change the plan already ignores most daytime smart slot
 
 ## Still open
 
-- The credit starts at half the cap on a new install: is that right, or should a new install start empty until it has a week of
-  history?
-- Where should the balance be shown (Health tab, and a Monitoring tile)?
+Nothing on the credit's starting point or where it shows (decided 3 Oct 2026, evening):
+
+- **Starting balance:** one day's budget (10 counted writes), not half the cap and not empty.
+- **Where it shows:** both the Health tab and a Monitoring tile.

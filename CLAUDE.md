@@ -190,9 +190,6 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Backlog
 
-- Custom date range for the Costs savings waterfall: tried in 0.9.72-0.9.74 (relative-day From/To selects + a `custom`
-  period), removed in 0.9.75 because it didn't work as the owner wanted; re-ask him what he wants before building it
-  again. Ideas: real calendar date pickers; per-day data summed in the card.
 - Release workflow, still to do (the workflow itself is done and used for 0.9.87): untested are a card release in the same
   run (the card branch pushed in the card repo, `card_notes` given), a run where CI is red (it should stop without merging)
   and a slow CI (the script waits up to 12 minutes). `RELEASE_TOKEN` is a fine-grained token with an expiry: when it lapses
@@ -206,14 +203,15 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   card (the catalogue holds only the default inverter's, and `map_catalogue` is near its 15 KB limit, so ship them per definition
   some other way); (4) Octopus tariff suggestions and a fixed-rate tariff adapter (Phase 2), since the tariff suggestions are the
   EDF ones; (5) the GitHub issue form that the candidate export attaches to (the wizard links to a plain new issue).
-- **Controlling more than one inverter or battery: review how to support it** (docs/plans/multiple-devices.md). The owner's second
-  inverter is solar-only and already a read-only `solar_plants` entry (counted in total solar and on the energy-flow card; the wizard
-  recognises it and can add more plants, e.g. plug-in panels, which are now legal in the UK). For now the user selects the one inverter
-  and battery PowerEngine controls. Two hybrid inverters, a second battery, or plug-in solar with storage are real in some houses, so
-  this needs a proper design before any code: M1 a second device with a battery read but not controlled (`site.inverters` list,
-  per-device inputs); M2 a pooled battery in the plan; M3 control of more than one device (command split, per-device write budget,
-  RAM refresh, failsafe, Active guard, a two-device replay fixture, a long Passive trial). Cars and grid-event providers as lists are
-  independent of those.
+- **Multiple devices: designed (3 Oct), not built** (docs/plans/multiple-devices.md). Owner's decisions: flexible enough for any mix of
+  hybrid inverters, solar-only inverters and battery-only units; a setting for which are controlled (a new device starts read only);
+  each battery gets its own plan that mirrors the main one with the device's own size, power rates and drive. The design: a device
+  is a capability set (`solar`, `battery`, `drive`) in its definition; roles per device as `<id>.<role>` (`main` keeps today's names);
+  a `BatteryProfile` per battery; **residual planning in priority order** (not a joint optimiser) with shared grid limits and a shared
+  grid-event export; per-device controller, write budget, Active guard and supervised tests; the demo world gains a second device so
+  M3 can be tested without hardware. Stages: M1 device model and read-only devices, M2 a plan per battery shown not executed, M3
+  control of more than one device (long Passive trial first). The owner's second inverter is solar-only and stays a read-only
+  `solar_plants` entry. Open for M2: default priority, splitting a grid event, planning around a non-autonomous read-only battery.
 - Phase 1, still open: low-write mode for EEPROM-only inverters (#189). **Designed; L1 shadow study built** (`docs/plans/low-write-mode.md`;
   evidence from `tools/low_write_study.py` on the demo days: the overnight cycle alone keeps 83-94% of the full plan's benefit for
   about 5 window changes a day; daytime smart-slot top-ups add nothing; value per write falls steeply). Recommended: a write credit
@@ -222,8 +220,8 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   change), L2 credit and price, L3 overnight tier and derived band, L4 card/wizard/docs and a supervised EEPROM trial. Decided
   (owner, 3 Oct): 10 writes/day (4 for unknown brands), 3-day credit, paid events may overdraw, a `daytime_policy` setting
   (`plan` default / `no holds`; hold by day was considered and rejected), shadow on his install first (L1, built in 0.9.91:
-  `pe_core/lowwrite.py`, nightly at 02:40, `sensor.pe_diag_lowwrite`, Health tab; `Params.plan_tier`), no EEPROM tester yet. Still
-  open: the starting balance, where the balance shows. RAM-control installs are never capped. (Licence, CONTRIBUTING and the step 7
+  `pe_core/lowwrite.py`, nightly at 02:40, `sensor.pe_diag_lowwrite`, Health tab; `Params.plan_tier`), no EEPROM tester yet. Also decided
+  (3 Oct): the balance starts at one day's budget (10 writes) and shows on the Health tab and a Monitoring tile. RAM-control installs are never capped. (Licence, CONTRIBUTING and the step 7
   leftovers are done: see Phase 1 below.)
 
 ## Recent fixes
