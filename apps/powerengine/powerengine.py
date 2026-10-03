@@ -1637,13 +1637,14 @@ class PowerEngine(hass.Hass):
         return (with_operation(new, "passive") if (new.get("operation") or {}).get("mode") == "active" else new), True
 
     def _slot_map(self):
-        """{slot n: {role: entity}} when all three inverter slots exist (SolaX '_2'/'_3' names), else None."""
+        """{slot n: {role: entity}} when all the inverter's timed slots exist (SolaX '_2'/'_3' names), else None."""
         if self.cfg is None:
             return None
         m, warn = self._inverter().slot_map(datetime.now(timezone.utc))
         if warn:
-            self.log("Inverter windows 2 and 3 not found (the '_2'/'_3' entities); using the single rolling window "
-                     "for now, rechecking every 10 minutes", level="WARNING")
+            n = self._inverter().slot_count
+            self.log(f"Inverter windows {'2 and 3' if n == 3 else f'2 to {n}'} not found (the '_2'/'_3' entities); "
+                     "using the single rolling window for now, rechecking every 10 minutes", level="WARNING")
         return m
 
     def _slot_keys(self, slots):
@@ -1672,10 +1673,10 @@ class PowerEngine(hass.Hass):
             kind, end, want = self._inverter().rolling(decision, now_local, current_end, block_end,
                                                        CONTROL_STRATEGY, p.max_charge_kw * 1000,
                                                        p.max_discharge_kw * 1000)
-            entities = {role: self._role_entity(role) for role in list(want) + ["timed_update_button"]}
+            entities = {role: self._role_entity(role) for role in list(want) + [self._inverter().button_role]}
             missing = sorted(role for role, eid in entities.items() if not eid)
             have = self._inverter().read(entities)
-            writes = writes_needed(want, have)
+            writes = writes_needed(want, have, self._inverter().button_role)
             state = "not mapped" if missing else (f"{len(writes)} write{'s' if len(writes) != 1 else ''}"
                                                    if writes else "no change")
             attrs = {"decision": decision.action, "strategy": CONTROL_STRATEGY, "missing": missing,
@@ -1708,7 +1709,8 @@ class PowerEngine(hass.Hass):
             for kind, sh in self._shadows().items():
                 n = sh.step(now, now_local, pers, decision.action, decision.power_w, decision.rule, have,
                             BATTERY_VOLTS, p.max_charge_kw * 1000, p.max_discharge_kw * 1000, str(day),
-                            float(sft.get("damp_burst_window_min", 10)), float(sft.get("damp_burst_settle_min", 5)))
+                            float(sft.get("damp_burst_window_min", 10)), float(sft.get("damp_burst_settle_min", 5)),
+                            self._inverter().slot_count, self._inverter().button_role)
                 if n:
                     self.writes.would(day, n, kind)
         except Exception as err:
@@ -2169,7 +2171,7 @@ class PowerEngine(hass.Hass):
         return False
 
     def _control_entities(self, roles):
-        entities = {role: self._role_entity(role) for role in list(roles) + ["timed_update_button"]}
+        entities = {role: self._role_entity(role) for role in list(roles) + [self._inverter().button_role]}
         missing = sorted(role for role, eid in entities.items() if not eid)
         return entities, missing
 
@@ -2248,7 +2250,7 @@ class PowerEngine(hass.Hass):
             if missing:
                 return
             have = self._inverter().read(entities)
-            writes = writes_needed(want, have)
+            writes = writes_needed(want, have, self._inverter().button_role)
             if writes:
                 self._write_why = "return to Self-Use"
                 self._execute(writes, entities)
@@ -2342,7 +2344,7 @@ class PowerEngine(hass.Hass):
         now_local = now.astimezone(self.tz) if self.tz else now
         want = self._inverter().test_window(req, now_local, max_c, max_d)
         have = self._inverter().read({role: entities[role] for role in want})
-        writes = writes_needed(want, have)
+        writes = writes_needed(want, have, self._inverter().button_role)
         run.step(now, "before", **self._battery_now(), settings=have)
         self._write_why = f"supervised test: {req['action']}"
         self._write(writes, entities)
@@ -2394,7 +2396,7 @@ class PowerEngine(hass.Hass):
         want = release()
         entities, _ = self._control_entities(want)
         have = {role: self.get_state(entities[role]) for role in want}
-        writes = writes_needed(want, have)
+        writes = writes_needed(want, have, self._inverter().button_role)
         self._write_why = "supervised test: revert"
         self._write(writes, entities)
         run.step(datetime.now(timezone.utc), "reverted to Self-Use", writes=[w.as_dict() for w in writes])
@@ -2414,7 +2416,7 @@ class PowerEngine(hass.Hass):
         want = release()
         windows, _ = self._control_entities(want)
         have = self._inverter().read({role: windows[role] for role in want})
-        writes = writes_needed(want, have)
+        writes = writes_needed(want, have, self._inverter().button_role)
         run.step(now, "before", **self._battery_now(), rc_entities=rc)
         self._write_why = f"supervised RC test: {test} (timed windows closed first)"
         self._write(writes, windows)
@@ -2486,7 +2488,7 @@ class PowerEngine(hass.Hass):
         if changed:
             run.problems.append("timed-window settings changed during the test: " + ", ".join(changed))
         mode = self.get_state(rc["rc"]["rc_mode"])
-        if mode not in (rctest.OPTION_OFF, None):
+        if self._inverter().app_option(mode) not in (rctest.OPTION_OFF, None):
             run.problems.append(f"remote control still shows '{mode}' after switching Off")
         run.verdict, run.explanation = rctest.judge(run.req["action"], rc["power"], rc["samples"], rc["stop_at"])
         run.step(now, f"result: {run.verdict}", note=run.explanation, **self._battery_now())

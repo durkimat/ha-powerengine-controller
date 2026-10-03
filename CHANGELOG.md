@@ -2,6 +2,22 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.90 (beta)
+
+### Behaviour changes
+
+None. Nothing PowerEngine does to your system changes: the replay of a recorded night is identical, and your Solis keeps its three charge and three discharge windows, the same update button and the same remote-control words.
+
+### Licence and contributing
+
+- PowerEngine is now licensed under **Apache-2.0** (it was MIT), in both the app and the card. New `LICENSE`, `NOTICE` and `CONTRIBUTING.md` files; the README says how to send a device list from the setup wizard, write an inverter definition and open a pull request, and what rules the code keeps.
+
+### Ready for other inverters
+
+- An inverter definition now says how many timed charge and discharge windows the inverter has (1 to 8, instead of always three) and which control is its "apply the window times" button, so another brand's timed windows need no code change.
+- The inverter's remote-control mode is read back through the same word mapping used when it is written, so a definition can name the modes anything.
+- Docs: docs/INVERTERS.md describes the new definition keys.
+
 ## 0.9.89 (beta)
 
 ### Behaviour changes

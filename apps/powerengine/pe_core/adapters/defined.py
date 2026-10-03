@@ -28,7 +28,7 @@ from ..control import KINDS, SELF_USE_MODE, Write, desired, window_end, writes_n
 from ..control import release as _rolling_release
 from ..decide import Decision
 from ..rctest import find_entities, missing_roles
-from ..schedule import desired_state, slot_entities
+from ..schedule import BUTTON_ROLE, desired_state, slot_entities
 from ..schedule import writes_for as _slot_writes_for
 from ..testwrite import decision as _test_decision
 from ..testwrite import end_time as _test_end_time
@@ -74,6 +74,25 @@ class DefinedInverter:
         self._clock = d.get("clock") or {}
         self._slot_cache = None
         self._rc_cache = None
+
+    @property
+    def slot_count(self) -> int:
+        """How many charge windows (and discharge windows) the inverter has: three on Solis."""
+        return int(self._slots.get("count", 3))
+
+    @property
+    def button_role(self) -> str:
+        """The control role whose button sends the window times ("timed_update_button" unless the definition says)."""
+        return self._slots.get("button_role", BUTTON_ROLE)
+
+    def app_option(self, shown):
+        """One of the app's remote-control words (Off, Force charge, Force discharge) for what the inverter's mode
+        select shows, or `shown` unchanged when it is not one of the definition's options (the reverse of the
+        mapping applied when a mode is written; the same words on Solis)."""
+        for app, real in (self._ram.get("options") or {}).items():
+            if real == shown:
+                return app
+        return shown
 
     # --- reading ---------------------------------------------------------------------------
 
@@ -240,15 +259,15 @@ class DefinedInverter:
     def slot_writes(self, pers: list, have: dict, now_local: datetime, action: str, power_w: float | None,
                     max_charge_w: float, max_discharge_w: float) -> tuple[dict, list]:
         want = self._localise(desired_state(pers, have, now_local, action, power_w, self.volts, max_charge_w,
-                                            max_discharge_w))
-        return want, _slot_writes_for(want, have)
+                                            max_discharge_w, self.slot_count))
+        return want, _slot_writes_for(want, have, self.button_role)
 
     def release_slots(self, entities: dict, have: dict) -> list:
         """The writes that close all the charge/discharge windows and set Self-Use."""
         skip = self._slots["write_only_match"]
         want = {k: 0 for k in entities if "#" in k and skip not in k}
         want[STORAGE_MODE] = self._self_use()
-        return _slot_writes_for(want, have)
+        return _slot_writes_for(want, have, self.button_role)
 
     # --- rolling single-window strategy ------------------------------------------------------
 
@@ -326,7 +345,7 @@ class DefinedInverter:
         """Protocol conformance: the writes that hand the inverter back to Self-Use via the rolling window's
         settings, from an empty `have` (so every field is written). Not used by the app yet, which calls
         `release_slots`/`release_rolling` directly since it has real `have` state to diff against."""
-        return self._localise_writes(writes_needed(self.release_rolling(), {}))
+        return self._localise_writes(writes_needed(self.release_rolling(), {}, self.button_role))
 
 
 def defined_factory(name: str):

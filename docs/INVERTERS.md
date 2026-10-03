@@ -17,7 +17,7 @@ name with `behaviour:`:
 | Section | Behaviour | What it does |
 | --- | --- | --- |
 | `ram` | `override_select` | A mode select plus force-charge and force-discharge power numbers (Solis: SolaX Modbus "Battery control override"). One command per decision, re-sent every minute. |
-| `timed_slots` | `timed_hhmm` | Three charge and three discharge windows set as hour and minute numbers, applied with an update button. |
+| `timed_slots` | `timed_hhmm` | One to eight charge windows and the same number of discharge windows (Solis: three), set as hour and minute numbers, applied with an update button. |
 | `clock` | `drift_button` | A clock sensor whose drift is measured, and a button that syncs it. |
 
 An unknown behaviour is refused when the file loads. A new behaviour is a small piece of Python (see
@@ -52,8 +52,10 @@ command by itself), `max_power_w`, `lookup_minutes`, `prefer` (an entity id cont
 `power_roles`, `options` (the app's words `Off`, `Force charge`, `Force discharge` on the left, the inverter select's
 own words on the right), and `tests` (which option each supervised test forces).
 
-**`timed_slots`** (needed when `supports_timed_slots`): `behaviour`, `count` (three), `suffix` (slot n's entity is
-slot 1's plus this, `{n}` being the number), `first_slot_roles` (the roles that have one entity per slot),
+**`timed_slots`** (needed when `supports_timed_slots`): `behaviour`, `count` (how many charge windows, and the same number of discharge windows: 1 to 8; Solis has
+three), `suffix` (slot n's entity is slot 1's plus this, `{n}` being the number), `first_slot_roles` (the roles that have one
+entity per slot), `button_role` (optional, default `timed_update_button`: the control role whose button sends the window
+times; it must be one of `first_slot_roles` and contain `write_only_match`),
 `currents`, `self_use_option` (the `storage_mode` option that gives plain Self-Use), `write_only_match` (roles
 containing this are never read, the button), `staged_parts` (role names containing these are kept in Home Assistant
 until the button sends them, so setting them is not an inverter write), `recheck_seconds` and `test_roles`.
@@ -101,5 +103,7 @@ the config card's supervised tests before letting PowerEngine drive it.
 
 The app builds the inverter the config's `site.inverter` names (see docs/SITE.md). The remote-control controller
 works in the words `Off`, `Force charge`, `Force discharge` and the definition maps them to the inverter's own at the
-service call, so an inverter whose remote control is not a mode select plus two powers needs a new behaviour. The timed
-behaviour handles exactly three slots.
+service call, and reads the select back through the same mapping (`DefinedInverter.app_option`), so the words in the
+definition can be anything. An inverter whose remote control is not a mode select plus two powers needs a new behaviour.
+The timed behaviour takes its slot count and its update-button role from the definition (no longer fixed at three slots and
+`timed_update_button`); a test pins the three-slot Solis output and a four-slot example.

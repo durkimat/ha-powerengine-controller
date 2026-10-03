@@ -101,13 +101,13 @@ class Shadow:
 
     def step(self, now: datetime, now_local: datetime, pers, action: str, power_w, rule: str | None, have: dict,
              volts: float, max_charge_w: float, max_discharge_w: float, day: str, window_min: float,
-             settle_min: float) -> int:
+             settle_min: float, slots: int = 3, button_role: str = "timed_update_button") -> int:
         from .journal import is_staged
         from .schedule import desired_state, settled, urgent, writes_for
         if self.virt is None:
             self.virt = dict(have)
-        want = desired_state(pers, self.virt, now_local, action, power_w, volts, max_charge_w, max_discharge_w)
-        writes = writes_for(want, self.virt)
+        want = desired_state(pers, self.virt, now_local, action, power_w, volts, max_charge_w, max_discharge_w, slots)
+        writes = writes_for(want, self.virt, button_role)
         if writes and not urgent(writes, want, self.virt, now_local):
             ok, self.pending = settled(self.pending, want, now)
             if not ok:

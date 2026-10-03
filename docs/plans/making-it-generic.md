@@ -9,7 +9,7 @@
 >   AppDaemon loads any `.yaml`), and the `site:` config section with the "Your system" block. See CLAUDE.md, "Phase 0".
 > - **Phase 1 has started** (2 Oct 2026). The owner wants the system fully modular before looking for testers, who may have any
 >   brand. Done: Active is refused on an inverter definition that is not `verified`, or on firmware not in its
->   `verified_firmware` (`pe_core/verification.py`). Open items: the licence and CONTRIBUTING, and the low-write mode for EEPROM-only inverters (issue #189).
+>   `verified_firmware` (`pe_core/verification.py`). Open items: the low-write mode for EEPROM-only inverters (issue #189). Done 3 Oct 2026: Apache-2.0 licence and CONTRIBUTING in both repos; the step 7 leftovers (timed-slot count, update-button role and RC read-back words come from the definition).
 > - **Wizard and candidate export** (3 Oct 2026, branch `ccr-6832e975-2wkm5i`, card 0.9.88): done in the card, with the app
 >   publishing what to look for (`pe_core/wizard.py`, `adapters/detect.py`, definitions' `detect:`). A skipped part (`none`) no
 >   longer leaves its inputs required. See `docs/WIZARD.md`. Not yet run on a live Home Assistant.

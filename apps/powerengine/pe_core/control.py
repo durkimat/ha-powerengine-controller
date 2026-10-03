@@ -96,9 +96,9 @@ def _same(want, have) -> bool:
         return str(want) == str(have)
 
 
-def writes_needed(want: dict, have: dict) -> list[Write]:
+def writes_needed(want: dict, have: dict, button_role: str = "timed_update_button") -> list[Write]:
     """The writes to go from `have` (role -> current state) to `want`: numbers/select that differ, then one press
-    of the update button if any window time changed."""
+    of the update button (`button_role`) if any window time changed."""
     out: list[Write] = []
     times_changed = False
     for role, value in want.items():
@@ -111,5 +111,5 @@ def writes_needed(want: dict, have: dict) -> list[Write]:
             if role.startswith("timed_") and not role.endswith("_current"):
                 times_changed = True
     if times_changed:
-        out.append(Write("timed_update_button", None, "button"))
+        out.append(Write(button_role, None, "button"))
     return out

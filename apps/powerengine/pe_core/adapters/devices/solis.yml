@@ -85,7 +85,9 @@ ram:
 timed_slots:
   behaviour: timed_hhmm           # window times as hour and minute numbers, applied with an update button
   storage: eeprom
-  count: 3
+  count: 3                        # charge windows, and the same number of discharge windows (1 to 8)
+  # the control role whose button sends the window times to the inverter (one entity per slot; default timed_update_button)
+  button_role: timed_update_button
   # Slot 1's entities are the mapped roles; slot n's entity id is slot 1's plus this suffix ({n} = 2, 3).
   suffix: "_{n}"
   first_slot_roles:
