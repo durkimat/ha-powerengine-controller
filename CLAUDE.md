@@ -222,8 +222,10 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   about 5 window changes a day; daytime smart-slot top-ups add nothing; value per write falls steeply). Recommended: a write credit
   (token bucket, 10 counted writes/day, 3 days' cap) that sets the optimiser's price per window change, paid events may overdraw,
   overnight-only arbitrage with a band derived from battery size and spread. Stages L1 shadow accounting (any install, no behaviour
-  change), L2 credit and price, L3 overnight tier and derived band, L4 card/wizard/docs and a supervised EEPROM trial. Open
-  questions for the owner are at the end of the plan. RAM-control installs are never capped. (Licence, CONTRIBUTING and the step 7
+  change), L2 credit and price, L3 overnight tier and derived band, L4 card/wizard/docs and a supervised EEPROM trial. Decided
+  (owner, 3 Oct): 10 writes/day (4 for unknown brands), 3-day credit, paid events may overdraw, a `daytime_policy` setting
+  (`plan` default / `no holds` / `hold by day`), shadow on his install first (L1), no EEPROM tester yet. Still open: the
+  `hold by day` hour, the starting balance, where the balance shows. RAM-control installs are never capped. (Licence, CONTRIBUTING and the step 7
   leftovers are done: see Phase 1 below.)
 
 ## Recent fixes

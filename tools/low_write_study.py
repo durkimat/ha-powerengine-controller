@@ -12,6 +12,9 @@ window change (the optimiser's `switch_cost_p`), and for four tiers of what the 
     T3  + grid charge and car-slot holds anywhere (smart slots)
     T4  + arbitrage anywhere (selling stored energy before a cheaper refill): the full PowerEngine plan
 
+`--daytime hold` replaces self-use outside the overnight window with a hold (a charge window at 0 A), the way to cut
+the writes of many smart slots; Axle events are still honoured.
+
 and prints, per tier, the average saving against T0 in GBP/day and the window changes per day (a "full" change opens
 or closes a charge or discharge window; a "current-only" change is hold <-> charge). See docs/plans/low-write-mode.md
 for what the numbers mean and what they don't (four recorded September days: an indication, not a forecast).
@@ -43,6 +46,7 @@ TIERS = {0: "T0 self-use (+events)", 1: "T1 + overnight charge", 2: "T2 + overni
          3: "T3 + smart-slot holds and charges", 4: "T4 + arbitrage anywhere (full plan)"}
 _ORIGINAL_ACTIONS = opt._actions
 _tier = {"t": 4}
+_daytime = {"policy": "self-use", "until": 17}
 
 
 def _actions(s: Slot, p: Params) -> list[str]:
@@ -53,6 +57,9 @@ def _actions(s: Slot, p: Params) -> list[str]:
     t = _tier["t"]
     if t == 0:
         return [SELF_USE]
+    if _daytime["policy"] == "hold" and not s.overnight and not (p.axle_enabled and s.axle) \
+            and s.start.astimezone(TZ).hour < _daytime["until"]:
+        return [HOLD]                  # the battery neither charges nor discharges by day: a charge window at 0 A
     keep = []
     for a in full:
         charge_ok = t >= 3 or s.overnight
@@ -98,10 +105,12 @@ def run_day(pack: dict, name: str, p: Params) -> dict:
             "acts": "".join({SELF_USE: ".", HOLD: "h", GRID_CHARGE: "C", EXPORT: "X"}.get(a, "A") for a in acts)}
 
 
-def study(switch_costs: list[float], day_names: list[str], pack: dict | None = None) -> dict:
+def study(switch_costs: list[float], day_names: list[str], pack: dict | None = None, daytime: str = "self-use",
+          hold_until: int = 24) -> dict:
     """{switch cost: {tier: {"saving": GBP/day vs T0, "full": per day, "current_only": per day, "days": {...}}}}."""
     pack = pack or load_pack()
     opt._actions = _actions
+    _daytime.update(policy=daytime, until=hold_until)
     try:
         out = {}
         for sw in switch_costs:
@@ -120,6 +129,7 @@ def study(switch_costs: list[float], day_names: list[str], pack: dict | None = N
         return out
     finally:
         opt._actions = _ORIGINAL_ACTIONS
+        _daytime.update(policy="self-use", until=17)
 
 
 def main(argv: list[str]) -> int:
@@ -128,11 +138,17 @@ def main(argv: list[str]) -> int:
                     help="the optimiser's price per window change, pence (default 2 10 20 40)")
     ap.add_argument("--days", nargs="+", default=None, help="demo pack days (default: all)")
     ap.add_argument("--timeline", action="store_true", help="also print each day's action string")
+    ap.add_argument("--daytime", choices=("self-use", "hold"), default="self-use",
+                    help="what the battery does outside the overnight window: self-use (default) or hold (neither "
+                         "charge nor discharge: one 0 A window instead of many changes; events still honoured)")
+    ap.add_argument("--hold-until", type=int, default=24,
+                    help="with --daytime hold: the hour (0-24) the hold ends, self-use after (default 24: all day)")
     args = ap.parse_args(argv[1:])
     pack = load_pack()
     names = args.days or list(pack["days"])
+    print(f"daytime policy: {args.daytime}" + (f" until {args.hold_until:02d}:00" if args.daytime == "hold" else ""))
     print("legend: . self-use  C grid charge  h hold  X arbitrage sale  A event discharge (48 half-hours from 00:00)")
-    for sw, tiers in study(args.switch_cost, names, pack).items():
+    for sw, tiers in study(args.switch_cost, names, pack, args.daytime, args.hold_until).items():
         print(f"\nprice per window change {sw:g}p")
         for tier, row in tiers.items():
             changes = row["full"] + row["current_only"]

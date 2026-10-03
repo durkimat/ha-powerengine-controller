@@ -33,3 +33,11 @@ def test_the_command_line_prints_each_tier(capsys):
     assert study.main(["x", "--switch-cost", "10", "--days", "dull"]) == 0
     text = capsys.readouterr().out
     assert "price per window change 10p" in text and "T4 + arbitrage anywhere (full plan)" in text
+
+
+def test_a_daytime_hold_trades_money_for_fewer_full_window_changes():
+    plan = study.study([10.0], ["dull", "sunny"])[10.0]
+    hold = study.study([10.0], ["dull", "sunny"], daytime="hold")[10.0]
+    assert hold[2]["saving"] < plan[2]["saving"]                          # the battery sits idle by day
+    assert hold[2]["full"] < plan[2]["full"]                              # but fewer windows open and close
+    assert study._daytime["policy"] == "self-use"                         # restored

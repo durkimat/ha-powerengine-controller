@@ -1,6 +1,6 @@
 # Low-write mode (issue #189)
 
-> **Status (3 Oct 2026).** Design only. Built so far: `tools/low_write_study.py`, which runs the real optimiser over the demo
+> **Status (3 Oct 2026).** Design agreed with the owner (see "Decided"); not built. Built so far: `tools/low_write_study.py`, which runs the real optimiser over the demo
 > pack's recorded days to put numbers on the options below (and a test that keeps it working). No change to what PowerEngine
 > does. Nothing in this plan applies to a RAM-control install such as the owner's Solis on 420044: RAM control is not worn by
 > writes and is never capped. This is for inverters whose only way of being driven is persistent (EEPROM or flash) settings.
@@ -175,10 +175,44 @@ The study as a regression (the tiers order by value and by window changes; a dea
 A multi-day run of the demo days looped through a bucket, counting writes. The replay unchanged with the mode off; a timed-window
 replay with the mode on, pinned.
 
-## Open questions for the owner
+## Decided (owner, 3 Oct 2026)
 
-- Is **10 counted writes a day** (about 5 window changes) the right default, with 4 for unknown brands, and a credit of 3 days?
-- Is it acceptable for **paid events to overdraw** the balance by a day's worth? (They are worth far more than the wear.)
-- Should **daytime smart-slot holds** (the battery not feeding the car) be off by default in low-write mode?
-- Do you want L1 (shadow on your own install) first, so the choice of profile is made on your own tariff and days?
-- Is there a tester with an EEPROM-only inverter (GivEnergy, Sunsynk/Deye) who could run the supervised trial, or does it wait?
+- **Budget:** 10 counted writes a day (about 5 window changes), 4 for a brand with no evidence, with a credit of 3 days.
+- **Paid events may overdraw** the balance by about a day's worth.
+- **Daytime smart slots are a setting, not a fixed rule.** The battery's behaviour around daytime smart slots is configurable in
+  low-write mode (`daytime_policy`), because many smart slots would use many writes: `plan` (the default: priced by the credit, so
+  slots are used only when worth it), `no holds` (the battery may help the car; costs stored energy), and `hold by day` (the battery
+  neither charges nor discharges until an hour you choose, one 0 A window instead of a window per slot; Axle events still honoured;
+  self-use after that hour). See "The daytime policy" below.
+- **Shadow first.** Run the low-write plan in shadow on the owner's own install before anything is switched on (L1), so the profile
+  is chosen on his tariff and days. It is worth building whatever else is decided.
+- **No EEPROM-only tester yet.** The supervised trial (L4) waits for one.
+
+## The daytime policy
+
+`tools/low_write_study.py --daytime hold [--hold-until 17]` models the hold. A hold is a charge window at 0 A, so going between
+hold and charge changes only a current (one write), and a hold all day is no changes at all. On the four recorded days, 10p per
+change:
+
+| Daytime | Overnight cycle (T2) saves GBP/day | Window changes/day |
+|---|---|---|
+| Self-use, the plan priced by the credit (default) | 1.43 | 5.2 |
+| Hold until 14:00, then self-use | 1.41 | 6.2 (5.2 full, 1.0 current-only) |
+| Hold until 17:00, then self-use | 1.34 | 6.2 |
+| Hold all day | 0.79 | 4.5 (3.2 full, 1.2 current-only) |
+
+So holding all day does avoid the daytime writes, and Axle is still honoured, but it throws away about 45% of the benefit: the
+battery sits idle while the house pays the peak rate. Holding until the afternoon costs almost nothing in money but does not
+save window changes on these days, because with a priced change the plan already ignores most daytime smart slots (adding them
+back, T3, costs 0.8 more changes at 10p and 3.3 more at 2p). It starts to pay only on a day with many fragmented smart slots, or
+with a cheap price per change. So the default is the priced plan, and `hold by day` is there for homes where smart slots are
+frequent. Whether the counted writes of a hold window are really lower than those of a slot window is one of the things the shadow
+measurement (L1) settles.
+
+## Still open
+
+- Which hour should `hold by day` default to (17:00 here, ahead of the evening peak), and should it apply on days with no
+  smart slot at all?
+- The credit starts at half the cap on a new install: is that right, or should a new install start empty until it has a week of
+  history?
+- Where should the balance be shown (Health tab, and a Monitoring tile)?
