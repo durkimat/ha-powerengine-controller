@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.91 (beta)
+
+### Behaviour changes
+
+None. PowerEngine plans and controls exactly as before.
+
+### What's new
+
+- **Low-write study.** Each night PowerEngine now plans your last recorded days again under four rules (leave the inverter alone, the full plan, an overnight cycle only, overnight charging only) and shows what each would have saved, how many times the inverter's timed windows would change and roughly how many writes that is. It is the first step of a low-write mode for inverters that wear when settings are written. It only measures: nothing here is switched on and nothing is sent to your inverter. The results are on the Health tab under "Low-write study" and in the diagnostics export's sensor list.
+- The planner can now be limited to fewer kinds of action (used only by this study; the normal plan is unchanged).
+- `tools/low_write_study.py` runs the same comparison on the demo days.
+
 ## 0.9.90 (beta)
 
 ### Behaviour changes
