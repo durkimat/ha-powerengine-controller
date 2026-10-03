@@ -718,6 +718,10 @@ views:
             grid_options: {columns: 6}
             features:
               - type: select-options
+          # any day the app still holds (the Day select above only reaches back 30); hides itself on an older app
+          - type: custom:powerengine-history-date-card
+            entity: sensor.pe_plan_history
+            grid_options: {columns: full}
           - type: markdown
             grid_options: {columns: full}
             content: |-

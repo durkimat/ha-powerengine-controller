@@ -15,7 +15,7 @@ import json
 import os
 import re
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
@@ -47,7 +47,7 @@ from pe_core.config import (
     uses_battery_pair,
 )
 from pe_core.control import KINDS, Write, readback_mismatches, release, writes_needed
-from pe_core.costbook import MIN_MEASURE_DAYS, CostBook, cost_entity_states
+from pe_core.costbook import KEEP_DAYS, MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION
 from pe_core.dashboard import energy_flow_card, sync_dashboard
 from pe_core.decide import cheap_limit, decide
@@ -116,6 +116,7 @@ INPUT_GRACE_SECONDS = 600         # inputs missing: keep the inverter's programm
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
 DEMO_EVENT, DEMO_RESULT_EVENT = "pe_demo", "pe_demo_result"
+HISTORY_DAY_EVENT = "pe_history_day"
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
 PAUSE_ENTITY = "switch.pe_ctl_pause"
@@ -414,6 +415,8 @@ class PowerEngine(hass.Hass):
         self.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
         self.listen_event(self._on_health_dismiss, "pe_health_dismiss")
         self.listen_event(self._on_demo, DEMO_EVENT)
+        self._history_date = None                            # a day picked with the card's date picker (Plan history)
+        self.listen_event(self._on_history_day, HISTORY_DAY_EVENT)
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
@@ -1281,6 +1284,25 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Could not save the plan that ran: {err!r}", level="WARNING")
 
+    def _on_history_select(self, *args, **kwargs):
+        """The Day select was used: it wins over a day picked earlier with the date picker."""
+        self._history_date = None
+        self._publish_history()
+
+    def _on_history_day(self, event_name, data, kwargs):
+        """The card's date picker (pe_history_day {date}): show that day, if the app can still hold it."""
+        if event_name != HISTORY_DAY_EVENT or self.costbook is None:
+            return
+        try:
+            day = date.fromisoformat(str((data or {}).get("date")))
+        except ValueError:
+            return
+        today = datetime.now(timezone.utc).astimezone(self.tz or timezone.utc).date()
+        if not today - timedelta(days=KEEP_DAYS) <= day <= today:
+            return
+        self._history_date = day
+        self._publish_history()
+
     def _publish_history(self, *args, **kwargs):
         """The Plan history tab: the chosen day and plan against what happened."""
         if self.costbook is None or self._get_publisher() is None:
@@ -1288,12 +1310,16 @@ class PowerEngine(hass.Hass):
         try:
             tz = self.tz or timezone.utc
             now = datetime.now(timezone.utc)
-            day = chosen_day(self.get_state("select.pe_ui_history_day"), now.astimezone(tz).date())
+            today = now.astimezone(tz).date()
+            day = self._history_date or chosen_day(self.get_state("select.pe_ui_history_day"), today)
             hourly = self.costbook.plan_history(day)
             start_of_day, ran = self.costbook.plan_snapshot(day), self.costbook.ran_plan(day)
             label, snap = chosen_plan(self.get_state("select.pe_ui_history_plan"), start_of_day, hourly, ran)
             available = (["As run"] if ran else []) + (["Start of day"] if start_of_day else []) + sorted(hourly)
             view = day_view(day, self.costbook.day_records(day), snap, label, tz, now, available)
+            recorded = self.costbook.recorded_days()
+            view["earliest"] = min(recorded[0], day.isoformat()) if recorded else day.isoformat()  # for the picker
+            view["latest"] = today.isoformat()
             self._publish_state("plan_history", day.isoformat(), view)
         except Exception as err:
             self.log(f"Could not build the plan history: {err!r}", level="WARNING")
@@ -1406,8 +1432,8 @@ class PowerEngine(hass.Hass):
         for eid in [self._role_entity(key) for key, _ in GUARDS] + [PAUSE_ENTITY]:
             if eid:                                   # re-check the mode as soon as a guard or pause changes
                 self._write_listeners.append(self._listen_state(self._on_guard_change, eid))
-        for eid in ("select.pe_ui_history_day", "select.pe_ui_history_plan"):
-            self._write_listeners.append(self._listen_state(self._publish_history, eid))
+        self._write_listeners.append(self._listen_state(self._on_history_select, "select.pe_ui_history_day"))
+        self._write_listeners.append(self._listen_state(self._publish_history, "select.pe_ui_history_plan"))
         self._write_listeners = [h for h in self._write_listeners if h is not None]
 
     def _listen_state(self, callback, entity_id):

@@ -108,3 +108,53 @@ def test_ran_plan_keeps_latest_version_of_each_half_hour_and_is_pruned_after_400
     assert book.ran_plan(day) is not None
     book.prune(day + timedelta(days=401))
     assert book.ran_plan(day) is None
+
+
+def _picker_app(monkeypatch, tmp_path, select="Yesterday"):
+    """Just enough of the app to run the date picker's handlers, bound from the real class."""
+    import sys
+    import types
+
+    from pe_core.costbook import CostBook
+    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
+    hassapi.Hass = type("Hass", (), {})
+    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
+    sys.modules.pop("powerengine", None)
+    import powerengine as pe
+
+    class FakeDT(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 3, 12, tzinfo=UTC).astimezone(tz) if tz else datetime(2026, 10, 3, 12, tzinfo=UTC)
+
+    monkeypatch.setattr(pe, "datetime", FakeDT)
+    book = CostBook(str(tmp_path), LON)
+    published = []
+    app = types.SimpleNamespace(costbook=book, tz=LON, _history_date=None, select=select, published=published)
+    app.get_state = lambda eid: app.select if eid == "select.pe_ui_history_day" else "As run"
+    app._get_publisher = lambda: object()
+    app._publish_state = lambda key, state, attrs=None: published.append((key, state, attrs))
+    app.log = lambda *a, **k: None
+    for name in ("_publish_history", "_on_history_day", "_on_history_select"):
+        setattr(app, name, types.MethodType(getattr(pe.PowerEngine, name), app))
+    return app, pe
+
+
+def test_date_picker_shows_the_picked_day_until_the_select_is_used(monkeypatch, tmp_path):
+    app, pe = _picker_app(monkeypatch, tmp_path)
+    app._on_history_day("pe_history_day", {"date": "2026-03-04"}, {})
+    assert app.published[-1][1] == "2026-03-04"
+    assert app.published[-1][2]["latest"] == "2026-10-03" and app.published[-1][2]["earliest"] <= "2026-03-04"
+    app._on_history_select("select.pe_ui_history_day", "state", "7 days ago", "Yesterday", {})
+    assert app._history_date is None and app.published[-1][1] == "2026-10-02"
+
+
+def test_date_picker_ignores_bad_future_and_too_old_days(monkeypatch, tmp_path):
+    app, pe = _picker_app(monkeypatch, tmp_path)
+    for bad in ("2026-10-04", "2025-01-01", "not a date", None):
+        app._on_history_day("pe_history_day", {"date": bad}, {})
+    app._on_history_day("pe_history_day", None, {})
+    app._on_history_day("other_event", {"date": "2026-09-01"}, {})
+    assert app._history_date is None and not app.published
