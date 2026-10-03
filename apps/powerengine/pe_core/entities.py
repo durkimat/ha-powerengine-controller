@@ -94,6 +94,8 @@ ENTITIES: tuple[EntityDef, ...] = (
                "entity_category": "diagnostic", "suggested_display_precision": 1}),
     EntityDef("sensor", "diag_learned", "Learned from use",
               {"icon": "mdi:school-outline", "entity_category": "diagnostic"}),
+    EntityDef("sensor", "diag_lowwrite", "Low-write study",
+              {"icon": "mdi:content-save-cog-outline", "entity_category": "diagnostic"}),
     EntityDef("sensor", "diag_battery_temperature", "Battery temperature (estimated)",
               {"unit_of_measurement": "°C", "device_class": "temperature", "state_class": "measurement",
                "entity_category": "diagnostic", "suggested_display_precision": 1}),

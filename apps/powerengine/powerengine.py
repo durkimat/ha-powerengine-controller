@@ -78,6 +78,7 @@ from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_plan, day_view
 from pe_core.journal import WriteJournal, day_summary, is_staged
 from pe_core.loadstore import LoadStore
+from pe_core.lowwrite import Study as LowWriteStudy
 from pe_core.modes import GUARDS, UNVERIFIED, effective_mode, guard_problems, guard_status
 from pe_core.names import build_names, default_names, fill, neutral_names, set_current
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
@@ -102,6 +103,8 @@ from pe_core.weather import Weather
 from pe_core.wizard import wizard_info
 
 HEARTBEAT_SECONDS = 60
+LOWWRITE_START = "02:40:00"       # after the Simulator has had its hour
+LOWWRITE_SLICE = 3                # new days planned per pass (about a second each); more passes follow a minute apart
 SIM_START = "01:30:00"            # after the midnight jobs (00:05-00:20), well before the morning
 SIM_SLICE_SECONDS = 2.0           # work per callback, then hand AppDaemon back for a second
 CONTROL_STRATEGY = "rolling"      # "rolling" | "block": decided by #44 (EEPROM writes) before Active ships
@@ -408,6 +411,8 @@ class PowerEngine(hass.Hass):
         self.run_daily(self._daily_summary, "08:00:00")
         self.run_daily(self._sim_start, SIM_START)                  # tariff Simulator: heavy work, overnight only
         self.run_in(lambda kwargs: self._sim_publish(), 20)
+        self.run_daily(self._lowwrite_start, LOWWRITE_START)        # low-write study: shadow only, changes nothing
+        self.run_in(lambda kwargs: self._lowwrite_publish(), 25)
         self.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
         self.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
         self.run_every(self._check_update, "now+120", 60)        # a new version installed: ask HA to restart us
@@ -2805,6 +2810,39 @@ class PowerEngine(hass.Hass):
         self._publish_state("cost_simulator_year", year["days"] if year else "unknown",
                             {"window": year, "heat_pump": s.get("heat_pump"), "planner": s.get("planner"),
                              "equipment": s.get("equipment")})
+
+    # --- low-write study (docs/plans/low-write-mode.md, stage L1): shadow accounting, changes nothing ---------------
+
+    def _lowwrite_start(self, kwargs=None):
+        if self.cfg is None or self.costbook is None or self._demo:
+            return
+        try:
+            study = getattr(self, "_lowwrite_study", None) or LowWriteStudy(self._sim_folder())
+            self._lowwrite_study = study
+            cb = self.costbook
+            p = self._params()
+            summary = study.run(cb.recorded_days(), lambda d: cb.day_records(datetime.fromisoformat(d).date()), p,
+                                float(self.cfg.safety.get("window_switch_cost_p", 5.0)), self.tz or timezone.utc,
+                                datetime.now(timezone.utc), limit=LOWWRITE_SLICE)
+            self._lowwrite_publish()
+            if summary.get("pending"):
+                self.run_in(self._lowwrite_start, 60)
+        except Exception as err:
+            self.log(f"Low-write study failed: {err!r}", level="WARNING")
+
+    def _lowwrite_publish(self):
+        study = getattr(self, "_lowwrite_study", None)
+        if study is None:
+            try:
+                study = LowWriteStudy(self._sim_folder())
+            except Exception:
+                return
+        s = study.summary or {}
+        rows = {r["id"]: r for r in s.get("profiles", [])}
+        cycle = rows.get("overnight_cycle")
+        state = (f"overnight cycle keeps {cycle['kept_pct']}%" if cycle and cycle.get("kept_pct") is not None
+                 else "waiting for recorded days")
+        self._publish_state("diag_lowwrite", state, s or {"days": 0})
 
     def _sim_notify(self, out):
         month = self._today().strftime("%Y-%m")

@@ -1456,6 +1456,25 @@ views:
 
               **Battery temperature ({{ 'measured' if t.attributes.measured else 'estimated' }}): {{ t.state }}°C** · outside {{ t.attributes.outside_c }}°C ({{ t.attributes.outside_source }}) · cold caution {{ 'ON' if t.attributes.caution_now else 'off' }} (below {{ t.attributes.threshold_c }}°C). Battery location: {{ t.attributes.location }}, so it follows the outside temperature over about {{ t.attributes.lag_h | int }} hours{{ '; the estimate ahead starts from the measured value' if t.attributes.measured else '' }}.
               {%- endif %}
+          - type: heading
+            heading: Low-write study
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set w = states.sensor.pe_diag_lowwrite %}
+              {%- if w and w.attributes.profiles %}
+              What the plan would earn if it changed the inverter's timed windows less often, over your last {{ w.attributes.days }} recorded days ({{ w.attributes['from'] }} to {{ w.attributes.to }}). Nothing here changes what PowerEngine does.
+
+              | Plan | Saves a day | Of the full plan | Window changes a day | Inverter writes a day |
+              |---|---|---|---|---|
+              {%- for r in w.attributes.profiles %}
+              | {{ r.label }} | £{{ '%.2f' | format(r.saving_gbp_day) }} | {{ (r.kept_pct ~ '%') if r.kept_pct is not none else '' }} | {{ r.changes_day }} | {{ r.writes_day }} |
+              {%- endfor %}
+
+              {{ w.attributes.note }}
+              {%- else %}
+              Nothing yet: this fills in overnight once there are complete recorded days.
+              {%- endif %}
       - type: grid
         column_span: 3
         cards:
