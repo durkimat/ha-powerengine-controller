@@ -1,0 +1,160 @@
+name: Release
+
+# Runs tools/release.sh on GitHub, so a release no longer needs the owner's machine or `gh` login.
+#
+# Start it from the Actions tab (Run workflow), or a cloud session starts it. Before anything runs, the `release`
+# environment pauses the job until the owner presses Approve: only then is the RELEASE_TOKEN secret available.
+# `dry_run` is on by default: the script prints every step and file change and pushes nothing.
+#
+# What to prepare first (on the PR's branch in this repo):
+#   - the code change, tests and a green PR (the script re-runs the checks, bumps the version and CHANGELOG,
+#     reuses the open PR, waits for CI, squash-merges and creates the GitHub release);
+#   - the release notes as a Markdown file in the branch, starting with "### Behaviour changes"
+#     (e.g. release-notes/0.9.87.md);
+#   - for a card release: the card's branch pushed in the card repo, and card notes in a file on the app branch.
+#
+# tools/release.sh is always taken from main, so a stale branch can't release with an old script.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.9.87 (must be newer than the app's current version)"
+        required: true
+        type: string
+      title:
+        description: "Short title for the PR and commit (the script adds the version itself)"
+        required: true
+        type: string
+      app_branch:
+        description: "Branch in this repo that carries the change"
+        required: true
+        type: string
+      app_notes:
+        description: "Release notes file on that branch, e.g. release-notes/0.9.87.md"
+        required: true
+        type: string
+      card_branch:
+        description: "Card release only: the branch in ha-powerengine-card (empty: release/<version> from main)"
+        required: false
+        type: string
+      card_notes:
+        description: "Card release only: card notes file on the app branch. Empty: the card is not released"
+        required: false
+        type: string
+      dry_run:
+        description: "Dry run: show every step and file change, push nothing"
+        required: true
+        type: boolean
+        default: true
+      skip_replay:
+        description: "Skip the replay in the pre-release checks (CI still runs it on the PR)"
+        required: true
+        type: boolean
+        default: false
+      model_name:
+        description: "Name for the Co-Authored-By trailer"
+        required: false
+        type: string
+        default: "Claude"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release ${{ inputs.version }}${{ inputs.dry_run && ' (dry run)' || '' }}
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+    steps:
+      - name: Check the inputs
+        env:
+          VERSION: ${{ inputs.version }}
+          APP_BRANCH: ${{ inputs.app_branch }}
+          APP_NOTES: ${{ inputs.app_notes }}
+          CARD_NOTES: ${{ inputs.card_notes }}
+          CARD_BRANCH: ${{ inputs.card_branch }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version must look like 0.9.87, got: $VERSION"; exit 1; }
+          [ "$APP_BRANCH" != "main" ] || { echo "won't release main itself; give the branch that carries the change"; exit 1; }
+          [ -n "$APP_NOTES" ] || { echo "app_notes is required"; exit 1; }
+          if [ -z "$CARD_NOTES" ] && [ -n "$CARD_BRANCH" ]; then
+            echo "card_branch given without card_notes: the card is only released when you give card notes"; exit 1
+          fi
+          [ -n "$GH_TOKEN" ] || { echo "RELEASE_TOKEN is not available: is this job using the 'release' environment?"; exit 1; }
+
+      - name: Release script (from main)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: tools-src
+          persist-credentials: false
+
+      - name: App repo (the branch to release)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.app_branch }}
+          path: app
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Card repo
+        if: inputs.card_notes != ''
+        uses: actions/checkout@v4
+        with:
+          repository: durkimat/ha-powerengine-card
+          ref: ${{ inputs.card_branch || 'main' }}
+          path: card
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the app's dev tools
+        run: pip install -r app/requirements-dev.txt
+
+      - name: Git identity
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+
+      - name: Run tools/release.sh
+        env:
+          VERSION: ${{ inputs.version }}
+          TITLE: ${{ inputs.title }}
+          APP_BRANCH: ${{ inputs.app_branch }}
+          APP_NOTES: ${{ inputs.app_notes }}
+          CARD_BRANCH: ${{ inputs.card_branch }}
+          CARD_NOTES: ${{ inputs.card_notes }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          SKIP_REPLAY: ${{ inputs.skip_replay }}
+          CLAUDE_MODEL_NAME: ${{ inputs.model_name }}
+          CLAUDE_SESSION_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          args=("$VERSION" --title "$TITLE"
+                --app-dir "$GITHUB_WORKSPACE/app" --app-branch "$APP_BRANCH"
+                --app-notes "$GITHUB_WORKSPACE/app/$APP_NOTES")
+          if [ -n "$CARD_NOTES" ]; then
+            args+=(--card-dir "$GITHUB_WORKSPACE/card" --card-notes "$GITHUB_WORKSPACE/app/$CARD_NOTES")
+            [ -z "$CARD_BRANCH" ] || args+=(--card-branch "$CARD_BRANCH")
+          fi
+          [ "$DRY_RUN" != "true" ] || args+=(--dry-run)
+          [ "$SKIP_REPLAY" != "true" ] || args+=(--skip-replay)
+          {
+            echo "### Release $VERSION$([ "$DRY_RUN" = "true" ] && echo ' (dry run)')"
+            echo '```'
+            echo "tools/release.sh ${args[*]}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          bash tools-src/tools/release.sh "${args[@]}" 2>&1 | tee release.log
+          { echo '```'; sed -n '/^==> Summary/,$p' release.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
