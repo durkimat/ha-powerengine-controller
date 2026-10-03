@@ -209,11 +209,14 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   card (the catalogue holds only the default inverter's, and `map_catalogue` is near its 15 KB limit, so ship them per definition
   some other way); (4) Octopus tariff suggestions and a fixed-rate tariff adapter (Phase 2), since the tariff suggestions are the
   EDF ones; (5) the GitHub issue form that the candidate export attaches to (the wizard links to a plain new issue).
-- Multiple devices (docs/plans/multiple-devices.md): only detection and display are built (wizard and "Your system" list every candidate,
-  mark the one in use, flag unsupported energy devices). Still one inverter, charger, tariff, forecast and grid-event provider in the
-  planner and control. Next, in order: ask the owner what his second inverter is (brand, role); M1 a second device that is read but not
-  controlled (`site.inverters` list, per-device inputs, readings only); M2 pooled battery in the plan; M3 control of more than one
-  device (per-device write budget, RAM refresh, Active guard); cars and grid-event providers as lists, independent of those.
+- **Controlling more than one inverter or battery: review how to support it** (docs/plans/multiple-devices.md). The owner's second
+  inverter is solar-only and already a read-only `solar_plants` entry (counted in total solar and on the energy-flow card; the wizard
+  recognises it and can add more plants, e.g. plug-in panels, which are now legal in the UK). For now the user selects the one inverter
+  and battery PowerEngine controls. Two hybrid inverters, a second battery, or plug-in solar with storage are real in some houses, so
+  this needs a proper design before any code: M1 a second device with a battery read but not controlled (`site.inverters` list,
+  per-device inputs); M2 a pooled battery in the plan; M3 control of more than one device (command split, per-device write budget,
+  RAM refresh, failsafe, Active guard, a two-device replay fixture, a long Passive trial). Cars and grid-event providers as lists are
+  independent of those.
 - Phase 1, still open: licence and CONTRIBUTING; low-write mode for EEPROM-only inverters (#189); the step 7 "Left" items (three timed
   slots, RC option words, `writes_needed`).
 

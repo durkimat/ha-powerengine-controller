@@ -3,8 +3,15 @@
 > **Status (3 Oct 2026).** Design only for control; detection and display are built. What exists: the setup wizard and the
 > "Your system" block list every device Home Assistant has for each part, say which one PowerEngine uses ("in use now") and
 > which it doesn't, and flag energy equipment no adapter owns (for example a second inverter of another brand). PowerEngine
-> still reads, plans and controls **one inverter, one car charger, one tariff, one forecast and one grid-event provider**.
-> Nothing here changes how the battery is driven.
+> still reads, plans and controls **one inverter with its battery, one car charger, one tariff, one forecast and one
+> grid-event provider**. Nothing here changes how the battery is driven.
+>
+> **Extra solar sources are supported now, as solar plants.** The owner's second inverter is solar-only and has no control: it
+> is a `solar_plants` entry (read only), counted in total solar and drawn on the energy-flow card. The wizard recognises
+> configured plants, offers other solar-looking devices (a second solar inverter, plug-in panels) to add as plants, and "Your
+> system" lists the plants counted. What is not supported is **controlling** more than one inverter or battery: for now the user
+> selects which one PowerEngine controls. That is a real situation in some houses (two hybrid inverters, a second battery,
+> plug-in solar with its own storage, which is now legal in the UK), so it is a backlog item to review properly (stages M1 to M3).
 
 ## Why it matters
 
@@ -12,8 +19,8 @@ Several of these are normal homes, not edge cases:
 
 | Part | Legitimate multiples | Today |
 |---|---|---|
-| Inverter and battery | Two inverters (same or different brand), each with its own battery or only solar; a second battery stack | One inverter. The owner has two in Home Assistant. |
-| Solar | Several arrays | Supported (`solar_plants`). |
+| Inverter and battery | Two hybrid inverters (same or different brand), each with a battery; a second battery stack; plug-in solar with storage | One controlled inverter and battery. A second inverter that is solar-only is a plant (below). |
+| Solar | Several arrays; a second solar-only inverter; plug-in panels | Supported (`solar_plants`, read only). The owner's second inverter is one. |
 | Car charger | A second charger; one charger and several cars | One charger. `site.car` is reserved (`none`). |
 | Car | Two cars, each with its own battery size, target and ready-by time | Not modelled: the car is a load seen through the charger. |
 | Tariff | A separate export tariff; an EV tariff on its own meter | Import and export rates are separate inputs and may come from any entity. One meter. |
@@ -35,12 +42,13 @@ Each stage is shippable and passes the replay unchanged for a single-inverter ho
 
 - **M0, detect and list. Done.** The wizard and "Your system" show every candidate per part and mark the one in use; unsupported
   energy devices are listed with a way to send their entity list (docs/WIZARD.md).
-- **M1, a second device that is read, not controlled.** `site.inverters` becomes a list of `{id, adapter, firmware}`; the first
-  is the controlled one (`site.inverter` stays readable as that, so old configs load). Inputs are keyed per device
-  (`battery_soc` for the first, `<id>.battery_soc` for the others, so the catalogue and saved configs don't change for one
-  inverter). A device that is not controlled contributes its readings only: solar generation, house load and the grid
-  check, battery power and SoC shown on the Health and Monitoring pages. No planning or control change. Needs: per-device
-  role catalogue in the card (the size limit on `map_catalogue` means roles are published per definition, not all at once).
+- **M1, a second device with a battery that is read, not controlled.** (A solar-only second inverter is already covered by
+  `solar_plants`.) `site.inverters` becomes a list of `{id, adapter, firmware}`; the first is the controlled one
+  (`site.inverter` stays readable as that, so old configs load). Inputs are keyed per device (`battery_soc` for the first,
+  `<id>.battery_soc` for the others, so the catalogue and saved configs don't change for one inverter). A device that is not
+  controlled contributes its readings only: its battery power and SoC shown on the Health and Monitoring pages, and counted in
+  the totals. No planning or control change. Needs: per-device role catalogue in the card (the size limit on `map_catalogue`
+  means roles are published per definition, not all at once).
 - **M2, a pooled battery in the plan.** The planner sees one virtual battery: summed capacity and power limits, SoC weighted by
   capacity, learned rates per device. One plan, still one controlled device. Safe because the plan is still executed by the
   one device, but wrong if the second battery then discharges on its own, so M2 only applies where the second inverter is
@@ -54,9 +62,14 @@ Each stage is shippable and passes the replay unchanged for a single-inverter ho
 - **Grid events.** `site.events` becomes a list; events from all providers are merged by time with a stated priority.
   Independent of the inverter stages.
 
-## Questions for the owner
+## Decided
 
-- What is the second inverter (brand, model, integration), and what does it do: a second battery that should be planned
-  with the first, or a generation-only inverter, or something that runs by itself?
-- Do you want M1 (read it, show it, count its solar and house load) first? It is the cheapest step and needs no control risk.
+- **Select which inverter and battery PowerEngine controls.** One is controlled; others are read only (solar plants today,
+  M1 later). Controlling several at once is the M3 review above, to be done as a design with a long Passive trial before any
+  code that writes to more than one device.
+
+## Questions for the owner (when this is picked up)
+
 - Cars: how many, and do they share the Zappi?
+- Plug-in solar: which products (with or without storage) and which integrations are people likely to have, so the wizard's
+  "looks like solar" hints and the first definitions can cover them?

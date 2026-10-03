@@ -36,9 +36,16 @@ the one holding an entity mapped in the saved config, so a home with both the ED
 Anything else Home Assistant has for that part is listed as "Also found, not used by PowerEngine", and picking it is a choice
 you make with **Change this part**. Only the ticked parts are asked about; the others are left exactly as they are.
 
-**More than one of something.** Every matching device is offered, with the one in use marked. Energy equipment no adapter owns
-(a device with a battery, a power and an energy sensor, such as a second inverter of another brand) is listed as "not supported
-yet" with the entity-list export. PowerEngine uses one device of each kind for now: see docs/plans/multiple-devices.md.
+**More than one of something.** Every matching device is offered, with the one in use marked. PowerEngine controls one inverter
+with its battery, and you choose which; see docs/plans/multiple-devices.md for what more would take.
+
+**Solar plants.** A second solar-only inverter, or plug-in panels, is a read-only *solar plant*: counted in total solar and drawn on
+the energy-flow card, never controlled. The wizard shows the plants already configured ("Counted now: Main, Fox solar"), does not list
+a configured plant's device as "also found", and offers other solar-looking devices (a power and an energy sensor, named like a solar
+source) to add as a plant, guessing its power and today's-energy entities; each plant needs both, and has a forecast choice (none,
+from the forecast service, or scaled from the main plant). On a configured system tick **Change solar plants** to add or remove one
+without touching the other parts. A hybrid inverter with a battery that no adapter owns is listed as "not supported yet", with the
+entity-list export.
 
 ## What the app provides
 
