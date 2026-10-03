@@ -2,6 +2,22 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.89 (beta)
+
+### Behaviour changes
+
+None. This changes what the Config page and setup wizard show and how some settings are worded; nothing PowerEngine does to your system changes.
+
+### Setup wizard and Config page
+
+- On a system that is already set up, the **Setup wizard** is folded away until you open it. A new system still sees it open.
+- The wizard now reads what PowerEngine is already using for each part and keeps it chosen. With both the EDF and Octopus integrations installed it shows EDF (the one in your configuration) as "in use now", and lists Octopus as "also found, not used by PowerEngine" instead of picking it.
+- Where Home Assistant has more than one device for a part, all are listed and the one in use is marked. PowerEngine controls one inverter with its battery, and you choose which; the design for supporting more is in docs/plans/multiple-devices.md.
+- **Solar plants:** a second solar-only inverter, or plug-in panels, can be added as a read-only solar plant (counted in total solar and drawn on the energy-flow card). The wizard shows the plants you already have, offers other solar-looking devices to add (guessing their power and energy-today entities), and lets you add or remove one without touching anything else. A hybrid inverter with a battery that PowerEngine has no support for yet is listed as "not supported yet", with a way to send its entity list.
+- **Your system** lists the solar plants it counts and the same "also found" devices, and its labels now match the wizard (Inverter, Car charger, Electricity tariff, Solar forecast, Grid events).
+- The setup checklist box at the top of the Config tab hides itself when everything is in place. **Check for updates** is now the first box on the page.
+- Wording: grid events are now called grid events throughout the Config page (the role names, the on/off switches, the settings, the notification and the section), with the provider named in the description (Axle for you). The settings keep their names, so nothing needs re-saving.
+
 ## 0.9.88 (beta)
 
 ### Behaviour changes
