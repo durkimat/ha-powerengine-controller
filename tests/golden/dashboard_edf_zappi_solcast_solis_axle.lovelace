@@ -735,7 +735,7 @@ views:
               Whole day, import minus export (no standing charge): £{{ '%.2f' | format(a.day_import_export_cost) }} from {{ a.recorded_half_hours }} recorded half-hours.
               {%- endif %}
               {%- if a.available_plans %}
-              Plans stored for this day: {{ a.available_plans | join(', ') }}. PowerEngine keeps the first plan of each hour for 60 days (from 0.5.18) and the start-of-day plan for 400.
+              Plans stored for this day: {{ a.available_plans | join(', ') }}. PowerEngine keeps the plan that actually ran ("As run": each half-hour as the plan had it at the time) and the start-of-day plan for 400 days, and the first plan of each hour for 60 days.
               {%- endif %}
               {%- else %}
               Choose a day above. The history builds up from 0.5.18: each hour's first plan is kept from now on.
@@ -748,6 +748,7 @@ views:
               type: custom:apexcharts-card
               grid_options: {columns: full, rows: auto}
               graph_span: 24h
+              update_interval: 5   # re-read the chosen day every 5 s, so a new day or plan shows on the chart
               span:
                 start: day
               header:
@@ -887,6 +888,7 @@ views:
               type: "custom:apexcharts-card"
               grid_options: {"columns": "full", "rows": "auto"}
               graph_span: "24h"
+              update_interval: 5   # re-read the chosen day every 5 s, so a new day or plan shows on the chart
               span: {"start": "day"}
               header: {"show": true, "title": "Battery, prices and grid use (plan dashed, actual solid)", "show_states": false}
               apex_config: {"chart": {"height": 420, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"datetimeFormatter": {"day": "HH:mm", "hour": "HH:mm"}, "style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
@@ -900,6 +902,7 @@ views:
               type: custom:apexcharts-card
               grid_options: {columns: full, rows: auto}
               graph_span: 24h
+              update_interval: 5   # re-read the chosen day every 5 s, so a new day or plan shows on the chart
               span:
                 start: day
               header:
@@ -964,6 +967,7 @@ views:
               type: "custom:apexcharts-card"
               grid_options: {"columns": "full", "rows": "auto"}
               graph_span: "24h"
+              update_interval: 5   # re-read the chosen day every 5 s, so a new day or plan shows on the chart
               span: {"start": "day"}
               header: {"show": true, "title": "House load and solar (forecast dashed, actual solid)", "show_states": false}
               apex_config: {"chart": {"height": 240, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}

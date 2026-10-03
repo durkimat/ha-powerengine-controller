@@ -13,7 +13,7 @@ def test_day_choice():
     assert chosen_day("Yesterday", TODAY) == date(2026, 9, 25)
     assert chosen_day("7 days ago", TODAY) == date(2026, 9, 19)
     assert chosen_day(None, TODAY) == date(2026, 9, 25)
-    assert len(DAY_OPTIONS) == 31 and len(PLAN_OPTIONS) == 25
+    assert len(DAY_OPTIONS) == 31 and len(PLAN_OPTIONS) == 26
 
 
 def test_plan_choice_falls_back_to_earlier_hour():
@@ -83,3 +83,28 @@ def test_snapshot_keeps_what_the_history_tab_needs():
     s = snap["slots"][0]
     assert {"price_p", "charge_kwh", "bat_export_kwh", "solar_export_kwh", "import_kwh", "cost"} <= s.keys()
     assert snap["windows"] and "reason" in snap["windows"][0] and "day" not in snap["windows"][0]
+
+
+def test_as_run_plan_is_chosen_when_stored_and_falls_back_when_not():
+    sod, ran = {"made_at": "a"}, {"made_at": None, "slots": [{"start": "x"}]}
+    assert chosen_plan("As run", sod, {}, ran) == ("As run", ran)
+    assert chosen_plan("As run", sod, {}, None) == ("Start of day", sod)
+    assert chosen_plan("As run", sod, {}, {"slots": []}) == ("Start of day", sod)
+    assert chosen_plan("Start of day", sod, {}, ran) == ("Start of day", sod)
+
+
+def test_ran_plan_keeps_latest_version_of_each_half_hour_and_is_pruned_after_400_days(tmp_path):
+    from pe_core.costbook import CostBook
+    book = CostBook(str(tmp_path))
+    day = date(2026, 9, 26)
+    w = {"start": "s", "end": "e", "action": "charge"}
+    book.record_ran(day, {"start": "2026-09-26T00:30:00+00:00", "soc": 50}, None)
+    book.record_ran(day, {"start": "2026-09-26T00:00:00+00:00", "soc": 40}, w)
+    book.record_ran(day, {"start": "2026-09-26T00:30:00+00:00", "soc": 55}, {**w, "end": "e2"})
+    ran = book.ran_plan(day)
+    assert [(s["start"][11:16], s["soc"]) for s in ran["slots"]] == [("00:00", 40), ("00:30", 55)]
+    assert ran["windows"] == [{**w, "end": "e2"}]
+    book.prune(day + timedelta(days=399))
+    assert book.ran_plan(day) is not None
+    book.prune(day + timedelta(days=401))
+    assert book.ran_plan(day) is None

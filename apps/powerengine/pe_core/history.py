@@ -1,7 +1,8 @@
 """The Plan history tab (#58): one past (or today's) day, a plan made that day, and what actually happened.
 
 Choices come from two dashboard selects: the day ("Today", "Yesterday", "2 days ago" ... "30 days ago") and the
-plan ("Start of day" = the first plan of that day, or the first plan made in a given hour). Plans are stored as
+plan ("As run" = the plan as it stood in each half-hour that ran, "Start of day" = the first plan of that day, or
+the first plan made in a given hour). Plans are stored as
 snapshots of their predictions for that day only (health.plan_snapshot); what happened comes from the half-hour
 cost records.
 """
@@ -12,7 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 
 DAYS_BACK = 30
 DAY_OPTIONS = ["Today", "Yesterday"] + [f"{n} days ago" for n in range(2, DAYS_BACK + 1)]
-PLAN_OPTIONS = ["Start of day"] + [f"{h:02d}:00" for h in range(24)]
+PLAN_OPTIONS = ["As run", "Start of day"] + [f"{h:02d}:00" for h in range(24)]
 HALF = timedelta(minutes=30)
 
 
@@ -36,8 +37,11 @@ def chosen_day(option: str | None, today: date) -> date:
 
 
 def chosen_plan(option: str | None, start_of_day: dict | None,
-                hourly: dict[str, dict]) -> tuple[str | None, dict | None]:
-    """(label of the plan used, snapshot). An hour with no stored plan falls back to the latest earlier one."""
+                hourly: dict[str, dict], ran: dict | None = None) -> tuple[str | None, dict | None]:
+    """(label of the plan used, snapshot). "As run" is the plan that actually ran, half-hour by half-hour. An hour
+    with no stored plan falls back to the latest earlier one; a day with no as-run record, to the start of day."""
+    if option == "As run" and ran and ran.get("slots"):
+        return "As run", ran
     if option in (None, "", "Start of day") or option not in PLAN_OPTIONS:
         if start_of_day:
             return "Start of day", start_of_day

@@ -73,7 +73,7 @@ from pe_core.forecast import (
     parse_history,
     profile_from_means,
 )
-from pe_core.health import overall, plan_snapshot
+from pe_core.health import WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_day, chosen_plan, day_view
 from pe_core.journal import WriteJournal, day_summary, is_staged
@@ -1209,6 +1209,7 @@ class PowerEngine(hass.Hass):
                               stick=self._mid_slot_stick(r.now), first_h=first_h)
         self._plan_sig, self._plan_time = sig, r.now
         self._snapshot_plan(r.now)
+        self._record_ran(r.now)
         extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0,
                  "slot_certainty": slot_certainty_rows(slots, self.tz), "certainty": cert.summary(), "cold": cold}
         if self.plan.strategy != "optimiser":
@@ -1257,6 +1258,29 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self.log(f"Could not save the plan snapshot: {err!r}", level="WARNING")
 
+    def _record_ran(self, now):
+        """Keep the plan that actually ran (Plan history, "As run"): the plan's slot for the half-hour now running,
+        written when it first appears and again if a replan changes it."""
+        if self.costbook is None or self.plan is None:
+            return
+        try:
+            tz = self.tz or timezone.utc
+            local = now.astimezone(tz)
+            start = local.replace(minute=local.minute - local.minute % 30, second=0, microsecond=0)
+            ps = next((x for x in self.plan.slots if x.slot.start == start), None)
+            if ps is None:
+                return
+            slot = slot_snapshot(ps)
+            window = next(({k: w[k] for k in WINDOW_KEYS if k in w} for w in getattr(self.plan, "windows", []) or []
+                           if w.get("start") and w.get("end")
+                           and datetime.fromisoformat(w["start"]) <= start < datetime.fromisoformat(w["end"])), None)
+            if getattr(self, "_ran_last", None) == (slot, window):
+                return
+            self.costbook.record_ran(local.date(), slot, window)
+            self._ran_last = (slot, window)
+        except Exception as err:
+            self.log(f"Could not save the plan that ran: {err!r}", level="WARNING")
+
     def _publish_history(self, *args, **kwargs):
         """The Plan history tab: the chosen day and plan against what happened."""
         if self.costbook is None or self._get_publisher() is None:
@@ -1266,9 +1290,9 @@ class PowerEngine(hass.Hass):
             now = datetime.now(timezone.utc)
             day = chosen_day(self.get_state("select.pe_ui_history_day"), now.astimezone(tz).date())
             hourly = self.costbook.plan_history(day)
-            label, snap = chosen_plan(self.get_state("select.pe_ui_history_plan"),
-                                      self.costbook.plan_snapshot(day), hourly)
-            available = (["Start of day"] if self.costbook.plan_snapshot(day) else []) + sorted(hourly)
+            start_of_day, ran = self.costbook.plan_snapshot(day), self.costbook.ran_plan(day)
+            label, snap = chosen_plan(self.get_state("select.pe_ui_history_plan"), start_of_day, hourly, ran)
+            available = (["As run"] if ran else []) + (["Start of day"] if start_of_day else []) + sorted(hourly)
             view = day_view(day, self.costbook.day_records(day), snap, label, tz, now, available)
             self._publish_state("plan_history", day.isoformat(), view)
         except Exception as err:
