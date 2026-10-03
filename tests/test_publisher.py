@@ -165,10 +165,9 @@ def test_mqtt_presets_go_to_the_retained_command_topics():
     m.preset("ctl_pause", "ON")
     m.preset("ui_right_align", "ON")
     m.preset("ui_history_day", "Yesterday")
-    m.preset("ui_history_plan", "Start of day")
     assert [(t, p) for t, p, *_ in api.sent] == [
         ("powerengine/ctl_pause/set", "ON"), ("powerengine/ui_right_align/set", "ON"),
-        ("powerengine/ui_history_day/set", "Yesterday"), ("powerengine/ui_history_plan/set", "Start of day")]
+        ("powerengine/ui_history_day/set", "Yesterday")]
 
 
 # --- choosing one --------------------------------------------------------------------------------

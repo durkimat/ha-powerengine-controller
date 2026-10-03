@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from pe_core.history import DAY_OPTIONS, PLAN_OPTIONS, chosen_day, chosen_plan, day_view
+from pe_core.history import DAY_OPTIONS, chosen_day, chosen_plan, day_view
 
 LON = ZoneInfo("Europe/London")
 UTC = timezone.utc
@@ -13,17 +13,7 @@ def test_day_choice():
     assert chosen_day("Yesterday", TODAY) == date(2026, 9, 25)
     assert chosen_day("7 days ago", TODAY) == date(2026, 9, 19)
     assert chosen_day(None, TODAY) == date(2026, 9, 25)
-    assert len(DAY_OPTIONS) == 31 and len(PLAN_OPTIONS) == 26
-
-
-def test_plan_choice_falls_back_to_earlier_hour():
-    sod, h = {"made_at": "a"}, {"00:00": {"made_at": "b"}, "06:00": {"made_at": "c"}}
-    assert chosen_plan("Start of day", sod, h) == ("Start of day", sod)
-    assert chosen_plan("09:00", sod, h) == ("06:00", h["06:00"])
-    assert chosen_plan("06:00", sod, h)[0] == "06:00"
-    assert chosen_plan("09:00", sod, {}) == ("Start of day", sod)
-    assert chosen_plan("Start of day", None, h) == ("06:00", h["06:00"])
-    assert chosen_plan(None, None, {}) == (None, None)
+    assert len(DAY_OPTIONS) == 31
 
 
 def _day(day):
@@ -43,7 +33,7 @@ def _day(day):
 def test_day_view_pairs_plan_and_actual():
     day = date(2026, 9, 24)
     recs, snap = _day(day)
-    v = day_view(day, recs, snap, "Start of day", LON, datetime(2026, 9, 26, 12, tzinfo=UTC), ["Start of day"])
+    v = day_view(day, recs, snap, "Start of day", LON, datetime(2026, 9, 26, 12, tzinfo=UTC))
     s = v["series"]
     assert len(s["t"]) == 48 and s["actual_soc"][0] == 50 and s["plan_soc"][0] == 51
     assert v["summary"]["half_hours"] == 48 and v["summary"]["soc_gap"] == 1.0
@@ -55,7 +45,7 @@ def test_day_view_pairs_plan_and_actual():
 def test_day_view_across_clock_change_keeps_local_times():
     day = date(2026, 10, 25)                                  # 25-hour day
     recs, snap = _day(day)
-    v = day_view(day, recs, None, None, LON, datetime(2026, 10, 27, 12, tzinfo=UTC), [])
+    v = day_view(day, recs, None, None, LON, datetime(2026, 10, 27, 12, tzinfo=UTC))
     assert len(v["series"]["t"]) == 50 and v["summary"] is None
     last = datetime.fromtimestamp(v["series"]["x"][-1] / 1000, LON)
     assert (last.hour, last.minute) == (23, 30)
@@ -85,12 +75,12 @@ def test_snapshot_keeps_what_the_history_tab_needs():
     assert snap["windows"] and "reason" in snap["windows"][0] and "day" not in snap["windows"][0]
 
 
-def test_as_run_plan_is_chosen_when_stored_and_falls_back_when_not():
+def test_the_plan_shown_is_the_one_that_ran_else_the_start_of_day_plan():
     sod, ran = {"made_at": "a"}, {"made_at": None, "slots": [{"start": "x"}]}
-    assert chosen_plan("As run", sod, {}, ran) == ("As run", ran)
-    assert chosen_plan("As run", sod, {}, None) == ("Start of day", sod)
-    assert chosen_plan("As run", sod, {}, {"slots": []}) == ("Start of day", sod)
-    assert chosen_plan("Start of day", sod, {}, ran) == ("Start of day", sod)
+    assert chosen_plan(sod, ran) == ("As run", ran)
+    assert chosen_plan(sod, None) == ("Start of day", sod)
+    assert chosen_plan(sod, {"slots": []}) == ("Start of day", sod)
+    assert chosen_plan(None, None) == (None, None)
 
 
 def test_ran_plan_keeps_latest_version_of_each_half_hour_and_is_pruned_after_400_days(tmp_path):

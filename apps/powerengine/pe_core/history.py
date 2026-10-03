@@ -13,7 +13,6 @@ from datetime import date, datetime, timedelta, timezone
 
 DAYS_BACK = 30
 DAY_OPTIONS = ["Today", "Yesterday"] + [f"{n} days ago" for n in range(2, DAYS_BACK + 1)]
-PLAN_OPTIONS = ["As run", "Start of day"] + [f"{h:02d}:00" for h in range(24)]
 HALF = timedelta(minutes=30)
 
 
@@ -36,21 +35,11 @@ def chosen_day(option: str | None, today: date) -> date:
     return today - timedelta(days=int(option.split()[0]))
 
 
-def chosen_plan(option: str | None, start_of_day: dict | None,
-                hourly: dict[str, dict], ran: dict | None = None) -> tuple[str | None, dict | None]:
-    """(label of the plan used, snapshot). "As run" is the plan that actually ran, half-hour by half-hour. An hour
-    with no stored plan falls back to the latest earlier one; a day with no as-run record, to the start of day."""
-    if option == "As run" and ran and ran.get("slots"):
+def chosen_plan(start_of_day: dict | None, ran: dict | None) -> tuple[str | None, dict | None]:
+    """(label of the plan shown, snapshot): the plan that actually ran, half-hour by half-hour. A day with no as-run
+    record (before it was kept) shows the plan made at the start of that day instead."""
+    if ran and ran.get("slots"):
         return "As run", ran
-    if option in (None, "", "Start of day") or option not in PLAN_OPTIONS:
-        if start_of_day:
-            return "Start of day", start_of_day
-        option = "23:00"
-        if not hourly:
-            return None, None
-    earlier = sorted(h for h in hourly if h <= option)
-    if earlier:
-        return earlier[-1], hourly[earlier[-1]]
     if start_of_day:
         return "Start of day", start_of_day
     return None, None
@@ -61,7 +50,7 @@ def _r(v, n=2):
 
 
 def day_view(day: date, records: list[dict], snapshot: dict | None, plan_label: str | None, tz,
-             now: datetime, available: list[str]) -> dict:
+             now: datetime) -> dict:
     start = datetime(day.year, day.month, day.day, tzinfo=tz)
     end = datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=tz)
     recs = {r["start"]: r for r in records if r.get("start")}
@@ -112,7 +101,7 @@ def day_view(day: date, records: list[dict], snapshot: dict | None, plan_label: 
     day_cost = sum(cost(r) for r in records) if records else None
     return {
         "date": day.isoformat(), "label": start.strftime("%A %d %B %Y"),
-        "plan": plan_label, "plan_made_at": (snapshot or {}).get("made_at"), "available_plans": available,
+        "plan": plan_label, "plan_made_at": (snapshot or {}).get("made_at"),
         "windows": (snapshot or {}).get("windows", []), "series": ser, "summary": summary,
         "day_import_export_cost": _r(day_cost), "recorded_half_hours": len(records),
     }

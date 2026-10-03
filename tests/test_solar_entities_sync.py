@@ -82,7 +82,8 @@ def test_sync_solar_entities_no_mqtt_is_a_noop(engine):
 def test_retired_entities_are_cleared_from_mqtt_and_marked_in_direct_mode(engine, tmp_path):
     """The Costs custom-range selects (0.9.72-0.9.74) no longer exist: every start clears them."""
     from pe_core.entities import RETIRED_ENTITIES
-    assert {e.entity_id for e in RETIRED_ENTITIES} == {"select.pe_ui_cost_from", "select.pe_ui_cost_to"}
+    assert {e.entity_id for e in RETIRED_ENTITIES} == {"select.pe_ui_cost_from", "select.pe_ui_cost_to",
+                                                   "select.pe_ui_history_plan"}
     e, powerengine = engine
     e.cfg = None
     e.mqtt = _FakeMqtt()
