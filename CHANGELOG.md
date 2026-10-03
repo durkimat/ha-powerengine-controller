@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.85 (beta)
+
+### Behaviour changes
+
+- **Fixes the Plan history charts showing "Configuration error" in 0.9.84.** The 5-second refresh added in 0.9.84 is removed, so the charts draw again. They follow the Day select (or the picked day) when you change it.
+- Plan history now shows only the plan that actually ran, half-hour by half-hour, so it matches what happened even though the plan is re-made many times a day. The "Plan made at" choice is gone (the retired "History plan" entity, select.pe_ui_history_plan, is removed at start-up). Days before the as-run record began show the plan made at the start of that day instead, and say so.
+- The text above the charts is now collapsed ("Plan against actual"); open it for the plan-versus-actual figures.
+- The as-run plan is still kept for 400 days. The first plan of each hour (60 days) and the start-of-day plan (400 days) are still kept for diagnostics, but are no longer shown on the page.
+
+### Other changes
+
+- Works with card 0.9.84, which is already released (it has the date picker). No new card release.
+- To check after updating: the Plan history charts draw, follow the Day select, and the date picker switches day.
+
 ## 0.9.84 (beta)
 
 ### Behaviour changes
