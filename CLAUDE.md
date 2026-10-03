@@ -202,6 +202,16 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   (`s0`, `smart`, `s3a`, `s3b`), so its numbers don't match the Costs page's waterfall (No solar or battery, Solar, tariff,
   PowerEngine, events, You paid). Align it with the waterfall's steps; `tests/test_notify.py` pins the current text.
 
+- Setup wizard, still to do (see docs/WIZARD.md, "Not done yet"): (1) try it on the live HA and check the guessed details: the Solis
+  `detect:` manufacturer pattern, the integration domains in `adapters/detect.py` (`solax_modbus`, `octopus_energy`/`edf_energy`,
+  `myenergi`, `solcast_solar`, Axle's unknown) and that `hass.entities[].platform` / `hass.devices` are what the card expects; (2) install
+  links for myenergi and Axle (left out because the addresses weren't known); (3) a second inverter's `suggest` regexes reaching the
+  card (the catalogue holds only the default inverter's, and `map_catalogue` is near its 15 KB limit, so ship them per definition
+  some other way); (4) Octopus tariff suggestions and a fixed-rate tariff adapter (Phase 2), since the tariff suggestions are the
+  EDF ones; (5) the GitHub issue form that the candidate export attaches to (the wizard links to a plain new issue).
+- Phase 1, still open: licence and CONTRIBUTING; low-write mode for EEPROM-only inverters (#189); the step 7 "Left" items (three timed
+  slots, RC option words, `writes_needed`).
+
 ## Recent fixes
 
 - **#121, RAM control and BMS limits. Done in 0.9.73** (`pe_core/bms.py`, `ramcontrol.py`). Optional roles
