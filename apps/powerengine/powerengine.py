@@ -59,6 +59,8 @@ from pe_core.energy import Recorder
 from pe_core.entities import (
     ENTITIES,
     RETIRED_ENTITIES,
+    device_entity,
+    device_ref_from_entity,
     solar_plant_entity,
     solar_plant_id_from_entity,
     validate_definitions,
@@ -328,6 +330,7 @@ class PowerEngine(hass.Hass):
         for ent in ENTITIES:
             self._get_publisher().discover(ent, __version__)
         self._sync_solar_entities()
+        self._sync_device_entities()
         self._retire_old_entities()
         self._ui_defaults()
         self._get_publisher().available(True)
@@ -1548,8 +1551,12 @@ class PowerEngine(hass.Hass):
             detected = self._inverter().firmware_detected()
         except Exception:
             detected = None
-        return {"site": self._site().as_dict(), "site_options": site_options(), "wizard": wizard_info(),
-                "firmware_detected": detected, "retest_required": self._retest_required()}
+        out = {"site": self._site().as_dict(), "site_options": site_options(), "wizard": wizard_info(),
+               "firmware_detected": detected, "retest_required": self._retest_required()}
+        if self.cfg is not None and self.cfg.devices:            # read-only devices (M1); absent for one inverter
+            out["devices"] = [{"id": d.id, "name": d.name, "adapter": d.adapter, "control": d.control,
+                               "inputs": sorted(d.inputs)} for d in self.cfg.devices]
+        return out
 
     def _events(self):
         """The grid-event adapter the site names (Axle, or none)."""
@@ -2923,6 +2930,23 @@ class PowerEngine(hass.Hass):
         for pid in published - set(wanted):
             self._get_publisher().retire(solar_plant_entity(pid, ""))
 
+    def _sync_device_entities(self):
+        """Discover a sensor for each input a read-only device has mapped, and retire any no longer wanted (same
+        approach as the solar plants: HA's own state is the record of what is published)."""
+        if self.cfg is None or self._get_publisher() is None:
+            return
+        input_field = {"battery_soc": "soc", "battery_power": "battery_power", "solar_power": "solar_power"}
+        wanted = {(d.id, input_field[k]): d.name for d in self.cfg.devices for k in d.inputs}
+        try:
+            ids = list((self.get_state() or {}).keys())
+        except Exception:
+            ids = []
+        published = {ref for ref in (device_ref_from_entity(e) for e in ids) if ref}
+        for (did, fname), name in wanted.items():
+            self._get_publisher().discover(device_entity(did, name, fname), __version__)
+        for did, fname in published - set(wanted):
+            self._get_publisher().retire(device_entity(did, "", fname))
+
     def _energy_flow_card(self):
         plants = self.cfg.solar_plants if self.cfg else ()
         if self.cfg is not None and getattr(self, "_last_readings", None) is not None:
@@ -2962,6 +2986,9 @@ class PowerEngine(hass.Hass):
             if not isinstance(new, dict):
                 raise ConfigError("no configuration received")
             new = coerce_flags(new)          # true/false that arrived as text or 0/1 (the demo's settings save)
+            old_devices = self.cfg.raw.get("devices") if self.cfg else None
+            if old_devices is not None and "devices" not in new:     # a card that doesn't know devices keeps them
+                new = {**new, "devices": old_devices}
             new, switched = self._site_guard(new)
             _, backup = save_config(self._save_path(), new)
         except (ConfigError, OSError) as err:
@@ -3078,6 +3105,7 @@ class PowerEngine(hass.Hass):
         self._last_checks = None
         self._evaluate()
         self._sync_solar_entities()
+        self._sync_device_entities()
         self._sync_dashboard()
         self._cycle({})
 

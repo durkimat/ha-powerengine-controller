@@ -54,6 +54,7 @@ class Readings:
     ev_power: float | None = None        # W
     solar_power: float | None = None     # W, all enabled plants
     solar_by_plant: dict[str, float | None] = field(default_factory=dict)
+    devices: dict[str, dict] = field(default_factory=dict)   # id -> {soc, battery_power, solar_power} (read only)
     import_rate: float | None = None     # GBP/kWh now
     export_rate: float | None = None
     standing_charge: float | None = None  # GBP/day
@@ -214,6 +215,24 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None, tariff: 
         r.solar_by_plant[plant.id] = p
         if p is not None:
             total += max(0.0, p)
+            seen = True
+    for dev in cfg.devices:          # read-only devices (M1): measured, shown, counted in solar, never planned
+        def dev_state(key, dev=dev):
+            spec = dev.inputs.get(key)
+            if not spec:
+                return None
+            return get_state(spec["entity"]) if "entity" in spec else {"state": spec.get("value")}
+        reading = {}                     # only the inputs the device has mapped
+        if "battery_soc" in dev.inputs:
+            reading["soc"] = _num((dev_state("battery_soc") or {}).get("state"))
+        if "battery_power" in dev.inputs:
+            reading["battery_power"] = _power_w(dev_state("battery_power"),
+                                                bool((dev.inputs["battery_power"]).get("invert")))
+        if "solar_power" in dev.inputs:
+            reading["solar_power"] = _power_w(dev_state("solar_power"))
+        r.devices[dev.id] = reading
+        if reading.get("solar_power") is not None:
+            total += max(0.0, reading["solar_power"])
             seen = True
     r.solar_power = total if seen else None
 

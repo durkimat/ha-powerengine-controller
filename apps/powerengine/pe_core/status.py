@@ -9,6 +9,7 @@ from datetime import datetime, tzinfo
 from typing import Any
 
 from .decide import Decision
+from .entities import DEVICE_FIELDS
 from .modes import ModeDecision
 from .names import N
 from .readings import Readings
@@ -133,6 +134,9 @@ def entity_states(r: Readings | None, mode: ModeDecision, tz: tzinfo | None = No
                                                      "forecast_tomorrow_kwh": r.forecast_tomorrow_kwh})
     for pid, p in r.solar_by_plant.items():             # one sensor per enabled plant, for the Energy flow card
         out[f"state_solar_{pid}_power"] = (num(p), {})
+    for did, fields in r.devices.items():                # read-only devices: one sensor per mapped input
+        for fname, value in fields.items():
+            out[f"state_dev_{did}_{DEVICE_FIELDS[fname][0]}"] = (num(value), {})
     out["state_house_power"] = (num(r.house_power), {"including_car": num(r.house_power_raw)})
     out["state_ev_power"] = (num(r.ev_power), {})
     total = None if r.house_power is None else r.house_power + (r.ev_power or 0)

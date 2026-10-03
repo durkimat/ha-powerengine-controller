@@ -30,6 +30,7 @@ KNOWN_KEYS = frozenset(
         "schema_version",
         "inputs",
         "solar_plants",
+        "devices",
         "system",
         "features",
         "safety",
@@ -286,6 +287,22 @@ class SolarPlant:
     enabled: bool = True
 
 
+@dataclass(frozen=True)
+class Device:
+    """A piece of equipment beyond the main inverter (docs/plans/multiple-devices.md, M1): read only for now. `inputs`
+    maps DEVICE_INPUTS to an input spec (entity or fixed value)."""
+    id: str
+    adapter: str
+    firmware: str | None = None
+    control: str = "read_only"
+    name: str = ""
+    inputs: dict[str, Any] = field(default_factory=dict)
+
+
+DEVICE_INPUTS = {"battery_soc": "battery", "battery_power": "battery", "solar_power": "solar"}   # input -> capability
+DEVICE_CONTROLS = ("read_only",)           # "controlled" arrives with M3; only the main inverter is driven until then
+
+
 # Which plant this home has: one adapter (by name) per kind. The choices come from the adapter registry, so a new
 # definition file or adapter shows up here by itself; "none" is allowed where the app can run without that part.
 SITE_KEYS = ("inverter", "inverter_firmware", "ev_charger", "car", "tariff", "forecast", "events")
@@ -353,6 +370,7 @@ class Config:
     notifications: dict[str, Any] = field(default_factory=lambda: _parse_notifications(None))
     inputs: dict[str, Any] = field(default_factory=dict)
     solar_plants: tuple[SolarPlant, ...] = ()
+    devices: tuple[Device, ...] = ()
     site: Site = field(default_factory=Site)
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -549,9 +567,62 @@ def parse_config(data: Any) -> Config:
         notifications=notifications,
         inputs=dict(inputs),
         solar_plants=_parse_plants(data.get("solar_plants")),
+        devices=_parse_devices(data.get("devices")),
         site=_parse_site(data.get("site")),
         raw=data,
     )
+
+
+def _parse_devices(data: Any) -> tuple[Device, ...]:
+    if data is None:
+        return ()
+    if not isinstance(data, list):
+        raise ConfigError("'devices' must be a list")
+    from .adapters.definition import device_capabilities
+    adapters = site_choices()["inverter"]
+    devices, seen = [], {"main"}
+    for i, item in enumerate(data, start=1):
+        if not isinstance(item, dict):
+            raise ConfigError(f"device #{i} must be a mapping")
+        unknown = sorted(set(item) - {"id", "adapter", "firmware", "control", "name", "inputs"}, key=str)
+        if unknown:
+            raise ConfigError(f"device #{i}: unknown key(s) {', '.join(map(str, unknown))}")
+        did = item.get("id")
+        if not isinstance(did, str) or not _PLANT_ID.match(did):
+            raise ConfigError(f"device #{i}: 'id' must be lowercase letters, digits or _ (max 24)")
+        if did in seen:
+            raise ConfigError(f"device id '{did}' is used twice" if did != "main" else
+                              "device id 'main' is the main inverter; choose another id")
+        seen.add(did)
+        adapter = item.get("adapter")
+        if adapter not in adapters:
+            raise ConfigError(f"device '{did}': adapter must be one of {', '.join(adapters)} (not {adapter!r})")
+        control = item.get("control", "read_only")
+        if control not in DEVICE_CONTROLS:
+            raise ConfigError(f"device '{did}': control must be {' or '.join(DEVICE_CONTROLS)} for now (only the "
+                              f"main inverter is controlled; not {control!r})")
+        firmware = item.get("firmware")
+        if firmware is not None and not isinstance(firmware, str):
+            raise ConfigError(f"device '{did}': 'firmware' must be text in quotes or empty")
+        name = item.get("name") or did
+        if not isinstance(name, str):
+            raise ConfigError(f"device '{did}': 'name' must be text")
+        inputs = item.get("inputs") or {}
+        if not isinstance(inputs, dict):
+            raise ConfigError(f"device '{did}': 'inputs' must be a mapping")
+        caps = device_capabilities(adapter, firmware or None)
+        for key, spec in inputs.items():
+            if key not in DEVICE_INPUTS:
+                raise ConfigError(f"device '{did}': unknown input '{key}' (known: {', '.join(DEVICE_INPUTS)})")
+            if not caps[DEVICE_INPUTS[key]]:
+                raise ConfigError(f"device '{did}': '{key}' needs a device that reports {DEVICE_INPUTS[key]} "
+                                  f"data, and {adapter} doesn't")
+            _check_input_spec(f"device '{did}' input '{key}'", spec)
+            if spec.get("invert") and key != "battery_power":
+                raise ConfigError(f"device '{did}' input '{key}' can't be inverted")
+        devices.append(Device(id=did, adapter=adapter, firmware=(firmware or "").strip() or None, control=control,
+                              name=name, inputs=dict(inputs)))
+    return tuple(devices)
 
 
 def load_config(paths: tuple[str, ...] | list[str] = DEFAULT_PATHS) -> tuple[Config | None, str | None]:

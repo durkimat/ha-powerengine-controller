@@ -28,7 +28,8 @@ for the owner; the migration never picks it.
 Leaving a part out also stops its inputs being required: with `ev_charger: none` the car charger's and the smart-charge
 inputs are not needed, with `forecast: none` the solar forecast inputs, with `events: none` the grid-event inputs
 (`config.required_roles`, `left_out_roles`). The inverter and the tariff are always required. The card's setup wizard
-(docs/WIZARD.md) sets these for you. One device of each kind is used for now; docs/plans/multiple-devices.md is the design for more.
+(docs/WIZARD.md) sets these for you. One device of each kind is controlled for now; docs/plans/multiple-devices.md is the design for more, and
+[Other devices](#other-devices-read-only) below is the first part of it.
 
 ## Migration
 
@@ -46,8 +47,30 @@ marks the supervised tests as needing a re-run (`retest_required`, kept in `site
 cleared when a supervised RC test passes). Other keys only rebuild their adapters. A save with no `site` key keeps the
 saved one.
 
+## Other devices (read only)
+
+From 0.9.93 a config may list `devices:` beyond the main inverter (docs/plans/multiple-devices.md, M1). They are read only:
+PowerEngine measures them and counts their solar, and never writes to them or plans their battery.
+
+```yaml
+devices:
+  - id: garage                # lowercase letters, digits, _ (max 24); "main" is the main inverter
+    adapter: solis            # an inverter definition (the same names as site.inverter)
+    name: Garage              # optional, shown on the card
+    firmware: "420044"        # optional
+    control: read_only        # the only value for now
+    inputs:                   # only the ones the device reports
+      battery_soc: {entity: sensor.garage_battery_soc}
+      battery_power: {entity: sensor.garage_battery_power, invert: true}   # + discharging, - charging
+      solar_power: {entity: sensor.garage_pv_power}
+```
+
+Each mapped input becomes a sensor, `sensor.pe_state_dev_<id>_soc`, `_battery_power` and `_solar_power`, and a device's solar adds to
+the total solar. A save that has no `devices` key keeps the saved ones (an older card); an empty list removes them. The card's
+"Your system" block has an "Other devices" list to add, edit and remove them (app and card 0.9.93 or newer).
+
 ## What the card reads
 
 `sensor.pe_diag_version` attributes: `site` (the current values), `site_options` (per key, a list of
 `{id, name, status, firmware_variants}`; inverters also carry `verified_firmware`), `firmware_detected` (what the
-inverter reports, or null), `retest_required` and `wizard` (what the setup wizard looks for: docs/WIZARD.md). `status` is `verified`, `community` or `draft`.
+inverter reports, or null), `retest_required`, `wizard` (what the setup wizard looks for: docs/WIZARD.md) and, only when the config has devices, `devices` (`{id, name, adapter, control, inputs}` each). `status` is `verified`, `community` or `draft`.
