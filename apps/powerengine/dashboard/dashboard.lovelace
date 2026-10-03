@@ -1040,25 +1040,28 @@ views:
               **Reading the chart, left to right**
               - **No solar or battery:** what the period would have cost buying every kWh from the grid (including the standing charge).
               - **Solar, Tariff:** what your solar and your <<tariff>>'s cheap rates would each have saved.
-              - **PowerEngine:** what the battery and PowerEngine saved on top of that, by choosing when to charge, discharge and export. It is the real cost of your normal half-hours, with the value of energy carried in the battery from one day to the next taken into account (charging at 7p tonight for tomorrow doesn't make today look dear).
-              - **<<event>>:** <<event>> and free-power events. Negative means money in: <<event>>'s £1/kWh plus <<supplier>>'s export payment.
+              - **PowerEngine:** what the battery and PowerEngine saved on top of that, by choosing when to charge, discharge and export. It is the real metered cost of your normal half-hours, set against the line before it. Energy bought for later or used from earlier counts on the day it was bought or used, so a single day can look dearer or cheaper than the battery really made it; it evens out over a week.
+              - **<<event>> & free power:** the <<event>> and free-power half-hours, which are kept out of the everyday figures. Negative means money in: <<event>>'s £1/kWh plus <<supplier>>'s export payment.
               - **You paid:** the real total for the period, after <<event>>'s payments.
       - type: grid
         column_span: 3
         cards:
           - type: heading
-            heading: Daily cost by scenario
-          # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
+            heading: Last 7 days, day by day
+          # the last 7 complete days: the same days as the waterfall's "Last 7 days", and never today (a day that is
+          # not over yet always looks cheap). Columns sit at each day's midnight, so the window ends at noon on the
+          # last complete day: end of today minus 36 h.
+          # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis
           - type: conditional
             grid_options: {columns: full, rows: auto}
             conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
             card:
               type: custom:apexcharts-card
               grid_options: {columns: full, rows: auto}
-              graph_span: 8d
+              graph_span: 7d
               span:
                 end: day
-                offset: "-12h"
+                offset: "-36h"
               header:
                 show: true
                 title: Daily cost by scenario
@@ -1079,8 +1082,7 @@ views:
                   color: "#8d6e63"
                   extend_to: false
                   data_generator: |
-                    const from = Date.now() - 8 * 86400000;
-                    return (entity.attributes.days || []).filter(d => d.scenarios).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.none]).filter(p => p[0] >= from);
+                    return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.none]);
                 - entity: sensor.pe_cost_days
                   show: {legend_value: false}
                   name: "Solar"
@@ -1088,8 +1090,7 @@ views:
                   color: "#fdd835"
                   extend_to: false
                   data_generator: |
-                    const from = Date.now() - 8 * 86400000;
-                    return (entity.attributes.days || []).filter(d => d.scenarios).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.solar]).filter(p => p[0] >= from);
+                    return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.solar]);
                 - entity: sensor.pe_cost_days
                   show: {legend_value: false}
                   name: "+ <<tariff>>"
@@ -1097,8 +1098,7 @@ views:
                   color: "#26a69a"
                   extend_to: false
                   data_generator: |
-                    const from = Date.now() - 8 * 86400000;
-                    return (entity.attributes.days || []).filter(d => d.scenarios).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.tariff]).filter(p => p[0] >= from);
+                    return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.tariff]);
                 - entity: sensor.pe_cost_days
                   show: {legend_value: false}
                   name: "PowerEngine"
@@ -1106,16 +1106,15 @@ views:
                   color: "#424242"
                   extend_to: false
                   data_generator: |
-                    const from = Date.now() - 8 * 86400000;
-                    return (entity.attributes.days || []).filter(d => d.scenarios).map(d => [new Date(d.date + "T00:00:00").getTime(), Math.round((d.scenarios.actual_adj + d.scenarios.carry) * 100) / 100]).filter(p => p[0] >= from);
+                    return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), Math.round((d.scenarios.actual_adj + d.scenarios.carry) * 100) / 100]);
           - type: conditional
             grid_options: {columns: full, rows: auto}
             conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
             card:
               type: "custom:apexcharts-card"
               grid_options: {"columns": "full", "rows": "auto"}
-              graph_span: "5d"
-              span: {"end": "day", "offset": "-12h"}
+              graph_span: "7d"
+              span: {"end": "day", "offset": "-36h"}
               header: {"show": true, "title": "Daily cost by scenario", "show_states": false}
               apex_config: {"chart": {"height": 380, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true}, "xaxis": {"labels": {"format": "ddd dd", "style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
               yaxis: [{"decimals": 2, "apex_config": {"labels": {"style": {"fontSize": "10px"}}}}]
@@ -1124,18 +1123,18 @@ views:
         column_span: 3
         cards:
           - type: heading
-            heading: What the scenarios mean
+            heading: What the bars mean
           - type: markdown
             grid_options: {columns: full}
             content: |-
-              | Scenario | What it assumes |
+              | Bar | What it assumes |
               |---|---|
               | No solar or battery | Every kWh from the grid: the house at the standard rate, the car at the overnight rate; plus the standing charge. |
               | Solar | Your solar covers the house first, the surplus is exported; no battery. |
               | + <<tariff>> | The same, but grid energy is priced at the real half-hourly rates (smart slots, overnight, peak). |
-              | PowerEngine | What your normal half-hours really cost, from the meters, with your battery and PowerEngine's control. It includes the carry-over: the day's change in battery charge valued at the overnight rate, so tonight's charging for tomorrow doesn't make today look dear. |
+              | PowerEngine | What your normal half-hours really cost, from the meters, with your battery and PowerEngine's control. Energy bought for later or used from earlier counts on the day it was bought or used. |
 
-              These are the same steps as the savings chart above, day by day. All scenarios use the same measured house, car and solar. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated. <<event>> and free-power events are left out of these bars and shown separately.
+              These are the same four lines as the savings chart above, day by day, for the same last 7 complete days (today is left out until it is over). All use the same measured house, car and solar. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated. <<event>> and free-power events are left out of these bars and shown separately.
       - type: grid
         column_span: 3
         cards:
@@ -1163,7 +1162,7 @@ views:
               - **Energy it used:** what that energy was worth otherwise. Battery energy is costed at the overnight rate it's refilled at, including the battery's losses. Solar is costed at the export rate it would have earned anyway.
               - **<<event>> net:** the difference, what the events really added.
               - **Free power:** kWh used in free-power sessions × the rate you'd otherwise have paid.
-              - **Day-to-day energy (metered):** the meter's cost for all the other half-hours, without the standing charge (shown next to it). This is the metered figure, before the carry-over adjustment used in the chart.
+              - **Day-to-day energy (metered):** the meter's cost for all the other half-hours, without the standing charge (shown next to it).
 
               Events are kept out of the day-to-day figures so rare, large payments don't distort them.
       - type: grid
@@ -1172,21 +1171,26 @@ views:
           - type: heading
             heading: Detail and checks
           - type: heading
-            heading: Cost layers by day (for checking)
+            heading: Savings by day (the waterfall's steps)
           - type: markdown
             grid_options: {columns: full}
             content: |-
               {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
+              {%- macro sv(steps, label) -%}{%- for s in steps if s.label == label -%}{{ s.value }}{%- endfor -%}{%- endmacro %}
               {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
-              These layers attribute one day's actual cost, piece by piece, for checking; they are not alternatives to compare against each other (see "Where the savings came from" above for that).
+              {%- set w = (state_attr('sensor.pe_cost_waterfall', 'periods') or {}).week %}
+              The same steps as "Where the savings came from", one row per complete day (today is left out until it is over). The first column is the cost with no solar or battery; each step after it is what that step saved (negative) or added, and the last column is what you paid.
 
-              | Day | No solar/battery | Solar | Smart | Battery (default) | Battery control | Arbitrage | Carried in battery | Actual | Unexplained |
-              |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
-              {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse %}
-              | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }}{{ ' (so far)' if not d.complete else '' }} | {{ gbp(d.s0) }} | {{ gbp(d.solar) }} | {{ gbp(d.smart) }} | {{ gbp(d.s3a) }} | {{ gbp(d.s3b) }} | {{ gbp(d.arbitrage) }} | {{ gbp(d.stored) }} | **{{ gbp(d.actual) }}** | {{ gbp(d.unexplained) }} |
+              | Day | No solar or battery | Solar | <<tariff>> | PowerEngine | <<event>> & free power | You paid |
+              |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
+              {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse if d.complete and d.scenarios %}{% set sc = d.scenarios %}{% set pe = (sc.actual_adj | float(0)) + (sc.carry | float(0)) %}{% set ev = (sc.events_metered | float(0)) - (sc.axle_income | float(0)) %}
+              | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }} | {{ gbp(sc.none) }} | {{ gbp((sc.solar | float(0)) - (sc.none | float(0))) }} | {{ gbp((sc.tariff | float(0)) - (sc.solar | float(0))) }} | {{ gbp(pe - (sc.tariff | float(0))) }} | {{ gbp(ev) }} | **{{ gbp(pe + ev) }}** |
               {%- endfor %}
+              {%- if w and w.days %}
+              | **Last {{ w.days }} days** | **{{ gbp(sv(w.steps, 'No solar or battery')) }}** | **{{ gbp(sv(w.steps, 'Solar')) }}** | **{{ gbp(sv(w.steps, '<<tariff>>')) }}** | **{{ gbp(sv(w.steps, 'PowerEngine')) }}** | **{{ gbp(sv(w.steps, '<<event>> & free power')) }}** | **{{ gbp(w.steps[-1].value) }}** |
+              {%- endif %}
 
-              Savings columns reduce the cost; "Carried in battery" is energy bought or stored for later use (it adds to today's cost and is credited when used). {% if states('sensor.pe_state_operation_mode') != 'active' %}PowerEngine is in Passive mode, so "Battery control" and "Arbitrage" show what your current setup (for example Predbat or your automations) actually did, not PowerEngine.{% endif %}
+              The last row is the waterfall's "Last 7 days" figures; it can differ from the sum of the last 7 rows by a penny, because each day is rounded. {% if states('sensor.pe_state_operation_mode') != 'active' %}PowerEngine is in Passive mode, so the PowerEngine column shows what your current setup (for example Predbat or your automations) actually did, not PowerEngine.{% endif %}
           - type: heading
             heading: Energy by day
           - type: markdown
@@ -1194,31 +1198,28 @@ views:
             content: |-
               {%- macro k(v) -%}{{ '%.1f' | format(v | float(0)) }}{%- endmacro %}
               {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
-              | Day | Import | Export | Solar | House | Car | Battery in | Battery out | Battery → export | Unaccounted | Ledger correction |
-              |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
+              | Day | Import | Export | Solar | House | Car | Battery in | Battery out | Battery → export | Unaccounted |
+              |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
               {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse %}{% set e = d.energy or {} %}
-              | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }} | {{ k(e.grid_import) }} | {{ k(e.grid_export) }} | {{ k(e.solar) }} | {{ k(e.house) }} | {{ k(e.car) }} | {{ k(e.battery_in) }} | {{ k(e.battery_out) }} | {{ k(e.b_e) }} | {{ k(e.unallocated_src) }} | {{ k(e.correction_kwh) }} |
+              | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }}{{ ' (so far)' if not d.complete else '' }} | {{ k(e.grid_import) }} | {{ k(e.grid_export) }} | {{ k(e.solar) }} | {{ k(e.house) }} | {{ k(e.car) }} | {{ k(e.battery_in) }} | {{ k(e.battery_out) }} | {{ k(e.b_e) }} | {{ k(e.unallocated_src) }} |
               {%- endfor %}
 
-              kWh, integrated from the 30-second readings. Compare with the inverter's daily counters to check the sensors. *Unaccounted* is energy supplied (solar, grid, battery) that didn't reach a measured destination: inverter losses, standby and sensor mismatch. It is the main source of *Unexplained* cost. *Ledger correction* is how far the battery's real state of charge differed from what the flows predicted.
+              kWh, integrated from the 30-second readings. Compare with the inverter's daily counters to check the sensors. *Unaccounted* is energy supplied (solar, grid, battery) that didn't reach a measured destination: inverter losses, standby and sensor mismatch. If it grows, a sensor probably needs a look. Unlike the cost tables above, this one includes today so far.
           - type: heading
-            heading: How the layers are calculated
+            heading: How the numbers are worked out
           - type: markdown
             grid_options: {columns: full}
             content: |-
-              Each half-hour, PowerEngine splits the energy into flows: solar, battery and grid supplying the house, the car, the battery and export (solar first, then battery, then grid). Each flow is valued at that half-hour's rates.
+              Each half-hour, PowerEngine splits the energy into flows (solar, battery and grid supplying the house, the car, the battery and export; solar first, then battery, then grid) and values each flow at that half-hour's rates. The waterfall's lines are:
 
-              - **No solar or battery (S0):** house kWh × standard rate + car kWh × overnight rate + standing charge. Assumes the car would otherwise have charged overnight.
-              - **Solar:** solar used by the house × standard rate, plus solar exported or stored × export rate.
-              - **Smart charge:** every kWh bought in an <<dispatch>> × (standard rate − slot rate), split between house, car (against the overnight rate) and battery by where it went. The standard rate in a slot is the day's peak rate.
-              - **Battery (default):** a half-hour simulation of the inverter's plain self-use with the same battery: charges only from surplus solar, covers the house.
-              - **Battery control:** the battery's real value minus the default: what the charge/discharge timing added. Energy delivered is valued at the rate it avoided; energy used is costed from a first-in-first-out ledger (solar at the export rate, grid at the standard rate when bought), losses included. Can be negative. In Passive mode this is whatever is controlling the battery today.
-              - **Arbitrage:** grid-bought energy later exported: export revenue − its cost.
-              - **Carried in battery:** the change in the ledger's value: energy bought or stored today for later. The ledger is matched to the battery's real state of charge every half-hour; any correction shows in Unexplained.
-              - **Actual:** metered import × rate − metered export × export rate + standing charge.
-              - **Unexplained:** Actual minus the layers. Inverter losses, standby use and meter mismatch land here; if it grows, the model needs fixing.
+              - **No solar or battery:** house kWh × the standard rate + car kWh × the overnight rate, plus the standing charge. Assumes the car would otherwise have charged overnight.
+              - **Solar:** the same, but your solar covers the house (and car) first and the surplus is exported at the export rate.
+              - **<<tariff>>:** the same again, but grid energy is priced at the real half-hourly rates (smart slots, overnight, peak) instead of the standard rate.
+              - **PowerEngine:** what your normal half-hours really cost from the meters (metered import × rate − metered export × export rate, plus the standing charge). The step is that figure minus the <<tariff>> line, so it is everything the battery and PowerEngine did, measured, not simulated. Energy bought for later or used from earlier counts on the day it was bought or used, so one day can look dearer or cheaper than the battery really made it; it evens out over a week.
+              - **<<event>> & free power:** the metered cost of those half-hours, minus <<event>>'s own £1/kWh payments, which are paid off the meter. They are kept out of every other line.
+              - **You paid:** the sum of all of it: the metered cost of every half-hour plus the standing charge, after <<event>>'s payments.
 
-              Caveats: half-hour resolution from HA's sensors, which may differ slightly from <<supplier>>'s bill; rates are the ones seen at the time; first-in-first-out is a convention, not physics; battery round-trip efficiency is {{ states('sensor.pe_diag_battery_efficiency') }}% ({{ 'measured over the last 30 days' if state_attr('sensor.pe_diag_battery_efficiency', 'measured') else 'the configured figure until 14 full days are recorded' }}). Method version {{ state_attr('sensor.pe_cost_days', 'method') or 1 }}.
+              Caveats: half-hour resolution from HA's sensors, which may differ slightly from <<supplier>>'s bill; rates are the ones seen at the time; the value of energy a special event used (shown in the table above) assumes a battery round-trip efficiency of {{ states('sensor.pe_diag_battery_efficiency') }}% ({{ 'measured over the last 30 days' if state_attr('sensor.pe_diag_battery_efficiency', 'measured') else 'the configured figure until 14 full days are recorded' }}). Method version {{ state_attr('sensor.pe_cost_days', 'method') or 1 }}.
   - title: Health
     path: health
     icon: mdi:stethoscope

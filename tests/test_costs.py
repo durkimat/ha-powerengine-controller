@@ -672,3 +672,16 @@ def test_waterfall_you_paid_and_no_solar_totals_are_unchanged_by_the_merge():
     assert steps[0]["value"] == round(10.111 + 12.126, 2)
     assert steps[-1]["value"] == round(3.111 + 0.501 + 1.0 - 0.4 + 4.201 - 0.201, 2)
 
+
+
+def test_powerengine_figure_is_the_metered_cost_whatever_the_battery_did():
+    """The waterfall's, the chart's and the table's 'PowerEngine' figure is actual_adj + carry: that is the metered
+    cost of the normal half-hours (actual), because carry is exactly what actual_adj took off. The Costs page says
+    so (energy bought for later counts on the day it was bought), so keep it true."""
+    from pe_core.costs import day_scenarios
+    r1 = rec(g_h=1.0, g_b=2.0, soc_start=30, soc_end=45)      # bought for later: the battery fills
+    r2 = rec(b_h=1.0, soc_start=45, soc_end=40)               # and some of it is used
+    records = _scenario_records([(r1, RT1), (r2, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=1.0)
+    assert sc["carry"] != 0.0                                  # the battery really moved
+    assert sc["actual_adj"] + sc["carry"] == pytest.approx(sc["actual"], abs=0.011)
