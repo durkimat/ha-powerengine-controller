@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.86 (beta)
+
+### Behaviour changes
+
+- Plan history now picks its day with a date box and previous/next arrows (any day PowerEngine still holds, up to 400 days back). The old Day pulldown is gone. The page shows yesterday until you pick a day, and goes back to yesterday when AppDaemon restarts. Only an admin user can change the day.
+- The arrows grey out at the oldest day held and at today.
+- The as-run plan, its 400-day retention and the collapsed "Plan against actual" text are as in 0.9.85.
+
+### Other changes
+
+- The retired "History day" entity (select.pe_ui_history_day) is removed at start-up, as "History plan" was in 0.9.85.
+- Needs card 0.9.86 or newer (released with this); the app now warns if the card is older.
+- To check after updating: the Plan history charts draw and follow the day you pick; the arrows step the day and grey out at the oldest day and at today; after a few half-hours, today shows as-run data.
+
 ## 0.9.85 (beta)
 
 ### Behaviour changes
