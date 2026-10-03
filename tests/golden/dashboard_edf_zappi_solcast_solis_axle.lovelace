@@ -709,16 +709,10 @@ views:
           - type: tile
             entity: select.pe_ui_history_day
             name: Day
-            grid_options: {columns: 6}
+            grid_options: {columns: 12}
             features:
               - type: select-options
-          - type: tile
-            entity: select.pe_ui_history_plan
-            name: Plan made at
-            grid_options: {columns: 6}
-            features:
-              - type: select-options
-          # any day the app still holds (the Day select above only reaches back 30); hides itself on an older app
+          # any day the app still holds (the Day select only reaches back 30); hides itself on an older app
           - type: custom:powerengine-history-date-card
             entity: sensor.pe_plan_history
             grid_options: {columns: full}
@@ -727,22 +721,22 @@ views:
             content: |-
               {%- set h = states.sensor.pe_plan_history %}
               {%- if h and h.attributes.date is defined %}{% set a = h.attributes %}{% set s = a.summary %}
-              **{{ a.label }}**{{ (' · plan: ' ~ a.plan ~ (' (made ' ~ (as_timestamp(a.plan_made_at) | timestamp_custom('%H:%M')) ~ ')' if a.plan_made_at else '')) if a.plan else ' · no stored plan for this day' }}
-              {%- if a.plan and states('select.pe_ui_history_plan') not in [a.plan, 'unknown'] %} (no plan stored for {{ states('select.pe_ui_history_plan') }}; showing the latest before it){% endif %}
+              **{{ a.label }}**{{ ' · plan made at the start of the day (no as-run record for this day)' if a.plan == 'Start of day' else '' }}{{ ' · no stored plan for this day' if not a.plan else '' }}
+
+              {%- if s or a.day_import_export_cost is not none %}
+              <details><summary>Plan against actual</summary>
 
               {%- if s %}
               Over the {{ s.half_hours }} half-hours the plan covered: the plan expected import/export to cost **£{{ '%.2f' | format(s.plan_cost) }}**, it actually cost **£{{ '%.2f' | format(s.actual_cost) }}** ({{ ('£%.2f more' | format(s.actual_cost - s.plan_cost)) if s.actual_cost > s.plan_cost else ('£%.2f less' | format(s.plan_cost - s.actual_cost)) }}). House load {{ s.plan_load }} kWh forecast, {{ s.actual_load }} kWh actual; solar {{ s.plan_solar }} kWh forecast, {{ s.actual_solar }} kWh actual; battery {{ s.soc_gap }}% from the plan on average.
-              {%- elif a.recorded_half_hours %}
-              Nothing to compare: no stored plan covers this day's recorded half-hours.
               {%- endif %}
               {%- if a.day_import_export_cost is not none %}
               Whole day, import minus export (no standing charge): £{{ '%.2f' | format(a.day_import_export_cost) }} from {{ a.recorded_half_hours }} recorded half-hours.
               {%- endif %}
-              {%- if a.available_plans %}
-              Plans stored for this day: {{ a.available_plans | join(', ') }}. PowerEngine keeps the plan that actually ran ("As run": each half-hour as the plan had it at the time) and the start-of-day plan for 400 days, and the first plan of each hour for 60 days.
+
+              </details>
               {%- endif %}
               {%- else %}
-              Choose a day above. The history builds up from 0.5.18: each hour's first plan is kept from now on.
+              Choose a day above.
               {%- endif %}
           # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
           - type: conditional
@@ -752,7 +746,6 @@ views:
               type: custom:apexcharts-card
               grid_options: {columns: full, rows: auto}
               graph_span: 24h
-              update_interval: 5   # re-read the chosen day every 5 s, so a new day or plan shows on the chart
               span:
                 start: day
               header:
@@ -892,7 +885,6 @@ views:
               type: "custom:apexcharts-card"
               grid_options: {"columns": "full", "rows": "auto"}
               graph_span: "24h"
-              update_interval: 5   # re-read the chosen day every 5 s, so a new day or plan shows on the chart
               span: {"start": "day"}
               header: {"show": true, "title": "Battery, prices and grid use (plan dashed, actual solid)", "show_states": false}
               apex_config: {"chart": {"height": 420, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"datetimeFormatter": {"day": "HH:mm", "hour": "HH:mm"}, "style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
@@ -906,7 +898,6 @@ views:
               type: custom:apexcharts-card
               grid_options: {columns: full, rows: auto}
               graph_span: 24h
-              update_interval: 5   # re-read the chosen day every 5 s, so a new day or plan shows on the chart
               span:
                 start: day
               header:
@@ -971,7 +962,6 @@ views:
               type: "custom:apexcharts-card"
               grid_options: {"columns": "full", "rows": "auto"}
               graph_span: "24h"
-              update_interval: 5   # re-read the chosen day every 5 s, so a new day or plan shows on the chart
               span: {"start": "day"}
               header: {"show": true, "title": "House load and solar (forecast dashed, actual solid)", "show_states": false}
               apex_config: {"chart": {"height": 240, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
@@ -990,7 +980,7 @@ views:
               | {{ x.from }}–{{ x.to }} | **{{ x.action | replace('_', '-') }}** | {{ (x.target_soc | int | string ~ '%') if x.target_soc else '–' }} | {{ x.soc_start }}% → {{ x.soc_end }}% | {{ x.reason }} |
               {%- endfor %}
               {%- else %}
-              No actions stored for this plan (plans saved before 0.5.18 kept only the battery level).
+              No actions stored for this day.
               {%- endif %}
   - title: Costs
     path: costs
