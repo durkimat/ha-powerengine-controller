@@ -33,6 +33,8 @@ owner approves each run on GitHub. It can't run `tools/release.sh` itself (it ne
 - `apps/powerengine/dashboard/dashboard.lovelace`: the dashboard. The app writes it to HA on start, so edit it
   here, never in HA.
 - `docs/INVERTERS.md`: how to add an inverter as a definition file (`pe_core/adapters/devices/<name>.yml`).
+- `docs/logic/`: the plan and decision logic as flowcharts and tables (inputs, rules planner, optimiser, priorities, control, settings,
+  decision log, review findings). Start at `docs/logic/README.md`. A PR that changes planning or `decide` updates the matching page.
 - `docs/INSTALL.md`: the install guide. Keep it current: any release that changes setup updates it in the same PR.
 - `docs/ha/powerengine_handover.yaml`: the HA package (handover scripts, update script, watchdog automations).
   The owner installs it into HA; see "HA config" below.

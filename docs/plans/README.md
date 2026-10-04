@@ -14,3 +14,5 @@ rules and for what the code does now, and GitHub issues are the backlog.
 | [demo-and-easier-install.md](demo-and-easier-install.md) | Demo mode design, install simplification, steps A1–D1, decisions, risks | Demo or install work (#192), the native integration (#177) |
 
 Keep these up to date: when a step lands, update the plan's Status box in the same PR.
+
+How the plan and the live decision work today (as built, not as planned) is in [../logic/README.md](../logic/README.md).
