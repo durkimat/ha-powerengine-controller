@@ -2,6 +2,12 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.96 (beta)
+
+### Behaviour changes
+
+- The plan no longer holds the battery in a dear-rate half-hour just because the solar forecast says the sun will cover the house. Holding stops the battery helping, so when the sun fell short (4 Oct: forecast 2 kW, actual 0.4 kW) the house bought power at 28.84p with the battery at 84%. Those half-hours now plan Self-use, which only uses the battery when the sun falls short. Holds that the plan chose to save charge for a dearer slot, and holds at cheap rates, are unchanged.
+
 ## 0.9.95 (beta)
 
 ### Behaviour changes
