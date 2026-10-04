@@ -240,3 +240,20 @@ def test_costs_page_no_longer_describes_the_old_cost_layers():
                   "Ledger correction", "first-in-first-out"):
         assert stale not in view, stale
     assert "Savings by day (the waterfall's steps)" in view and "How the numbers are worked out" in view
+
+
+def test_plan_actions_table_renders_when_a_window_has_no_optional_key():
+    """HA raises on a missing key ('dict object' has no attribute 'manual') and the card then shows nothing, so the
+    Actions table must render with windows that lack the optional `manual` key (0.9.102)."""
+    import jinja2
+    d = yaml.safe_load(open(SOURCE))
+    card = next(c for v in d["views"] for s in v.get("sections", []) for c in s.get("cards", [])
+                if c.get("type") == "markdown" and "'sensor.pe_plan', 'windows'" in c["content"])
+    plain = {"from": "15:30", "to": "16:00", "day": "", "action": "self_use", "target_soc": None, "price": "6.66p",
+             "estimated": False, "soc_start": 72, "soc_end": 71, "reason": "the battery covers the house"}
+    attrs = {"windows": [plain, {**plain, "manual": True}], "windows_more": 0}
+    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    env.globals["state_attr"] = lambda _e, k: attrs.get(k)
+    env.globals["states"] = lambda _e: "3"
+    out = env.from_string(card["content"]).render()
+    assert "**self-use** |" in out and "**self-use** (manual) |" in out

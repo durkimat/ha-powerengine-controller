@@ -696,7 +696,7 @@ views:
               | Time | Action | Target | Price | Battery | Why |
               |---|---|---|---|---|---|
               {%- for w in state_attr('sensor.pe_plan', 'windows') or [] %}
-              | {{ (w.day ~ ' ') if w.day }}{{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}**{{ ' (manual)' if w.manual }} | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
+              | {{ (w.day ~ ' ') if w.day }}{{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}**{{ ' (manual)' if w.get('manual') }} | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
               {%- endfor %}
               {%- set more = state_attr('sensor.pe_plan', 'windows_more') | int(0) %}
               {%- if more %}
