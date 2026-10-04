@@ -88,6 +88,7 @@ from pe_core.forecast import (
     meter_corrected,
     parse_history,
     profile_from_means,
+    slot_start,
 )
 from pe_core.health import WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
 from pe_core.heatpump import HeatPumpSettings
@@ -1357,13 +1358,19 @@ class PowerEngine(hass.Hass):
         except Exception:
             return False
 
+    def _plan_signature(self, r):
+        """What a plan depends on: when it changes, the plan is remade. The car's state is in it (start and stop of
+        charging), and the half-hour while it charges: the plan assumes the charge ends by the end of the running
+        half-hour, so a car still charging in the next one gets a new plan."""
+        return (len(r.rates), r.rates[0].start if r.rates else None,
+                tuple((w.start, w.end) for w in r.dispatches), r.axle_start, r.axle_end, r.free_start, r.free_end,
+                self.profile.days if self.profile else None, json.dumps(self.cfg.safety, sort_keys=True),
+                json.dumps(self.cfg.features, sort_keys=True), r.ev_state(),
+                slot_start(r.now) if r.ev_state() == "charging" else None,
+                json.dumps(self._active_override().as_dict()) if self._active_override() else None)  # set / cancelled
+
     def _maybe_replan(self, r, force=False):
-        r.car_idle = self._car_idle(r)
-        sig = (len(r.rates), r.rates[0].start if r.rates else None,
-               tuple((w.start, w.end) for w in r.dispatches), r.axle_start, r.axle_end, r.free_start, r.free_end,
-               self.profile.days if self.profile else None, json.dumps(self.cfg.safety, sort_keys=True),
-               json.dumps(self.cfg.features, sort_keys=True), r.ev_state(), r.car_idle,  # car starts/stops: re-plan
-               json.dumps(self._active_override().as_dict()) if self._active_override() else None)  # set / cancelled
+        sig = self._plan_signature(r)
         due = self._plan_time is None or (r.now - self._plan_time).total_seconds() >= REPLAN_SECONDS
         if (sig == self._plan_sig and not due and not force) or r.battery_soc is None:
             return

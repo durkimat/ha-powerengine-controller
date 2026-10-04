@@ -97,10 +97,7 @@ class SlotTracker:
                 continue
             if latest is None or start > datetime.fromisoformat(latest["start"]):
                 latest = rec
-        if latest is None:
-            return False
-        # a blip (1 minute, 0.01 kWh: 4 Oct 2026) is not a charge; `used` in summary() counts from 0.2 kWh too
-        return (latest.get("charging_min") or 0.0) < 1.0 or (latest.get("car_kwh") or 0.0) < USED_KWH
+        return latest is not None and (latest.get("charging_min") or 0.0) < 1.0
 
     def save(self) -> None:
         if not self.path:

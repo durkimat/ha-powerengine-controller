@@ -103,3 +103,16 @@ def test_the_summary_tool_reads_the_export_section():
     out = diag_summary.summarise(export)["early_target"]
     assert out["count"] == 1 and out["by_outcome"]["late"]["count"] == 1
     assert "early targets (#175), 1" in diag_summary.render(diag_summary.summarise(export))
+
+
+def test_plan_signature_changes_with_the_car_and_the_half_hour_while_it_charges(monkeypatch):
+    pe = import_powerengine(monkeypatch)
+    stub = SimpleNamespace(profile=None, cfg=SimpleNamespace(safety={}, features={}), _active_override=lambda: None)
+    def sig(state, minute):
+        r = SimpleNamespace(rates=[], dispatches=[], axle_start=None, axle_end=None, free_start=None, free_end=None,
+                            now=datetime(2026, 10, 4, 19, minute, tzinfo=timezone.utc), ev_state=lambda: state)
+        return pe.PowerEngine._plan_signature(stub, r)
+    assert sig("plugged_in", 5) == sig("plugged_in", 35)                  # not charging: the half-hour doesn't matter
+    assert sig("plugged_in", 5) != sig("charging", 5)                     # starts
+    assert sig("charging", 5) == sig("charging", 20)                      # same half-hour
+    assert sig("charging", 5) != sig("charging", 35)                      # still charging next half-hour: re-plan
