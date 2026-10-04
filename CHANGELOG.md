@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.100 (beta)
+
+### Behaviour changes
+
+None. The control and the plan are unchanged.
+
+### Report a problem
+
+- A new **Report a problem** form for GitHub issues (`.github/ISSUE_TEMPLATE/report-a-problem.yml`): description, versions, and a box for the diagnostics file. It is the target of the card's new button; it needs card 0.9.100.
+
 ## 0.9.99 (beta)
 
 ### Behaviour changes

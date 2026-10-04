@@ -1,0 +1,27 @@
+name: Report a problem
+description: Something isn't working, a decision looks wrong, or you have a question about PowerEngine.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Opened from PowerEngine's **Report a problem** button? The title, description and versions are already filled in.
+        Read the downloaded diagnostics file first: account and meter numbers, serials, ids and emails are replaced, but nothing
+        automatic is perfect. Never paste tokens or passwords.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What you saw, what you expected, and roughly when (date and time help).
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: App and card versions (filled in by the button).
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Drag the downloaded `powerengine-report-....json` file onto this box. GitHub accepts files up to 25 MB.
