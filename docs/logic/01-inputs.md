@@ -130,12 +130,14 @@ The plan shows each upcoming smart slot with its certainty and the price used (`
 
 | Question | Rule (`_car_expected` in `build_slots`) |
 |---|---|
-| Will the car draw in this smart slot? | **No** if: unplugged; or the charger reports the charge complete; or plugged in and the last long smart slot drew nothing (`car_idle`); or plugged in and the dispatch is already running while the car is not charging. Otherwise yes |
+| Will the car draw in this smart slot? | **No** if: unplugged; or the charger reports the charge complete; or plugged in and the last long smart slot drew nothing, or under 0.2 kWh (`car_idle`); or plugged in and the dispatch is already running while the car is not charging. Otherwise yes |
 | How much? | The charger's rating (`ev_charger_kw`, default 7.4, or the learned typical kW) in smart slots where the car is expected; else 0 |
 | What if the plan is wrong? | If the car does start, the live car-charging rule takes over at once (page 4), and a change in car state triggers a replan |
 
 `car_idle` (`SlotTracker.car_idle`): the most recent smart slot that ran at least 15 minutes, within 12 hours, charged for
-under a minute. That is the "car is full but plugged in" case that kept the battery held for the car all morning on
+under a minute **or drew under 0.2 kWh** (`USED_KWH`). The second test was added in 0.9.101: a one-minute blip of 0.01 kWh
+used to make every later smart slot look like a car charge, so the plan did no selling and held the battery at 90% from
+19:00 to 04:00 (4 Oct 2026). That is the "car is full but plugged in" case that kept the battery held for the car all morning on
 28 Sep 2026.
 
 A smart slot where the car *is* expected is a **car slot** (`car_slot`): the battery may not feed the car, so only Hold or

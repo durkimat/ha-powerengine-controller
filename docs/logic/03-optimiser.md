@@ -68,7 +68,7 @@ An **Export** option is also dropped if it would take the battery below `sell_fl
 | Where | Lowest the battery may be sold down to |
 |---|---|
 | Inside the fixed overnight window, with *deeper selling overnight* on | reserve + `arbitrage_keep_soc` (12 + 10 = 22%) |
-| Anywhere else | the arbitrage band's bottom (`arbitrage_min_soc`, 75%), as a hard limit, because the refill there may depend on optional smart slots the supplier can withdraw |
+| Anywhere else | **5 points under** the arbitrage band's bottom (`arbitrage_min_soc` 75% - 5 = 70%), as a hard limit, because the refill there may depend on optional smart slots the supplier can withdraw. The 5 points are the soft band (3.4a); the part below 75% pays the band penalty |
 | The owner's override | no floor here (the reserve in `step` still applies) |
 
 ## 3.4 What it adds to the cash cost (the "extra costs")
@@ -79,7 +79,7 @@ Cash cost comes from `step`. These extra terms steer the choice but are **not** 
 |---|---|---|---|
 | **Wear** | Any half-hour the battery discharges (including self-use covering the house) | `battery_wear_p` (2p) per kWh taken out | A cycle costs the battery something; discourages pointless cycling |
 | **Leftover energy credit** | End of the horizon | Energy x cheapest price in the horizon | So the plan is not rewarded for emptying the battery, nor punished for ending full |
-| **Band penalty** | Arbitrage on: selling below the band's bottom, or grid-charging above its top | `arbitrage_band_penalty_p` (2p) per kWh outside the band | The band is a guide, not a limit. Not charged for deep selling inside the overnight window |
+| **Band penalty** | Arbitrage on: selling below the band's bottom, or grid-charging above its top | `arbitrage_band_penalty_p` (2p) per kWh outside the band | The band is a guide, with 5 points of give each side (3.4a). Not charged for deep selling inside the overnight window |
 | **Dwell above the band** | Arbitrage on: ending a half-hour above `arbitrage_max_soc` | £0.0015 per kWh per half-hour (`HIGH_DWELL`) | The full zone wears the battery; fill the top last |
 | **Not full at the end of the cheap window** | The last half-hour of each overnight window run, with *top up when cheap* on, ending below `grid_charge_target_soc` | **£1.00 per kWh short** (`FULL_PENALTY`) | The battery should be full when the cheap window closes |
 | **Charge early** | Grid-charge inside the overnight window | £0.0005 per kWh per half-hour of delay (`EARLY_BIAS`) | Same price all night: charge sooner, leave room for a replan |
@@ -88,8 +88,28 @@ Cash cost comes from `step`. These extra terms steer the choice but are **not** 
 | **Switch cost** | Between half-hours whose kind differs | See 3.5 | Each change of the inverter's mode is a write |
 
 The **final top-up** (`final_topup`): the last half-hours of each overnight window long enough to charge from the top of the
-arbitrage band to the grid-charge target (plus one to spare) are allowed to charge above the band. This is the only time
-grid-charging goes above `arbitrage_max_soc` with arbitrage on (apart from free power).
+arbitrage band to the grid-charge target (plus one to spare) are allowed to charge all the way to the target. Apart from
+that, free power, and the soft margin below, grid-charging does not go above `arbitrage_max_soc` with arbitrage on.
+
+### 3.4a The soft band (0.9.102)
+
+The arbitrage band (default 75% to 90%) used to be two hard edges in the plan: a charge stopped at the top, and a sale was
+skipped if it would end under the bottom (outside the overnight window). With RAM control a sale at full power takes about
+15 points off an 18 kWh battery in a half-hour, but a charge restores about 13, so every cycle needed a charge slot and a
+bit, then an idle Hold for the rest of the second slot (4 Oct 2026). The band is now a guide with **5 points of give**
+(`SOFT_BAND_MARGIN`), priced by the costs above:
+
+| Edge | Before 0.9.102 | Now |
+|---|---|---|
+| Top: a grid charge's target (`slot_target`) | `arbitrage_max_soc` (90%) | `arbitrage_max_soc` + 5 (95%), paying the band penalty and the dwell cost for the part above 90 |
+| Bottom: how low a sale may end outside the overnight window (`sell_floor`) | `arbitrage_min_soc` (75%) | `arbitrage_min_soc` - 5 (70%), paying the band penalty below 75. Still a hard floor |
+| Unchanged | | The final overnight top-up and free power (to the target / 100%); a cheap car charge keeps its top-up level; deep selling inside the overnight window (reserve + 10); the reserve |
+
+Effect measured on a synthetic night: 9 sales and two idle half-hours became 13 sales and none, with a lower net cost
+(`docs/plans/soft-band.md`). Expect tighter sell, charge, sell, charge cycles and fewer Holds. The controller needed no
+change: it follows each slot's `target_soc` (the plan's end level for the slot) and does not enforce the sell floor itself.
+The rules planner's arbitrage pass (2.7) was not changed; it already allowed a sale below the band when it still paid after
+the penalty.
 
 ## 3.5 Switch cost
 

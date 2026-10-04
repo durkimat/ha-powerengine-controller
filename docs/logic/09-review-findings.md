@@ -1,6 +1,8 @@
 # 9. Review findings: where the code, its comments and its settings disagree
 
-Found while writing pages 0 to 8, on 5 Oct 2026, against 0.9.100. **Nothing here has been fixed.** Each item says how
+Found while writing pages 0 to 8, on 5 Oct 2026, against 0.9.100. **Re-checked against 0.9.102:** the three confirmed-by-running
+findings (F2, F3, F5) still reproduce, and the stale docstring (F1) is still there. The soft arbitrage band and the car-blip
+fix (0.9.101 and 0.9.102) do not touch any finding. **Nothing here has been fixed.** Each item says how
 sure the finding is:
 
 * **Confirmed**: I ran the code (a small script, not committed) and saw it.

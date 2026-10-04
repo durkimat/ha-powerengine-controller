@@ -1,6 +1,6 @@
 # How PowerEngine decides: the plan logic, written down
 
-> **Status:** written 5 Oct 2026 from the code at 0.9.100 (`main` at `6312543`). It describes what the code does, not what
+> **Status:** written 5 Oct 2026 from the code at 0.9.100, refreshed for 0.9.101 (car idle blip) and 0.9.102 (soft arbitrage band; `main` at `22096cb`). It describes what the code does, not what
 > it was meant to do. Where the two differ, [09-review-findings.md](09-review-findings.md) says so. Nothing in the code was
 > changed to write these pages.
 >

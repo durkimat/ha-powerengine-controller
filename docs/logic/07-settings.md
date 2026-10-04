@@ -74,8 +74,8 @@ event rate (or the optimiser finds it). The event value (£1/kWh) is a code cons
 | Setting | Default (range) | Acts in | What it does |
 |---|---|---|---|
 | `arbitrage_min_margin_p` | 1 p (0 to 50) | Plan (rules pass) | Profit per kWh a rules-planner sale must clear after losses and wear |
-| `arbitrage_min_soc` | 75 % (10 to 100) | Plan | Bottom of the band; hard sale floor outside the overnight window |
-| `arbitrage_max_soc` | 90 % (20 to 100) | Plan, Live | Top of the band; routine top-ups stop here; the live car-charge top-up ceiling |
+| `arbitrage_min_soc` | 75 % (10 to 100) | Plan | Bottom of the band, a guide: outside the overnight window a sale may go up to 5 points below it (paying the band penalty); that lower point (70%) is the hard floor |
+| `arbitrage_max_soc` | 90 % (20 to 100) | Plan, Live | Top of the band, a guide: a grid charge may run up to 5 points past it (paying the band penalty); also the live car-charge top-up ceiling and the rules planner's buffer ceiling |
 | `arbitrage_band_penalty_p` | 2 p (0 to 50) | Plan | Extra cost per kWh outside the band |
 | `overnight_switch_cost_p` | 3 p (0 to 100) | Plan | Minimum cost of a full switch inside the overnight window (with deep overnight and arbitrage) |
 
@@ -143,6 +143,8 @@ Changing any of these needs a code change and a release.
 | `FULL_PENALTY` | £1/kWh | `optimiser.py` | Cost of ending the cheap window below target |
 | `HIGH_DWELL`, `EARLY_BIAS`, `SELL_BIAS` | £0.0015, £0.0005, £0.0005 | `optimiser.py` | Tie-breakers |
 | `MID_SLOT_STICK` | £0.15 | `optimiser.py` | Reluctance to change a running half-hour |
+| `SOFT_BAND_MARGIN` | 5 points | `optimiser.py` | How far past the arbitrage band's edges a charge or sale may go, priced by the band penalty (0.9.102) |
+| `USED_KWH` | 0.2 kWh | `slots.py` | A smart slot the car drew less than this in was not used (0.9.101) |
 | `LATCH_BAND_SOC` | 2 points | `decide.py`, `override.py` | Target-reached latch |
 | `MIN_LEFT_MIN` | 5 min | `earlytarget.py` | Least time left for an early-target replan |
 | `DATA_GAP_GRACE_S` | 180 s | `powerengine.py` | Missing-reading bridge |
