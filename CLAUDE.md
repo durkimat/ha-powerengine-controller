@@ -160,6 +160,21 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   what the summary flags.
 - Prefer fresh sub-agents per task over resuming long-lived ones.
 
+## Principles (every plan and PR answers to these)
+
+Short form of the guardrails below, used as the "Principles check" in `docs/plans/TEMPLATE.md`. They are advice to the
+author; the enforcement is in code and tests (the replay, goldens, the app's mode checks), so a principle that matters
+should also get a test.
+
+1. **The house comes first.** A mistake costs money or inverter wear. Prefer the change that fails safe (Hold, Passive, no write).
+2. **Writes are precious.** Keep the write budget, dampening, read-back checks and RAM refresh behaviour intact.
+3. **Never buy dear energy the plan didn't count.** A forced charge or any decision must name the price it used.
+4. **The owner owns the modes.** Never write Backup, Off-Grid, "bump" or "boost"; leave Active / Passive / Pause to him.
+5. **Behaviour is pinned by tests.** A refactor leaves the replay and goldens unchanged; an intended change re-records them and says why.
+6. **Neutral wording.** Supplier and device names come from the names map, never from literals in user text.
+7. **Both sides move together.** A change one repo needs from the other raises the minimum version in the same PR.
+8. **Plan before building anything big.** A feature gets a `docs/plans/` file from the template, with its Status box kept current.
+
 ## Guardrails (don't break these)
 
 - **Never write to Backup or Off-Grid modes, or to any entity with "bump" or "boost" in its name.** The app

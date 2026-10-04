@@ -11,4 +11,7 @@ rules and for what the code does now, and GitHub issues are the backlog.
 | [multiple-devices.md](multiple-devices.md) | More than one inverter, battery, car, charger, tariff or grid-event provider: devices as capability sets, a plan per battery, per-device control, stages M0 to M3 | Anything that adds a second device of a kind |
 | [demo-and-easier-install.md](demo-and-easier-install.md) | Demo mode design, install simplification, steps A1–D1, decisions, risks | Demo or install work (#192), the native integration (#177) |
 
+Starting a new plan: copy [TEMPLATE.md](TEMPLATE.md) (problem, goals, decided/open, design, principles check, acceptance,
+stages, risks). Only features need one; small fixes don't.
+
 Keep these up to date: when a step lands, update the plan's Status box in the same PR.
