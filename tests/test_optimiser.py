@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from pe_core.forecast import SLOT, Slot
 from pe_core.optimiser import compare, optimise
-from pe_core.planner import Params, make_plan
+from pe_core.planner import EXPORT, GRID_CHARGE, Params, make_plan
 
 T0 = datetime(2026, 9, 22, 17, 0, tzinfo=timezone.utc)
 PEAK, CHEAP = 0.30, 0.07
@@ -46,7 +46,7 @@ def test_arbitrage_sells_from_full_before_idling_there():
     assert opt["soc"][0] < 99.0 and opt["soc"][11] >= 99.0, opt["soc"]
 
 
-def test_arbitrage_stays_in_the_band_and_only_the_final_top_up_goes_to_full():
+def test_arbitrage_band_is_a_guide_with_give_and_only_the_final_top_up_goes_to_full():
     from pe_core.optimiser import final_topup
     # 20:00: a cheap smart slot all evening, then the fixed overnight window 23:30-05:30, export 15p
     t0 = T0.replace(hour=19)
@@ -60,7 +60,8 @@ def test_arbitrage_stays_in_the_band_and_only_the_final_top_up_goes_to_full():
     assert fin[18] and fin[17] and not fin[15] and not fin[5]
     opt = optimise(slots, 80.0, p)
     soc = opt["soc"]
-    assert max(soc[:16]) <= 90.5, soc                      # evening cycles and most of the night: within the band
+    assert max(soc[:16]) <= 95.5, soc                      # evening cycles, most of the night: band plus give
+    assert min(soc[:7]) >= 69.5, soc                       # ...and the hard floor under its bottom (evening)
     assert soc[18] >= 99.0, soc                            # full when the overnight window ends
 
 
@@ -84,7 +85,7 @@ def test_deeper_overnight_selling_can_be_switched_off():
         s.overnight = 7 <= i < 19
         slots.append(s)
     p = Params(arbitrage=True, max_charge_kw=5.0, max_discharge_kw=5.0, capacity_kwh=18.0, deep_overnight=False)
-    assert min(optimise(slots, 80.0, p)["soc"][7:19]) >= 74.5          # the band's bottom holds overnight too
+    assert min(optimise(slots, 80.0, p)["soc"][7:19]) >= 69.5          # the band (plus its give) holds overnight too
     p = Params(arbitrage=True, max_charge_kw=5.0, max_discharge_kw=5.0, capacity_kwh=18.0)
     assert min(optimise(slots, 80.0, p)["soc"][7:19]) < 60              # on (default): one deeper sale
 
@@ -112,3 +113,21 @@ def test_arbitrage_starts_selling_as_soon_as_it_can_not_after_an_idle_hour():
     assert first_sale <= 2, (opt["actions"], opt["soc"])
     idle = [i for i in range(first_sale) if abs(opt["soc"][i] - opt["soc"][i - 1 if i else 0]) < 0.05 and i > 1]
     assert not idle, opt["soc"]
+
+
+def test_a_cycle_uses_whole_half_hours_with_no_charge_then_idle_sliver():
+    """The band is a guide with give (4 Oct 2026): a sale of 15 points and a charge that stopped at the band's top
+    left a charge slot mostly idle after every sale. With the give, a charge slot in the middle of a cycle runs the
+    whole half-hour at full power, and a cycle sells on 15p and refills on 6.99p without idle half-hours."""
+    p = Params(arbitrage=True, switch_cost_p=0.0)                 # remote control: a change of action costs no wear
+    slots = [Slot(T0 + i * SLOT, CHEAP if i < 26 else PEAK, 0.15, load_kwh=0.3) for i in range(40)]
+    opt = optimise(slots, 90.0, p, wear=p.wear_p / 100)
+    soc, acts = opt["soc"], opt["actions"]
+    prev, rises = 90.0, []
+    for a, s in zip(acts[:26], soc[:26], strict=True):
+        if a == GRID_CHARGE:
+            rises.append(s - prev)
+        prev = s
+    assert acts[:8].count(EXPORT) >= 3, acts[:8]                  # it keeps cycling
+    assert all(r > 10 or r < 0.05 for r in rises[:6]), rises      # no 1-3 point sliver of a charge slot in the cycles
+    assert max(soc[:26]) <= 95.5 and min(soc[:26]) >= 69.5, soc   # the give is limited, the floor holds

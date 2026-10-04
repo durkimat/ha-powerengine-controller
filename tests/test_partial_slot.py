@@ -35,8 +35,9 @@ def test_a_running_export_carries_on_with_time_left():
 
 
 def test_the_sell_floor_still_holds_for_a_whole_half_hour():
-    assert first_action(89, 30) == GRID_CHARGE                  # 14% off 89 would end below the 75% floor
-    assert first_action(89, 30, stick=MID_SLOT_STICK) == GRID_CHARGE
+    assert first_action(89, 30) == EXPORT                       # 14% off 89 ends 75: in the band
+    assert first_action(76, 30) != EXPORT                       # 14% off 76 would end below the hard floor (70%)
+    assert first_action(76, 30, stick=MID_SLOT_STICK) != EXPORT
 
 
 def test_full_slot_is_the_default():

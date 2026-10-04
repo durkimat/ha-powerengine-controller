@@ -29,15 +29,23 @@ def car_cheap_charge(s: Slot, p: Params) -> bool:
             and price * 100 <= p.cheap_cap_p)
 
 
+SOFT_BAND_MARGIN = 5.0               # points past the band's edges that its guide allows (charge above the top, sale
+                                      # below the bottom outside the overnight window); the band's penalty prices them
+
+
 def slot_target(s: Slot, p: Params, final: bool = False) -> float:
-    """Grid-charge target for a slot. With arbitrage on, grid charging stops at the top of the arbitrage band
-    (the full zone wears the battery), except for the final top-up at the end of the fixed overnight window
-    (`final`: the battery goes into the morning full) and free-power sessions. Alongside a cheap car charge outside
-    the overnight window: the top-up level. Otherwise grid_target (100%)."""
+    """Grid-charge target for a slot. With arbitrage on, the band's top is a guide with some give
+    (docs/plans/soft-band.md): a slot may charge SOFT_BAND_MARGIN points past it, paying the band penalty and the
+    above-band dwell cost, so a cycle uses whole half-hours at full power instead of stopping at the top and idling
+    for the rest of the slot (4 Oct 2026: a sale of 15 points, a charge of 13, so every cycle had a charge-then-hold
+    sliver). The final top-up at the end of the fixed overnight window (`final`: the battery goes into the morning
+    full) and free-power sessions go to grid_target. Alongside a cheap car charge: the top-up level outside the
+    overnight window, the band's top inside it. Otherwise grid_target (100%)."""
     if car_cheap_charge(s, p) and not s.overnight:
         return p.buffer_target
     if p.arbitrage and not final and not s.free:
-        return min(grid_target(p), p.arbitrage_max_soc)
+        give = 0.0 if car_cheap_charge(s, p) else SOFT_BAND_MARGIN
+        return min(grid_target(p), p.arbitrage_max_soc + give)
     return grid_target(p)
 
 
@@ -67,9 +75,10 @@ def final_topup(slots: list[Slot], p: Params) -> list[bool]:
 def sell_floor(s: Slot, p: Params) -> float:
     """How low a sale may take the battery. Inside the fixed overnight window the refill is guaranteed, so down to
     the reserve plus a margin; anywhere else the refill may depend on optional smart-charge slots that EDF can
-    withdraw, so selling stops at the arbitrage band's bottom (a hard limit there, for safety)."""
+    withdraw, so selling stops SOFT_BAND_MARGIN points under the arbitrage band's bottom: the band is a guide that
+    costs the band penalty below it, and this floor under it is the hard limit, for safety."""
     floor = p.min_reserve_soc + p.arbitrage_keep_soc
-    return floor if s.overnight and p.deep_overnight else max(floor, p.arbitrage_min_soc)
+    return floor if s.overnight and p.deep_overnight else max(floor, p.arbitrage_min_soc - SOFT_BAND_MARGIN)
 
 
 def band_penalty(a: str, lv: float, end: float, p: Params, overnight: bool = False) -> float:

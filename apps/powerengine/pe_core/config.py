@@ -158,15 +158,17 @@ SETTING_TEXT = {
                                "Arbitrage runs only if, per kWh exported, export price − purchase price ÷ losses − "
                                "wear is at least this."),
     "arbitrage_min_soc": ("Arbitrage band: bottom", "%",
-                          "Outside the fixed overnight window, arbitrage never sells below this: a refill then may "
-                          "depend on optional smart-charge slots that can be withdrawn. Inside the overnight window, "
-                          "where the refill is guaranteed, selling may go lower when it still pays after the "
-                          "outside-band cost."),
+                          "A guide, not a limit. Outside the fixed overnight window a sale may go up to 5 points "
+                          "below this (paying the outside-band cost) so a cycle can use whole half-hours; a refill "
+                          "then may depend on optional smart-charge slots that can be withdrawn, so never lower. "
+                          "Inside the overnight window, where the refill is guaranteed, selling may go lower when it "
+                          "still pays after the outside-band cost."),
     "arbitrage_max_soc": ("Arbitrage band: top", "%",
-                          "With arbitrage on, grid charging (smart-charge slots included) stops here, out of the full "
-                          "zone that wears the battery fastest, except for the final top-up at the end of the "
-                          "overnight window, which fills to the grid-charge target for the day ahead. Solar can "
-                          "still fill it higher. Set 100 to allow full charges any time."),
+                          "A guide, not a limit. With arbitrage on, grid charging (smart-charge slots included) may "
+                          "run up to 5 points past this (paying the outside-band cost) so a cycle can use whole "
+                          "half-hours; the final top-up at the end of the overnight window fills to the grid-charge "
+                          "target for the day ahead. Solar can still fill it higher. Set 100 to allow full charges "
+                          "any time."),
     "arbitrage_band_penalty_p": ("Arbitrage outside-band cost", "p/kWh",
                                  "Extra cost counted for each kWh arbitrage moves outside the band. Higher keeps "
                                  "cycles inside it more strictly; 0 ignores the band."),

@@ -232,6 +232,11 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Recent fixes
 
+- **The arbitrage band is soft (0.9.102, `docs/plans/soft-band.md`)**: a charge may run `SOFT_BAND_MARGIN` (5) points past `arbitrage_max_soc` and a sale may end 5 under
+  `arbitrage_min_soc` outside the overnight window (`optimiser.slot_target`, `sell_floor`), priced by the band penalty, so a cycle uses whole half-hours instead of a
+  charge-then-hold sliver. Planner only; the controller follows each slot's target. Replay re-recorded. **Observe** the first days: idle (Hold) half-hours in the plan, levels outside 75-90.
+- **A dashboard template must not read a key a window may lack**: HA raises on a missing attribute and the card shows nothing (the Actions list, 0.9.102: use `w.get('manual')`).
+
 - **#121, RAM control and BMS limits. Done in 0.9.73** (`pe_core/bms.py`, `ramcontrol.py`). Optional roles
   `battery_bms_charge_limit` / `battery_bms_discharge_limit` (Solis suggestions) cap commands at limit A x 52 V
   (`BATTERY_VOLTS`; no battery-voltage role, because it pushed `map_catalogue` over 15,000 bytes: it is 14.9 KB now, so

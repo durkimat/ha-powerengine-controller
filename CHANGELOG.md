@@ -2,6 +2,32 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.102 (beta)
+
+### Behaviour changes
+
+- **The arbitrage band is now a soft guide, so cycles use whole half-hours.** A sale at full power takes the battery down
+  about 15 points but a charge restores about 13, so the plan used to charge for a slot and a bit and then sit idle (Hold)
+  for the rest of the second slot. The band's top is now soft: a charge may run up to 5 points past it, and a sale may go up
+  to 5 points under its bottom (outside the overnight window), paying the existing outside-band cost. The battery still never
+  sells below 5 points under the band (70% by default) or the minimum reserve, the final overnight top-up and free-power
+  charging are unchanged, and a cheap car top-up keeps its level. Expect tighter sell, charge, sell, charge cycles and fewer
+  Holds in the plan. Control is otherwise unchanged. The two band settings' help text says so (docs/plans/soft-band.md).
+- **The Plan page's Actions list shows again.** Home Assistant stopped it from drawing because it asked for a "manual"
+  marker that only exists while a manual override is on, and Home Assistant treats a missing marker as an error.
+
+### Tests
+
+- A test renders the Actions list the way Home Assistant does, with a window that has no "manual" marker, and one checks
+  that charge slots in a cycle run whole half-hours. The replay is re-recorded: the night's plan has fewer flips (20 decision
+  changes become 13) and more half-hours at full power.
+
+## 0.9.101 (beta)
+
+### Behaviour changes
+
+- **A tiny car draw no longer stops the plan selling during smart-charge slots.** If the last smart-charge slot drew less than 0.2 kWh (for example a one-minute blip of 0.01 kWh), PowerEngine now treats the car as full, as it already did for no draw at all. Before, that blip made it plan every later smart-charge slot as car charging: no selling and the battery held at 90% from 19:00 to 04:00 (4 Oct 2026). If the car does start charging, the battery is held at once, as before.
+
 ## 0.9.100 (beta)
 
 ### Behaviour changes

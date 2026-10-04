@@ -158,7 +158,7 @@ def test_later_changes_wait_for_the_plan_to_settle():
     assert urgent([Write("timed_charge_current", 0, "number")], {}, {}, at)
 
 
-def test_selling_stays_in_the_band_unless_the_refill_is_guaranteed():
+def test_selling_stays_near_the_band_unless_the_refill_is_guaranteed():
     from pe_core.optimiser import sell_floor
     t0 = NOW.astimezone(UTC)
     p = Params(arbitrage=True)
@@ -166,8 +166,8 @@ def test_selling_stays_in_the_band_unless_the_refill_is_guaranteed():
     day = [Slot(t0 + i * SLOT, 0.0699 if i < 16 else 0.30, 0.15, load_kwh=0.3, smart_slot=i < 16,
                 car_expected=False) for i in range(24)]
     res = optimise(day, 90.0, p, wear=0.02)
-    assert min(res["soc"][:16]) >= 74.5, res["soc"]
-    assert sell_floor(day[0], p) == 75
+    assert min(res["soc"][:16]) >= 69.5, res["soc"]
+    assert sell_floor(day[0], p) == 70
     night = [Slot(t0 + i * SLOT, 0.0699, 0.15, load_kwh=0.3, overnight=True) for i in range(14)]
     assert sell_floor(night[0], p) == p.min_reserve_soc + p.arbitrage_keep_soc
     res = optimise(night + day[16:], 90.0, p, wear=0.02)
