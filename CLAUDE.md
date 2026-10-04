@@ -192,6 +192,10 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Backlog
 
+- **Review the 0.2 kWh "car drew something" figure in the code (docs/logic/09-review-findings.md, F14).** It is defined twice, `certainty.MIN_CAR_KWH` (smart-slot
+  certainty: delivered or not) and `slots.USED_KWH` (the Health tab's "used" count), and neither affects the live plan since 0.9.103 took it out of `car_idle`. Decide
+  whether the figure is right (is 0.2 kWh the real line between a blip and a charge?), keep one constant and import it in the other module, or drop it where it only
+  scores history. Any change to `certainty.py` moves the planner's expected smart-slot prices, so re-record the replay and say so in the PR.
 - **Zappi Eco+ and solar (monitor):** Eco+ is required for EDF/Octopus smart charging. The owner has only seen the car charge from the grid, not from solar, so some
   threshold (probably on the charger) decides. If the Zappi ever starts and stops with solar surplus, `car_charging` (an urgent rule, no damping) and the plan signature will flip with it:
   watch `ev_state` changes per day in the diagnostics export, and add a short debounce on stop only if it happens. Do nothing until it is seen.
