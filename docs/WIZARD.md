@@ -1,55 +1,39 @@
-# The setup wizard and the candidate export
+# Your system, device discovery and the candidate export
 
-The wizard is a card on the dashboard's **Config** tab (`custom:powerengine-wizard-card`, card 0.9.88 or newer). It gets a new
-home to a working **Passive** install without editing YAML: it says what you need first, finds your devices in Home
-Assistant, fills PowerEngine's inputs from them, checks the signs against what you can see, and saves. It never turns
-control on: Passive stays until the supervised tests have passed (see INSTALL.md).
+> The step-by-step setup wizard was replaced by the **Your system** card (card version after 0.9.93; plan:
+> docs/plans/equipment-manager.md). This file keeps its name because the data the app publishes for it, and the candidate export,
+> are unchanged.
 
-## The five steps
+**Your system** is a card on the dashboard's **Config** tab (`custom:powerengine-system-card`; the old
+`powerengine-wizard-card` name still works as an alias). It lists the equipment PowerEngine uses (the inverter and battery, the
+tariff, the car charger, the solar forecast, grid events, extra solar plants and other devices) and nothing on it is editable.
+**Change your system** opens a panel where a new or an existing install adds, edits, replaces and removes equipment. It never
+turns control on: Active, Passive and Pause stay the owner's, and Passive stays until the supervised tests have passed (INSTALL.md).
 
-1. **What you'll need.** Each part of a home (inverter and battery, tariff, car charger, solar forecast, grid events),
-   marked **Required** or **Optional**, with whether the wizard found it in Home Assistant: found, installed in HACS but
-   not added yet, or not found, with a link to install it. Required parts (inverter, tariff) must exist before the
-   wizard can finish. Optional parts have an "I don't have this / skip it" tick, ticked by default when nothing was
-   found. A skipped part is saved as `none` in `site:` and PowerEngine leaves it out (docs/SITE.md, "What none does");
-   its inputs stop being required. The page also lists what to have to hand (battery size and rates, tariff details,
-   an admin login).
-2. **Your devices.** For each part that is in use, pick the device: Home Assistant's own devices that match, listed first (the one in use is marked).
-   "My device isn't listed" opens the candidate export (below). The inverter's definition status (verified, community or
-   draft) is shown, and its firmware is chosen here.
-3. **Map inputs.** Each input is filled from the picked device's own entities, with the live value beside it. The picker is
-   narrowed to that device; a tick shows all entities (a separate CT clamp, say). An input with no match is left empty and
-   marked, never guessed. A suggestion that had to come from another device says so. Optional inputs and the
-   controls needed later to go live are in a folded list. The wizard will not move on while a required input is empty.
-4. **Live checks.** You say what the battery and the house are doing now (charging, discharging, importing, exporting); the
-   card compares that with the sign of the mapped sensor and offers **Invert**. It also checks that house load is about
-   grid + solar + battery. Advice only.
-5. **Review and save.** What will be saved, with anything switched off because its inputs aren't set (smart-charge
-   optimisation, grid events and free-power sessions are turned off when their inputs or their part is missing; the wizard
-   never turns a feature on). Saved through the normal `pe_config_save` path (a backup is kept), in Passive.
-   Changing the inverter or its firmware variant on an already configured system asks for confirmation and sets
-   `retest_required`, as the "Your system" block does.
+## The panel
 
-On a system that is already set up the wizard starts folded away (open it from its heading), reads the saved configuration, and
-shows what PowerEngine **already uses** for each part ("In use now: EDF on Electricity meter"). The device PowerEngine uses is
-the one holding an entity mapped in the saved config, so a home with both the EDF and the Octopus integrations is shown as EDF.
-Anything else Home Assistant has for that part is listed as "Also found, not used by PowerEngine", and picking it is a choice
-you make with **Change this part**. Only the ticked parts are asked about; the others are left exactly as they are.
-
-**More than one of something.** Every matching device is offered, with the one in use marked. PowerEngine controls one inverter
-with its battery, and you choose which; see docs/plans/multiple-devices.md for what more would take.
-
-**Solar plants.** A second solar-only inverter, or plug-in panels, is a read-only *solar plant*: counted in total solar and drawn on
-the energy-flow card, never controlled. The wizard shows the plants already configured ("Counted now: Main, Fox solar"), does not list
-a configured plant's device as "also found", and offers other solar-looking devices (a power and an energy sensor, named like a solar
-source) to add as a plant, guessing its power and today's-energy entities; each plant needs both, and has a forecast choice (none,
-from the forecast service, or scaled from the main plant). On a configured system tick **Change solar plants** to add or remove one
-without touching the other parts. A hybrid inverter with a battery that no adapter owns is listed as "not supported yet", with the
-entity-list export.
+- **Add** has four steps. *What is it?* (the parts the app offers, a solar-only inverter or panels, another inverter or battery),
+  *Find it* (the devices Home Assistant has for it, with the one in use marked, a search box, and "choose its type by hand" or
+  "send us its entity list" when nothing matches), *Which entities?* (each input filled from the picked device's own entities,
+  with its live value, the sign check and an Invert tick, and for an inverter the firmware and a does-it-add-up check), and
+  *Review* (what will happen in plain words).
+- **Edit** opens at the entities step. **Replace** is for the required parts (inverter, tariff), which cannot be removed.
+- **Remove** (optional parts, extra plants, other devices) says what goes with it first: the features that switch off, the inputs
+  that stop being used, and what planning loses. A removed optional part is saved as `none` in `site:` (docs/SITE.md, "What none
+  does"), and its inputs stop being required.
+- Changes are a **draft** until **Apply to System**. **Save draft** keeps them in the browser (local storage, tied to the saved
+  system, so a draft of a system that has since changed is dropped); closing with unsaved edits asks Save draft, Discard changes
+  or Keep editing. **Apply to System** shows a summary and sends the saved configuration with only the equipment changed (a backup
+  is kept). Changing the inverter or its firmware variant switches to Passive and sets `retest_required`, as before. Applying
+  never turns a feature on, and switches off only the features that need a part that was removed. An optional part that was
+  never set up is saved as `none`.
+- **More than one of something.** PowerEngine controls one inverter with its battery. Extra solar sources are read-only *solar
+  plants* (counted in total solar and the energy-flow card; each needs a power and a today's-energy entity and has a forecast
+  choice) and other inverters or batteries are read-only *devices* (app 0.9.93 or newer; docs/plans/multiple-devices.md).
 
 ## What the app provides
 
-Only the card can see Home Assistant's entity and device registries, so the wizard runs there. The app tells it what to
+Only the card can see Home Assistant's entity and device registries, so the card does the finding. The app tells it what to
 look for, as the `wizard` attribute of `sensor.pe_diag_version` (about 3.5 KB; `pe_core/wizard.py`):
 
 ```

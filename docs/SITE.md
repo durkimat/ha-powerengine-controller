@@ -27,7 +27,7 @@ for the owner; the migration never picks it.
 
 Leaving a part out also stops its inputs being required: with `ev_charger: none` the car charger's and the smart-charge
 inputs are not needed, with `forecast: none` the solar forecast inputs, with `events: none` the grid-event inputs
-(`config.required_roles`, `left_out_roles`). The inverter and the tariff are always required. The card's setup wizard
+(`config.required_roles`, `left_out_roles`). The inverter and the tariff are always required. The card's Your system panel
 (docs/WIZARD.md) sets these for you. One device of each kind is controlled for now; docs/plans/multiple-devices.md is the design for more, and
 [Other devices](#other-devices-read-only) below is the first part of it.
 
@@ -73,4 +73,4 @@ the total solar. A save that has no `devices` key keeps the saved ones (an older
 
 `sensor.pe_diag_version` attributes: `site` (the current values), `site_options` (per key, a list of
 `{id, name, status, firmware_variants}`; inverters also carry `verified_firmware`), `firmware_detected` (what the
-inverter reports, or null), `retest_required`, `wizard` (what the setup wizard looks for: docs/WIZARD.md) and, only when the config has devices, `devices` (`{id, name, adapter, control, inputs}` each). `status` is `verified`, `community` or `draft`.
+inverter reports, or null), `retest_required`, `wizard` (what the Your system card looks for: docs/WIZARD.md) and, only when the config has devices, `devices` (`{id, name, adapter, control, inputs}` each). `status` is `verified`, `community` or `draft`.

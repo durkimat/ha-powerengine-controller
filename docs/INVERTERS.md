@@ -62,10 +62,10 @@ until the button sends them, so setting them is not an inverter write), `recheck
 
 **`clock`** (optional): `behaviour`, `clock_role`, `sync_role`.
 
-**`detect`** (optional): how the setup wizard (docs/WIZARD.md) recognises this inverter in Home Assistant: `integration`
+**`detect`** (optional): how the Your system card (docs/WIZARD.md) recognises this inverter in Home Assistant: `integration`
 (`name`, and `url` where known), `domains` (integration domains), and the regular expressions `manufacturers` and `models`
-(on the device, case insensitive) and `entities` (on entity ids). Any one match is a find. It only changes what the wizard
-suggests, never what the app does. A definition without it still works; the wizard just can't find it.
+(on the device, case insensitive) and `entities` (on entity ids). Any one match is a find. It only changes what the card
+suggests, never what the app does. A definition without it still works; the card just can't find it.
 
 **`roles`**: for each role the config card offers, the suggested entity as regular expressions on the entity id
 (`suggest`, and `suggest_not` to exclude). They are added to the role catalogue for this inverter
@@ -94,7 +94,7 @@ and values are replaced. The merged result is validated again, so an override ca
 ## Checking a new file
 
 `load_definition("<name>")` validates the file and names anything missing (`solis.yml: missing 'ram.failsafe_min'`).
-If you have an export from the wizard rather than the hardware, start from `tools/candidates_summary.py` (docs/WIZARD.md).
+If you have an export from the card rather than the hardware, start from `tools/candidates_summary.py` (docs/WIZARD.md).
 Then copy `tests/test_solis_definition.py`: its parity test pins every output of the inverter for a spread of inputs, and
 its "another inverter is only a YAML file" test shows the shape of a second definition. Test on the real inverter with
 the config card's supervised tests before letting PowerEngine drive it.

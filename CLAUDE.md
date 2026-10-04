@@ -15,7 +15,7 @@ there, say so and stop; don't guess its contents. Pairs that must move together:
 
 - A new setting in `pe_core/config.py` (`SAFETY`, `SETTING_SECTIONS`) needs adding to the card's section lists in
   `ha-powerengine-card.js` (search for a neighbouring key, e.g. `ram_max_power_w`), or it never shows on the config page.
-- A new adapter (tariff, charger, forecast, events) or inverter definition needs a detect entry for the setup wizard
+- A new adapter (tariff, charger, forecast, events) or inverter definition needs a detect entry for the Your system card (once the setup wizard)
   (`pe_core/adapters/detect.py`, or the definition's `detect:`); see Phase 1 below.
 - `MIN_APP_VERSION` (card) and `MIN_CARD_VERSION` (app, `pe_core/version.py`): raise one in the PR that makes the other
   side need something new, and release both (see Releases).
@@ -384,6 +384,15 @@ Plan status box: `docs/plans/making-it-generic.md`. Done so far:
   place; the Config tab order is demo banner, update, setup checklist, wizard, handover, config. Config page wording now says
   **grid events** (run by `<<event>>`, i.e. Axle) in the role, setting, feature, notification and topic texts (`axle` stays the key).
 
+- **Your system (replaces the setup wizard). E1 built on branch `ccr-b18fa4a5-ve20m1`, not released** (plan: `docs/plans/equipment-manager.md`; user guide:
+  docs/WIZARD.md). Card only, plus the dashboard line: `custom:powerengine-wizard-card` became `custom:powerengine-system-card` in `dashboard.lovelace` and its
+  golden (the card keeps the old name as an alias for a dashboard the app has not yet rewritten). The Config tab shows the configured equipment read only and a
+  **Change your system** panel; changes are a draft (browser local storage) until **Apply to System**, which sends `pe_config_save` with the saved config plus
+  only the equipment changes. Removing a required part is blocked (replace only); removing an optional part shows what goes with it. The config card no
+  longer edits site, plants or devices. **To release:** card and app together; raise `MIN_CARD_VERSION` (`pe_core/version.py`) to the card's new version, because
+  the dashboard now names the new card; the card's release notes (`--card-notes`) say the wizard is gone. The app needs nothing else: `wizard`, `site_options`
+  and the save path are unchanged. **Not yet run on a live HA** (same open point as the wizard); the card was driven in Chromium against a fake `hass`.
+  Open: the setup checklist's button could open the panel; E2 (per-definition roles, battery-only kind) and E3 (plants become devices) are in the plan.
 - **Licence and CONTRIBUTING. Done.** Apache-2.0 in both repos (`LICENSE`, `NOTICE`, README sections; copyright 2026 Matthew Durkin;
   they were MIT before, which stays true for copies already taken). `CONTRIBUTING.md` in each repo: what to send, how to add a
   definition, the PR checks and the replay, the rules the code keeps, safety on other people's hardware.

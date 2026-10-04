@@ -1,9 +1,10 @@
 # Equipment manager (replaces the setup wizard)
 
-> **Status (4 Oct 2026).** Design only; nothing built. Agreed with the owner in outline: the setup wizard goes, and the config
-> page gets one **Your system** section: a read-only list of what is configured, and a **Change your system** button that opens a panel
-> where equipment is added, changed, replaced and removed, for a new or an existing install. A click-through mock-up was made
-> for review (not in the repo). The wizard's pure helpers and tests carry over; the app side needs no change for phase 1.
+> **Status (4 Oct 2026).** **E1 built, not released** (branch `ccr-b18fa4a5-ve20m1`: the card's `PowerEngineSystemCard`, `tests/system.test.cjs`, the
+> dashboard line; the wizard card is gone and its old name is an alias). E2 and E3 are not built. Agreed with the owner (the draft is browser only, 4 Oct):
+> the setup wizard goes, and the config page gets one **Your system** section: a read-only list of what is configured, and a **Change your system**
+> button that opens a panel where equipment is added, changed, replaced and removed, for a new or an existing install. A click-through mock-up was
+> made for review (not in the repo). The wizard's pure helpers and tests carry over; the app side needs no change for phase 1.
 
 ## Why
 

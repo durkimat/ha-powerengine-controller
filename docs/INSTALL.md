@@ -247,9 +247,9 @@ read-only.
 
 ## Step 6: configure PowerEngine
 
-**Prefer to be guided?** The **Setup wizard** card on the Config tab (open on a new system, folded away once PowerEngine is set up) lists what you need, finds your devices in
-Home Assistant, fills the inputs from them, checks the signs and saves a Passive setup (see
-[WIZARD.md](WIZARD.md)). It needs card 0.9.88 or newer. If you use it, check its result against the notes below, then carry on from
+**Prefer to be guided?** The **Your system** card on the Config tab lists what PowerEngine uses and has a **Change your system** button. Its panel
+finds your devices in Home Assistant, fills the inputs from them, checks the signs and puts the result in a draft; **Apply to System** then saves it (see
+[WIZARD.md](WIZARD.md)). It needs the card from the release that introduced it. Check its result against the notes below, then carry on from
 step 3. The rest of this step describes the full page, which is also how you change things later.
 
 Open the PowerEngine dashboard's **Config** tab (you must be an admin to save). The page has one section per

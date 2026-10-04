@@ -1753,10 +1753,10 @@ views:
           # everything is in place
           - type: custom:powerengine-setup-card
             grid_options: {columns: full}
-          # setup wizard: finds your devices, maps PowerEngine's inputs from them and saves a Passive setup; also
-          # exports a device's entity list for hardware PowerEngine doesn't support yet (hides itself when the app
-          # is too old to publish what it needs)
-          - type: custom:powerengine-wizard-card
+          # your system: what PowerEngine uses, and a panel to add, edit, replace and remove equipment (a draft until
+          # Apply to System); also exports a device's entity list for hardware PowerEngine doesn't support yet (hides
+          # itself when the app is too old to publish what it needs)
+          - type: custom:powerengine-system-card
             grid_options: {columns: full}
           # Predbat <-> PowerEngine switch (needs docs/ha/powerengine_handover.yaml installed as a package)
           - type: custom:powerengine-handover-card
