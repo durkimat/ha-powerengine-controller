@@ -115,7 +115,7 @@ def slot_snapshot(ps) -> dict:
             "import_kwh": round(ps.grid_import, 3), "cost": round(ps.cost, 4)}
 
 
-WINDOW_KEYS = ("start", "end", "from", "to", "action", "target_soc", "reason", "soc_start", "soc_end")
+WINDOW_KEYS = ("start", "end", "from", "to", "action", "target_soc", "reason", "soc_start", "soc_end", "manual")
 
 
 def plan_snapshot(plan, day_start: datetime, day_end: datetime) -> dict:

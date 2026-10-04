@@ -626,11 +626,11 @@ class PowerEngine(hass.Hass):
                 self._track_slots(readings)
                 self._smart_step(readings)
                 self._refresh_temps(readings.now)
-                self._maybe_replan(readings)
                 self._expire_override(readings.now)
+                self._maybe_replan(readings)
                 decision = self._bridge_data_gap(
                     decide(readings, self.cfg, self._decision, self.tz, plan=self.plan,
-                           override=self._override if self.mode.effective == "active" else None), readings.now)
+                           override=self._active_override()), readings.now)
                 self._note_command(decision)
                 sim = self.sim.update(decision, readings, self._params(), self.tz)
                 if sim is not None:
@@ -676,7 +676,8 @@ class PowerEngine(hass.Hass):
             if self._override is None:
                 return self._override_reply(True, "No override was on.")
             self._set_override(None)
-            return self._override_reply(True, "Override cancelled: back to the plan.")
+            self._override_reply(True, "Override cancelled: back to the plan.")
+            return self._cycle(None)
         if action != "set":
             return self._override_reply(False, "The override action isn't understood.")
         if self._demo or self.cfg is None or self.mode.effective != "active":
@@ -693,6 +694,21 @@ class PowerEngine(hass.Hass):
         self._set_override(ov)
         self._override_reply(True, f"Override on: {manual.describe(ov, self.tz)}.")
         self._cycle(None)
+
+    def _active_override(self):
+        """The override that is in force: only in Active (the plan and decisions both use this)."""
+        return self._override if self.mode.effective == "active" else None
+
+    def _mark_manual(self, slots, now):
+        """The slots an override covers, from the half-hour running now until it ends, carry its action, so the plan
+        is made around them. A grid event in progress or planned keeps its slot (it wins over an override)."""
+        ov = self._active_override()
+        if ov is None:
+            return slots
+        axle = bool(self.cfg.features.get("axle"))
+        return [dataclasses.replace(s, manual=ov.mode)
+                if s.end > now and (ov.until is None or s.start < ov.until) and not (axle and s.axle) else s
+                for s in slots]
 
     def _set_override(self, ov):
         self._override = ov
@@ -1285,7 +1301,8 @@ class PowerEngine(hass.Hass):
         sig = (len(r.rates), r.rates[0].start if r.rates else None,
                tuple((w.start, w.end) for w in r.dispatches), r.axle_start, r.axle_end, r.free_start, r.free_end,
                self.profile.days if self.profile else None, json.dumps(self.cfg.safety, sort_keys=True),
-               json.dumps(self.cfg.features, sort_keys=True), r.ev_state(), r.car_idle)  # car starts/stops: re-plan
+               json.dumps(self.cfg.features, sort_keys=True), r.ev_state(), r.car_idle,  # car starts/stops: re-plan
+               json.dumps(self._active_override().as_dict()) if self._active_override() else None)  # set / cancelled
         due = self._plan_time is None or (r.now - self._plan_time).total_seconds() >= REPLAN_SECONDS
         if sig == self._plan_sig and not due or r.battery_soc is None:
             return
@@ -1295,6 +1312,7 @@ class PowerEngine(hass.Hass):
                             first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
                             overnight=window, whole_house=bool(self.cfg.features.get("slots_whole_house", True)))
         slots, cold = self._apply_cold(slots, r.now)
+        slots = self._mark_manual(slots, r.now)
         strategy = "optimiser" if self.cfg.features.get("optimised_plan", True) else "rules"
         first_h = self._first_slot_hours(slots, r.now)
         self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz,

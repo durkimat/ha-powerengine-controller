@@ -2,7 +2,8 @@
 
 > **Status:** decided 4 Oct 2026. **O1 (app) built, not released**: `pe_core/override.py`, the `decide` hook, event `pe_override`,
 > sensor `sensor.pe_state_override`, `override.json` beside the config. **O2 (card and dashboard) built, not released**:
-> `powerengine-override-card`, "Mode" tile renamed "Power Engine", golden updated. O3 not started.
+> `powerengine-override-card`, "Mode" tile renamed "Power Engine", golden updated. **O3 built, not released**:
+> the plan is made around the override's half-hours (`Slot.manual`), and replans when one is set, cancelled or ends.
 
 A way to switch the inverter's behaviour by hand for a while, from the Monitoring page, and a clearer top panel.
 
@@ -37,8 +38,11 @@ card shows the price it will pay for the period before asking for confirmation.
 card only offers valid choices. New sensor `sensor.pe_state_override` (state `none` or the mode; attributes `mode`,
 `until`, `set_at`, `price_p`), small.
 
-**Planning**: stage 1 leaves the plan alone (it replans as usual and the override simply wins now). Stage 3 makes the
-planner treat the overridden half-hours as fixed, so the plan after it starts from the real battery level.
+**Planning** (owner's decision, 4 Oct): the planner treats the overridden half-hours as fixed, so the rest of the plan is made from
+what the battery will really hold after them. Setting, cancelling or the end of an override replans at once. Overridden
+half-hours show as windows marked `manual` ("manual override: ..."), as a pink band on the plan chart (series
+"Manual override", from the plan series' `manual` list, present only while one is on) and as "(manual)" in the Actions table.
+A grid event slot keeps its event. A manual Export in the plan runs to the reserve; Charge heads for the charge target.
 
 **Top panel** (card + `dashboard.lovelace`, golden re-rendered):
 - Tile "Mode" becomes **Power Engine**: Active / Paused / Passive / Blocked, same colours.
@@ -52,7 +56,7 @@ planner treat the overridden half-hours as fixed, so the plan after it starts fr
 - **O1 app**: `pe_core/override.py`, `decide` hook, event handler, sensor, restart persistence, tests (including the
   replay with an override), docs. No card change needed to test it (fire the event).
 - **O2 card and dashboard**: the tiles, the dialog, the rename.
-- **O3 plan-aware**: fixed override slots in the planner; optional "return to plan at the next window".
+- **O3 plan-aware**: fixed override slots in the planner (done).
 
 ## Decided (owner, 4 Oct 2026)
 

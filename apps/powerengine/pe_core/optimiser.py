@@ -41,6 +41,11 @@ def slot_target(s: Slot, p: Params, final: bool = False) -> float:
     return grid_target(p)
 
 
+def _target(s: Slot, p: Params, final: bool) -> float:
+    """slot_target, except that an override's charge heads for the charge target, as the controller does."""
+    return p.target_soc if s.manual == GRID_CHARGE else slot_target(s, p, final)
+
+
 def final_topup(slots: list[Slot], p: Params) -> list[bool]:
     """The last half-hours of each fixed overnight window, long enough to charge from the top of the arbitrage band
     to the grid-charge target (plus one to spare): the only time grid charging goes above the band."""
@@ -104,6 +109,8 @@ def _tiered(acts: list[str], s: Slot, p: Params) -> list[str]:
 def _actions(s: Slot, p: Params) -> list[str]:
     if p.axle_enabled and s.axle:
         return [FORCE_DISCHARGE]
+    if s.manual:
+        return [s.manual]                          # the owner's override fixes this half-hour
     if p.free_enabled and s.free:
         return [GRID_CHARGE]
     return _tiered(_untiered_actions(s, p), s, p)
@@ -191,9 +198,9 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
         for lv in range(LEVELS):
             options = []
             for a in acts:
-                ps = PlanSlot(s, a, "", target_soc=slot_target(s, p, final[t]), hours=hours[t])
+                ps = PlanSlot(s, a, "", target_soc=_target(s, p, final[t]), hours=hours[t])
                 end = step(ps, float(lv), p)
-                if a == EXPORT and end < sell_floor(s, p) - 1e-6:
+                if a == EXPORT and not s.manual and end < sell_floor(s, p) - 1e-6:
                     continue                           # below the band only where the refill is guaranteed
                 k = KIND[a]
                 total = ps.cost + nxt[min(LEVELS - 1, max(0, round(end)))][k]
@@ -224,7 +231,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
     kp = KIND.get(prev_action, NONE_K) if prev_action else NONE_K
     for t, s in enumerate(slots):
         a = choice[t][min(LEVELS - 1, max(0, round(lvl)))][kp]
-        ps = PlanSlot(s, a, "", target_soc=slot_target(s, p, final[t]), hours=hours[t])
+        ps = PlanSlot(s, a, "", target_soc=_target(s, p, final[t]), hours=hours[t])
         lvl = step(ps, lvl, p)
         actions.append(a)
         socs.append(round(lvl, 1))
