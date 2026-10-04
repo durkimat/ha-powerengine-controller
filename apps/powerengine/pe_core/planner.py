@@ -414,7 +414,7 @@ def _overlay(rules: Plan, opt: dict, soc: float, p: Params, now: datetime, tz) -
         reason = ps.reason if a == ps.action and a != GRID_CHARGE else _why(i, a, src, acts, cheap, p, now, tz)
         out.append(replace(ps, action=a, reason=reason, target_soc=target))
     simulate(out, soc, p)
-    if _solar_only_charges(out, cheap, p):
+    if _solar_only_charges(out, cheap, p) | _solar_only_holds(out, cheap, p):
         simulate(out, soc, p)
     plan = Plan(slots=out, made_at=now, cheap_p=rules.cheap_p, cost=sum(x.cost for x in out),
                 baseline_cost=rules.baseline_cost, strategy="optimiser")
@@ -454,6 +454,29 @@ def _solar_only_charges(out: list[PlanSlot], cheap: list[bool], p: Params) -> bo
                              reason="the battery covers the house; any solar surplus goes into it")
         else:
             out[i] = replace(ps, action=HOLD, target_soc=None, reason="keep the charge for later")
+        changed = True
+    return changed
+
+
+def _solar_only_holds(out: list[PlanSlot], cheap: list[bool], p: Params) -> bool:
+    """Turn a hold that imports nothing, at a dear rate, into self-use.
+
+    Where the forecast's solar covers the house, hold and self-use look the same in the plan (the surplus charges the
+    battery, nothing is imported), so the optimiser may pick hold. But a hold forbids the battery to cover the house:
+    with less sun than forecast the shortfall is bought from the grid at the dear rate (4 Oct 2026: forecast 2 kW,
+    actual 0.4 kW, battery at 84% held while the house bought at 28.84p). Self-use only draws on the battery when the
+    sun falls short. A hold that does import (the plan weighed that cost to keep the charge for a dearer slot), a
+    cheap slot and a car's slot keep it. Returns whether it changed anything."""
+    from .optimiser import car_cheap_charge
+    changed = False
+    for i, ps in enumerate(out):
+        s = ps.slot
+        if ps.action != HOLD or cheap[i] or car_slot(s, p) or car_cheap_charge(s, p):
+            continue
+        if ps.grid_import > SOLAR_ONLY_KWH:
+            continue
+        out[i] = replace(ps, action=SELF_USE, target_soc=None,
+                         reason="the battery covers the house; any solar surplus goes into it")
         changed = True
     return changed
 
