@@ -21,7 +21,7 @@ def installed_version(path: str) -> str | None:
 # with the setup wizard (now the Your system card, `powerengine-system-card`, which the dashboard's Config page
 # holds). Raise it only when the app starts to need something a newer card does. The card holds the matching
 # MIN_APP_VERSION for the other direction.
-MIN_CARD_VERSION = "0.9.88"
+MIN_CARD_VERSION = "0.9.95"
 
 _DOTTED = re.compile(r"^\s*v?(\d+(?:\.\d+)*)\s*$")
 
