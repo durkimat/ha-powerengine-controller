@@ -1,7 +1,8 @@
 # Mode override and the top panel
 
 > **Status:** decided 4 Oct 2026. **O1 (app) built, not released**: `pe_core/override.py`, the `decide` hook, event `pe_override`,
-> sensor `sensor.pe_state_override`, `override.json` beside the config. O2 (card and dashboard) and O3 not started.
+> sensor `sensor.pe_state_override`, `override.json` beside the config. **O2 (card and dashboard) built, not released**:
+> `powerengine-override-card`, "Mode" tile renamed "Power Engine", golden updated. O3 not started.
 
 A way to switch the inverter's behaviour by hand for a while, from the Monitoring page, and a clearer top panel.
 

@@ -30,11 +30,11 @@ views:
             icon_on: mdi:pause-circle
             icon_off: mdi:play-circle-outline
             grid_options: {columns: full, rows: 1}
-          # Mode, coloured: green Active, orange Paused, blue Passive, red Blocked (inputs not ready, or Active
+          # Power Engine's own mode, coloured: green Active, orange Paused, blue Passive, red Blocked (inputs not ready, or Active
           # refused) or Stopped (inverter writes couldn't be confirmed); neutral "Not set up yet" before there is a config
           - type: tile
             entity: sensor.pe_state_status
-            name: Mode
+            name: Power Engine
             color: green
             grid_options: {columns: 3}
             visibility:
@@ -43,7 +43,7 @@ views:
                 state: Active
           - type: tile
             entity: sensor.pe_state_status
-            name: Mode
+            name: Power Engine
             color: orange
             grid_options: {columns: 3}
             visibility:
@@ -52,7 +52,7 @@ views:
                 state: Paused
           - type: tile
             entity: sensor.pe_state_status
-            name: Mode
+            name: Power Engine
             color: blue
             grid_options: {columns: 3}
             visibility:
@@ -61,7 +61,7 @@ views:
                 state: Passive
           - type: tile
             entity: sensor.pe_state_status
-            name: Mode
+            name: Power Engine
             color: red
             grid_options: {columns: 3}
             visibility:
@@ -70,12 +70,15 @@ views:
                 state: [Blocked, Stopped]
           - type: tile
             entity: sensor.pe_state_status
-            name: Mode
+            name: Power Engine
             grid_options: {columns: 3}
             visibility:
               - condition: state
                 entity: sensor.pe_state_status
                 state: Not set up yet
+          # what the inverter is doing, and the manual override button (hides itself on an app without the override)
+          - type: custom:powerengine-override-card
+            grid_options: {columns: full}
           - type: tile
             entity: sensor.pe_state_control_method
             name: Inverter control
