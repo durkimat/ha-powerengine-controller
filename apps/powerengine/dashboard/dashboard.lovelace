@@ -30,11 +30,11 @@ views:
             icon_on: mdi:pause-circle
             icon_off: mdi:play-circle-outline
             grid_options: {columns: full, rows: 1}
-          # Mode, coloured: green Active, orange Paused, blue Passive, red Blocked (inputs not ready, or Active
+          # Power Engine's own mode, coloured: green Active, orange Paused, blue Passive, red Blocked (inputs not ready, or Active
           # refused) or Stopped (inverter writes couldn't be confirmed); neutral "Not set up yet" before there is a config
           - type: tile
             entity: sensor.pe_state_status
-            name: Mode
+            name: Power Engine
             color: green
             grid_options: {columns: 3}
             visibility:
@@ -43,7 +43,7 @@ views:
                 state: Active
           - type: tile
             entity: sensor.pe_state_status
-            name: Mode
+            name: Power Engine
             color: orange
             grid_options: {columns: 3}
             visibility:
@@ -52,7 +52,7 @@ views:
                 state: Paused
           - type: tile
             entity: sensor.pe_state_status
-            name: Mode
+            name: Power Engine
             color: blue
             grid_options: {columns: 3}
             visibility:
@@ -61,7 +61,7 @@ views:
                 state: Passive
           - type: tile
             entity: sensor.pe_state_status
-            name: Mode
+            name: Power Engine
             color: red
             grid_options: {columns: 3}
             visibility:
@@ -70,12 +70,15 @@ views:
                 state: [Blocked, Stopped]
           - type: tile
             entity: sensor.pe_state_status
-            name: Mode
+            name: Power Engine
             grid_options: {columns: 3}
             visibility:
               - condition: state
                 entity: sensor.pe_state_status
                 state: Not set up yet
+          # what the inverter is doing, and the manual override button (hides itself on an app without the override)
+          - type: custom:powerengine-override-card
+            grid_options: {columns: full}
           - type: tile
             entity: sensor.pe_state_control_method
             name: Inverter control
@@ -476,6 +479,7 @@ views:
                         }
                         if (name === "Battery" || name === "Alt plan") return Math.round(val) + "%";
                         if (name === "Planned writes") return Math.round(val) + " writes";
+                        if (name === "Manual override") return val ? "on" : "–";
                         if (name === "Price") return (Math.round(val * 100) / 100) + "p";
                         return (Math.round(val * 100) / 100) + " kWh";
                       }
@@ -637,6 +641,23 @@ views:
                     const w = entity.attributes.writes_forecast || {};
                     return Object.entries(w).map(([t, n]) => [new Date(t).getTime() + 900000, n]);
                 - entity: sensor.pe_plan
+                  name: Manual override
+                  show: {legend_value: false}
+                  yaxis_id: soc
+                  type: area
+                  curve: stepline
+                  color: "#ec407a"
+                  opacity: 0.16
+                  stroke_width: 0
+                  extend_to: false
+                  # the half-hours the owner's override fixes, shaded full height (the series only exists while one is on)
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const m = s.manual || [];
+                    const pts = s.t.map((t, i) => [new Date(t).getTime(), m[i] ?? 0]);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan
                   name: Action
                   show: {legend_value: false}
                   yaxis_id: act
@@ -675,7 +696,7 @@ views:
               | Time | Action | Target | Price | Battery | Why |
               |---|---|---|---|---|---|
               {%- for w in state_attr('sensor.pe_plan', 'windows') or [] %}
-              | {{ (w.day ~ ' ') if w.day }}{{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}** | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
+              | {{ (w.day ~ ' ') if w.day }}{{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}**{{ ' (manual)' if w.manual }} | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
               {%- endfor %}
               {%- set more = state_attr('sensor.pe_plan', 'windows_more') | int(0) %}
               {%- if more %}

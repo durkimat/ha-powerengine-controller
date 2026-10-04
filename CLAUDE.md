@@ -393,6 +393,18 @@ Plan status box: `docs/plans/making-it-generic.md`. Done so far:
   the dashboard now names the new card; the card's release notes (`--card-notes`) say the wizard is gone. The app needs nothing else: `wizard`, `site_options`
   and the save path are unchanged. **Not yet run on a live HA** (same open point as the wizard); the card was driven in Chromium against a fake `hass`.
   Open: the setup checklist's button could open the panel; E2 (per-definition roles, battery-only kind) and E3 (plants become devices) are in the plan.
+- **Manual override, O1 app and O2 card built (not released, 0.9.97)** (`pe_core/override.py`, `_on_override` in `powerengine.py`, plan `docs/plans/mode-override.md`;
+  card `powerengine-override-card`, section "Manual override" in the card). The owner picks Self-use, Hold ("home": the grid runs the house), Charge or Export, for the
+  plan window, N half-hours, until a half-hour time (max 12 h) or permanently. Event `pe_override` `{"action":"set","mode":..., window|slots|until|permanent}` /
+  `{"action":"clear"}`, answer `pe_override_result {ok,message}`; sensor `sensor.pe_state_override` (state `none` or the mode; attributes `text`, `until`,
+  `set_at`); `override.json` beside the config. In `decide` it sits **below a grid event in progress (the event wins), above the plan**; the reserve stops Export
+  and Self-use, Charge holds at the target (2-point latch). Active only (`_on_override` refuses otherwise; the app passes `override=` to `decide` only when
+  effective mode is active). Pause, fuse limit, BMS limits and the write budget act as for any decision. O3: the planner makes the plan around it (`Slot.manual`, set by `_mark_manual` for
+  the slots from now to the end, skipping grid-event slots; `optimiser._actions` and `planner._default` fix the action, the post-passes and arbitrage skip them; windows carry
+  `manual: true`, the plan series a `manual` list, the dashboard a pink "Manual override" band); set, cancel and expiry replan at once (the plan signature
+  holds the active override). `MIN_CARD_VERSION` is 0.9.97 because the dashboard names the new card.
+- **Short missing readings are bridged** (`_bridge_data_gap`, `DATA_GAP_GRACE_S` 180 s): a `no_data` decision within 3 minutes of the last real one keeps it.
+
 - **Licence and CONTRIBUTING. Done.** Apache-2.0 in both repos (`LICENSE`, `NOTICE`, README sections; copyright 2026 Matthew Durkin;
   they were MIT before, which stays true for copies already taken). `CONTRIBUTING.md` in each repo: what to send, how to add a
   definition, the PR checks and the replay, the rules the code keeps, safety on other people's hardware.

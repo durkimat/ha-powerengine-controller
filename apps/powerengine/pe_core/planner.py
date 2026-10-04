@@ -281,9 +281,21 @@ def simulate(slots: list[PlanSlot], soc: float, p: Params) -> float:
 
 # --- the planner -----------------------------------------------------------------
 
+MANUAL_REASON = {SELF_USE: "the battery covers the house", HOLD: "the grid runs the house",
+                 GRID_CHARGE: "charge from the grid", EXPORT: "sell from the battery"}
+
+
+def manual_slot(s: Slot, p: Params) -> PlanSlot:
+    """A half-hour the owner's override fixes (docs/plans/mode-override.md). A charge heads for the charge target."""
+    return PlanSlot(s, s.manual, f"manual override: {MANUAL_REASON[s.manual]}",
+                    target_soc=p.target_soc if s.manual == GRID_CHARGE else None)
+
+
 def _default(s: Slot, p: Params, tz) -> PlanSlot:
     if p.axle_enabled and s.axle:
         return PlanSlot(s, FORCE_DISCHARGE, f"{N('event')} event: export for {axle_words(p, s.export)}")
+    if s.manual:
+        return manual_slot(s, p)
     if p.free_enabled and s.free:
         return PlanSlot(s, GRID_CHARGE, "free-electricity session: fill the battery", target_soc=100.0)
     cheap = s.price is not None and s.price * 100 <= p.cheap_cap_p
@@ -348,7 +360,8 @@ def _add_arbitrage(plan: list[PlanSlot], soc: float, p: Params, now: datetime, t
         keep = p.min_reserve_soc + p.arbitrage_keep_soc          # hard: the house must still be covered
         for j in range(i - 1, -1, -1):
             c = plan[j]
-            if c.action != SELF_USE or c.slot.axle or c.slot.free or car_slot(c.slot, p) or c.slot.export is None:
+            if c.action != SELF_USE or c.slot.manual or c.slot.axle or c.slot.free or car_slot(c.slot, p) \
+                    or c.slot.export is None:
                 break
             margin_p = (c.slot.export - buy / rte) * 100 - p.wear_p
             if margin_p < p.min_margin_p:
@@ -412,6 +425,9 @@ def _overlay(rules: Plan, opt: dict, soc: float, p: Params, now: datetime, tz) -
         target = min(100.0, math.ceil(socs[i])) if a == GRID_CHARGE else None
         # the rule-based reason where both agree (it's richer), except for charging, whose level now differs
         reason = ps.reason if a == ps.action and a != GRID_CHARGE else _why(i, a, src, acts, cheap, p, now, tz)
+        if ps.slot.manual and a == ps.action:                  # the owner's choice: its own words and target
+            out.append(ps)
+            continue
         out.append(replace(ps, action=a, reason=reason, target_soc=target))
     simulate(out, soc, p)
     if _solar_only_charges(out, cheap, p) | _solar_only_holds(out, cheap, p):
@@ -444,7 +460,7 @@ def _solar_only_charges(out: list[PlanSlot], cheap: list[bool], p: Params) -> bo
     changed = False
     for i, ps in enumerate(out):
         s = ps.slot
-        if ps.action != GRID_CHARGE or cheap[i] or (p.free_enabled and s.free) or car_cheap_charge(s, p):
+        if ps.action != GRID_CHARGE or s.manual or cheap[i] or (p.free_enabled and s.free) or car_cheap_charge(s, p):
             continue
         house = _house_import(ps)
         if ps.grid_import > house + SOLAR_ONLY_KWH:
@@ -471,7 +487,7 @@ def _solar_only_holds(out: list[PlanSlot], cheap: list[bool], p: Params) -> bool
     changed = False
     for i, ps in enumerate(out):
         s = ps.slot
-        if ps.action != HOLD or cheap[i] or car_slot(s, p) or car_cheap_charge(s, p):
+        if ps.action != HOLD or s.manual or cheap[i] or car_slot(s, p) or car_cheap_charge(s, p):
             continue
         if ps.grid_import > SOLAR_ONLY_KWH:
             continue
@@ -548,7 +564,7 @@ def _rules_plan(slots: list[Slot], soc: float, p: Params, now: datetime, tz=None
         best = None
         for j in range(i):
             c = plan[j]
-            if c.action not in (SELF_USE, HOLD) or c.slot.price is None or j in skipped:
+            if c.action not in (SELF_USE, HOLD) or c.slot.manual or c.slot.price is None or j in skipped:
                 continue
             if c.soc_end >= 99.9:
                 continue
@@ -594,6 +610,11 @@ def _tariff_price(s: Slot) -> float | None:
     return s.slot_price if s.slot_price is not None else s.price
 
 
+def _manual(ps: PlanSlot) -> bool:
+    """Is this half-hour the owner's override (not an event that took the slot over)?"""
+    return bool(ps.slot.manual) and ps.action == ps.slot.manual
+
+
 def windows(plan: list[PlanSlot], tz=None, now: datetime | None = None) -> list[dict]:
     """Merge consecutive slots with the same action and reason into windows.
 
@@ -603,8 +624,9 @@ def windows(plan: list[PlanSlot], tz=None, now: datetime | None = None) -> list[
     """
     out: list[dict] = []
     for ps in plan:
-        key = (ps.action, ps.reason, ps.target_soc)
-        same = out and (out[-1]["_key"] == key or (ps.action == GRID_CHARGE and out[-1]["action"] == GRID_CHARGE))
+        key = (ps.action, ps.reason, ps.target_soc, _manual(ps))
+        same = out and (out[-1]["_key"] == key or (ps.action == GRID_CHARGE and out[-1]["action"] == GRID_CHARGE
+                                                  and out[-1].get("manual", False) == _manual(ps)))
         if same:
             w = out[-1]
             w["end"] = ps.slot.end
@@ -615,7 +637,7 @@ def windows(plan: list[PlanSlot], tz=None, now: datetime | None = None) -> list[
             out.append({"_key": key, "start": ps.slot.start, "end": ps.slot.end, "action": ps.action,
                         "reason": ps.reason, "target_soc": ps.target_soc, "prices": [_tariff_price(ps.slot)],
                         "soc_start": ps.soc_start, "soc_end": ps.soc_end, "cost": ps.cost,
-                        "estimated": ps.slot.price_estimated})
+                        "estimated": ps.slot.price_estimated, **({"manual": True} if _manual(ps) else {})})
     for w in out:
         prices = [x for x in w.pop("prices") if x is not None]
         w.pop("_key")
@@ -781,6 +803,8 @@ def plan_entity_states(plan: Plan | None, extra: dict | None = None) -> dict:
         ser["discharge_kwh"].append(round(ps.battery_export, 2))          # battery export (Axle, arbitrage)
         ser["solar_export_kwh"].append(round(max(0.0, ps.grid_export - ps.battery_export), 2))
         ser["action"].append(ps.action)
+    if any(_manual(ps) for ps in plan.slots):          # the override's half-hours, shaded on the chart
+        ser["manual"] = [100 if _manual(ps) else 0 for ps in plan.slots]
     text = headline(plan)
     est = next((ps.slot.start.isoformat() for ps in plan.slots if ps.slot.price_estimated), None)
     nxt = plan.windows[1] if len(plan.windows) > 1 else None

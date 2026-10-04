@@ -43,6 +43,7 @@ class Slot:
     overnight: bool = False             # in the tariff's fixed overnight window (cheap every day)
     charge_factor: float = 1.0          # cold-battery caution: fraction of the normal charge rate expected
     car_expected: bool = True           # smart slot: the car will charge (False once it has stopped or unplugged)
+    manual: str | None = None           # the owner's override covers this slot: the action it fixes (override.py)
 
     @property
     def end(self) -> datetime:

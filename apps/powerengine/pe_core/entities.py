@@ -124,6 +124,7 @@ STATE_ENTITIES: tuple[EntityDef, ...] = (
               {"icon": "mdi:head-cog-outline", "device_class": "enum",
                "options": ["self_use", "grid_charge", "hold", "force_discharge", "export", "none"]}),
     EntityDef("sensor", "state_activity", "Activity", {"icon": "mdi:history"}),
+    EntityDef("sensor", "state_override", "Manual override", {"icon": "mdi:hand-back-right"}),
     EntityDef("sensor", "state_control_method", "Inverter control", {"icon": "mdi:tune-variant"}),
     EntityDef("sensor", "state_battery_soc", "Battery",
               {"device_class": "battery", "unit_of_measurement": "%", "state_class": "measurement"}),

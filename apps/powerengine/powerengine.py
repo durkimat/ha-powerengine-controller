@@ -22,6 +22,7 @@ import appdaemon.plugins.hass.hassapi as hass
 
 from pe_core import __version__, bms, clock, damping, diagnostics, gridcheck, ramcontrol, rctest, releases, testwrite
 from pe_core import learn as learning
+from pe_core import override as manual
 from pe_core.activity import ActivityLog
 from pe_core.adapters import registry
 from pe_core.adapters.definition import load_definition
@@ -105,6 +106,7 @@ from pe_core.weather import Weather
 from pe_core.wizard import wizard_info
 
 HEARTBEAT_SECONDS = 60
+DATA_GAP_GRACE_S = 180             # a reading missing this long or less keeps the last decision (_bridge_data_gap)
 LOWWRITE_START = "02:40:00"       # after the Simulator has had its hour
 LOWWRITE_SLICE = 3                # new days planned per pass (about a second each); more passes follow a minute apart
 SIM_START = "01:30:00"            # after the midnight jobs (00:05-00:20), well before the morning
@@ -122,6 +124,7 @@ INPUT_GRACE_SECONDS = 600         # inputs missing: keep the inverter's programm
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
 DEMO_EVENT, DEMO_RESULT_EVENT = "pe_demo", "pe_demo_result"
+OVERRIDE_EVENT, OVERRIDE_RESULT_EVENT = "pe_override", "pe_override_result"
 HISTORY_DAY_EVENT = "pe_history_day"
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
@@ -294,6 +297,7 @@ class PowerEngine(hass.Hass):
         self._real_paths = list(self.paths)
         self.cfg, self.cfg_path, self.cfg_error = None, None, None
         self._demo = None
+        self._override = None                        # a manual override (_on_override), loaded below
         day = self.args.get("demo") or self._saved_demo_day()
         if day:
             self._demo_setup(str(day))
@@ -341,6 +345,7 @@ class PowerEngine(hass.Hass):
         self._last_checks = None
         self._published = {}
         self._decision, self._since = None, None
+        self._no_data_since = None                 # when the readings last went missing (see DATA_GAP_GRACE_S)
         try:   # keep the activity log across restarts (it lives in the entity's attributes)
             saved = self.get_state("sensor.pe_state_activity", attribute="entries")
         except Exception:
@@ -424,6 +429,9 @@ class PowerEngine(hass.Hass):
         self.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
         self.listen_event(self._on_health_dismiss, "pe_health_dismiss")
         self.listen_event(self._on_demo, DEMO_EVENT)
+        if not self._demo:
+            self._override = manual.load(self._override_file(), datetime.now(timezone.utc))
+        self.listen_event(self._on_override, OVERRIDE_EVENT)
         self._history_date = None                            # a day picked with the card's date picker (Plan history)
         self.listen_event(self._on_history_day, HISTORY_DAY_EVENT)
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
@@ -618,8 +626,11 @@ class PowerEngine(hass.Hass):
                 self._track_slots(readings)
                 self._smart_step(readings)
                 self._refresh_temps(readings.now)
+                self._expire_override(readings.now)
                 self._maybe_replan(readings)
-                decision = decide(readings, self.cfg, self._decision, self.tz, plan=self.plan)
+                decision = self._bridge_data_gap(
+                    decide(readings, self.cfg, self._decision, self.tz, plan=self.plan,
+                           override=self._active_override()), readings.now)
                 self._note_command(decision)
                 sim = self.sim.update(decision, readings, self._params(), self.tz)
                 if sim is not None:
@@ -641,9 +652,97 @@ class PowerEngine(hass.Hass):
             self._control(readings, decision)
         for key, (state, attrs) in entity_states(readings, self.mode, self.tz, decision, self._since).items():
             self._publish_if_changed(key, state, attrs)
+        self._publish_override()
         if not self._dashboard_readings_synced and getattr(self, "_last_readings", None) is not None:
             self._dashboard_readings_synced = True     # now the real capacity, not the 18000 Wh fallback
             self._sync_dashboard()
+
+    # --- manual override (pe_core/override.py, docs/plans/mode-override.md) -------------------------
+
+    def _override_file(self):
+        return os.path.join(self._real_dir(), "override.json")
+
+    def _override_reply(self, ok, message):
+        self.log(f"Override: {message}", level="INFO" if ok else "WARNING")
+        self.fire_event(OVERRIDE_RESULT_EVENT, ok=ok, message=message)
+
+    def _on_override(self, event_name, data, kwargs):
+        """The card's override button (pe_override: set / clear). Only the event named pe_override is handled."""
+        if event_name != OVERRIDE_EVENT:
+            return
+        data = data if isinstance(data, dict) else {}
+        action, now = data.get("action"), datetime.now(timezone.utc)
+        if action == "clear":
+            if self._override is None:
+                return self._override_reply(True, "No override was on.")
+            self._set_override(None)
+            self._override_reply(True, "Override cancelled: back to the plan.")
+            return self._cycle(None)
+        if action != "set":
+            return self._override_reply(False, "The override action isn't understood.")
+        if self._demo or self.cfg is None or self.mode.effective != "active":
+            return self._override_reply(False, "An override works only while PowerEngine is Active. "
+                                               "Nothing was changed.")
+        window_end = None
+        if self.plan is not None and getattr(self.plan, "windows", None):
+            w = self.plan.windows[0]
+            if w.get("end"):
+                window_end = datetime.fromisoformat(w["end"])
+        ov, why = manual.parse(data, now, window_end)
+        if ov is None:
+            return self._override_reply(False, why)
+        self._set_override(ov)
+        self._override_reply(True, f"Override on: {manual.describe(ov, self.tz)}.")
+        self._cycle(None)
+
+    def _active_override(self):
+        """The override that is in force: only in Active (the plan and decisions both use this)."""
+        return self._override if self.mode.effective == "active" else None
+
+    def _mark_manual(self, slots, now):
+        """The slots an override covers, from the half-hour running now until it ends, carry its action, so the plan
+        is made around them. A grid event in progress or planned keeps its slot (it wins over an override)."""
+        ov = self._active_override()
+        if ov is None:
+            return slots
+        axle = bool(self.cfg.features.get("axle"))
+        return [dataclasses.replace(s, manual=ov.mode)
+                if s.end > now and (ov.until is None or s.start < ov.until) and not (axle and s.axle) else s
+                for s in slots]
+
+    def _set_override(self, ov):
+        self._override = ov
+        try:
+            manual.save(self._override_file(), ov)
+        except OSError as err:
+            self.log(f"Could not save the override ({err}); it will not survive a restart.", level="WARNING")
+        self._publish_override()
+
+    def _expire_override(self, now):
+        if manual.expired(self._override, now):
+            self.log(f"Override ended ({manual.describe(self._override, self.tz)}): back to the plan.")
+            self._set_override(None)
+
+    def _publish_override(self):
+        ov = self._override
+        attrs = {"mode": None, "until": None, "set_at": None, "text": None} if ov is None else \
+            {**ov.as_dict(), "text": manual.describe(ov, self.tz)}
+        self._publish_if_changed("state_override", "none" if ov is None else ov.mode, attrs)
+
+    def _bridge_data_gap(self, decision, now):
+        """A reading missing for a moment (the import rate went unavailable for one cycle on 4 Oct 2026, 08:21)
+        keeps the last real decision for up to DATA_GAP_GRACE_S, instead of handing the inverter to Self-use and
+        straight back (two RAM writes). A longer gap, or no earlier decision, decides as before."""
+        if decision.rule != "no_data":
+            self._no_data_since = None
+            return decision
+        prev = self._decision
+        if self._no_data_since is None:
+            self._no_data_since = now
+        if prev is None or prev.rule in ("no_data", "unconfigured") \
+                or (now - self._no_data_since).total_seconds() > DATA_GAP_GRACE_S:
+            return decision
+        return prev
 
     # --- cost accounting -------------------------------------------------------------
 
@@ -1202,7 +1301,8 @@ class PowerEngine(hass.Hass):
         sig = (len(r.rates), r.rates[0].start if r.rates else None,
                tuple((w.start, w.end) for w in r.dispatches), r.axle_start, r.axle_end, r.free_start, r.free_end,
                self.profile.days if self.profile else None, json.dumps(self.cfg.safety, sort_keys=True),
-               json.dumps(self.cfg.features, sort_keys=True), r.ev_state(), r.car_idle)  # car starts/stops: re-plan
+               json.dumps(self.cfg.features, sort_keys=True), r.ev_state(), r.car_idle,  # car starts/stops: re-plan
+               json.dumps(self._active_override().as_dict()) if self._active_override() else None)  # set / cancelled
         due = self._plan_time is None or (r.now - self._plan_time).total_seconds() >= REPLAN_SECONDS
         if sig == self._plan_sig and not due or r.battery_soc is None:
             return
@@ -1212,6 +1312,7 @@ class PowerEngine(hass.Hass):
                             first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
                             overnight=window, whole_house=bool(self.cfg.features.get("slots_whole_house", True)))
         slots, cold = self._apply_cold(slots, r.now)
+        slots = self._mark_manual(slots, r.now)
         strategy = "optimiser" if self.cfg.features.get("optimised_plan", True) else "rules"
         first_h = self._first_slot_hours(slots, r.now)
         self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz,

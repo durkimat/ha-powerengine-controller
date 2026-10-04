@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+from .planner import windows_within
+
 HALF = timedelta(minutes=30)
+HISTORY_WINDOWS_BUDGET = 9000          # bytes of windows; the series take about 5.4 KB of the 16 KB
 
 
 def _imp(rec: dict):
@@ -39,6 +42,45 @@ def _r(v, n=2):
     return None if v is None else round(v, n)
 
 
+def as_run_windows(windows: list[dict], slots: list[dict], tz) -> list[dict]:
+    """The windows of an "as run" day without the ones a replan replaced.
+
+    The as-run record keeps every window the plan showed while its half-hours ran, so a day with many replans held
+    overlapping copies (52 windows, 17 KB, over HA's 16 KB limit on 4 Oct 2026). Each half-hour belongs to the window
+    of its action that started last (the plan as it stood then); a window keeps only the span it owns."""
+    by_start = sorted(slots, key=lambda x: x["start"])
+    owned: dict[int, list[str]] = {}
+    for sl in by_start:
+        best = None
+        for i, w in enumerate(windows):
+            if w.get("action") == sl["action"] and w["start"] <= sl["start"] < w["end"] \
+                    and (best is None or w["start"] >= windows[best]["start"]):
+                best = i
+        if best is not None:
+            owned.setdefault(best, []).append(sl["start"])
+    out = []
+    for i, w in enumerate(windows):
+        starts = owned.get(i)
+        if not starts:
+            continue
+        last = datetime.fromisoformat(starts[-1]) + HALF
+        first = datetime.fromisoformat(starts[0])
+        if first.isoformat() == w["start"] and last.isoformat() == w["end"]:
+            out.append(w)
+            continue
+        out.append({**w, "start": first.isoformat(), "end": last.isoformat(),
+                    "from": first.astimezone(tz).strftime("%H:%M"), "to": last.astimezone(tz).strftime("%H:%M")})
+    merged: list[dict] = []
+    for w in sorted(out, key=lambda w: w["start"]):
+        m = merged[-1] if merged else None
+        if m and m["end"] == w["start"] and m["action"] == w["action"] \
+                and (m.get("reason") == w.get("reason") or w["action"] == "grid_charge"):
+            m.update(end=w["end"], to=w["to"], soc_end=w.get("soc_end"))
+        else:
+            merged.append(dict(w))
+    return merged
+
+
 def day_view(day: date, records: list[dict], snapshot: dict | None, plan_label: str | None, tz,
              now: datetime) -> dict:
     start = datetime(day.year, day.month, day.day, tzinfo=tz)
@@ -49,6 +91,10 @@ def day_view(day: date, records: list[dict], snapshot: dict | None, plan_label: 
             "actual_bat_export", "plan_solar_export", "actual_solar_export", "plan_load", "actual_load",
             "plan_solar", "actual_solar")
     ser: dict[str, list] = {k: [] for k in keys}
+    windows = (snapshot or {}).get("windows", [])
+    if plan_label == "As run":
+        windows = as_run_windows(windows, (snapshot or {}).get("slots", []), tz)
+    windows, _ = windows_within(windows, HISTORY_WINDOWS_BUDGET)      # the sensor's attributes stay under 16 KB
     today = now.astimezone(tz).date()
     both = []
     t, stop = start.astimezone(timezone.utc), end.astimezone(timezone.utc)
@@ -92,6 +138,6 @@ def day_view(day: date, records: list[dict], snapshot: dict | None, plan_label: 
     return {
         "date": day.isoformat(), "label": start.strftime("%A %d %B %Y"),
         "plan": plan_label, "plan_made_at": (snapshot or {}).get("made_at"),
-        "windows": (snapshot or {}).get("windows", []), "series": ser, "summary": summary,
+        "windows": windows, "series": ser, "summary": summary,
         "day_import_export_cost": _r(day_cost), "recorded_half_hours": len(records),
     }

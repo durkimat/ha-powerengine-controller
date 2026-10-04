@@ -138,3 +138,16 @@ def test_date_picker_ignores_bad_future_and_too_old_days(monkeypatch, tmp_path):
     app._on_history_day("pe_history_day", None, {})
     app._on_history_day("other_event", {"date": "2026-09-01"}, {})
     assert app._history_date is None and not app.published
+
+
+def test_as_run_windows_drop_replaced_copies_and_merge():
+    from zoneinfo import ZoneInfo
+
+    from pe_core.history import as_run_windows
+    t = [f"2026-10-03T{h:02d}:{m:02d}:00+00:00" for h in (7, 8) for m in (0, 30)] + ["2026-10-03T09:00:00+00:00"]
+    slots = [{"start": x, "action": "self_use"} for x in t[:4]]
+    ws = [{"start": t[0], "end": t[4], "from": "08:00", "to": "10:00", "action": "self_use", "reason": "r"},
+          {"start": t[1], "end": t[4], "from": "08:30", "to": "10:00", "action": "self_use", "reason": "r"},
+          {"start": t[0], "end": t[1], "from": "08:00", "to": "08:30", "action": "hold", "reason": "old"}]
+    out = as_run_windows(ws, slots, ZoneInfo("Europe/London"))
+    assert [(w["from"], w["to"], w["action"]) for w in out] == [("08:00", "10:00", "self_use")]
