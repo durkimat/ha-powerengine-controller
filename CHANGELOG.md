@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.94 (beta)
+
+### Behaviour changes
+
+None. PowerEngine plans and controls exactly as before.
+
+### What's new
+
+- **The Costs page's daily bars now end on the same figure as the savings chart.** The "Daily cost by scenario" chart has a new last bar, **You paid**: the PowerEngine bar plus the Axle and free-power half-hours, less Axle's payment. It matches the savings chart's "You paid" figure for the same day. Before, the bars stopped at the PowerEngine level, so a day with an Axle event showed a different final figure from the savings chart. On a day with no events the new bar equals the PowerEngine bar, and below zero means the day paid you.
+- The text under the chart describes the new bar and no longer says events are left out of the bars.
+
 ## 0.9.93 (beta)
 
 ### Behaviour changes
