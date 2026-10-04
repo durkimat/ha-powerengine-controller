@@ -42,7 +42,7 @@ internal that changes between releases). It lists the same rows with **Edit** an
 
 Equipment changes go through three plainly named states:
 
-1. **Editing**: inside the panel. Each row carries a tag (*new*, *changed*, *will be removed*) and any change can be undone.
+1. **Editing**: inside the panel. The last step of Add says **Add to list**, of Edit or Replace **Done**, and the Remove confirmation **Mark for removal**; each puts the change in the working copy and returns to the list.  Each row carries a tag (*new*, *changed*, *will be removed*) and any change can be undone.
 2. **Draft**: **Save draft** keeps the edits in the card and closes the panel. They are not live. The page shows a banner
    ("Draft: 3 changes, not applied to your system") with **Edit draft**, **Discard draft** (asks first) and **Apply to System**.
 3. **Applied**: **Apply to System** shows a summary ("Add garage battery; remove solar plant 2; change tariff") and any mode
@@ -79,7 +79,7 @@ clear the input mappings that nothing uses any more, in the same Apply.
 
 ## Card changes
 
-- **New:** the Your system section, the panel, and `equipment*` pure helpers (impact of a removal, staged-change summary), tested in
+- **New:** the Your system section, the panel, and `equipment*` pure helpers (impact of a removal, draft-change summary), tested in
   `tests/equipment.test.cjs`.
 - **Reused:** `wizardFacts`, `wizardMatch`, `wizardCandidates`, `wizardOthers`, `wizardSuggest`, `wizardSignCheck`,
   `wizardUsedEntities`, `wizardPlantFromDevice`, `buildCandidateExport`, `scrubText`, `siteRows` and the device helpers. Rename
@@ -98,7 +98,7 @@ clear the input mappings that nothing uses any more, in the same Apply.
 
 ## Stages
 
-- **E1, panel and list, with today's data model.** Your system section, panel, staged changes, removal warnings, wizard retired.
+- **E1, panel and list, with today's data model.** Your system section, panel, draft and apply, removal warnings, wizard retired.
   Card only; `MIN_APP_VERSION` unchanged (hidden pieces follow the app's published attributes as now).
 - **E2, per-definition roles and a battery-only kind.** App and card; raises `MIN_CARD_VERSION` / `MIN_APP_VERSION` as needed.
 - **E3, plants become devices.** Migration in the app; the list is unchanged to the user.
