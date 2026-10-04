@@ -10,6 +10,7 @@ and how the planner is told how sure it is.
 ## 1.1 From readings to a plan
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     subgraph LIVE["Live readings, every 30 s (readings.read)"]
         L1["Battery SoC, battery power"]
@@ -98,6 +99,7 @@ A supplier "smart slot" (car dispatch) makes the **whole house** cheap for that 
 supplier can withdraw it, or it may be cut short when the car is full. The plan weighs it.
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A["Slot is in a planned dispatch"] --> B{"Supplier gives the whole house<br/>the slot rate? (slots_whole_house)"}
     B -- "no" --> C["Plan it at the day's standard (highest) rate,<br/>unweighted, unless it is in the overnight window"]
@@ -117,6 +119,9 @@ flowchart TD
 | Cut short while running (and not carried on by another slot within 10 minutes) | 0.5 |
 | Cancelled before it started | 0 |
 | Cut short, but another slot began within 10 minutes (the supplier re-lists a running dispatch) | 1 if the car drew 0.2 kWh or confirmed, else 0.5 |
+
+The 0.2 kWh line (`MIN_CAR_KWH` in `certainty.py`) is used here, for scoring, and in the Health tab's smart-slot summary
+(`USED_KWH` in `slots.py`). It no longer has any part in how the plan treats the car (1.5).
 
 The overall score starts from a prior of **70% worth 4 slots**, so a few early results cannot swing it to 0 or 100. The
 score is then worked out per group, pulled towards the overall figure until the group has about 4 slots of its own:
@@ -141,7 +146,7 @@ A smart slot where the car *is* expected is a **car slot** (`car_slot`): the bat
 Grid-charge are allowed there (page 3). Under the rule above that is at most one half-hour at a time.
 
 **What was removed.** Before 0.9.103 the plan also guessed the car would not draw when: it was unplugged; the charger said
-"charge complete"; the last long smart slot drew nothing (`car_idle`, then also under 0.2 kWh, 0.9.101); or a dispatch was
+"charge complete"; the last long smart slot charged for under a minute (`car_idle`); or a dispatch was
 running with the car not charging. Those guesses fixed the 28 Sep 2026 case (a 09:00 to 15:30 slot after two where the car drew
 nothing) but also meant any smart slot with the car plugged in was planned as car charging, so a one-minute blip of 0.01 kWh
 kept the plan flat at 90% from 19:00 to 04:00 (4 Oct 2026). `car_idle` and the charger's "complete" now feed only the

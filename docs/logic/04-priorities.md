@@ -15,6 +15,7 @@ There are **two places** where priority is decided, and they have to agree:
 **Active**; decisions are still *made* in Passive and Paused, they are just labelled "Would ..." and not sent.
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A{"Config file has an error?"} -- yes --> A1["UNCONFIGURED"]
     A -- no --> B{"No config at all?"}
@@ -42,6 +43,7 @@ Leaving Active hands the inverter back to Self-Use once (RAM control: remote con
 `_decide` then `_with_plan`. This is what runs every 30 seconds once a plan exists, which is nearly always.
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     S["Readings"] --> R0{"No config / no SoC / no import rate?"}
     R0 -- yes --> R0a["NONE: 'no reading for ...'<br/>(a gap of 3 minutes or less keeps the last decision)"]
@@ -88,6 +90,7 @@ Inside `_with_plan` (only when the house load includes the car, `house_load_incl
 battery must never feed the car".
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A["Car is charging now"] --> B{"A target-reached hold is already on?"}
     B -- yes --> B1["Keep it"]
@@ -121,6 +124,7 @@ Event `pe_override`, state `sensor.pe_state_override`, file `override.json`, cod
 | Not applied over it | Free power, the car rule, the "plan wants a force discharge but no event" rule. The owner chose it |
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     O["Override set"] --> M{"Mode?"}
     M -- "Hold" --> H["HOLD: grid runs the house"]
@@ -160,6 +164,7 @@ If `plan` is `None` (just after a start, or planning failed) `_decide` falls thr
 and the override are as above; then:
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A["No plan"] --> B{"2. Event scheduled within the look-ahead<br/>(6 h) and SoC below what it needs?"}
     B -- "yes, import cheap" --> B1["GRID-CHARGE to the target, or the need if higher<br/>rule: pre_axle"]

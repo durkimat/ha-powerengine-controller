@@ -7,6 +7,10 @@
 > **Keeping it true:** a PR that changes planner, optimiser, `decide`, the override or the control path updates the matching
 > page here (and the decision log, [08](08-decision-log.md), if it adds a rule). Code is cited by file and function name,
 > not line number, because line numbers drift.
+>
+> **Diagrams:** every Mermaid block starts with the same `%%{init: ...}%%` line (plain SVG text, extra padding). Without it,
+> Mermaid measures each label in one font and clips it to that box, so in a viewer with a different font the text is cut off
+> at any zoom. Copy the line into any new diagram; `tests/test_logic_docs.py` checks it.
 
 These pages are for the owner to read and review: what PowerEngine considers, in what order, and why. The diagrams are
 [Mermaid](https://mermaid.js.org/) (GitHub draws them; in an editor they read as indented text). Where a decision has many
@@ -37,6 +41,7 @@ Everything below happens in `PowerEngine._cycle` (`apps/powerengine/powerengine.
 changes. The decision is made on **every** cycle from the plan's first half-hour plus live readings.
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A["Every 30 s: read the inputs<br/>(readings.read, via the adapters)"] --> B["Record: load profile, costs,<br/>smart-slot tracking, grid events"]
     B --> C["Smart-charge step: maybe ask the<br/>supplier for more car slots"]
@@ -56,6 +61,7 @@ flowchart TD
 ### What "the plan" is, in three layers
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart LR
     S["Slots<br/>48 half-hours of price, solar,<br/>house load, events"] --> R["Rules plan<br/>(page 2)<br/>defaults + fix shortfalls<br/>supplies the explanations"]
     S --> O["Optimiser<br/>(page 3)<br/>dynamic programming<br/>chooses the actions"]

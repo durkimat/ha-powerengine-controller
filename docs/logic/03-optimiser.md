@@ -18,6 +18,7 @@ does not capture directly (wear, inverter writes, living in the arbitrage band, 
 It is **dynamic programming over state of charge**, solved backwards from the end of the horizon.
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A["State = (half-hour t, battery level 0 to 100 percent,<br/>kind of the previous half-hour's action)"] --> B["End of horizon:<br/>leftover energy valued at the cheapest<br/>price in the period (a credit)"]
     B --> C["Step back one half-hour at a time"]
@@ -43,6 +44,7 @@ flowchart TD
 `_actions(slot)`. First match wins.
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     S["A half-hour"] --> A{"Grid event, feature on?"}
     A -- yes --> A1["Only FORCE-DISCHARGE"]
@@ -116,6 +118,7 @@ the penalty.
 `switch_cost(previous kind, new kind)`:
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A{"Same kind as the<br/>previous half-hour?"} -- yes --> Z["0"]
     A -- no --> B{"Hold to charge,<br/>or charge to hold?"}
@@ -132,6 +135,7 @@ free (0.5p) and the plan is allowed to be choppier.
 ## 3.6 From the optimiser's table to "the plan"
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A["Rules plan<br/>(actions, reasons, cheap threshold)"] --> M
     B["Optimiser result<br/>(actions, SoC path)"] --> M["_overlay"]
@@ -161,6 +165,7 @@ Both exist because the plan's *model* cannot tell two actions apart when the for
 *house* can, once the sun is less than forecast. They run on the optimiser's result, after the overlay.
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     subgraph CH["_solar_only_charges"]
         C1{"A grid-charge slot that is NOT cheap,<br/>NOT free power, NOT a cheap car slot,<br/>NOT manual?"}

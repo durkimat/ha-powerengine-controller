@@ -144,7 +144,8 @@ Changing any of these needs a code change and a release.
 | `HIGH_DWELL`, `EARLY_BIAS`, `SELL_BIAS` | £0.0015, £0.0005, £0.0005 | `optimiser.py` | Tie-breakers |
 | `MID_SLOT_STICK` | £0.15 | `optimiser.py` | Reluctance to change a running half-hour |
 | `SOFT_BAND_MARGIN` | 5 points | `optimiser.py` | How far past the arbitrage band's edges a charge or sale may go, priced by the band penalty (0.9.102) |
-| `USED_KWH` | 0.2 kWh | `slots.py` | A smart slot the car drew less than this in counts as not used in the Health summary (0.9.101; `car_idle` no longer uses it since 0.9.103) |
+| `MIN_CAR_KWH` | 0.2 kWh | `certainty.py` | A smart slot that ran to its end counts as delivered if the car drew at least this (or the supplier confirms it) |
+| `USED_KWH` | 0.2 kWh | `slots.py` | A smart slot the car drew less than this in counts as not used in the Health tab's summary. Added to `car_idle` in 0.9.101, taken out again in 0.9.103; it is a second copy of the same figure as `MIN_CAR_KWH` |
 | `LATCH_BAND_SOC` | 2 points | `decide.py`, `override.py` | Target-reached latch |
 | `MIN_LEFT_MIN` | 5 min | `earlytarget.py` | Least time left for an early-target replan |
 | `DATA_GAP_GRACE_S` | 180 s | `powerengine.py` | Missing-reading bridge |

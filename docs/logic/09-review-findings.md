@@ -28,6 +28,7 @@ sure the finding is:
 | [F11](#f11) | Leftover energy is valued at the cheapest price, which can be zero or negative | Read | Low |
 | [F12](#f12) | The learned reserve reaches the plan but not the live decision | Read | Low |
 | [F13](#f13) | The plan is not re-optimised when learned parameters change | Read | Low |
+| [F14](#f14) | The 0.2 kWh "car drew something" line is defined twice | Read | Low |
 
 ---
 
@@ -217,6 +218,15 @@ read the *configured* `min_reserve_soc`. If the learned reserve is 15% and the s
 
 The replan signature (page 1, 1.9) contains the settings and features but not the learned parameters or the measured
 capacity. They reach the plan at the next 5-minute refresh. Not a problem in practice.
+
+<a id="f14"></a>
+## F14. The 0.2 kWh line is defined twice
+
+`certainty.MIN_CAR_KWH` and `slots.USED_KWH` are both 0.2 kWh and both mean "the car really drew from this smart slot".
+One scores a slot's certainty; the other feeds the Health tab's "used" count. 0.9.101 briefly used `USED_KWH` inside `car_idle`
+too; 0.9.103 took that out. Nothing in the live plan uses either now. If one is ever tuned, the other will quietly disagree.
+
+**What I would do:** keep one constant (for example in `slots.py`) and import it in `certainty.py`.
 
 ---
 
