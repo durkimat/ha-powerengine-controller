@@ -22,6 +22,7 @@ import appdaemon.plugins.hass.hassapi as hass
 
 from pe_core import __version__, bms, clock, damping, diagnostics, gridcheck, ramcontrol, rctest, releases, testwrite
 from pe_core import learn as learning
+from pe_core import override as manual
 from pe_core.activity import ActivityLog
 from pe_core.adapters import registry
 from pe_core.adapters.definition import load_definition
@@ -123,6 +124,7 @@ INPUT_GRACE_SECONDS = 600         # inputs missing: keep the inverter's programm
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
 DEMO_EVENT, DEMO_RESULT_EVENT = "pe_demo", "pe_demo_result"
+OVERRIDE_EVENT, OVERRIDE_RESULT_EVENT = "pe_override", "pe_override_result"
 HISTORY_DAY_EVENT = "pe_history_day"
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
@@ -295,6 +297,7 @@ class PowerEngine(hass.Hass):
         self._real_paths = list(self.paths)
         self.cfg, self.cfg_path, self.cfg_error = None, None, None
         self._demo = None
+        self._override = None                        # a manual override (_on_override), loaded below
         day = self.args.get("demo") or self._saved_demo_day()
         if day:
             self._demo_setup(str(day))
@@ -426,6 +429,9 @@ class PowerEngine(hass.Hass):
         self.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
         self.listen_event(self._on_health_dismiss, "pe_health_dismiss")
         self.listen_event(self._on_demo, DEMO_EVENT)
+        if not self._demo:
+            self._override = manual.load(self._override_file(), datetime.now(timezone.utc))
+        self.listen_event(self._on_override, OVERRIDE_EVENT)
         self._history_date = None                            # a day picked with the card's date picker (Plan history)
         self.listen_event(self._on_history_day, HISTORY_DAY_EVENT)
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
@@ -621,8 +627,10 @@ class PowerEngine(hass.Hass):
                 self._smart_step(readings)
                 self._refresh_temps(readings.now)
                 self._maybe_replan(readings)
+                self._expire_override(readings.now)
                 decision = self._bridge_data_gap(
-                    decide(readings, self.cfg, self._decision, self.tz, plan=self.plan), readings.now)
+                    decide(readings, self.cfg, self._decision, self.tz, plan=self.plan,
+                           override=self._override if self.mode.effective == "active" else None), readings.now)
                 self._note_command(decision)
                 sim = self.sim.update(decision, readings, self._params(), self.tz)
                 if sim is not None:
@@ -644,9 +652,66 @@ class PowerEngine(hass.Hass):
             self._control(readings, decision)
         for key, (state, attrs) in entity_states(readings, self.mode, self.tz, decision, self._since).items():
             self._publish_if_changed(key, state, attrs)
+        self._publish_override()
         if not self._dashboard_readings_synced and getattr(self, "_last_readings", None) is not None:
             self._dashboard_readings_synced = True     # now the real capacity, not the 18000 Wh fallback
             self._sync_dashboard()
+
+    # --- manual override (pe_core/override.py, docs/plans/mode-override.md) -------------------------
+
+    def _override_file(self):
+        return os.path.join(self._real_dir(), "override.json")
+
+    def _override_reply(self, ok, message):
+        self.log(f"Override: {message}", level="INFO" if ok else "WARNING")
+        self.fire_event(OVERRIDE_RESULT_EVENT, ok=ok, message=message)
+
+    def _on_override(self, event_name, data, kwargs):
+        """The card's override button (pe_override: set / clear). Only the event named pe_override is handled."""
+        if event_name != OVERRIDE_EVENT:
+            return
+        data = data if isinstance(data, dict) else {}
+        action, now = data.get("action"), datetime.now(timezone.utc)
+        if action == "clear":
+            if self._override is None:
+                return self._override_reply(True, "No override was on.")
+            self._set_override(None)
+            return self._override_reply(True, "Override cancelled: back to the plan.")
+        if action != "set":
+            return self._override_reply(False, "The override action isn't understood.")
+        if self._demo or self.cfg is None or self.mode.effective != "active":
+            return self._override_reply(False, "An override works only while PowerEngine is Active. "
+                                               "Nothing was changed.")
+        window_end = None
+        if self.plan is not None and getattr(self.plan, "windows", None):
+            w = self.plan.windows[0]
+            if w.get("end"):
+                window_end = datetime.fromisoformat(w["end"])
+        ov, why = manual.parse(data, now, window_end)
+        if ov is None:
+            return self._override_reply(False, why)
+        self._set_override(ov)
+        self._override_reply(True, f"Override on: {manual.describe(ov, self.tz)}.")
+        self._cycle(None)
+
+    def _set_override(self, ov):
+        self._override = ov
+        try:
+            manual.save(self._override_file(), ov)
+        except OSError as err:
+            self.log(f"Could not save the override ({err}); it will not survive a restart.", level="WARNING")
+        self._publish_override()
+
+    def _expire_override(self, now):
+        if manual.expired(self._override, now):
+            self.log(f"Override ended ({manual.describe(self._override, self.tz)}): back to the plan.")
+            self._set_override(None)
+
+    def _publish_override(self):
+        ov = self._override
+        attrs = {"mode": None, "until": None, "set_at": None, "text": None} if ov is None else \
+            {**ov.as_dict(), "text": manual.describe(ov, self.tz)}
+        self._publish_if_changed("state_override", "none" if ov is None else ov.mode, attrs)
 
     def _bridge_data_gap(self, decision, now):
         """A reading missing for a moment (the import rate went unavailable for one cycle on 4 Oct 2026, 08:21)

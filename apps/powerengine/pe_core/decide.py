@@ -104,13 +104,13 @@ def pre_axle_reserve(r: Readings, cfg: Config) -> float | None:
 
 
 def decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz: tzinfo | None = None,
-           plan=None) -> Decision:
+           plan=None, override=None) -> Decision:
     """What PowerEngine would do now (the rule stack, or the plan with live overrides), within the fuse limit."""
-    return fuse_limited(_decide(r, cfg, previous, tz, plan), r, cfg)
+    return fuse_limited(_decide(r, cfg, previous, tz, plan, override), r, cfg)
 
 
 def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz: tzinfo | None = None,
-            plan=None) -> Decision:
+            plan=None, override=None) -> Decision:
     if r is None:
         return Decision(NONE, "unconfigured", "PowerEngine isn't configured yet")
     if r.battery_soc is None or r.import_rate is None:
@@ -132,6 +132,11 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
         return Decision(FORCE_DISCHARGE, "axle_active",
                         f"{N('event')} event in progress (paid £1{extra} per kWh exported)",
                         power_w=axle_power_w(cfg))
+
+    # The owner's manual override (override.py): below a grid event in progress, above the plan and the rules
+    if override is not None:
+        from . import override as manual
+        return manual.decide(override, soc, price, target, s["min_reserve_soc"], tz, previous)
 
     # With a plan, live overrides first (Axle now, free power now, car charging now), then the plan.
     if plan is not None and plan.slots:
