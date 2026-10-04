@@ -20,7 +20,19 @@ from zoneinfo import ZoneInfo
 
 import appdaemon.plugins.hass.hassapi as hass
 
-from pe_core import __version__, bms, clock, damping, diagnostics, gridcheck, ramcontrol, rctest, releases, testwrite
+from pe_core import (
+    __version__,
+    bms,
+    clock,
+    damping,
+    diagnostics,
+    earlytarget,
+    gridcheck,
+    ramcontrol,
+    rctest,
+    releases,
+    testwrite,
+)
 from pe_core import learn as learning
 from pe_core import override as manual
 from pe_core.activity import ActivityLog
@@ -55,6 +67,7 @@ from pe_core.decide import cheap_limit, decide
 from pe_core.demo.gate import DemoGate
 from pe_core.demo.pack import load_pack as load_demo_pack
 from pe_core.demo.world import DemoWorld
+from pe_core.earlytarget import EarlyTargets
 from pe_core.eeprom import BlockWriteModel, WriteLog, WriteModel
 from pe_core.energy import Recorder
 from pe_core.entities import (
@@ -298,6 +311,7 @@ class PowerEngine(hass.Hass):
         self.cfg, self.cfg_path, self.cfg_error = None, None, None
         self._demo = None
         self._override = None                        # a manual override (_on_override), loaded below
+        self._early = EarlyTargets()                 # early-target records (_early_target), saved below
         day = self.args.get("demo") or self._saved_demo_day()
         if day:
             self._demo_setup(str(day))
@@ -429,6 +443,8 @@ class PowerEngine(hass.Hass):
         self.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
         self.listen_event(self._on_health_dismiss, "pe_health_dismiss")
         self.listen_event(self._on_demo, DEMO_EVENT)
+        if not self._demo:
+            self._early = EarlyTargets(os.path.join(self._real_dir(), "early_target.json"))
         if not self._demo:
             self._override = manual.load(self._override_file(), datetime.now(timezone.utc))
         self.listen_event(self._on_override, OVERRIDE_EVENT)
@@ -631,6 +647,7 @@ class PowerEngine(hass.Hass):
                 decision = self._bridge_data_gap(
                     decide(readings, self.cfg, self._decision, self.tz, plan=self.plan,
                            override=self._active_override()), readings.now)
+                decision = self._early_target(readings, decision)
                 self._note_command(decision)
                 sim = self.sim.update(decision, readings, self._params(), self.tz)
                 if sim is not None:
@@ -728,6 +745,50 @@ class PowerEngine(hass.Hass):
         attrs = {"mode": None, "until": None, "set_at": None, "text": None} if ov is None else \
             {**ov.as_dict(), "text": manual.describe(ov, self.tz)}
         self._publish_if_changed("state_override", "none" if ov is None else ov.mode, attrs)
+
+    def _early_target(self, r, decision):
+        """The plan's charge target for this half-hour is reached (the decision would be a Hold until it ends): if
+        there is time left, replan now from the live battery level so the best action takes over for the rest of the
+        slot (#175). Looked at once per half-hour; every look is recorded, with why a hold stayed
+        (pe_core/earlytarget.py)."""
+        e = self._early
+        reached = decision.details.get("reached") if decision.rule == "plan" else None
+        if not isinstance(reached, dict) or not reached.get("slot"):
+            e.note_decision(r.now, decision.action, decision.rule, None)
+            return decision
+        slot = reached["slot"]
+        if not e.first_look(slot):
+            return decision
+        start = datetime.fromisoformat(slot)
+        left = earlytarget.minutes_left(start, r.now)
+        nxt = self.plan.slots[1] if self.plan is not None and len(self.plan.slots) > 1 else None
+        rec = {"t": r.now.isoformat(timespec="seconds"), "slot": slot,
+               "slot_end": (start + earlytarget.SLOT).isoformat(), "left_min": round(left, 1),
+               "soc": r.battery_soc, "target": reached.get("target"),
+               "price_p": round(r.import_rate * 100, 2) if r.import_rate is not None else None,
+               "car_charging": r.ev_state() == "charging", "mode": self.mode.effective,
+               "next_action": nxt.action if nxt else None,
+               "next_price_p": round(nxt.slot.price * 100, 2) if nxt and nxt.slot.price is not None else None}
+        why = earlytarget.evaluate(left, self.plan is not None)
+        if why:
+            rec["outcome"] = why
+            e.record(rec, replanned=False)
+            return decision
+        try:
+            self._maybe_replan(r, force=True)
+            new = self._bridge_data_gap(decide(r, self.cfg, decision, self.tz, plan=self.plan,
+                                               override=self._active_override()), r.now)
+        except Exception as err:
+            self.log(f"Early-target replan failed: {err!r}", level="WARNING")
+            rec["outcome"] = "error"
+            e.record(rec, replanned=False)
+            return decision
+        still = new.rule == "plan" and isinstance(new.details.get("reached"), dict)
+        rec.update(outcome="replanned_still_hold" if still else "replanned_changed", new_action=new.action,
+                   new_rule=new.rule, new_reason=new.reason[:90], new_target=new.target_soc)
+        e.record(rec, replanned=True)
+        self.log(f"Target reached with {left:.0f} min left: replanned, now {new.action} ({new.reason[:60]})")
+        return new
 
     def _bridge_data_gap(self, decision, now):
         """A reading missing for a moment (the import rate went unavailable for one cycle on 4 Oct 2026, 08:21)
@@ -1296,7 +1357,7 @@ class PowerEngine(hass.Hass):
         except Exception:
             return False
 
-    def _maybe_replan(self, r):
+    def _maybe_replan(self, r, force=False):
         r.car_idle = self._car_idle(r)
         sig = (len(r.rates), r.rates[0].start if r.rates else None,
                tuple((w.start, w.end) for w in r.dispatches), r.axle_start, r.axle_end, r.free_start, r.free_end,
@@ -1304,7 +1365,7 @@ class PowerEngine(hass.Hass):
                json.dumps(self.cfg.features, sort_keys=True), r.ev_state(), r.car_idle,  # car starts/stops: re-plan
                json.dumps(self._active_override().as_dict()) if self._active_override() else None)  # set / cancelled
         due = self._plan_time is None or (r.now - self._plan_time).total_seconds() >= REPLAN_SECONDS
-        if sig == self._plan_sig and not due or r.battery_soc is None:
+        if (sig == self._plan_sig and not due and not force) or r.battery_soc is None:
             return
         cert = Certainty(self.slots.slots, self.tz)
         window = overnight_window(self.costbook.cheap_history) if self.costbook is not None else set()
@@ -1319,7 +1380,7 @@ class PowerEngine(hass.Hass):
                               auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)),
                               wear_p=self.cfg.safety.get("battery_wear_p", 2.0), strategy=strategy,
                               prev_action=self._decision.action if getattr(self, "_decision", None) else None,
-                              stick=self._mid_slot_stick(r.now), first_h=first_h)
+                              stick=0.0 if force else self._mid_slot_stick(r.now), first_h=first_h)
         self._plan_sig, self._plan_time = sig, r.now
         self._snapshot_plan(r.now)
         self._record_ran(r.now)
@@ -3243,6 +3304,7 @@ class PowerEngine(hass.Hass):
             "smart_requests": s(lambda: self.smart.attempts[-40:]) if getattr(self, "smart", None) else None,
             "smart_slots": s(lambda: self.slots.summary(now, tz=self.tz)) if getattr(self, "slots", None) else None,
             "bms": s(self._bms_bundle),
+            "early_target": s(lambda: {**self._early.summary(), "records": self._early.records[-60:]}),
             "attribute_sizes": s(lambda: diagnostics.largest_attrs(self.__dict__.get("_attr_sizes", {}))),
             "log": list(getattr(self.__dict__.get("_log_ring"), "lines", [])),
         }
