@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.95 (beta)
+
+### Behaviour changes
+
+None. PowerEngine plans and controls exactly as before.
+
+### What's new
+
+- **The Config page's Setup wizard is replaced by a "Your system" section.** It lists the equipment PowerEngine uses (inverter and battery, tariff, car charger, solar forecast, grid events, extra solar and other devices) and shows each one's live value. Nothing in the list is editable. **Change your system** opens a panel where you add, edit, replace and remove equipment, whether the install is new or already running.
+- Changes in the panel are a **draft** until you choose **Apply to System**. **Save draft** keeps the draft in your browser, and closing the panel with unsaved edits asks whether to save or discard it. Apply sends only the equipment changes; your other settings are not touched.
+- The inverter and the tariff can be replaced but not removed. Removing the car charger, solar forecast, grid events, an extra solar plant or another device first says what goes with it (features that switch off, inputs that stop being used). Active, Passive and Pause are never changed by Apply. Changing the inverter still switches to Passive and asks for the supervised tests, as before.
+- The dashboard's Config page now uses the new card, so this release needs the matching card (0.9.95): the app warns if the card is older.
+
 ## 0.9.94 (beta)
 
 ### Behaviour changes
