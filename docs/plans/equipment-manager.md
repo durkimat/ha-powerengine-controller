@@ -51,8 +51,10 @@ Equipment changes go through three plainly named states:
 Closing the panel (Close, Esc, the backdrop) with unsaved edits asks: **Save draft**, **Discard changes** or **Keep editing**. With
 no edits it just closes. The word "Save" alone is not used for equipment, so it cannot be confused with the settings' own Save.
 
-The draft lives in the card, not the app. Proposal: keep it in the browser's local storage so a reload does not lose it, with
-a note "draft from earlier" when it is found (it would not show on another browser). Apply writes only the equipment keys
+The draft lives in the card, in the browser's local storage, so a reload keeps it and a note "draft from earlier" shows when it
+is found. **Decided (owner, 4 Oct): browser only.** It does not follow the user to another browser or device, and E1 stays card
+only. Reads and writes of local storage are wrapped (private windows and blocked storage must not break the page: the draft then
+lasts until the page is closed). Apply writes only the equipment keys
 (`site`, `solar_plants`, `devices` and the mappings of the parts concerned) onto the saved configuration; the settings' own
 draft is not applied by it. To check in E1: `pe_config_save` takes the whole config today, so the card would send the saved one
 with those keys replaced.
@@ -105,6 +107,5 @@ clear the input mappings that nothing uses any more, in the same Apply.
 
 ## Still open
 
-- Whether the draft survives a reload (local storage, proposed).
 - Whether the panel shows firmware detection for inverters (today's `firmware_detected` line) in step 3 or on the list row.
 - Not yet run on a live HA: `hass.entities[].platform` and `hass.devices` are what the card expects (same open point as the wizard).
