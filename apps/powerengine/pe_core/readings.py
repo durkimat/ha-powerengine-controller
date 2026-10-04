@@ -62,7 +62,6 @@ class Readings:
     dispatches: list[Window] = field(default_factory=list)     # planned smart-charge slots
     completed_dispatches: list[Window] = field(default_factory=list)
     ev_plug: str | None = None
-    car_idle: bool = False               # the last smart slot passed with the car drawing nothing (it's full)
     ev_status: str | None = None
     ev_mode: str | None = None
     ev_session_kwh: float | None = None

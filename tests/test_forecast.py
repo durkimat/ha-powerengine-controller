@@ -100,7 +100,7 @@ def test_load_profile_with_no_car_history():
     assert prof.watts
 
 
-def test_car_finished_mid_dispatch_frees_the_rest_of_it():
+def test_only_the_running_half_hour_is_a_car_slot_and_only_while_charging():
     from dataclasses import replace
 
     from pe_core.optimiser import optimise
@@ -110,20 +110,16 @@ def test_car_finished_mid_dispatch_frees_the_rest_of_it():
     r.dispatches = [Window(s0 - timedelta(hours=1), s0 + timedelta(hours=4)),       # running now
                     Window(s0 + timedelta(hours=20), s0 + timedelta(hours=22))]     # a later one
     r.ev_plug = "Charging"
-    assert all(s.car_expected for s in build_slots(r, [], None, BST) if s.smart_slot)
-    r.ev_plug = "EV Connected"                     # plugged in, not charging: finished
-    r.ev_status = "Paused"                         # (charger not reporting the charge complete)
+    r.ev_power = 7200.0
     slots = build_slots(r, [], None, BST)
-    now_slots = [s for s in slots if s.smart_slot and s.start < s0 + timedelta(hours=4)]
-    later = [s for s in slots if s.smart_slot and s.start >= s0 + timedelta(hours=20)]
-    assert now_slots and not any(s.car_expected for s in now_slots) and all(s.car_kw == 0 for s in now_slots)
-    assert later and all(s.car_expected for s in later)
-    r.ev_status = "Completed"                      # the charger says the car is full: later slots are free too
+    smart = [s for s in slots if s.smart_slot]
+    assert smart[0].start == s0 and smart[0].car_expected and smart[0].car_kw == pytest.approx(7.2)
+    assert smart[1:] and not any(s.car_expected for s in smart[1:])      # assumed done by the end of this half-hour
+    for plug in ("EV Connected", "Waiting for EV", "EV Disconnected"):      # not charging: no smart slot has a car
+        r.ev_plug, r.ev_power, r.ev_status = plug, 0.0, "Paused"
+        assert not any(s.car_expected for s in build_slots(r, [], None, BST) if s.smart_slot)
+    r.ev_plug, r.ev_status = "EV Connected", "Completed"
     slots = build_slots(r, [], None, BST)
-    assert not any(s.car_expected for s in slots if s.smart_slot)
-    r.ev_status = "Paused"
-    r.ev_plug = "EV Disconnected"
-    assert not any(s.car_expected for s in build_slots(r, [], None, BST) if s.smart_slot)
     # the optimiser may sell in a smart slot the car has finished with
     cheap = [replace(s, price=0.0699, export=0.15, load_kwh=0.2, solar_kwh=0.0) for s in slots[:12]]
     free = [replace(s, smart_slot=True, car_expected=False) for s in cheap[:6]] + \
@@ -187,20 +183,16 @@ def test_rest_of_a_running_dispatch_is_counted_at_its_price():
     assert later and all(s.certainty is not None for s in later)
 
 
-def test_idle_car_means_smart_slots_are_just_cheap_time():
-    import dataclasses
+def test_plugged_in_car_means_smart_slots_are_just_cheap_time():
     from datetime import timedelta
 
     from pe_core.forecast import build_slots
     from pe_core.readings import Readings, Window
     now = datetime(2026, 9, 28, 7, 41, tzinfo=timezone.utc)
     disp = [Window(now + timedelta(minutes=19), now + timedelta(hours=7), -45.5)]
-    base = Readings(now=now, battery_soc=90, import_rate=0.30, export_rate=0.15, ev_plug="Waiting for EV",
-                    ev_power=0, dispatches=disp)
-    slots = build_slots(base, None, None, timezone.utc)
-    assert any(s.smart_slot and s.car_expected for s in slots)
-    idle = build_slots(dataclasses.replace(base, car_idle=True), None, None, timezone.utc)
-    assert all(not s.car_expected for s in idle if s.smart_slot)
+    r = Readings(now=now, battery_soc=90, import_rate=0.30, export_rate=0.15, ev_plug="Waiting for EV",
+                 ev_power=0, dispatches=disp)
+    assert all(not s.car_expected for s in build_slots(r, None, None, timezone.utc) if s.smart_slot)
 
 
 def _smart_slots(**kw):

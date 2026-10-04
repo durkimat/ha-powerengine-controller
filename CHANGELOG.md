@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.103 (beta)
+
+### Behaviour changes
+
+- **The plan no longer waits for the car.** Until now, any smart-charge slot with the car plugged in was planned as car charging: the battery was held and nothing was sold, even when the car was not charging (on 4 Oct a one-minute blip of car draw kept the plan flat at 90% from 19:00 to 04:00). Now the plan only believes what the charger says: smart-charge slots are planned as cheap time with no car, so the battery can sell and refill as usual. When the car is charging, that half-hour is planned as car charging with the live power, and the plan assumes the charge ends by the end of it. When the car starts or stops, or is still charging in the next half-hour, the plan is remade, and the battery is held while it charges, as before.
+- The guesses about whether the car is full (the last slot's draw, the charger saying "complete") no longer shape the plan. The `smart_skip_full_car` setting still uses them, and while it is off, smart-charge slots are asked for even when the car is full.
+
 ## 0.9.102 (beta)
 
 ### Behaviour changes

@@ -219,22 +219,12 @@ def build_slots(r: Readings, solar: list[dict] | list[ForecastPoint] | None, pro
         return r.import_rate, True
 
     def _car_expected(r, s: datetime) -> bool:
-        """Will the car draw power in this smart slot? Not if it's unplugged, nor if the charger reports the charge
-        complete, nor for the rest of a dispatch that's already running while the car isn't charging (it has finished
-        or stopped; the slot is still cheap). If the car does start, the car-charging rule takes over at once."""
-        state = r.ev_state()
-        if state == "unplugged":
-            return False
-        if r.ev_complete():
-            return False                  # the charger says the charge is complete (car full): it won't draw
-        if state == "plugged_in" and getattr(r, "car_idle", False):
-            return False                  # it drew nothing in the last smart slot: full; if it starts, the
-                                          # car-charging rule holds the battery at once
-        if state == "plugged_in":
-            win = next((w for w in r.dispatches if w.start <= s < w.end), None)
-            if win is not None and win.start <= r.now:
-                return False
-        return True
+        """Will the car draw power in this smart slot? Only if it is charging now and this is the running
+        half-hour: the plan assumes the charge ends by the end of it, and if the car is still charging then the plan
+        is remade (the half-hour is part of the replan signature while it charges). Every other smart slot is
+        planned as cheap time with no car: the plan never waits for a car to start, and when it does start the
+        change of state remakes the plan and the car-charging rule holds the battery at once."""
+        return r.ev_state() == "charging" and s == start
 
     slots, s = [], start
     while s < end:
@@ -245,6 +235,8 @@ def build_slots(r: Readings, solar: list[dict] | list[ForecastPoint] | None, pro
                     axle=_in(axle, s), free=_in(free, s), overnight=tod(s, tz) in (overnight or set()))
         if slot.smart_slot and not _car_expected(r, s):
             slot.car_expected, slot.car_kw = False, 0.0
+        elif slot.smart_slot and r.ev_power:
+            slot.car_kw = max(0.0, r.ev_power / 1000)      # charging now: the live draw
         # weigh a future smart slot by how likely it is, except inside the fixed overnight window (the price there
         # is the same with or without the slot) and the rest of a dispatch that's already running (it's happening;
         # if EDF ends it early the plan is remade at once)

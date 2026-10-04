@@ -192,6 +192,9 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Backlog
 
+- **Zappi Eco+ and solar (monitor):** Eco+ is required for EDF/Octopus smart charging. The owner has only seen the car charge from the grid, not from solar, so some
+  threshold (probably on the charger) decides. If the Zappi ever starts and stops with solar surplus, `car_charging` (an urgent rule, no damping) and the plan signature will flip with it:
+  watch `ev_state` changes per day in the diagnostics export, and add a short debounce on stop only if it happens. Do nothing until it is seen.
 - Release workflow, still to do (the workflow itself is done and used for 0.9.87 to 0.9.92): the card path ran as a **dry run** on 3 Oct
   (card branch checked out, script ran, nothing pushed), but a **real** card release in the same run (card PR pushed, merged, card
   release created, `card_notes` given) is untested; it needs a real card change to ride along. Untested too: a slow CI (the script
@@ -231,6 +234,14 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   leftovers are done: see Phase 1 below.)
 
 ## Recent fixes
+
+- **The plan assumes no car, except the running half-hour while it charges (0.9.103, `forecast.build_slots`, `Readings.ev_state()`).** The planner used to expect the
+  car in every future smart slot (battery held, no selling) and guessed otherwise from history (`car_idle`, `ev_complete`, a running dispatch with no draw); a 1-minute 0.01 kWh blip
+  made it hold flat at 90% all evening (4 Oct 2026, 0.9.101 patched the threshold, 0.9.103 removed the guess). Now only the state counts: `car_expected` is true only for the running
+  half-hour while `ev_state() == "charging"` (`car_kw` = the live draw); the plan assumes the charge ends by the end of that half-hour. `_plan_signature` holds the car's state and, while it
+  charges, the half-hour, so start, stop and a charge into the next half-hour each remake the plan. The decide rule "car charging" still holds the battery at once. `SlotTracker.car_idle` stays only
+  for the `smart_skip_full_car` setting (off: slots are asked for even with the car full). Replay re-recorded: plan strings, and a sale begins 2 minutes later in the RAM night (15:27, was 15:25)
+  and 5 minutes later in the timed-window runs (15:30, was 15:25).
 
 - **The arbitrage band is soft (0.9.102, `docs/plans/soft-band.md`)**: a charge may run `SOFT_BAND_MARGIN` (5) points past `arbitrage_max_soc` and a sale may end 5 under
   `arbitrage_min_soc` outside the overnight window (`optimiser.slot_target`, `sell_floor`), priced by the band penalty, so a cycle uses whole half-hours instead of a

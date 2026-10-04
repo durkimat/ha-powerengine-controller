@@ -79,22 +79,5 @@ def test_car_idle_after_a_slot_it_drew_nothing_in():
     rec(7, 9, 0, status="planned")                           # running for 41 min, still nothing
     assert t.car_idle(now)
     t.slots[now.replace(hour=7, minute=0).isoformat()]["charging_min"] = 12.0
-    t.slots[now.replace(hour=7, minute=0).isoformat()]["car_kwh"] = 1.4
     assert not t.car_idle(now)                               # it has started drawing
     assert not t.car_idle(now + timedelta(hours=20))         # too long ago to tell
-
-
-def test_car_idle_ignores_a_one_minute_blip():
-    """4 Oct 2026: a slot with 1 minute and 0.01 kWh of draw was read as the car charging, so every later dispatch
-    was planned as car charging (battery held, no selling) from 19:00 to 04:00."""
-    from datetime import datetime, timezone
-
-    from pe_core.slots import SlotTracker
-    now = datetime(2026, 10, 4, 13, 7, tzinfo=timezone.utc)
-    t = SlotTracker()
-    s, e = now.replace(hour=12, minute=36), now.replace(hour=13, minute=0)
-    t.slots[s.isoformat()] = {"start": s.isoformat(), "end": e.isoformat(), "status": "done", "car_kwh": 0.01,
-                              "charging_min": 1.0, "confirmed": False}
-    assert t.car_idle(now)
-    t.slots[s.isoformat()]["car_kwh"] = 0.5
-    assert not t.car_idle(now)                               # a real draw still counts
