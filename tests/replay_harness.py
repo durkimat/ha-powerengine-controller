@@ -342,3 +342,15 @@ class Replay:
             self._snap(last)
             t += STEP
         return self.record
+
+
+def import_powerengine(monkeypatch):
+    """The app module, imported against the fake AppDaemon (for tests that call one of its methods on a stub)."""
+    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
+    hassapi.Hass = _fake_appdaemon()
+    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
+    sys.modules.pop("powerengine", None)
+    import powerengine
+    return powerengine

@@ -403,6 +403,10 @@ Plan status box: `docs/plans/making-it-generic.md`. Done so far:
   the slots from now to the end, skipping grid-event slots; `optimiser._actions` and `planner._default` fix the action, the post-passes and arbitrage skip them; windows carry
   `manual: true`, the plan series a `manual` list, the dashboard a pink "Manual override" band); set, cancel and expiry replan at once (the plan signature
   holds the active override). `MIN_CARD_VERSION` is 0.9.97 because the dashboard names the new card.
+- **A Hold does not store surplus solar in the plan** (#175, `planner.step`): on the inverter Hold is Force charge at 0 W, so with spare sun the battery sat idle while Self-use charged
+  at the full surplus (4 Oct 2026, from the diagnostics history: Hold with ~1.9 kW surplus averaged +0.19 kW battery, Self-use -1.9 kW). The plan used to charge from surplus in Hold, so its SoC
+  path ran ahead of the battery and the optimiser liked Hold in sunny half-hours. Now Hold exports the surplus. Replay re-recorded: the RAM night's decisions and service calls
+  are unchanged, only the plan strings; the timed-window runs lose one afternoon export and one decision moves by 10 minutes.
 - **Short missing readings are bridged** (`_bridge_data_gap`, `DATA_GAP_GRACE_S` 180 s): a `no_data` decision within 3 minutes of the last real one keeps it.
 
 - **Licence and CONTRIBUTING. Done.** Apache-2.0 in both repos (`LICENSE`, `NOTICE`, README sections; copyright 2026 Matthew Durkin;

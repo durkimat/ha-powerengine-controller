@@ -260,8 +260,10 @@ def step(ps: PlanSlot, soc: float, p: Params, dt_h: float | None = None) -> floa
                 imp = net - out
             else:
                 imp = net
-        else:
+        elif ps.action == SELF_USE:
             exp = charge_from_surplus(-net)
+        else:
+            exp = -net                                  # hold: the inverter is held at 0 W, so surplus solar is sold
 
     price = s.price if s.price is not None else 0.0
     export_price = s.export if s.export is not None else 0.0

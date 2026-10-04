@@ -116,7 +116,7 @@ def test_a_charge_that_needs_no_grid_energy_at_the_peak_rate_is_not_a_grid_charg
     plan = make_plan(slots, 92.0, Params(arbitrage=True, max_charge_kw=5.0, capacity_kwh=18.0), t0,
                      strategy="optimiser")
     first = plan.slots[0]
-    assert first.action != GRID_CHARGE and "30.28p" not in first.reason and "sell at" not in first.reason
+    assert first.action != GRID_CHARGE and "30.28p" not in first.reason and "charge at" not in first.reason
     for ps in plan.slots:                              # and no charge anywhere is bought at the peak to sell lower
         if ps.action == GRID_CHARGE and ps.slot.price > 0.2:
             assert ps.grid_import > 0.05 or "30.28p to sell" not in ps.reason

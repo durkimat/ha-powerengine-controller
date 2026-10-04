@@ -10,16 +10,16 @@ null
 },
 {
 "t": "2026-09-27T19:30:00+00:00",
-"plan": "ssssssssssCCCCCCCCCCCsssssHsssss",
+"plan": "sssssssssssssssssssCCsssssssssss",
 "soc": [
 89,
 83,
 77,
-90,
-90,
+71,
+65,
 90,
 85,
-85
+84
 ]
 },
 {
@@ -28,21 +28,7 @@ null
 },
 {
 "t": "2026-09-27T19:35:00+00:00",
-"plan": "ssssssCCCCCCCCCCCCCCCsssssHsssss",
-"soc": [
-88,
-82,
-90,
-90,
-90,
-90,
-85,
-85
-]
-},
-{
-"t": "2026-09-27T19:40:00+00:00",
-"plan": "sssssssssCCCCCCCCCCCCsssssHsssss",
+"plan": "sssssssssssCCCCCCCCCCsssssssssss",
 "soc": [
 88,
 82,
@@ -51,21 +37,21 @@ null
 90,
 90,
 85,
-85
+84
 ]
 },
 {
 "t": "2026-09-27T19:45:00+00:00",
-"plan": "ssssssssssCCCCCCCCCCCsssssHsssss",
+"plan": "ssssssssssssssssssssssssssssssss",
 "soc": [
 89,
 83,
 78,
-90,
-90,
-90,
-85,
-85
+72,
+66,
+60,
+55,
+54
 ]
 },
 {
@@ -80,7 +66,7 @@ null
 },
 {
 "t": "2026-09-27T19:50:00+00:00",
-"plan": "sEsssCCCCCCCCCCCCCCCCsssssHsssss",
+"plan": "sEsssCCCCCCCCCCCCCCCCsssssssssss",
 "soc": [
 92,
 72,
@@ -89,7 +75,7 @@ null
 90,
 90,
 85,
-85
+84
 ]
 },
 {
@@ -146,16 +132,16 @@ null
 },
 {
 "t": "2026-09-27T19:55:00+00:00",
-"plan": "sssssssssssCCCCCCCCCCsssssHsssss",
+"plan": "ssssssssssssssssssssssssssssssss",
 "soc": [
 90,
 84,
 78,
-90,
-90,
-90,
-85,
-85
+72,
+66,
+61,
+55,
+55
 ]
 },
 {
