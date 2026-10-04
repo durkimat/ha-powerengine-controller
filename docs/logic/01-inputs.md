@@ -68,7 +68,7 @@ longer than **48 h** (`build_slots`: `min_h=36`, `horizon_h=48`).
 | `axle` | The grid-event window overlaps the slot | false |
 | `free` | The free-power window overlaps the slot | false |
 | `overnight` | The slot's time of day is in the learned overnight window | false |
-| `car_expected`, `car_kw` | Car state, see 1.5 | assumes the car will charge in smart slots |
+| `car_expected`, `car_kw` | Car state, see 1.5 | true only for the running half-hour while the car is charging; otherwise no car |
 | `charge_factor` | Cold-battery caution (1.5 below) | 1.0 |
 | `manual` | The owner's override (page 4) | none |
 | `certainty`, `slot_price` | Smart-slot certainty (1.4) | none |
@@ -128,20 +128,25 @@ The plan shows each upcoming smart slot with its certainty and the price used (`
 
 ## 1.5 The car
 
+**Since 0.9.103 the plan only believes the charger.** It no longer guesses whether the car is full, and it never waits for a
+car to start.
+
 | Question | Rule (`_car_expected` in `build_slots`) |
 |---|---|
-| Will the car draw in this smart slot? | **No** if: unplugged; or the charger reports the charge complete; or plugged in and the last long smart slot drew nothing, or under 0.2 kWh (`car_idle`); or plugged in and the dispatch is already running while the car is not charging. Otherwise yes |
-| How much? | The charger's rating (`ev_charger_kw`, default 7.4, or the learned typical kW) in smart slots where the car is expected; else 0 |
-| What if the plan is wrong? | If the car does start, the live car-charging rule takes over at once (page 4), and a change in car state triggers a replan |
-
-`car_idle` (`SlotTracker.car_idle`): the most recent smart slot that ran at least 15 minutes, within 12 hours, charged for
-under a minute **or drew under 0.2 kWh** (`USED_KWH`). The second test was added in 0.9.101: a one-minute blip of 0.01 kWh
-used to make every later smart slot look like a car charge, so the plan did no selling and held the battery at 90% from
-19:00 to 04:00 (4 Oct 2026). That is the "car is full but plugged in" case that kept the battery held for the car all morning on
-28 Sep 2026.
+| Will the car draw in this smart slot? | **Yes only** if the car is charging **now** and this is the **running half-hour**. The plan assumes the charge ends by the end of it. **Every other smart slot is planned as cheap time with no car** (the battery may sell, charge or hold as the optimiser likes) |
+| How much? | In the running half-hour while charging: the charger's **live power**. If the power is unknown: the charger's rating (`ev_charger_kw`, default 7.4, or the learned typical kW). Everywhere else: 0 |
+| What if the plan is wrong? | The plan signature holds the car's state **and the running half-hour while it charges** (1.9). So when the car starts, stops, or is still charging in the next half-hour, the plan is remade, and the live car-charging rule holds the battery at once (page 4) |
 
 A smart slot where the car *is* expected is a **car slot** (`car_slot`): the battery may not feed the car, so only Hold or
-Grid-charge are allowed there (page 3).
+Grid-charge are allowed there (page 3). Under the rule above that is at most one half-hour at a time.
+
+**What was removed.** Before 0.9.103 the plan also guessed the car would not draw when: it was unplugged; the charger said
+"charge complete"; the last long smart slot drew nothing (`car_idle`, then also under 0.2 kWh, 0.9.101); or a dispatch was
+running with the car not charging. Those guesses fixed the 28 Sep 2026 case (a 09:00 to 15:30 slot after two where the car drew
+nothing) but also meant any smart slot with the car plugged in was planned as car charging, so a one-minute blip of 0.01 kWh
+kept the plan flat at 90% from 19:00 to 04:00 (4 Oct 2026). `car_idle` and the charger's "complete" now feed only the
+`smart_skip_full_car` setting (whether to ask the supplier for more slots; off by default, so slots are asked for even when
+the car is full).
 
 ## 1.6 Grid events and free power
 
@@ -203,7 +208,7 @@ forced:
 | Grid-event start and end; free-power start and end | Events announced or changed |
 | Load-profile days | New profile |
 | All safety settings; all feature switches | A setting was changed on the config page |
-| Car state; `car_idle` | The car started, stopped or filled |
+| Car state; and the running half-hour while the car is charging | The car started or stopped, or is still charging in the next half-hour |
 | The active override | Set, changed or cancelled |
 
 Other forces: a new temperature series, a new load profile (both clear the signature), and the **early-target replan**

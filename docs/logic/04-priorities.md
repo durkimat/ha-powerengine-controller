@@ -151,8 +151,8 @@ battery will hold afterwards. Setting, cancelling and expiry replan at once.
 | 6 | Cheap: hold | Choice | Plan's action |
 | 7 | Otherwise self-use | Choice among self-use, hold, grid-charge (and export if arbitrage) | Plan's action |
 
-The three agree on the first three rungs. Below that the plan reasons about *expected* cars and live reacts to the *actual*
-car.
+The three agree on the first three rungs. Below that, the plan assumes **no car except the running half-hour while the car is
+charging** (0.9.103) and live reacts to the actual car. A change in the car's state remakes the plan, so the two stay close.
 
 ## 4.6 When there is no plan (fallback ladder)
 

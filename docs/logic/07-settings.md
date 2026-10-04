@@ -25,7 +25,7 @@ A setting marked **fallback only** is read just by the reactive rule stack that 
 | `axle_plus_export` | on | Plan, Live | The supplier's export rate is paid on top of the event's £1 |
 | `free_power_days` | on | Plan, Live | Plan and act on free-electricity sessions (charge to 100%) |
 | `smart_charge_optimisation` | on | smart-charge step | Ask the supplier for extra car slots by changing the ready-by time |
-| `smart_skip_full_car` | off | smart-charge step | Do not ask when the car looks full |
+| `smart_skip_full_car` | off | smart-charge step | Do not ask for more slots when the car looks full (charger says complete, or the last slot drew nothing). Since 0.9.103 this is the only thing that uses those guesses; with it off, slots are asked for even when the car is full |
 | `slots_whole_house` | on | Plan, smart-charge | The supplier gives the whole house the smart-slot rate (if not: smart slots are planned at the standard rate, and extra slots are not requested) |
 | `use_check_meter` | on | Readings | Trust the check meter over the inverter's grid meter |
 | `learn_taper` | on | Plan | Use the learned charge and discharge tapers |
@@ -144,7 +144,7 @@ Changing any of these needs a code change and a release.
 | `HIGH_DWELL`, `EARLY_BIAS`, `SELL_BIAS` | £0.0015, £0.0005, £0.0005 | `optimiser.py` | Tie-breakers |
 | `MID_SLOT_STICK` | £0.15 | `optimiser.py` | Reluctance to change a running half-hour |
 | `SOFT_BAND_MARGIN` | 5 points | `optimiser.py` | How far past the arbitrage band's edges a charge or sale may go, priced by the band penalty (0.9.102) |
-| `USED_KWH` | 0.2 kWh | `slots.py` | A smart slot the car drew less than this in was not used (0.9.101) |
+| `USED_KWH` | 0.2 kWh | `slots.py` | A smart slot the car drew less than this in counts as not used in the Health summary (0.9.101; `car_idle` no longer uses it since 0.9.103) |
 | `LATCH_BAND_SOC` | 2 points | `decide.py`, `override.py` | Target-reached latch |
 | `MIN_LEFT_MIN` | 5 min | `earlytarget.py` | Least time left for an early-target replan |
 | `DATA_GAP_GRACE_S` | 180 s | `powerengine.py` | Missing-reading bridge |
