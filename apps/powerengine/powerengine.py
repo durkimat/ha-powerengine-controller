@@ -105,6 +105,7 @@ from pe_core.weather import Weather
 from pe_core.wizard import wizard_info
 
 HEARTBEAT_SECONDS = 60
+DATA_GAP_GRACE_S = 180             # a reading missing this long or less keeps the last decision (_bridge_data_gap)
 LOWWRITE_START = "02:40:00"       # after the Simulator has had its hour
 LOWWRITE_SLICE = 3                # new days planned per pass (about a second each); more passes follow a minute apart
 SIM_START = "01:30:00"            # after the midnight jobs (00:05-00:20), well before the morning
@@ -341,6 +342,7 @@ class PowerEngine(hass.Hass):
         self._last_checks = None
         self._published = {}
         self._decision, self._since = None, None
+        self._no_data_since = None                 # when the readings last went missing (see DATA_GAP_GRACE_S)
         try:   # keep the activity log across restarts (it lives in the entity's attributes)
             saved = self.get_state("sensor.pe_state_activity", attribute="entries")
         except Exception:
@@ -619,7 +621,8 @@ class PowerEngine(hass.Hass):
                 self._smart_step(readings)
                 self._refresh_temps(readings.now)
                 self._maybe_replan(readings)
-                decision = decide(readings, self.cfg, self._decision, self.tz, plan=self.plan)
+                decision = self._bridge_data_gap(
+                    decide(readings, self.cfg, self._decision, self.tz, plan=self.plan), readings.now)
                 self._note_command(decision)
                 sim = self.sim.update(decision, readings, self._params(), self.tz)
                 if sim is not None:
@@ -644,6 +647,21 @@ class PowerEngine(hass.Hass):
         if not self._dashboard_readings_synced and getattr(self, "_last_readings", None) is not None:
             self._dashboard_readings_synced = True     # now the real capacity, not the 18000 Wh fallback
             self._sync_dashboard()
+
+    def _bridge_data_gap(self, decision, now):
+        """A reading missing for a moment (the import rate went unavailable for one cycle on 4 Oct 2026, 08:21)
+        keeps the last real decision for up to DATA_GAP_GRACE_S, instead of handing the inverter to Self-use and
+        straight back (two RAM writes). A longer gap, or no earlier decision, decides as before."""
+        if decision.rule != "no_data":
+            self._no_data_since = None
+            return decision
+        prev = self._decision
+        if self._no_data_since is None:
+            self._no_data_since = now
+        if prev is None or prev.rule in ("no_data", "unconfigured") \
+                or (now - self._no_data_since).total_seconds() > DATA_GAP_GRACE_S:
+            return decision
+        return prev
 
     # --- cost accounting -------------------------------------------------------------
 
