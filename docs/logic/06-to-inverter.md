@@ -22,6 +22,7 @@ Active only. In Passive the same result is computed and published as "would send
 ## 6.1 RAM remote control, step by step
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     D["Decision"] --> C["Map to a command (command_for)"]
     C --> B["Cap by the BMS limits (6.3)"]
@@ -57,6 +58,7 @@ flowchart TD
 ## 6.2 Timed windows, step by step
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     D["Decision + the plan"] --> P["periods(): the plan's next charge and<br/>discharge periods within 24 h,<br/>merged and split at midnight.<br/>The half-hour now takes the LIVE decision's action"]
     P --> W["Work out the window times and currents wanted,<br/>and compare with what the inverter holds"]
@@ -93,6 +95,7 @@ flowchart TD
 in amps; amps x 52 V (`BATTERY_VOLTS`, rounded down to 100 W) gives watts.
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     L["A limit in amps"] --> V{"Usable? A number, finite, 0 to 1000"}
     V -- no --> N["Ignored: no cap from it"]
@@ -122,6 +125,7 @@ put out (its total AC limit, `inverter_max_output_w` 6000 W, less the solar pass
 Not following for **3 minutes** is an alarm. First the controller tries to fix it:
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A["Not following for 3 min"] --> B{"Battery doing less than 20% of the<br/>command in its direction, and the command<br/>above 3000 W?"}
     B -- yes --> C["Ceiling down 1000 W (5000 to 4000 to 3000)<br/>re-send lower next cycle.<br/>Held for up to 60 minutes or until the<br/>kind of command changes. Notify once"]

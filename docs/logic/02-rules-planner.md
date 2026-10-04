@@ -16,6 +16,7 @@ With *Optimised planning* off, this *is* the plan.
 ## 2.1 The three steps
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A["Work out the cheap threshold<br/>(2.2)"] --> B["Give every half-hour a default action<br/>(2.3)"]
     B --> C["Simulate the battery forward<br/>(2.4)"]
@@ -37,6 +38,7 @@ At most 200 iterations (`MAX_ITERATIONS`).
 (default); otherwise `cheap_threshold_p` (10p) is used as a fixed number.
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A["All slot prices in the horizon, in pence"] --> B{"Highest minus lowest<br/>under 1p? (flat tariff)"}
     B -- yes --> C["Nothing is cheap:<br/>lowest minus 0.01p<br/>(or 0 if the lowest is free)"]
@@ -61,6 +63,7 @@ same function on a different list of prices and with the default efficiency; see
 from a similar menu (page 3).
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     S["A half-hour"] --> A{"Grid event in this slot,<br/>and the feature on?"}
     A -- yes --> A1["FORCE-DISCHARGE<br/>'event: export for £1.15/kWh'"]
@@ -114,6 +117,7 @@ If a problem cannot be fixed economically, the scan moves on to the slot after i
 ## 2.6 Fixing a problem: where to charge
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     P["Problem at slot i, worth V per kWh"] --> L["Look at every earlier slot j"]
     L --> F1{"j is self-use or hold,<br/>not manual, has a price,<br/>and is not already charged,<br/>and has room (SoC under 99.9%)?"}

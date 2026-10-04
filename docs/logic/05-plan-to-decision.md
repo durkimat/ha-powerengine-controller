@@ -10,6 +10,7 @@ mechanisms that stop the inverter being pushed around by small differences betwe
 ## 5.1 One half-hour, as the controller sees it
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 sequenceDiagram
     participant P as Plan (first slot)
     participant D as decide() every 30 s
@@ -36,6 +37,7 @@ charging, 94 holding). With a charge target of 94, the controller reached 94, he
 between Force charge and Hold every 30 seconds (29 Sep 2026, 22:38 to 22:44 and twice more).
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A["Last decision was a HOLD from the plan<br/>with details.reached for THIS half-hour,<br/>and the plan still says GRID-CHARGE?"] -- no --> N["No latch: decide normally"]
     A -- yes --> B{"SoC has fallen to the target minus 2 points<br/>or lower?"}
@@ -65,6 +67,7 @@ half-hour, and this mostly matters when charging runs faster than modelled.
 the best action (carry on charging, start the next slot's sale early) was available, but the plan had not been asked.
 
 ```mermaid
+%%{init: {"htmlLabels": false, "flowchart": {"htmlLabels": false, "padding": 14, "nodeSpacing": 40, "rankSpacing": 50, "useMaxWidth": false}, "sequence": {"wrap": true, "useMaxWidth": false}}}%%
 flowchart TD
     A["Decision is a 'reached' HOLD from the plan"] --> B{"First time this half-hour<br/>has been looked at?"}
     B -- no --> Z["Leave the decision alone"]
