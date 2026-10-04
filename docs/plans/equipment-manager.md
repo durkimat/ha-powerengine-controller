@@ -1,7 +1,7 @@
 # Equipment manager (replaces the setup wizard)
 
 > **Status (4 Oct 2026).** Design only; nothing built. Agreed with the owner in outline: the setup wizard goes, and the config
-> page gets one **Equipment** section: a read-only list of what is configured, and a **Manage equipment** button that opens a panel
+> page gets one **Your system** section: a read-only list of what is configured, and a **Change your system** button that opens a panel
 > where equipment is added, changed, replaced and removed, for a new or an existing install. A click-through mock-up was made
 > for review (not in the repo). The wizard's pure helpers and tests carry over; the app side needs no change for phase 1.
 
@@ -14,12 +14,12 @@ the wizard is folded away on a configured system it is mostly a second copy of "
 
 ## What the page shows
 
-**Equipment** (one section, no wizard card above it):
+**Your system** (one section, no wizard card above it):
 
 - **Summary list**, read only, grouped: inverter and battery, solar, car charger, tariff, forecast, grid events, other devices.
   Each row: name, model, status badge (verified / community / draft), a live value. A system with nothing configured says so,
   and the setup checklist's button opens the panel.
-- **Manage equipment** button. Nothing else on the page edits equipment, so there is one way to do each thing.
+- **Change your system** button. Nothing else on the page edits equipment, so there is one way to do each thing.
 - Settings that are not equipment (features, limits, tariffs' numbers, inputs of the mapped parts) stay where they are.
 
 ## The panel
@@ -38,11 +38,24 @@ internal that changes between releases). It lists the same rows with **Edit** an
    (`wizardSignCheck`) and an Invert toggle. A solar-only device asks for two inputs, not six. Edit opens here.
 4. **Review.** Name, control (a new device always starts read only), and what PowerEngine will do with it in plain words.
 
-### Staged changes
+### Editing, draft, applied
 
-Nothing is applied while the panel is open. Each row carries a tag (*new*, *changed*, *will be removed*) and any staged change can be
-undone. **Apply changes** shows a summary ("Add garage battery; remove solar plant 2; change tariff"), then writes the page's
-draft. The page's normal Save writes the config, so cancelling the panel never loses anything by accident.
+Equipment changes go through three plainly named states:
+
+1. **Editing**: inside the panel. Each row carries a tag (*new*, *changed*, *will be removed*) and any change can be undone.
+2. **Draft**: **Save draft** keeps the edits in the card and closes the panel. They are not live. The page shows a banner
+   ("Draft: 3 changes, not applied to your system") with **Edit draft**, **Discard draft** (asks first) and **Apply to System**.
+3. **Applied**: **Apply to System** shows a summary ("Add garage battery; remove solar plant 2; change tariff") and any mode
+   warning, then writes the configuration. The draft is cleared.
+
+Closing the panel (Close, Esc, the backdrop) with unsaved edits asks: **Save draft**, **Discard changes** or **Keep editing**. With
+no edits it just closes. The word "Save" alone is not used for equipment, so it cannot be confused with the settings' own Save.
+
+The draft lives in the card, not the app. Proposal: keep it in the browser's local storage so a reload does not lose it, with
+a note "draft from earlier" when it is found (it would not show on another browser). Apply writes only the equipment keys
+(`site`, `solar_plants`, `devices` and the mappings of the parts concerned) onto the saved configuration; the settings' own
+draft is not applied by it. To check in E1: `pe_config_save` takes the whole config today, so the card would send the saved one
+with those keys replaced.
 
 ### Replace
 
@@ -66,14 +79,14 @@ clear the input mappings that nothing uses any more, in the same Apply.
 
 ## Card changes
 
-- **New:** the Equipment section, the panel, and `equipment*` pure helpers (impact of a removal, staged-change summary), tested in
+- **New:** the Your system section, the panel, and `equipment*` pure helpers (impact of a removal, staged-change summary), tested in
   `tests/equipment.test.cjs`.
 - **Reused:** `wizardFacts`, `wizardMatch`, `wizardCandidates`, `wizardOthers`, `wizardSuggest`, `wizardSignCheck`,
   `wizardUsedEntities`, `wizardPlantFromDevice`, `buildCandidateExport`, `scrubText`, `siteRows` and the device helpers. Rename
   away from "wizard" in the same change (the user-facing word goes; internal names can follow).
 - **Removed:** `powerengine-wizard-card` and its dashboard entry (and the golden), "also found", the plants box, the "Other devices"
   block and the equipment selects in "Your system".
-- **Config page order:** demo banner, update, setup checklist, Equipment, handover, config.
+- **Config page order:** demo banner, update, setup checklist, Your system, handover, config.
 - The wizard text in `docs/WIZARD.md` becomes this document's user guide; `docs/INSTALL.md` is updated in the same PR.
 
 ## Controller changes
@@ -85,14 +98,13 @@ clear the input mappings that nothing uses any more, in the same Apply.
 
 ## Stages
 
-- **E1, panel and list, with today's data model.** Equipment section, panel, staged changes, removal warnings, wizard retired.
+- **E1, panel and list, with today's data model.** Your system section, panel, staged changes, removal warnings, wizard retired.
   Card only; `MIN_APP_VERSION` unchanged (hidden pieces follow the app's published attributes as now).
 - **E2, per-definition roles and a battery-only kind.** App and card; raises `MIN_CARD_VERSION` / `MIN_APP_VERSION` as needed.
 - **E3, plants become devices.** Migration in the app; the list is unchanged to the user.
 
 ## Still open
 
-- Wording: "Equipment" or "Your system" for the section; "Manage equipment" for the button.
-- Whether Apply should write the config straight away (one fewer step) or stay a draft until Save (proposal: draft, Save as now).
+- Whether the draft survives a reload (local storage, proposed).
 - Whether the panel shows firmware detection for inverters (today's `firmware_detected` line) in step 3 or on the list row.
 - Not yet run on a live HA: `hass.entities[].platform` and `hass.devices` are what the card expects (same open point as the wizard).
