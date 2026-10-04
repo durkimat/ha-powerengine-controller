@@ -10,16 +10,16 @@ null
 },
 {
 "t": "2026-09-27T15:00:00+00:00",
-"plan": "sssssssssssssssHHHHHHHHsssssssss",
+"plan": "ssEssssssssssssssssCCCEsssssssss",
 "soc": [
 87,
-83,
-78,
-72,
 69,
-69,
-66,
-60
+63,
+57,
+51,
+76,
+71,
+65
 ]
 },
 {
@@ -27,69 +27,59 @@ null
 "warning": "[info] PowerEngine x.y.z starting"
 },
 {
-"t": "2026-09-27T15:00:00+00:00",
-"warning": "[info] Writes held back (restart hold-off until 2026-09-27T15:05:00+00:00)"
-},
-{
 "t": "2026-09-27T15:02:00+00:00",
-"plan": "ssssssssssssssssHHHHHHHHssssssss",
+"plan": "ssEsssssssssssssssssCCCEssssssss",
 "soc": [
 88,
-84,
-79,
-73,
-68,
-68,
-67,
-61
+70,
+64,
+58,
+52,
+62,
+72,
+66
 ]
 },
 {
-"t": "2026-09-27T15:05:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_current",
-"value": 0
-},
-{
 "t": "2026-09-27T15:07:00+00:00",
-"plan": "sssssssssssssssssHHHHHHHssssssss",
+"plan": "sssssssssssssssssssssCCEssssssss",
 "soc": [
 89,
 85,
 80,
 74,
 68,
-68,
-66,
-61
+62,
+73,
+67
 ]
 },
 {
 "t": "2026-09-27T15:12:00+00:00",
-"plan": "ssssssssssssssssHHHHHHHHssssssss",
+"plan": "sssssssssssssssssssssCCEssssssss",
 "soc": [
 88,
 84,
 79,
 73,
-68,
-68,
 67,
-61
+61,
+72,
+66
 ]
 },
 {
 "t": "2026-09-27T15:15:00+00:00",
-"plan": "ssssssssssssssssHHHHHHHHssssssss",
+"plan": "ssEssssssssssssssssCCCEsssssssss",
 "soc": [
 87,
-83,
-78,
-72,
-67,
-67,
-66,
-60
+69,
+63,
+57,
+51,
+76,
+71,
+66
 ]
 },
 {
@@ -97,30 +87,53 @@ null
 "warning": "Load history from HA was empty; retrying in an hour. PowerEngine's own load record is still used."
 },
 {
-"t": "2026-09-27T15:20:00+00:00",
-"plan": "ssssssssssssssssHHHHHHHHssssssss",
+"t": "2026-09-27T15:25:00+00:00",
+"plan": "ssEssssssssssssssssCCCEsssssssss",
 "soc": [
 87,
-84,
-78,
+69,
+63,
+57,
+51,
+76,
 72,
-67,
-67,
-66,
-60
+66
 ]
 },
 {
+"t": "2026-09-27T15:25:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 17
+},
+{
+"t": "2026-09-27T15:25:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 17
+},
+{
+"t": "2026-09-27T15:25:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes",
+"value": 30
+},
+{
+"t": "2026-09-27T15:26:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
 "t": "2026-09-27T15:30:00+00:00",
-"plan": "sssssssssssssEECCCCEEEECCCCCCsss",
+"plan": "sEsssssssssssEECCCCCEEEECCCCCsss",
 "soc": [
 87,
-82,
-76,
-70,
-67,
-60,
-57,
+68,
+62,
+56,
+53,
+79,
+47,
 100
 ]
 },
@@ -131,64 +144,67 @@ null
 "option": "04:00"
 },
 {
-"t": "2026-09-27T15:30:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_current",
-"value": 100
-},
-{
-"t": "2026-09-27T15:37:00+00:00",
-"plan": "sssssssssssssEECCCCEEEECCCCCCsss",
-"soc": [
-87,
-82,
-76,
-71,
-68,
-60,
-57,
-100
-]
-},
-{
 "t": "2026-09-27T15:47:00+00:00",
-"plan": "sssssssssssssEECCCCEEEECCCCCCsss",
+"plan": "sssssssssssssEEECCCCEEECCCCCCsss",
 "soc": [
 86,
 81,
 75,
 70,
-67,
-60,
-57,
+38,
+64,
+61,
 100
 ]
 },
 {
+"t": "2026-09-27T15:47:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 0
+},
+{
+"t": "2026-09-27T15:47:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-27T15:47:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-27T15:48:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
 "t": "2026-09-27T15:52:00+00:00",
-"plan": "sssssssssssssEECCCCEEEECCCCCCsss",
+"plan": "sssssssssssssEEECCCCEEECCCCCCsss",
 "soc": [
 86,
 81,
 76,
 70,
-67,
-60,
-57,
+38,
+64,
+61,
 100
 ]
 },
 {
 "t": "2026-09-27T16:00:00+00:00",
-"plan": "ssssssssssssEECCCCEEEECCCCCCssss",
+"plan": "ssssssssssssEEECCCCEEECCCCCCssss",
 "soc": [
 85,
 80,
 74,
 55,
-81,
-44,
-70,
+52,
+49,
+75,
 99
 ]
 },
@@ -278,7 +294,7 @@ null
 48,
 74,
 42,
-90,
+95,
 97
 ]
 },
@@ -296,7 +312,7 @@ null
 46,
 72,
 40,
-90,
+95,
 97
 ]
 },
@@ -310,7 +326,7 @@ null
 45,
 71,
 39,
-90,
+94,
 97
 ]
 },
@@ -324,7 +340,7 @@ null
 44,
 70,
 38,
-90,
+93,
 97
 ]
 },
@@ -338,7 +354,7 @@ null
 43,
 69,
 37,
-90,
+92,
 97
 ]
 },
@@ -447,7 +463,7 @@ null
 72,
 40,
 37,
-90,
+92,
 100,
 95
 ]
@@ -621,16 +637,16 @@ null
 },
 {
 "t": "2026-09-27T18:30:00+00:00",
-"plan": "sssssssEEECCCCEEECCCCCCsssssssss",
+"plan": "sssssssEEECCCCEEEECCCCCsssssssss",
 "soc": [
 91,
 85,
 51,
 77,
-44,
-90,
-97,
-94
+45,
+71,
+96,
+92
 ]
 },
 {
@@ -648,7 +664,7 @@ null
 50,
 76,
 44,
-90,
+95,
 97,
 94
 ]
@@ -662,7 +678,7 @@ null
 49,
 75,
 43,
-90,
+95,
 97,
 94
 ]
@@ -676,7 +692,7 @@ null
 48,
 74,
 42,
-90,
+95,
 97,
 94
 ]
@@ -690,7 +706,7 @@ null
 48,
 74,
 42,
-90,
+95,
 97,
 94
 ]
@@ -704,7 +720,7 @@ null
 48,
 74,
 42,
-90,
+95,
 97,
 94
 ]
@@ -749,16 +765,16 @@ null
 },
 {
 "t": "2026-09-27T19:11:00+00:00",
-"plan": "ssssssEEECCCCEEECCCCCCssssssssss",
+"plan": "ssssssEEECCCCEEEECCCCCssssssssss",
 "soc": [
 89,
 83,
 36,
-90,
-58,
-100,
-96,
-94
+91,
+30,
+85,
+95,
+92
 ]
 },
 {
@@ -767,28 +783,56 @@ null
 "entity_id": "button.solis_update_charge_discharge_times_2"
 },
 {
+"t": "2026-09-27T19:16:00+00:00",
+"plan": "ssssssEEECCCCEEEECCCCCssssssssss",
+"soc": [
+89,
+83,
+36,
+91,
+30,
+85,
+95,
+93
+]
+},
+{
 "t": "2026-09-27T19:21:00+00:00",
-"plan": "ssssssEEECCCCEEECCCCCCssssssssss",
+"plan": "ssssssEEECCCCEEEECCCCCssssssssss",
 "soc": [
 90,
 84,
 37,
+92,
+31,
+86,
+95,
+93
+]
+},
+{
+"t": "2026-09-27T19:26:00+00:00",
+"plan": "ssssssEEECCCCEEEECCCCCssssssssss",
+"soc": [
 90,
-58,
-100,
+84,
+37,
+92,
+31,
+86,
 96,
-94
+93
 ]
 },
 {
 "t": "2026-09-27T19:31:00+00:00",
-"plan": "sssssEEECCCCEEECCCCCCsssssssssss",
+"plan": "sssssEEECCCCEEEECCCCCsssssssssss",
 "soc": [
 89,
 83,
 51,
-75,
-72,
+77,
+45,
 100,
 95,
 94
@@ -796,16 +840,16 @@ null
 },
 {
 "t": "2026-09-27T19:36:00+00:00",
-"plan": "sssssEEECCCCEEECCCCCCsssssssssss",
+"plan": "sssssEEECCCCEEEECCCCCsssssssssss",
 "soc": [
 88,
 82,
 50,
-75,
-72,
-100,
-95,
-94
+76,
+44,
+99,
+94,
+93
 ]
 },
 {
@@ -833,13 +877,13 @@ null
 },
 {
 "t": "2026-09-27T19:46:00+00:00",
-"plan": "sssssEEEECCCCEEECCCCCsssssssssss",
+"plan": "ssssEEEECCCCEEECCCCCCsssssssssss",
 "soc": [
 90,
-84,
-24,
-79,
-47,
+71,
+39,
+65,
+62,
 100,
 95,
 94
@@ -847,13 +891,13 @@ null
 },
 {
 "t": "2026-09-27T19:51:00+00:00",
-"plan": "sssssEEEECCCCEEECCCCCsssssssssss",
+"plan": "ssssEEEECCCEECCCCCCCCsssssssssss",
 "soc": [
 92,
-86,
-25,
-80,
-48,
+72,
+40,
+37,
+92,
 100,
 95,
 94
@@ -903,13 +947,13 @@ null
 },
 {
 "t": "2026-09-27T20:15:00+00:00",
-"plan": "ssssEEECCCCEEECCCCCCssssssssssss",
+"plan": "ssssEEECCCCEEEECCCCCssssssssssss",
 "soc": [
 87,
 68,
 65,
-60,
-86,
+62,
+59,
 99,
 94,
 95
@@ -935,13 +979,13 @@ null
 },
 {
 "t": "2026-09-27T20:21:00+00:00",
-"plan": "ssssEEEECCCCEEECCCCCssssssssssss",
+"plan": "sssEEEECCCCEEECCCCCCssssssssssss",
 "soc": [
 90,
-70,
-38,
-64,
-61,
+56,
+53,
+50,
+76,
 99,
 94,
 95
@@ -949,13 +993,13 @@ null
 },
 {
 "t": "2026-09-27T20:26:00+00:00",
-"plan": "ssssEEEECCCCEEECCCCCssssssssssss",
+"plan": "sssEEEECCCEEECCCCCCCssssssssssss",
 "soc": [
 91,
-71,
-39,
-65,
-62,
+57,
+55,
+23,
+78,
 99,
 94,
 95
@@ -969,27 +1013,44 @@ null
 },
 {
 "t": "2026-09-27T20:31:00+00:00",
-"plan": "sssEEEECCCEEECCCCCCsssssssssssss",
+"plan": "ssEEEECCCEEECCCCCCCsssssssssssss",
 "soc": [
 91,
-57,
-54,
-22,
-77,
+44,
+69,
+38,
+92,
 97,
 94,
 98
 ]
 },
 {
+"t": "2026-09-27T20:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 22
+},
+{
+"t": "2026-09-27T20:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes",
+"value": 30
+},
+{
+"t": "2026-09-27T20:32:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
 "t": "2026-09-27T20:36:00+00:00",
-"plan": "sssEEEECCCCEEECCCCCsssssssssssss",
+"plan": "ssEEEECCCEEECCCCCCCsssssssssssss",
 "soc": [
 90,
-56,
-54,
-51,
-77,
+43,
+69,
+37,
+92,
 97,
 94,
 98
@@ -997,13 +1058,13 @@ null
 },
 {
 "t": "2026-09-27T20:41:00+00:00",
-"plan": "sssEEEECCCCEEECCCCCsssssssssssss",
+"plan": "ssEEEECCCEEECCCCCCCsssssssssssss",
 "soc": [
 89,
-56,
-53,
-50,
-76,
+42,
+68,
+36,
+91,
 97,
 94,
 98
@@ -1011,13 +1072,13 @@ null
 },
 {
 "t": "2026-09-27T20:46:00+00:00",
-"plan": "sssEEEECCCCEEECCCCCsssssssssssss",
+"plan": "ssEEEECCCCEEECCCCCCsssssssssssss",
 "soc": [
 87,
-54,
-51,
-48,
-74,
+40,
+66,
+34,
+89,
 97,
 94,
 98
@@ -1039,13 +1100,13 @@ null
 },
 {
 "t": "2026-09-27T20:56:00+00:00",
-"plan": "sssEEEECCCCEEECCCCCsssssssssssss",
+"plan": "ssEEEECCCEEECCCCCCCsssssssssssss",
 "soc": [
 90,
-56,
-54,
-51,
-77,
+43,
+69,
+37,
+92,
 97,
 94,
 98
@@ -1053,27 +1114,13 @@ null
 },
 {
 "t": "2026-09-27T21:00:00+00:00",
-"plan": "ssEEEECCCEEECCCCCCssssssssssssss",
+"plan": "sEEEECCCEEECCCCCCCssssssssssssss",
 "soc": [
 90,
-42,
-68,
-37,
-91,
-96,
-94,
-100
-]
-},
-{
-"t": "2026-09-27T21:02:00+00:00",
-"plan": "ssEEEECCCEEECCCCCCssssssssssssss",
-"soc": [
-90,
-43,
-69,
-37,
-92,
+29,
+55,
+52,
+100,
 96,
 94,
 100
@@ -1094,42 +1141,25 @@ null
 ]
 },
 {
-"t": "2026-09-27T21:07:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours",
-"value": 22
-},
-{
-"t": "2026-09-27T21:07:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes",
-"value": 30
-},
-{
-"t": "2026-09-27T21:07:00+00:00",
+"t": "2026-09-27T21:10:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_start_hours_3",
 "value": 2
 },
 {
-"t": "2026-09-27T21:07:00+00:00",
+"t": "2026-09-27T21:10:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_end_hours_3",
 "value": 3
 },
 {
-"t": "2026-09-27T21:07:00+00:00",
+"t": "2026-09-27T21:10:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_end_minutes_3",
 "value": 30
 },
 {
-"t": "2026-09-27T21:08:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-27T21:08:00+00:00",
+"t": "2026-09-27T21:11:00+00:00",
 "svc": "button/press",
 "entity_id": "button.solis_update_charge_discharge_times_3"
 },
@@ -1228,15 +1258,15 @@ null
 },
 {
 "t": "2026-09-27T21:41:00+00:00",
-"plan": "EEEECCCCEEECCCCCCsssssssssssssss",
+"plan": "EEEECCCCEEEECCCCCsssssssssssssss",
 "soc": [
 81,
 49,
 75,
-72,
-100,
-95,
-94,
+44,
+98,
+93,
+93,
 100
 ]
 },
@@ -1247,15 +1277,15 @@ null
 },
 {
 "t": "2026-09-27T21:46:00+00:00",
-"plan": "EEEECCCCEEECCCCCCsssssssssssssss",
+"plan": "EEEECCCCEEEECCCCCsssssssssssssss",
 "soc": [
 82,
 50,
-75,
-72,
-100,
-95,
+76,
+44,
+99,
 94,
+93,
 100
 ]
 },
@@ -1418,7 +1448,7 @@ null
 74,
 42,
 39,
-90,
+94,
 97,
 94,
 98,
@@ -1472,7 +1502,7 @@ null
 75,
 43,
 40,
-90,
+95,
 97,
 94,
 98,
@@ -1486,7 +1516,7 @@ null
 76,
 45,
 42,
-90,
+95,
 97,
 94,
 98,
@@ -1500,7 +1530,7 @@ null
 76,
 44,
 41,
-90,
+95,
 97,
 94,
 98,
@@ -1518,7 +1548,7 @@ null
 77,
 46,
 43,
-90,
+95,
 97,
 94,
 98,
@@ -1532,7 +1562,7 @@ null
 77,
 45,
 42,
-90,
+95,
 97,
 94,
 98,
@@ -1803,7 +1833,7 @@ null
 "soc": [
 70,
 39,
-90,
+93,
 100,
 95,
 94,
@@ -1876,11 +1906,11 @@ null
 },
 {
 "t": "2026-09-28T00:00:00+00:00",
-"plan": "EEECCCCCCCCCssssssssssssssssssss",
+"plan": "EEECECCCCCCCssssssssssssssssssss",
 "soc": [
 58,
-55,
-90,
+26,
+81,
 99,
 94,
 95,
@@ -2073,8 +2103,8 @@ null
 "plan": "CCEEEECCCCCCssssssssssssssssssss",
 "soc": [
 82,
-44,
-70,
+49,
+75,
 99,
 94,
 95,
@@ -2154,7 +2184,7 @@ null
 "decision": [
 "grid_charge",
 "plan",
-90,
+95,
 null
 ]
 },
@@ -2162,32 +2192,9 @@ null
 "t": "2026-09-28T00:30:00+00:00",
 "plan": "CEEEECCCCCCsssssssssssssssssssss",
 "soc": [
-90,
-29,
-84,
-97,
-94,
-98,
-100,
-99
-]
-},
-{
-"t": "2026-09-28T00:42:00+00:00",
-"decision": [
-"grid_charge",
-"plan",
+95,
+34,
 89,
-null
-]
-},
-{
-"t": "2026-09-28T00:42:00+00:00",
-"plan": "CEEEECCCCCCsssssssssssssssssssss",
-"soc": [
-88,
-27,
-82,
 97,
 94,
 98,
@@ -2196,116 +2203,7 @@ null
 ]
 },
 {
-"t": "2026-09-28T00:42:00+00:00",
-"svc": "logbook/log"
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"decision": [
-"grid_charge",
-"plan",
-85,
-null
-]
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"plan": "CEEEECCCCCCsssssssssssssssssssss",
-"soc": [
-85,
-24,
-79,
-97,
-94,
-98,
-100,
-99
-]
-},
-{
-"t": "2026-09-28T00:47:00+00:00",
-"svc": "logbook/log"
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"decision": [
-"grid_charge",
-"plan",
-81,
-null
-]
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"plan": "CCEEECCCCCCsssssssssssssssssssss",
-"soc": [
-81,
-44,
-90,
-97,
-94,
-98,
-100,
-99
-]
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "logbook/log"
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes",
-"value": 30
-},
-{
-"t": "2026-09-28T00:52:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes_3",
-"value": 30
-},
-{
-"t": "2026-09-28T00:53:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T00:53:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
-},
-{
-"t": "2026-09-28T00:57:00+00:00",
-"decision": [
-"grid_charge",
-"plan",
-78,
-null
-]
-},
-{
-"t": "2026-09-28T00:57:00+00:00",
-"plan": "CCEEECCCCCCsssssssssssssssssssss",
-"soc": [
-77,
-44,
-90,
-97,
-94,
-98,
-100,
-99
-]
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
+"t": "2026-09-28T00:32:00+00:00",
 "decision": [
 "export",
 "plan",
@@ -2314,8 +2212,145 @@ null
 ]
 },
 {
+"t": "2026-09-28T00:32:00+00:00",
+"plan": "EEEECCCCCCCsssssssssssssssssssss",
+"soc": [
+69,
+37,
+92,
+97,
+94,
+98,
+100,
+99
+]
+},
+{
+"t": "2026-09-28T00:32:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-28T00:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T00:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-28T00:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours_2",
+"value": 1
+},
+{
+"t": "2026-09-28T00:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-28T00:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_2",
+"value": 3
+},
+{
+"t": "2026-09-28T00:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-28T00:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours_3",
+"value": 0
+},
+{
+"t": "2026-09-28T00:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_3",
+"value": 0
+},
+{
+"t": "2026-09-28T00:33:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-28T00:33:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-28T00:33:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
+},
+{
+"t": "2026-09-28T00:42:00+00:00",
+"plan": "EEEECCCCCCCsssssssssssssssssssss",
+"soc": [
+71,
+39,
+94,
+97,
+94,
+98,
+100,
+99
+]
+},
+{
+"t": "2026-09-28T00:47:00+00:00",
+"plan": "EEEECCCCCCCsssssssssssssssssssss",
+"soc": [
+72,
+41,
+95,
+97,
+94,
+98,
+100,
+99
+]
+},
+{
+"t": "2026-09-28T00:52:00+00:00",
+"plan": "EEEECCCCCCCsssssssssssssssssssss",
+"soc": [
+73,
+41,
+95,
+97,
+94,
+98,
+100,
+99
+]
+},
+{
+"t": "2026-09-28T00:57:00+00:00",
+"plan": "EEEECCCCCCCsssssssssssssssssssss",
+"soc": [
+74,
+43,
+95,
+97,
+94,
+98,
+100,
+99
+]
+},
+{
 "t": "2026-09-28T01:00:00+00:00",
-"plan": "EEECCCCCCCssssssssssssssssssssss",
+"plan": "EEECCCCCCCsssssssssssssssssssssE",
 "soc": [
 60,
 57,
@@ -2328,87 +2363,8 @@ null
 ]
 },
 {
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "logbook/log"
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_start_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 0
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_minutes",
-"value": 0
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 2
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 3
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_2",
-"value": 30
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_3",
-"value": 0
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_minutes_3",
-"value": 0
-},
-{
-"t": "2026-09-28T01:00:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_3",
-"value": 0
-},
-{
-"t": "2026-09-28T01:01:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times"
-},
-{
-"t": "2026-09-28T01:01:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_2"
-},
-{
-"t": "2026-09-28T01:01:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
-},
-{
 "t": "2026-09-28T01:05:00+00:00",
-"plan": "EEECCCCCCCssssssssssssssssssssss",
+"plan": "EEECCCCCCCsssssssssssssssssssssE",
 "soc": [
 59,
 56,
@@ -2422,7 +2378,7 @@ null
 },
 {
 "t": "2026-09-28T01:10:00+00:00",
-"plan": "EEECCCCCCCssssssssssssssssssssss",
+"plan": "EEECCCCCCCsssssssssssssssssssssE",
 "soc": [
 61,
 58,
@@ -2440,7 +2396,7 @@ null
 },
 {
 "t": "2026-09-28T01:21:00+00:00",
-"plan": "EEECECCCCCssssssssssssssssssssss",
+"plan": "EEECECCCCCsssssssssssssssssssssE",
 "soc": [
 62,
 31,
@@ -2454,7 +2410,7 @@ null
 },
 {
 "t": "2026-09-28T01:26:00+00:00",
-"plan": "EEECCCCCCCssssssssssssssssssssss",
+"plan": "EEECCCCCCCsssssssssssssssssssssE",
 "soc": [
 62,
 59,
@@ -2468,7 +2424,7 @@ null
 },
 {
 "t": "2026-09-28T01:31:00+00:00",
-"plan": "EECCCCCCCssssssssssssssssssssssF",
+"plan": "EECCCCCCCsssssssssssssssssssssEF",
 "soc": [
 46,
 72,
@@ -2482,7 +2438,7 @@ null
 },
 {
 "t": "2026-09-28T01:36:00+00:00",
-"plan": "EECCCCCCCssssssssssssssssssssssF",
+"plan": "EECCCCCCCsssssssssssssssssssssEF",
 "soc": [
 47,
 73,
@@ -2496,7 +2452,7 @@ null
 },
 {
 "t": "2026-09-28T01:41:00+00:00",
-"plan": "EECCCCCCCssssssssssssssssssssssF",
+"plan": "EECCCCCCCsssssssssssssssssssssEF",
 "soc": [
 46,
 72,
@@ -2510,7 +2466,7 @@ null
 },
 {
 "t": "2026-09-28T02:00:00+00:00",
-"plan": "ECCCCCCCssssssssssssssssssssssFF",
+"plan": "ECCCCCCCsssssssssssssssssssssEFF",
 "soc": [
 31,
 86,
@@ -2524,7 +2480,7 @@ null
 },
 {
 "t": "2026-09-28T02:05:00+00:00",
-"plan": "ECECCCCCssssssssssssssssssssssFF",
+"plan": "ECECCCCCsssssssssssssssssssssEFF",
 "soc": [
 33,
 59,
@@ -2595,7 +2551,7 @@ null
 },
 {
 "t": "2026-09-28T02:10:00+00:00",
-"plan": "EECCCCCCssssssssssssssssssssssFF",
+"plan": "EECCCCCCsssssssssssssssssssssEFF",
 "soc": [
 39,
 65,
@@ -2636,6 +2592,12 @@ null
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_start_hours_2",
 "value": 3
+},
+{
+"t": "2026-09-28T02:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes_2",
+"value": 0
 },
 {
 "t": "2026-09-28T02:10:00+00:00",
@@ -2684,7 +2646,7 @@ null
 },
 {
 "t": "2026-09-28T02:15:00+00:00",
-"plan": "EECCCCCCssssssssssssssssssssssFF",
+"plan": "EECCCCCCsssssssssssssssssssssEFF",
 "soc": [
 43,
 69,
@@ -2698,7 +2660,7 @@ null
 },
 {
 "t": "2026-09-28T02:20:00+00:00",
-"plan": "EECCCCCCssssssssssssssssssssssFF",
+"plan": "EECCCCCCsssssssssssssssssssssEFF",
 "soc": [
 48,
 74,
@@ -2712,7 +2674,7 @@ null
 },
 {
 "t": "2026-09-28T02:25:00+00:00",
-"plan": "EECCCCCCssssssssssssssssssssssFF",
+"plan": "EECCCCCCsssssssssssssssssssssEFF",
 "soc": [
 51,
 77,
@@ -2726,16 +2688,16 @@ null
 },
 {
 "t": "2026-09-28T02:30:00+00:00",
-"plan": "ECCCCCCssssssssssssssssssssssFFs",
+"plan": "ECCCCCCsssssssssssssssssssssEFFs",
 "soc": [
 42,
-90,
+95,
 97,
 94,
 98,
 100,
 99,
-85
+73
 ]
 },
 {
@@ -2744,7 +2706,7 @@ null
 },
 {
 "t": "2026-09-28T02:36:00+00:00",
-"plan": "EECCCCCssssssssssssssssssssssFFs",
+"plan": "EECCCCCsssssssssssssssssssssEFFs",
 "soc": [
 47,
 73,
@@ -2753,7 +2715,7 @@ null
 98,
 100,
 99,
-85
+73
 ]
 },
 {
@@ -2786,7 +2748,7 @@ null
 },
 {
 "t": "2026-09-28T02:41:00+00:00",
-"plan": "EECCCCCssssssssssssssssssssssFFs",
+"plan": "EECCCCCsssssssssssssssssssssEFFs",
 "soc": [
 51,
 77,
@@ -2795,12 +2757,12 @@ null
 98,
 100,
 99,
-85
+73
 ]
 },
 {
 "t": "2026-09-28T02:46:00+00:00",
-"plan": "EECCCCCssssssssssssssssssssssFFs",
+"plan": "EECCCCCsssssssssssssssssssssEFFs",
 "soc": [
 56,
 82,
@@ -2809,12 +2771,12 @@ null
 98,
 100,
 99,
-85
+73
 ]
 },
 {
 "t": "2026-09-28T02:51:00+00:00",
-"plan": "EECCCCCssssssssssssssssssssssFFs",
+"plan": "EECCCCCsssssssssssssssssssssEFFs",
 "soc": [
 60,
 86,
@@ -2823,63 +2785,63 @@ null
 98,
 100,
 99,
-85
+73
 ]
 },
 {
 "t": "2026-09-28T02:56:00+00:00",
-"plan": "EECCCCCssssssssssssssssssssssFFs",
+"plan": "EECCCCCsssssssssssssssssssssEFFs",
 "soc": [
 65,
-90,
+91,
 97,
 94,
 98,
 100,
 99,
-85
+73
 ]
 },
 {
 "t": "2026-09-28T03:00:00+00:00",
-"plan": "ECCCCCEsssssssssssssssssssssFFss",
+"plan": "ECCCCCsssssssssssssssssssssEFFss",
 "soc": [
 54,
 100,
-82,
-80,
-87,
-95,
-91,
-65
+96,
+94,
+100,
+100,
+96,
+57
 ]
 },
 {
 "t": "2026-09-28T03:05:00+00:00",
-"plan": "ECCCCCEsssssssssssssssssssssFFss",
+"plan": "ECCCCCsssssssssssssssssssssEFFss",
 "soc": [
 57,
 100,
-82,
-80,
-87,
-95,
-91,
-65
+96,
+94,
+100,
+100,
+96,
+57
 ]
 },
 {
 "t": "2026-09-28T03:10:00+00:00",
-"plan": "EECCCCEsssssssssssssssssssssFFss",
+"plan": "EECCCCsssssssssssssssssssssEFFss",
 "soc": [
 63,
 89,
-82,
-80,
-87,
-95,
-91,
-65
+96,
+94,
+100,
+100,
+96,
+57
 ]
 },
 {
@@ -2898,7 +2860,7 @@ null
 "t": "2026-09-28T03:10:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_start_hours_2",
-"value": 7
+"value": 0
 },
 {
 "t": "2026-09-28T03:10:00+00:00",
@@ -2910,7 +2872,13 @@ null
 "t": "2026-09-28T03:10:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_end_hours_2",
-"value": 7
+"value": 0
+},
+{
+"t": "2026-09-28T03:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_2",
+"value": 0
 },
 {
 "t": "2026-09-28T03:10:00+00:00",
@@ -2941,86 +2909,86 @@ null
 },
 {
 "t": "2026-09-28T03:15:00+00:00",
-"plan": "EECCCCEsssssssssssssssssssssFFss",
+"plan": "EECCCCsssssssssssssssssssssEFFss",
 "soc": [
 67,
 93,
-82,
-80,
-87,
-95,
-91,
-65
+96,
+94,
+100,
+100,
+96,
+57
 ]
 },
 {
 "t": "2026-09-28T03:20:00+00:00",
-"plan": "EECCCCEsssssssssssssssssssssFFss",
+"plan": "EECCCCsssssssssssssssssssssEFFss",
 "soc": [
 73,
 99,
-82,
-80,
-87,
-95,
-91,
-65
+96,
+94,
+100,
+100,
+96,
+57
 ]
 },
 {
 "t": "2026-09-28T03:25:00+00:00",
-"plan": "EECCCCEsssssssssssssssssssssFFss",
+"plan": "EECCCCsssssssssssssssssssssEFFss",
 "soc": [
 77,
 100,
-82,
-80,
-87,
-95,
-91,
-65
+96,
+94,
+100,
+100,
+96,
+57
 ]
 },
 {
 "t": "2026-09-28T03:30:00+00:00",
-"plan": "ECCCCEsssssssssssssssssssssFFsss",
+"plan": "ECCCCsssssssssssssssssssssEFFsss",
 "soc": [
 68,
 100,
-81,
-80,
-89,
 95,
-88,
-50
+94,
+100,
+100,
+93,
+42
 ]
 },
 {
 "t": "2026-09-28T03:35:00+00:00",
-"plan": "ECCCCEsssssssssssssssssssssFFsss",
+"plan": "ECCCCsssssssssssssssssssssEFFsss",
 "soc": [
 72,
 100,
-81,
-80,
-89,
 95,
-88,
-50
+94,
+100,
+100,
+93,
+42
 ]
 },
 {
 "t": "2026-09-28T03:40:00+00:00",
-"plan": "EECCCEsssssssssssssssssssssFFsss",
+"plan": "EECCCsssssssssssssssssssssEFFsss",
 "soc": [
 77,
 100,
-81,
-80,
-89,
 95,
-88,
-50
+94,
+100,
+100,
+93,
+42
 ]
 },
 {
@@ -3053,30 +3021,30 @@ null
 },
 {
 "t": "2026-09-28T03:45:00+00:00",
-"plan": "EECCCEsssssssssssssssssssssFFsss",
+"plan": "EECCCsssssssssssssssssssssEFFsss",
 "soc": [
 81,
 100,
-81,
-80,
-89,
 95,
-88,
-50
+94,
+100,
+100,
+93,
+42
 ]
 },
 {
 "t": "2026-09-28T03:46:00+00:00",
-"plan": "EECCCEsssssssssssssssssssssFFsss",
+"plan": "EECCCsssssssssssssssssssssEFFsss",
 "soc": [
 82,
 100,
-81,
-80,
-89,
 95,
-88,
-50
+94,
+100,
+100,
+93,
+42
 ]
 },
 {
@@ -3085,63 +3053,63 @@ null
 },
 {
 "t": "2026-09-28T03:51:00+00:00",
-"plan": "EECCCEsssssssssssssssssssssFFsss",
+"plan": "EECCCsssssssssssssssssssssEFFsss",
 "soc": [
 86,
 100,
-81,
-80,
-89,
 95,
-88,
-50
+94,
+100,
+100,
+93,
+42
 ]
 },
 {
 "t": "2026-09-28T03:56:00+00:00",
-"plan": "EECCCEsssssssssssssssssssssFFsss",
+"plan": "EECCCsssssssssssssssssssssEFFsss",
 "soc": [
 90,
 100,
-81,
-80,
-89,
 95,
-88,
-50
+94,
+100,
+100,
+93,
+42
 ]
 },
 {
 "t": "2026-09-28T04:00:00+00:00",
-"plan": "ECCCEsssssssssssssssssssssFFssss",
+"plan": "ECCCsssssssssssssssssssssEFFssss",
 "soc": [
 81,
-85,
-80,
-82,
-92,
+99,
+94,
 95,
-83,
-47
+100,
+100,
+88,
+39
 ]
 },
 {
 "t": "2026-09-28T04:05:00+00:00",
-"plan": "ECCCEsssssssssssssssssssssFFssss",
+"plan": "ECCCsssssssssssssssssssssEFFssss",
 "soc": [
 84,
-85,
-80,
-82,
-92,
+99,
+94,
 95,
-83,
-47
+100,
+100,
+88,
+39
 ]
 },
 {
 "t": "2026-09-28T04:10:00+00:00",
-"plan": "EECCssssssssssssssssssssssFFssss",
+"plan": "EECCsssssssssssssssssssssEFFssss",
 "soc": [
 87,
 98,
@@ -3150,7 +3118,7 @@ null
 100,
 100,
 88,
-52
+39
 ]
 },
 {
@@ -3176,12 +3144,6 @@ null
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_end_hours_2",
 "value": 6
-},
-{
-"t": "2026-09-28T04:10:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_2",
-"value": 0
 },
 {
 "t": "2026-09-28T04:10:00+00:00",
@@ -3224,151 +3186,128 @@ null
 },
 {
 "t": "2026-09-28T04:15:00+00:00",
-"plan": "EECCEsssssssssssssssssssssFFssss",
+"plan": "EECCsssssssssssssssssssssEFFssss",
 "soc": [
 91,
-85,
-80,
-82,
-92,
+99,
+94,
 95,
-83,
-47
+100,
+100,
+88,
+39
 ]
 },
 {
 "t": "2026-09-28T04:20:00+00:00",
-"plan": "EECCEsssssssssssssssssssssFFssss",
+"plan": "EECCsssssssssssssssssssssEFFssss",
 "soc": [
 95,
-85,
-80,
-82,
-92,
+99,
+94,
 95,
-83,
-47
+100,
+100,
+88,
+39
 ]
 },
 {
 "t": "2026-09-28T04:25:00+00:00",
-"plan": "EECCEsssssssssssssssssssssFFssss",
+"plan": "EECCsssssssssssssssssssssEFFssss",
 "soc": [
 97,
-85,
-80,
-82,
-92,
+99,
+94,
 95,
-83,
-47
+100,
+100,
+88,
+39
 ]
-},
-{
-"t": "2026-09-28T04:25:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_start_hours_3",
-"value": 7
-},
-{
-"t": "2026-09-28T04:25:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours_3",
-"value": 7
-},
-{
-"t": "2026-09-28T04:25:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes_3",
-"value": 30
-},
-{
-"t": "2026-09-28T04:26:00+00:00",
-"svc": "button/press",
-"entity_id": "button.solis_update_charge_discharge_times_3"
 },
 {
 "t": "2026-09-28T04:30:00+00:00",
-"plan": "ECCEsssssssssssssssssssssFFsssss",
+"plan": "ECCsssssssssssssssssssssEFFsssss",
 "soc": [
 85,
-83,
-80,
-84,
-93,
+97,
 94,
-81,
-44
+98,
+100,
+99,
+73,
+36
 ]
 },
 {
 "t": "2026-09-28T04:35:00+00:00",
-"plan": "ECCEsssssssssssssssssssssFFsssss",
+"plan": "ECCsssssssssssssssssssssEFFsssss",
 "soc": [
 87,
-83,
-80,
-84,
-93,
+97,
 94,
-81,
-44
+98,
+100,
+99,
+73,
+36
 ]
 },
 {
 "t": "2026-09-28T04:40:00+00:00",
-"plan": "ECCEsssssssssssssssssssssFFsssss",
+"plan": "ECCsssssssssssssssssssssEFFsssss",
 "soc": [
 90,
-83,
-80,
-84,
-93,
+97,
 94,
-81,
-44
+98,
+100,
+99,
+73,
+36
 ]
 },
 {
 "t": "2026-09-28T04:45:00+00:00",
-"plan": "ECCEsssssssssssssssssssssFFsssss",
+"plan": "ECCsssssssssssssssssssssEFFsssss",
 "soc": [
 92,
-83,
-80,
-84,
-93,
+97,
 94,
-81,
-44
+98,
+100,
+99,
+73,
+36
 ]
 },
 {
 "t": "2026-09-28T04:50:00+00:00",
-"plan": "ECCEsssssssssssssssssssssFFsssss",
+"plan": "ECCsssssssssssssssssssssEFFsssss",
 "soc": [
 95,
-83,
-80,
-84,
-93,
+97,
 94,
-81,
-44
+98,
+100,
+99,
+73,
+36
 ]
 },
 {
 "t": "2026-09-28T04:55:00+00:00",
-"plan": "ECCEsssssssssssssssssssssFFsssss",
+"plan": "ECCsssssssssssssssssssssEFFsssss",
 "soc": [
 97,
-83,
-80,
-84,
-93,
+97,
 94,
-81,
-44
+98,
+100,
+99,
+73,
+36
 ]
 },
 {
@@ -3382,16 +3321,16 @@ null
 },
 {
 "t": "2026-09-28T05:00:00+00:00",
-"plan": "HHEsssssssssssssssssssssFFssssss",
+"plan": "HHsssssssssssssssssssssEFFssssss",
 "soc": [
 100,
-82,
-80,
-87,
-95,
-91,
-65,
-41
+96,
+94,
+100,
+100,
+96,
+57,
+33
 ]
 },
 {
