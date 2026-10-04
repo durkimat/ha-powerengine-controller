@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.99 (beta)
+
+### Behaviour changes
+
+- **A charge target reached early no longer just holds.** When the plan's charge target for the running half-hour is reached with 5 or more minutes left, PowerEngine now replans straight away from the live battery level for the rest of that half-hour, so the best action takes over: keep charging if the plan wants more, start the next half-hour's sale early, or hold. With less than 5 minutes left, or no plan, it holds as before. It looks once per half-hour, so it cannot flip back and forth.
+- Every such moment is recorded (the time left, the battery level, the rates, what the plan had next, and what the replan chose, or why the hold stayed). The records are kept in `early_target.json` beside the config and are in the diagnostics export, so the effect can be reviewed after a week (#175).
+
 ## 0.9.98 (beta)
 
 ### Behaviour changes
