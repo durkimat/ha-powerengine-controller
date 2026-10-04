@@ -20,6 +20,7 @@ from .readings import Window
 CONTINUE_GAP = timedelta(minutes=10)     # a new slot starting this soon after one vanishes mid-run continues it
 
 KEEP_DAYS = 30
+USED_KWH = 0.2                           # a slot the car drew at least this in was used; less is a blip
 
 
 class SlotTracker:
@@ -96,7 +97,10 @@ class SlotTracker:
                 continue
             if latest is None or start > datetime.fromisoformat(latest["start"]):
                 latest = rec
-        return latest is not None and (latest.get("charging_min") or 0.0) < 1.0
+        if latest is None:
+            return False
+        # a blip (1 minute, 0.01 kWh: 4 Oct 2026) is not a charge; `used` in summary() counts from 0.2 kWh too
+        return (latest.get("charging_min") or 0.0) < 1.0 or (latest.get("car_kwh") or 0.0) < USED_KWH
 
     def save(self) -> None:
         if not self.path:
@@ -129,11 +133,11 @@ class SlotTracker:
         since = (now - timedelta(days=days)).isoformat()
         recent = sorted((r for k, r in self.slots.items() if k >= since), key=lambda r: r["start"])
         finished = [r for r in recent if r["status"] != "planned"]
-        used = [r for r in finished if r["status"] in ("done", "cut_short") and r["car_kwh"] >= 0.2]
+        used = [r for r in finished if r["status"] in ("done", "cut_short") and r["car_kwh"] >= USED_KWH]
         out = {
             "days": days, "slots": len(finished),
             "used": len(used),
-            "done_no_car": len([r for r in finished if r["status"] == "done" and r["car_kwh"] < 0.2]),
+            "done_no_car": len([r for r in finished if r["status"] == "done" and r["car_kwh"] < USED_KWH]),
             "cancelled": len([r for r in finished if r["status"] == "cancelled"]),
             "cut_short": len([r for r in finished if r["status"] == "cut_short"]),
             # what EDF planned for the slots that ran (a withdrawn slot never ran, and EDF re-plans often: counting
