@@ -1107,6 +1107,14 @@ views:
                   extend_to: false
                   data_generator: |
                     return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), Math.round((d.scenarios.actual_adj + d.scenarios.carry) * 100) / 100]);
+                - entity: sensor.pe_cost_days
+                  show: {legend_value: false}
+                  name: "You paid"
+                  type: column
+                  color: "#7e57c2"
+                  extend_to: false
+                  data_generator: |
+                    return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), Math.round((d.scenarios.actual_adj + d.scenarios.carry + d.scenarios.events_metered - d.scenarios.axle_income) * 100) / 100]);
           - type: conditional
             grid_options: {columns: full, rows: auto}
             conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
@@ -1132,9 +1140,10 @@ views:
               | No solar or battery | Every kWh from the grid: the house at the standard rate, the car at the overnight rate; plus the standing charge. |
               | Solar | Your solar covers the house first, the surplus is exported; no battery. |
               | + EDF tariff | The same, but grid energy is priced at the real half-hourly rates (smart slots, overnight, peak). |
-              | PowerEngine | What your normal half-hours really cost, from the meters, with your battery and PowerEngine's control. Energy bought for later or used from earlier counts on the day it was bought or used. |
+              | PowerEngine | What your normal half-hours really cost, from the meters, with your battery and PowerEngine's control. Energy bought for later or used from earlier counts on the day it was bought or used. Axle and free-power half-hours are not in this bar. |
+              | You paid | The PowerEngine bar plus the Axle and free-power half-hours: their metered cost, less Axle's own £/kWh payment. This is the savings chart's "You paid" figure. On a day with no events it is the same as the PowerEngine bar. Below zero means the day paid you. |
 
-              These are the same four lines as the savings chart above, day by day, for the same last 7 complete days (today is left out until it is over). All use the same measured house, car and solar. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated. Axle and free-power events are left out of these bars and shown separately.
+              These are the same lines as the savings chart above, day by day, for the same last 7 complete days (today is left out until it is over), and the last bar is its final figure, so the two always agree. All use the same measured house, car and solar. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated.
       - type: grid
         column_span: 3
         cards:

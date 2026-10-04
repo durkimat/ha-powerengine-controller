@@ -211,10 +211,26 @@ def test_costs_chart_shows_the_last_seven_complete_days_never_today():
     """The daily chart is the waterfall's 'Last 7 days' day by day: complete days only, 7 of them, the window ending
     at noon on the last complete day (end of today minus 36 h) on desktop and phone alike."""
     view = _costs_view()
-    assert view.count("filter(d => d.scenarios && d.complete).slice(-7)") == 4        # one per series
+    assert view.count("filter(d => d.scenarios && d.complete).slice(-7)") == 5        # one per series
     assert "Date.now()" not in view
     assert view.count('offset: "-36h"') == 1 and view.count('"offset": "-36h"') == 1
     assert view.count("graph_span: 7d") == 1 and view.count('graph_span: "7d"') == 1
+
+
+def test_last_bar_is_the_waterfalls_you_paid_with_the_events_in():
+    """Day by day, the last bar is what the waterfall ends on: PowerEngine plus the event half-hours less the
+    event payment (costs._steps_for's r6), so the bars and the waterfall always agree."""
+    view = _costs_view()
+    assert 'name: "You paid"' in view
+    assert ("d.scenarios.actual_adj + d.scenarios.carry + d.scenarios.events_metered - d.scenarios.axle_income"
+            in view)
+    from pe_core.costs import waterfall
+    day = {"date": "2026-10-03", "complete": True, "scenarios": {
+        "none": 6.40, "solar": 5.0, "tariff": 3.0, "actual_adj": 2.5, "carry": 0.0,
+        "events_metered": 0.5, "axle_income": 4.2}}
+    paid = waterfall([day], "yesterday")["steps"][-1]["value"]
+    sc = day["scenarios"]
+    assert paid == round(sc["actual_adj"] + sc["carry"] + sc["events_metered"] - sc["axle_income"], 2) == -1.2
 
 
 def test_costs_page_no_longer_describes_the_old_cost_layers():
