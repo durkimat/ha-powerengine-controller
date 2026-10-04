@@ -10,7 +10,7 @@ null
 },
 {
 "t": "2026-09-27T19:30:00+00:00",
-"plan": "EssssCCECCECCECCECCECsssssHsssss",
+"plan": "EssssCCECCECCECCECCECsssssssssss",
 "soc": [
 75,
 70,
@@ -104,7 +104,7 @@ true
 },
 {
 "t": "2026-09-27T19:35:00+00:00",
-"plan": "EssssCCECCECCECCECCECsssssHsssss",
+"plan": "EssssCCECCECCECCECCECsssssssssss",
 "soc": [
 77,
 71,
@@ -130,7 +130,7 @@ true
 },
 {
 "t": "2026-09-27T19:40:00+00:00",
-"plan": "EssssCCECCECCECCECCECsssssHsssss",
+"plan": "EssssCCECCECCECCECCECsssssssssss",
 "soc": [
 79,
 73,
@@ -144,7 +144,7 @@ true
 },
 {
 "t": "2026-09-27T19:45:00+00:00",
-"plan": "EssssCECCECCECCECCECCsssssssssss",
+"plan": "EssssCECCECCECCECCECCEssssssssss",
 "soc": [
 83,
 77,
@@ -152,8 +152,8 @@ true
 75,
 89,
 90,
-85,
-84
+72,
+71
 ]
 },
 {
@@ -162,6 +162,34 @@ true
 },
 {
 "t": "2026-09-27T19:50:00+00:00",
+"plan": "EssssCECCECCECCECCECCEssssssssss",
+"soc": [
+87,
+81,
+90,
+75,
+89,
+90,
+72,
+71
+]
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"plan": "EssssCECCECCECCECCECCEssssssssss",
+"soc": [
+88,
+82,
+90,
+75,
+89,
+90,
+72,
+71
+]
+},
+{
+"t": "2026-09-27T20:00:00+00:00",
 "decision": [
 "self_use",
 "plan",
@@ -170,40 +198,8 @@ null
 ]
 },
 {
-"t": "2026-09-27T19:50:00+00:00",
-"plan": "sEsssCCECCECCECCECCECsssssHsssss",
-"soc": [
-92,
-73,
-89,
-90,
-75,
-89,
-84,
-83
-]
-},
-{
-"t": "2026-09-27T19:50:00+00:00",
-"svc": "logbook/log"
-},
-{
-"t": "2026-09-27T19:55:00+00:00",
-"plan": "sEsssCCECCECCECCECCECsssssHsssss",
-"soc": [
-90,
-71,
-89,
-90,
-75,
-89,
-84,
-83
-]
-},
-{
 "t": "2026-09-27T20:00:00+00:00",
-"plan": "ssssEEECCCCEEECCCCCCssssssssssss",
+"plan": "ssssEEECCCCEEECCCCCCsssssEssssss",
 "soc": [
 88,
 69,
@@ -212,7 +208,11 @@ null
 86,
 99,
 94,
-95
+81
 ]
+},
+{
+"t": "2026-09-27T20:00:00+00:00",
+"svc": "logbook/log"
 }
 ]

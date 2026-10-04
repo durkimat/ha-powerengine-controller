@@ -10,16 +10,16 @@ null
 },
 {
 "t": "2026-09-27T20:00:00+00:00",
-"plan": "ssssCECCECCECCECCECCssssssssssss",
+"plan": "ssssCECCECCECCECCECCEsssssssssss",
 "soc": [
 88,
 90,
 75,
 89,
 90,
-89,
-84,
-85
+75,
+71,
+72
 ]
 },
 {
@@ -45,7 +45,7 @@ null
 },
 {
 "t": "2026-09-27T20:05:00+00:00",
-"plan": "EsssCCECCECCECCECCECsssssHssssss",
+"plan": "EsssCCECCECCECCECCECssssssssssss",
 "soc": [
 77,
 86,
@@ -54,7 +54,7 @@ null
 89,
 87,
 83,
-85
+84
 ]
 },
 {
@@ -163,7 +163,7 @@ null
 },
 {
 "t": "2026-09-27T20:10:00+00:00",
-"plan": "EsssCCECCECCECCECCECsssssHssssss",
+"plan": "EsssCCECCECCECCECCECssssssssssss",
 "soc": [
 79,
 88,
@@ -172,7 +172,7 @@ null
 89,
 87,
 83,
-85
+84
 ]
 },
 {
@@ -285,7 +285,7 @@ null
 },
 {
 "t": "2026-09-27T20:15:00+00:00",
-"plan": "EsssCCECCECCECCECCECsssssHssssss",
+"plan": "EsssCCECCECCECCECCECssssssssssss",
 "soc": [
 81,
 89,
@@ -294,7 +294,7 @@ null
 89,
 87,
 83,
-85
+84
 ]
 },
 {
@@ -399,6 +399,214 @@ null
 },
 {
 "t": "2026-09-27T20:20:00+00:00",
+"plan": "EsssCECCECCECCECCECCEsssssssssss",
+"soc": [
+85,
+90,
+75,
+89,
+90,
+75,
+71,
+72
+]
+},
+{
+"t": "2026-09-27T20:20:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:20:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:20:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:21:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:21:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:21:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:22:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:22:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:22:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:23:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:23:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:23:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:24:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:24:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:24:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:25:00+00:00",
+"plan": "EsssCECCECCECCECCECCEsssssssssss",
+"soc": [
+89,
+90,
+75,
+89,
+90,
+75,
+71,
+72
+]
+},
+{
+"t": "2026-09-27T20:25:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:25:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:25:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:26:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:26:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:26:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:27:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:27:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:27:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:28:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:28:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:28:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:29:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:29:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:29:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 4000
+},
+{
+"t": "2026-09-27T20:30:00+00:00",
 "decision": [
 "self_use",
 "plan",
@@ -407,101 +615,73 @@ null
 ]
 },
 {
-"t": "2026-09-27T20:20:00+00:00",
-"plan": "sEssCCECCECCECCECCECsssssHssssss",
-"soc": [
-90,
-85,
-90,
-75,
-89,
-87,
-83,
-85
-]
-},
-{
-"t": "2026-09-27T20:20:00+00:00",
-"svc": "logbook/log"
-},
-{
-"t": "2026-09-27T20:20:00+00:00",
-"svc": "select/select_option",
-"entity_id": "select.solis_inverter_battery_control_override",
-"option": "Off"
-},
-{
-"t": "2026-09-27T20:20:00+00:00",
-"warning": "[info] RAM remote control: Off (Self-Use)"
-},
-{
-"t": "2026-09-27T20:25:00+00:00",
-"plan": "sEssCCECCECCECCECCECsssssHssssss",
-"soc": [
-91,
-86,
-90,
-75,
-89,
-87,
-83,
-85
-]
-},
-{
 "t": "2026-09-27T20:30:00+00:00",
-"plan": "sssEEEECCCEEECCCCCCsssssssssssss",
+"plan": "sssEEEECCCEEECCCCCCEssssssssssss",
 "soc": [
 91,
 58,
 56,
 25,
 78,
-97,
-94,
-98
+84,
+80,
+84
 ]
 },
 {
+"t": "2026-09-27T20:30:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T20:30:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Off"
+},
+{
+"t": "2026-09-27T20:30:00+00:00",
+"warning": "[info] RAM remote control: Off (Self-Use)"
+},
+{
 "t": "2026-09-27T20:35:00+00:00",
-"plan": "sEsEEECCCEEECCCCCCCsssssssssssss",
+"plan": "sEsEEECCCEEECCCCCCCEssssssssssss",
 "soc": [
 90,
 44,
 69,
 39,
 90,
-97,
-94,
-98
+84,
+80,
+84
 ]
 },
 {
 "t": "2026-09-27T20:40:00+00:00",
-"plan": "sssEEEECCCEEECCCCCCsssssssssssss",
+"plan": "sssEEEECCCEEECCCCCCEssssssssssss",
 "soc": [
 89,
 57,
 54,
 23,
 76,
-97,
-94,
-98
+84,
+80,
+84
 ]
 },
 {
 "t": "2026-09-27T20:45:00+00:00",
-"plan": "sssEEEECCCCCEECCCCCsssssssssssss",
+"plan": "sssEEEECCCCCEECCCCCEssssssssssss",
 "soc": [
 87,
 55,
 52,
 75,
 90,
-97,
-94,
-98
+84,
+80,
+84
 ]
 },
 {
@@ -512,35 +692,35 @@ null
 },
 {
 "t": "2026-09-27T20:50:00+00:00",
-"plan": "sssEEEECCCCCEECCCCCsssssssssssss",
+"plan": "sssEEEECCCCCEECCCCCEssssssssssss",
 "soc": [
 87,
 54,
 51,
 75,
 90,
-97,
-94,
-98
+84,
+80,
+84
 ]
 },
 {
 "t": "2026-09-27T20:55:00+00:00",
-"plan": "sssEEEECCCEEECCCCCCsssssssssssss",
+"plan": "sssEEEECCCEEECCCCCCEssssssssssss",
 "soc": [
 89,
 57,
 54,
 23,
 76,
-97,
-94,
-98
+84,
+80,
+84
 ]
 },
 {
 "t": "2026-09-27T21:00:00+00:00",
-"plan": "sEEEECCCEEECCCCCCCssssssssssssss",
+"plan": "sEEEECCCEEECCCCCCCsssssEssssssss",
 "soc": [
 90,
 31,
@@ -548,13 +728,13 @@ null
 53,
 100,
 96,
-94,
-100
+79,
+86
 ]
 },
 {
 "t": "2026-09-27T21:07:00+00:00",
-"plan": "sEEEECCCEEECCCCCCCssssssssssssss",
+"plan": "sEEEECCCEEECCCCCCCsssssEssssssss",
 "soc": [
 91,
 32,
@@ -562,8 +742,8 @@ null
 55,
 100,
 96,
-94,
-100
+79,
+86
 ]
 },
 {
@@ -574,16 +754,16 @@ null
 },
 {
 "t": "2026-09-27T21:10:00+00:00",
-"plan": "sEEEECCCEEECCCCCCCssssssssssssss",
+"plan": "sEEEECCCEEECCCCCCCEsssssssssssss",
 "soc": [
 92,
 34,
 59,
 56,
 100,
-96,
-94,
-100
+83,
+80,
+87
 ]
 },
 {
@@ -610,30 +790,30 @@ null
 },
 {
 "t": "2026-09-27T21:15:00+00:00",
-"plan": "sEEEECCCEEECCCCCCCssssssssssssss",
+"plan": "sEEEECCCEEECCCCCCCEsssssssssssss",
 "soc": [
 93,
 35,
 60,
 57,
 100,
-96,
-94,
-100
+83,
+80,
+87
 ]
 },
 {
 "t": "2026-09-27T21:20:00+00:00",
-"plan": "sEEEECCCEEECCCCCCCssssssssssssss",
+"plan": "sEEEECCCEEECCCCCCCEsssssssssssss",
 "soc": [
 94,
 35,
 60,
 57,
 100,
-96,
-94,
-100
+83,
+80,
+87
 ]
 },
 {
@@ -647,16 +827,16 @@ null
 },
 {
 "t": "2026-09-27T21:25:00+00:00",
-"plan": "EEEEECCCEEECCCCCCCssssssssssssss",
+"plan": "EEEEECCCEEECCCCCCCEsssssssssssss",
 "soc": [
 92,
 33,
 58,
 55,
 100,
-96,
-94,
-100
+83,
+80,
+87
 ]
 },
 {
@@ -687,7 +867,7 @@ null
 },
 {
 "t": "2026-09-27T21:26:00+00:00",
-"plan": "EEEEECCCEEECCCCCCCssssssssssssss",
+"plan": "EEEEECCCEEECCCCCCCsssssEssssssss",
 "soc": [
 92,
 34,
@@ -695,8 +875,8 @@ null
 56,
 100,
 96,
-94,
-100
+79,
+86
 ]
 },
 {
@@ -783,7 +963,7 @@ null
 },
 {
 "t": "2026-09-27T21:30:00+00:00",
-"plan": "EEEECCCEEECCCCCCCsssssssssssssss",
+"plan": "EEEECCCEEECCCCCCCsssssEsssssssss",
 "soc": [
 79,
 49,
@@ -791,8 +971,8 @@ null
 71,
 100,
 95,
-94,
-100
+80,
+89
 ]
 },
 {
@@ -901,7 +1081,7 @@ null
 },
 {
 "t": "2026-09-27T21:35:00+00:00",
-"plan": "EEECCCEEEECCCCCCCsssssssssssssss",
+"plan": "EEECCCEEEECCCCCCCsssssEsssssssss",
 "soc": [
 80,
 77,
@@ -909,8 +1089,8 @@ null
 71,
 100,
 95,
-94,
-100
+80,
+89
 ]
 },
 {
@@ -1005,7 +1185,7 @@ null
 },
 {
 "t": "2026-09-27T21:40:00+00:00",
-"plan": "EEECCCEEEECCCCCCCsssssssssssssss",
+"plan": "EEECCCEEEECCCCCCCsssssEsssssssss",
 "soc": [
 81,
 78,
@@ -1013,8 +1193,8 @@ null
 71,
 100,
 95,
-94,
-100
+80,
+89
 ]
 },
 {
@@ -1109,7 +1289,7 @@ null
 },
 {
 "t": "2026-09-27T21:45:00+00:00",
-"plan": "EEEECCCCEEECCCCCCsssssssssssssss",
+"plan": "EEEECCCCEEECCCCCCsssssEsssssssss",
 "soc": [
 83,
 52,
@@ -1117,8 +1297,8 @@ null
 73,
 100,
 95,
-94,
-100
+80,
+89
 ]
 },
 {
@@ -1317,7 +1497,7 @@ null
 },
 {
 "t": "2026-09-27T21:55:00+00:00",
-"plan": "EEEEECCCEEECCCCCCsssssssssssssss",
+"plan": "EEEEECCCEEECCCCCCsssssEsssssssss",
 "soc": [
 86,
 27,
@@ -1325,8 +1505,8 @@ null
 49,
 100,
 95,
-94,
-100
+80,
+89
 ]
 },
 {
@@ -1435,7 +1615,7 @@ null
 },
 {
 "t": "2026-09-27T22:00:00+00:00",
-"plan": "EEEECCCEEECCCCCCsssssssssssssssE",
+"plan": "EEEECCCEEECCCCCCsssssEssssssssss",
 "soc": [
 73,
 43,
@@ -1443,8 +1623,8 @@ null
 65,
 99,
 94,
-95,
-100
+81,
+91
 ]
 },
 {
@@ -1559,7 +1739,7 @@ null
 },
 {
 "t": "2026-09-27T22:05:00+00:00",
-"plan": "EEEECCCEEECCCCCCsssssssssssssssE",
+"plan": "EEEECCCEEECCCCCCsssssEssssssssss",
 "soc": [
 76,
 45,
@@ -1567,8 +1747,8 @@ null
 67,
 99,
 94,
-95,
-100
+81,
+91
 ]
 },
 {
@@ -1683,7 +1863,7 @@ null
 },
 {
 "t": "2026-09-27T22:10:00+00:00",
-"plan": "EEEECCCEEECCCCCCsssssssssssssssE",
+"plan": "EEEECCCEEECCCCCCsssssEssssssssss",
 "soc": [
 78,
 48,
@@ -1691,8 +1871,8 @@ null
 70,
 99,
 94,
-95,
-100
+81,
+91
 ]
 },
 {
@@ -1807,7 +1987,7 @@ null
 },
 {
 "t": "2026-09-27T22:15:00+00:00",
-"plan": "EEECCCEEEECCCCCCsssssssssssssssE",
+"plan": "EEECCCEEEECCCCCCsssssEssssssssss",
 "soc": [
 82,
 79,
@@ -1815,8 +1995,8 @@ null
 71,
 99,
 94,
-95,
-100
+81,
+91
 ]
 },
 {
@@ -1931,7 +2111,7 @@ null
 },
 {
 "t": "2026-09-27T22:20:00+00:00",
-"plan": "EEEEECCEECCCCCCCsssssssssssssssE",
+"plan": "EEEEECCEECCCCCCCsssssEssssssssss",
 "soc": [
 84,
 26,
@@ -1939,8 +2119,8 @@ null
 76,
 99,
 94,
-95,
-100
+81,
+91
 ]
 },
 {
@@ -2055,7 +2235,7 @@ null
 },
 {
 "t": "2026-09-27T22:25:00+00:00",
-"plan": "EEEEECCEECCCCCCCsssssssssssssssE",
+"plan": "EEEEECCEECCCCCCCsssssEssssssssss",
 "soc": [
 87,
 28,
@@ -2063,8 +2243,8 @@ null
 78,
 99,
 94,
-95,
-100
+81,
+91
 ]
 },
 {

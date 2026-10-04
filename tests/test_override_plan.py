@@ -66,8 +66,9 @@ def _app(ov, axle=False):
     return SimpleNamespace(_active_override=lambda: ov, cfg=SimpleNamespace(features={"axle": axle}))
 
 
-def test_mark_manual_covers_now_to_the_end_and_skips_events():
-    import powerengine as pe
+def test_mark_manual_covers_now_to_the_end_and_skips_events(monkeypatch):
+    from replay_harness import import_powerengine
+    pe = import_powerengine(monkeypatch)
 
     from pe_core.override import Override
     now = T0 + 2 * SLOT + SLOT / 3                                # part-way through slot 2
