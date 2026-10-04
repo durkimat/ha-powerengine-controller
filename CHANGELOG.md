@@ -2,6 +2,12 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.98 (beta)
+
+### Behaviour changes
+
+- The plan no longer assumes a Hold stores surplus sun. On the inverter, Hold is a forced charge at 0 W: with 1.9 kW of spare solar on 4 Oct the battery sat idle under Hold, where Self-use charged it at 1.9 kW. The plan used to count that sun as stored, so its battery path ran ahead of the real battery and it liked Hold in sunny half-hours. Now Hold exports the spare sun, so the plan prefers Self-use in sunny half-hours unless holding the battery really pays. Expect fewer sunny-day holds and a battery chart that stays closer to the real one.
+
 ## 0.9.97 (beta)
 
 ### Behaviour changes
