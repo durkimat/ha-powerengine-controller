@@ -394,7 +394,21 @@ null
 ]
 },
 {
-"t": "2026-09-27T21:20:00+00:00",
+"t": "2026-09-27T21:17:00+00:00",
+"plan": "sEEEECCCEEECCCCCCCssssssssssssss",
+"soc": [
+93,
+33,
+59,
+56,
+100,
+96,
+94,
+100
+]
+},
+{
+"t": "2026-09-27T21:22:00+00:00",
 "plan": "sEEEECCCEEECCCCCCCssssssssssssss",
 "soc": [
 94,
