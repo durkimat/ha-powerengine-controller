@@ -407,6 +407,12 @@ Plan status box: `docs/plans/making-it-generic.md`. Done so far:
   at the full surplus (4 Oct 2026, from the diagnostics history: Hold with ~1.9 kW surplus averaged +0.19 kW battery, Self-use -1.9 kW). The plan used to charge from surplus in Hold, so its SoC
   path ran ahead of the battery and the optimiser liked Hold in sunny half-hours. Now Hold exports the surplus. Replay re-recorded: the RAM night's decisions and service calls
   are unchanged, only the plan strings; the timed-window runs lose one afternoon export and one decision moves by 10 minutes.
+- **A charge target reached early replans (#175, `_early_target` in `powerengine.py`, `pe_core/earlytarget.py`)**: when `_with_plan` would hold at the target ("reached", `details["reached"]`) with
+  5 minutes or more left in the half-hour (`MIN_LEFT_MIN`) the app calls `_maybe_replan(force=True)` (no mid-slot stick) and decides again; one look per half-hour (`first_look`). Every look is a
+  record in `early_target.json` beside the config (last 300): `outcome` `replanned_changed` / `replanned_still_hold` / `late` / `no_plan` / `error`, `left_min`, `soc`, `target`, `price_p`,
+  `next_action`, `next_price_p`, `car_charging`, the new action and reason, and `after` (the decisions that followed in the rest of the half-hour, for churn). The diagnostics export has
+  `early_target` (summary + last 60), and `tools/diag_summary.py` prints a line. **Review about 11 Oct 2026** (first released 0.9.99): how often it fires, what it chose, minutes of hold avoided,
+  extra energy sold or charged in those minutes (cost records), churn in `after`, and the `late` / `still_hold` cases that still end in a hold. Not done: the same for non-charge holds.
 - **Short missing readings are bridged** (`_bridge_data_gap`, `DATA_GAP_GRACE_S` 180 s): a `no_data` decision within 3 minutes of the last real one keeps it.
 
 - **Licence and CONTRIBUTING. Done.** Apache-2.0 in both repos (`LICENSE`, `NOTICE`, README sections; copyright 2026 Matthew Durkin;

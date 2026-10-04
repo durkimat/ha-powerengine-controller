@@ -243,6 +243,15 @@ def writes_of(app):
     }
 
 
+def early_of(app):
+    """#175: charge targets reached early in a half-hour, and what the replan did (or why the hold stayed)."""
+    e = as_dict(app.get("early_target"))
+    if not e or not e.get("records"):
+        return None
+    return {"count": e.get("count") or len(as_list(e.get("records"))), "since": e.get("since"),
+            "by_outcome": as_dict(e.get("by_outcome")), "replan_chose": as_dict(e.get("replan_chose"))}
+
+
 def summarise(export, since=None):
     export = as_dict(export)
     app = as_dict(export.get("app"))
@@ -303,6 +312,7 @@ def summarise(export, since=None):
         ],
         "plan": plan_of(app, generated, tz),
         "writes": writes_of(app),
+        "early_target": early_of(app),
     }
     return out
 
@@ -418,6 +428,12 @@ def render(s):
                     for x in p["next"][6:]
                 )
             )
+    e = s.get("early_target")
+    if e:
+        parts = [f"{k} x{v.get('count')} ({v.get('minutes_left')} min left)" for k, v in e["by_outcome"].items()]
+        add(f"early targets (#175), {e['count']} since {e['since']}: " + "; ".join(parts))
+        if e["replan_chose"]:
+            add("  replans chose: " + ", ".join(f"{k} x{v}" for k, v in e["replan_chose"].items()))
     w = s.get("writes")
     if w:
         add(
