@@ -2,6 +2,12 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.101 (beta)
+
+### Behaviour changes
+
+- **A tiny car draw no longer stops the plan selling during smart-charge slots.** If the last smart-charge slot drew less than 0.2 kWh (for example a one-minute blip of 0.01 kWh), PowerEngine now treats the car as full, as it already did for no draw at all. Before, that blip made it plan every later smart-charge slot as car charging: no selling and the battery held at 90% from 19:00 to 04:00 (4 Oct 2026). If the car does start charging, the battery is held at once, as before.
+
 ## 0.9.100 (beta)
 
 ### Behaviour changes
