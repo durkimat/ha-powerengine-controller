@@ -55,7 +55,8 @@ def step(ex, sec, level=50.0, ln=None, lim=None, vr="default", events=(), **ob):
 
 
 def s0(**kw):
-    return V2Settings(**{"min_dwell_s": 0, **kw})
+    """No minimum time and no cost of changing: the automaton's own rules, tested alone."""
+    return V2Settings(**{"min_dwell_s": 0, "switch_cost_p": 0.0, **kw})
 
 
 def ev(kind, sec=0, text="x"):
@@ -92,7 +93,7 @@ def test_reaching_the_target_ends_the_charge_at_once_and_the_dip_does_not_restar
     ex = Executor(V2Settings())
     ln = lines(30.0, target=88.0)
     step(ex, 0, level=80, ln=ln)
-    ms, dec, new, changed = step(ex, 10, level=87.9, ln=ln)
+    ms, dec, new, changed = step(ex, 10, level=87.8, ln=ln)
     assert ms.mode == CHARGE and not changed                      # still short of it
     ms, dec, new, changed = step(ex, 20, level=88.0, ln=ln)       # within the minimum time: the level exit is not held
     assert changed and ms.mode != CHARGE
@@ -137,7 +138,7 @@ def test_price_band_is_a_dead_zone_either_side_of_the_use_line():
 
 
 def test_minimum_time_blocks_an_opportunity_change_until_it_has_passed():
-    ex = Executor(V2Settings(min_dwell_s=120))
+    ex = Executor(V2Settings(min_dwell_s=120, switch_cost_p=0.0))
     assert step(ex, 0, ln=lines(6.0))[0].mode == SELF_USE
     ms, dec, new, changed = step(ex, 60, ln=lines(9.0))           # Hold is better, but too soon
     assert ms.mode == SELF_USE and not changed
@@ -444,3 +445,102 @@ def test_charge_starts_when_the_plan_charges_in_this_stretch_even_on_a_tie():
     ln = Lines(**tie, charge_target_soc=71.0, charge_now=True, run_target_soc=71.0)
     mode, decision, _, _ = ex2.step(now, obs, lim, ln, vr, (), BatteryFacts())
     assert mode.mode == CHARGE and decision.target_soc == 71.0
+
+
+# ---- the level latch, the cycle tie-break and the cost of a change (engine_compare, 6 Oct 2026) ---------------------
+EXPORTING = NORMAL | {EXPORT}
+
+
+def test_a_charge_at_the_ceiling_ends_when_the_filtered_level_only_approaches_it():
+    """The filter closes on the reading but never reaches it: 99.99999999% at a target of 100% used to keep the charge
+    going for hours (dull day, 00:02 to 09:30)."""
+    ex = Executor(V2Settings())
+    ln = lines(30.0, target=100.0)
+    ms, *_ = step(ex, 0, level=90, ln=ln)
+    assert ms.mode == CHARGE
+    ms, dec, new, changed = step(ex, 600, level=99.99999999, ln=ln)
+    assert changed and ms.mode != CHARGE and [e.kind for e in new] == ["level"]
+
+
+def test_a_sale_at_the_floor_ends_when_the_filtered_level_only_approaches_it():
+    ex = Executor(V2Settings())
+    ln = lines(5.0, floor=0.0)
+    ms, *_ = step(ex, 0, level=50, ln=ln, lim=limits(EXPORTING))
+    assert ms.mode == EXPORT
+    ms, *_ = step(ex, 600, level=12.00000001, ln=ln, lim=limits(EXPORTING))
+    assert ms.mode != EXPORT
+
+
+def test_a_forced_charge_ends_at_its_ceiling_the_same_way():
+    ex = Executor(V2Settings())
+    lim = limits(set(), forced=FREE, rule="free")
+    ms, *_ = step(ex, 0, level=90, ln=lines(5.0), lim=lim)
+    assert ms.mode == FREE
+    ms, *_ = step(ex, 600, level=99.99999999, ln=lines(5.0), lim=lim)
+    assert ms.mode == HOLD
+
+
+def _timeline(mode):
+    return (TimelineItem(mode=mode, start=T0 - timedelta(minutes=5), end=T0 + timedelta(minutes=25), level_start=90.0,
+                         level_end=85.0, until="until 85%", reason="x"),)
+
+
+def test_when_charging_and_selling_both_pay_the_timeline_says_which_comes_now():
+    both = lines(10.0, target=100.0, floor=0.0)            # worth 10p: under the 14.25p a sale brings, over the buy
+    for planned, expected in ((EXPORT, EXPORT), (CHARGE, CHARGE)):
+        ms, *_ = step(Executor(V2Settings()), 0, level=90, ln=both, lim=limits(EXPORTING),
+                      vr=value_result(T0, forecast(T0, [segment(T0)]), timeline=_timeline(planned)))
+        assert ms.mode == expected
+    ms, *_ = step(Executor(V2Settings()), 0, level=90, ln=both, lim=limits(EXPORTING))     # no item covers now
+    assert ms.mode == EXPORT
+
+
+def test_without_a_plan_item_the_running_mode_goes_on_when_both_pay():
+    ex = Executor(s0())
+    both = lines(10.0, target=100.0, floor=0.0)
+    ms, *_ = step(ex, 0, level=90, ln=lines(30.0, target=100.0), lim=limits(EXPORTING))
+    assert ms.mode == CHARGE
+    ms, *_ = step(ex, 10, level=90, ln=both, lim=limits(EXPORTING))
+    assert ms.mode == CHARGE                               # not swapped to the sale: the one that runs goes on
+
+
+def _from_idle(settings, level, ln):
+    ex = Executor(settings)
+    step(ex, 0, level=level, ln=lines(20.0, floor=0.0), lim=limits(EXPORTING))        # nothing pays: idle
+    assert ex.mode in (SELF_USE, HOLD)
+    return step(ex, 10, level=level, ln=ln, lim=limits(EXPORTING))[0]
+
+
+def test_a_change_into_a_sale_must_earn_more_than_the_change_costs():
+    near = lines(13.7, floor=0.0)                          # 0.55p under the sale line, but only 3 points to sell
+    assert _from_idle(s0(switch_cost_p=0.5), 15, near).mode != EXPORT
+    assert _from_idle(s0(switch_cost_p=0.0), 15, near).mode == EXPORT      # free to change: it goes
+    assert _from_idle(s0(switch_cost_p=0.5), 50, near).mode == EXPORT      # 38 points to sell: 3.7p, worth it
+
+
+def test_the_plans_own_charge_start_is_not_held_back_by_the_cost():
+    ln = Lines(value_p=7.0, buy_line_p=7.37, sell_line_p=14.25, use_line_p=6.6, store_sun_line_p=15.8, import_p=7.0,
+               export_p=15.0, charge_target_soc=60.0, sell_floor_soc=None, charge_now=True)
+    ms, *_ = step(Executor(V2Settings()), 0, level=50, ln=ln)
+    assert ms.mode == CHARGE                               # value on the line: the plan's own run, no gain to test
+
+
+def test_a_sale_the_programme_would_not_start_here_is_not_started(monkeypatch):
+    from pe_core.engine_v2 import execute
+    near = lines(8.0, floor=0.0)                           # well under the sale line: the lines alone say sell
+    idle = lines(20.0, floor=0.0)
+    for answer, expected in (((HOLD, 1.0), HOLD), ((EXPORT, 1.0), EXPORT), (None, EXPORT)):
+        monkeypatch.setattr(execute, "choice_now", lambda *a, _r=answer, **k: _r)
+        ex = Executor(s0())
+        step(ex, 0, level=60, ln=idle, lim=limits(EXPORTING))
+        ms, *_ = step(ex, 10, level=60, ln=near, lim=limits(EXPORTING))
+        assert ms.mode == expected
+
+
+def test_self_use_and_hold_do_not_trade_places_for_a_margin_that_does_not_cover_the_change():
+    """Self-use against hold is decided against the use line; with the house drawing 0.5 kW, half an hour moves
+    0.25 kWh, so a margin of 1p earns 0.25p, short of the 1p a change in and out costs."""
+    ex = Executor(s0(switch_cost_p=0.5))
+    assert step(ex, 0, ln=lines(6.9))[0].mode == HOLD                    # use line 6.65: hold
+    assert step(ex, 10, ln=lines(5.6))[0].mode == HOLD                   # 1p under the line (past the band): too thin
+    assert step(ex, 20, ln=lines(1.0))[0].mode == SELF_USE               # 5.6p under: 1.4p for the half hour, pays

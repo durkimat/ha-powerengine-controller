@@ -32,7 +32,7 @@ from pe_core.readings import Readings, Window
 UTC = timezone.utc
 T0 = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
 FACTS = BatteryFacts()                      # 18 kWh, 95% each way, 4.8 kW, floor 12%
-NO_COMFORT = V2Settings(comfort_cost_p=0.0, terminal_value="fixed", terminal_value_p=0.0)
+NO_COMFORT = V2Settings(comfort_cost_p=0.0, terminal_value="fixed", terminal_value_p=0.0, switch_cost_p=0.0)
 BUY = 6.99 / 0.95
 
 
@@ -512,3 +512,49 @@ def test_run_target_is_cheap_and_does_not_resolve():
     for _ in range(50):
         V.run_target(vr, t(2), 20.0, 6.99, FACTS, NO_COMFORT)
     assert (time.perf_counter() - started) / 50 < 0.05
+
+
+# --- the cost of changing mode ---------------------------------------------------------------------------------------
+def test_switch_cost_is_the_setting_a_fifth_between_holding_and_charging_and_nothing_for_no_change():
+    sc = V.switch_cost
+    assert sc("none", "none", 0.5) == 0 and sc("charge", "charge", 0.5) == 0
+    assert sc("none", "charge", 0.5) == 0.5 and sc("charge", "discharge", 0.5) == 0.5
+    assert sc("hold", "charge", 0.5) == pytest.approx(0.1) and sc("charge", "hold", 0.5) == pytest.approx(0.1)
+    assert sc("none", "discharge", 0.0) == 0
+
+
+def test_a_dearer_change_gives_a_plan_with_fewer_changes_and_the_cost_is_in_the_expected_cost():
+    """A flat cheap day with export above the buy line: sell and refill is worth about 6p a kWh a cycle, and every
+    half-hour can host one. Changes cost, so the plan makes fewer of them."""
+    segs = [seg(i, imp=6.99, exp=15.0, load=0.3) for i in range(40)]
+    lim = lambda s: limits_for(s, arbitrage=True)                       # noqa: E731
+    free = solve(segs, 100.0, settings=replace(NO_COMFORT, switch_cost_p=0.0), lim=lim)
+    dear = solve(segs, 100.0, settings=replace(NO_COMFORT, switch_cost_p=20.0), lim=lim)
+    changes = lambda vr: sum(1 for a, b in zip(vr.timeline, vr.timeline[1:], strict=False) if a.mode != b.mode)  # noqa: E731
+    assert changes(free) > changes(dear)
+    assert dear.cost_expected_p > free.cost_expected_p                  # changes cost something
+
+
+def test_a_solve_with_the_switch_cost_stays_inside_the_time_budget():
+    segs = [seg(i, imp=6.99 if i % 8 < 5 else 30.28, exp=15.0, load=0.4) for i in range(96)]
+    lim = lambda s: limits_for(s, arbitrage=True)                       # noqa: E731
+    t0 = time.perf_counter()
+    solve(segs, 50.0, settings=replace(NO_COMFORT, switch_cost_p=0.5), lim=lim)
+    assert time.perf_counter() - t0 < 3.0
+
+
+def test_the_programmes_choice_now_is_the_first_timeline_mode_and_it_is_not_made_for_a_forced_segment():
+    segs = [seg(i, imp=6.99, exp=15.0, load=0.3) for i in range(12)]
+    lim = lambda s: limits_for(s, arbitrage=True)                       # noqa: E731
+    st = replace(NO_COMFORT, switch_cost_p=0.5)
+    vr = solve(segs, 100.0, settings=st, lim=lim)
+    mode, share = V.choice_now(vr, segs[0].start, 100.0, 6.99, FACTS, st, None)
+    assert mode == vr.timeline[0].mode == EXPORT and 0 < share <= 1
+    # from the mode already running, going on costs nothing and a change costs: never a worse choice than the first
+    again = V.choice_now(vr, segs[0].start, 100.0, 6.99, FACTS, st, EXPORT)
+    assert again[0] == EXPORT
+    ev = [replace(segs[0], event=True, event_p=115.0)] + segs[1:]
+    vr2 = solve(ev, 100.0, settings=st, lim=lambda s: limits_for(s, arbitrage=True))
+    assert V.choice_now(vr2, ev[0].start, 100.0, 6.99, FACTS, st, None) is None
+    bare = replace(vr, vk=())
+    assert V.choice_now(bare, segs[0].start, 100.0, 6.99, FACTS, st, None) is None

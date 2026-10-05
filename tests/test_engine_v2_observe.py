@@ -313,6 +313,21 @@ def test_band_exit_after_ten_minutes_outside_the_expected_range():
     assert len(hits) == 1 and 55 <= hits[0] <= 70               # about 10 minutes of 10 s ticks
 
 
+def test_a_battery_on_time_through_a_fast_charge_is_not_outside_the_band_between_the_paths_points():
+    """The path has a point every 15 minutes and a charge moves about 7 points in one step: read at the step's start
+    alone, a battery that is exactly on time was outside the band for most of every step (band_exit about every
+    15 minutes). It is read between the points."""
+    mid = [20.0 + 28.0 * i for i in range(3)]
+    path = {"start": T0.isoformat(), "step_min": 15, "mid": mid, "low": mid, "high": mid}
+    vr = value_result(T0, forecast(T0, []), path=path)
+    o = Observer(SETTINGS)
+    seen = []
+    for sec in range(0, 25 * 60, 10):                       # 25 minutes, the level exactly on the line
+        o.level = 20.0 + 28.0 * sec / 900
+        o._band(T0.timestamp() + sec, vr, T0 + timedelta(seconds=sec), lambda kind, text: seen.append(kind))
+    assert seen == [] and o.band_since is None
+
+
 def test_inside_the_band_nothing_happens():
     path = {"start": T0.isoformat(), "step_min": 15, "mid": [50.0] * 12, "low": [48.0] * 12, "high": [52.0] * 12}
     vr = value_result(T0, forecast(T0, []), path=path)

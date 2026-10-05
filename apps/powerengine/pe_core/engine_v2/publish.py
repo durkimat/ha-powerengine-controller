@@ -122,6 +122,12 @@ def _short_reasons(n: int):
     return f
 
 
+def _cap_items(n: int):
+    def f(a: dict) -> None:
+        a["items"] = a["items"][:n]
+    return f
+
+
 def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, tz) -> tuple[str, dict]:
     if vr is None:
         return "unknown", {}
@@ -137,7 +143,8 @@ def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, t
              "cost_expected": _r(vr.cost_expected_p / 100), "cost_selfuse": _r(vr.cost_selfuse_p / 100),
              "comfort_given_up": _r(vr.comfort_given_up_p / 100) if vr.comfort_given_up_p is not None else None,
              "calc_s": _r(vr.calc_s)}
-    _fit(attrs, [_short_reasons(120), _thin_path, _short_reasons(60), _short_reasons(0)])
+    _fit(attrs, [_short_reasons(120), _thin_path, _short_reasons(60), _short_reasons(0), _cap_items(40),
+                 _cap_items(24)])
     return _iso(vr.made_at, tz), attrs
 
 

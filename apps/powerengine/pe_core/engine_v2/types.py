@@ -156,6 +156,7 @@ class ValueResult:
     comfort_given_up_p: float | None = None   # cash difference against no comfort cost (None: not worked out)
     calc_s: float = 0.0
     limits: tuple = ()                    # the Limits each segment was solved with (value.run_target reuses them)
+    vk: tuple = ()                        # per segment k: the cost-to-go curves at its start by kind of the mode before
 
 
 # --- layer 1 and the triggers: events -----------------------------------------------------------------------------

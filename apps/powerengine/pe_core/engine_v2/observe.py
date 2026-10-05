@@ -327,8 +327,14 @@ class Observer:
         p = vr.path
         try:
             step = float(p["step_min"]) * 60
-            i = int((ts - datetime.fromisoformat(p["start"]).timestamp()) // step)
-            mid, low, high = p["mid"][i], p["low"][i], p["high"][i]
+            x = (ts - datetime.fromisoformat(p["start"]).timestamp()) / step
+            i = int(x // 1)
+            if i < 0:
+                raise IndexError(i)
+            # between the path's points: a charge moves several points in one step, so the point at the step's start
+            # alone would put a battery that is on time outside the band for most of every step
+            f = min(1.0, x - i)
+            mid, low, high = (p[k][i] + f * (p[k][min(i + 1, len(p[k]) - 1)] - p[k][i]) for k in ("mid", "low", "high"))
         except (KeyError, IndexError, ValueError, TypeError):
             self.band_since = None
             return

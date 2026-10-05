@@ -108,7 +108,7 @@ def _slope(a: _Arr, e: float) -> float:
 class _Seg:
     __slots__ = ("seg", "lim", "dt", "cap", "eta_c", "eta_d", "taper", "dtaper", "max_chg", "max_dis", "chg_f",
                  "chg_cap", "dis_cap", "export_limit", "fuse", "floor", "ceil", "car", "export_p", "event_p",
-                 "wear_h", "wear_s", "ccost", "lo", "hi", "allowed", "forced", "outcomes", "scen", "mid")
+                 "wear_h", "wear_s", "ccost", "sw", "lo", "hi", "allowed", "forced", "outcomes", "scen", "mid")
 
 
 def _groups(solar: Spread, load: Spread) -> list[tuple[float, float, float]]:
@@ -173,6 +173,7 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     S.export_p, S.event_p = seg.export_p, seg.event_p
     S.wear_h, S.wear_s = settings.wear_house_p, settings.wear_sale_p
     S.ccost = settings.comfort_cost_p
+    S.sw = settings.switch_cost_p
     S.lo, S.hi = settings.comfort_low_soc / 100 * S.cap, settings.comfort_high_soc / 100 * S.cap
     S.forced = lim.forced or (EVENT if seg.event else FREE if seg.free else seg.manual)
     S.allowed = tuple(m for m in _ORDER if m in lim.allowed) or (SELF_USE,)
@@ -323,20 +324,37 @@ def _partial(scen: list, full: list, hold: list, Vn: _Arr) -> tuple[float, float
     return best_g, best_f
 
 
-def _best(S: _Seg, e: float, scen: list, imp_p: float, Vn: _Arr) -> tuple[float, str, float]:
-    """(expected cost-to-go, mode, f): the cheapest choice at level e for one price outcome. f is the share of the
-    segment the mode runs (1 for everything but a charge or sale that stops part-way)."""
+# What a mode is, for the cost of changing between them (as v1's optimiser: self-use, hold, charge, discharge).
+NONE_K, HOLD_K, CHARGE_K, DISCHARGE_K = "none", "hold", "charge", "discharge"
+KINDS = (NONE_K, HOLD_K, CHARGE_K, DISCHARGE_K)
+KIND = {SELF_USE: NONE_K, HOLD: HOLD_K, CHARGE: CHARGE_K, FREE: CHARGE_K, EXPORT: DISCHARGE_K, EVENT: DISCHARGE_K}
+
+
+def switch_cost(prev: str, new: str, cost_p: float) -> float:
+    """Pence for changing from the kind of mode `prev` to `new`: the setting for a full change, a fifth of it between
+    holding and charging (on the inverter only the charge current changes)."""
+    if prev == new or not cost_p:
+        return 0.0
+    return cost_p / 5 if {prev, new} == {HOLD_K, CHARGE_K} else cost_p
+
+
+def _candidates(S: _Seg, e: float, scen: list, imp_p: float, Vk: dict) -> list[tuple[float, str, float]]:
+    """Every choice in one segment at level e for one price outcome, as (expected cost-to-go, mode, f), before the
+    cost of changing mode. f is the share of the segment the mode runs (1 for everything but a charge or sale that
+    stops part-way). The cost-to-go of a mode is read from the next segment's curve for the kind of that mode."""
     ckw, dkw = _chg_kw(S, e), _dis_kw(S, e)
     forced = S.forced
     if forced:
+        Vn = Vk[KIND[forced]]
         g = 0.0
         for p, _so, _ho, net in scen:
             r = _phys(S, e, forced, net, imp_p, ckw, dkw)
             g += p * (r[1] + _val(Vn, r[0]))
-        return g, forced, 1.0
-    best_g, best_m, best_f = math.inf, SELF_USE, 1.0
+        return [(g, forced, 1.0)]
+    out: list[tuple[float, str, float]] = []
     hold = None
     for mode in S.allowed:
+        Vn = Vk[KIND[mode]]
         res = [_phys(S, e, mode, s[3], imp_p, ckw, dkw) for s in scen]
         if mode == HOLD:
             hold = res
@@ -344,20 +362,30 @@ def _best(S: _Seg, e: float, scen: list, imp_p: float, Vn: _Arr) -> tuple[float,
             if hold is None:
                 hold = [_phys(S, e, HOLD, s[3], imp_p) for s in scen]
             part = _partial(scen, res, hold, Vn)
-            if part is not None and part[0] < best_g - EPS:
-                best_g, best_m, best_f = part[0], mode, part[1]
+            if part is not None:
+                out.append((part[0], mode, part[1]))
         g = 0.0
         for i in range(len(scen)):
             r = res[i]
             g += scen[i][0] * (r[1] + _val(Vn, r[0]))
-        if g < best_g - EPS:
-            best_g, best_m, best_f = g, mode, 1.0
-    return best_g, best_m, best_f
+        out.append((g, mode, 1.0))
+    return out
+
+
+def _pick(cands: list, prev: str, cost_p: float) -> float:
+    """The cheapest candidate once the cost of changing from kind `prev` is added. Ties keep the earlier one in the
+    modes' order (a change must beat the one before it by more than EPS)."""
+    best = math.inf
+    for g, mode, _f in cands:
+        g += switch_cost(prev, KIND[mode], cost_p)
+        if g < best - EPS:
+            best = g
+    return best
 
 
 # --- the solve -----------------------------------------------------------------------------------------------------
 class _Core:
-    __slots__ = ("segs", "V", "tv", "cap", "step", "fine_step")
+    __slots__ = ("segs", "V", "VK", "tv", "cap", "step", "fine_step")
 
 
 def _terminal_p(fc: Forecast, facts: BatteryFacts, settings: V2Settings) -> float:
@@ -372,6 +400,9 @@ def _terminal_p(fc: Forecast, facts: BatteryFacts, settings: V2Settings) -> floa
 
 def _backward(fc: Forecast, facts: BatteryFacts, settings: V2Settings, limits_for, now: datetime,
               fine: float, coarse: float) -> _Core:
+    """The value curves, backwards. The state is the level and the kind of the mode before (so a change of mode costs
+    `switch_cost_p`): `core.VK[k][kind]` is the cost-to-go from segment k's start having come from that kind, and
+    `core.V[k]` the one for self-use, which is what `lam` (the value of a stored kWh) is read from."""
     cap = facts.capacity_kwh
     core = _Core()
     core.cap = cap
@@ -381,23 +412,28 @@ def _backward(fc: Forecast, facts: BatteryFacts, settings: V2Settings, limits_fo
     nc, sc = _grid(cap, max(coarse, fine))
     core.step, core.fine_step = sf, sf
     tail = _Arr([-core.tv * i * sc for i in range(nc + 1)], sc)
-    V: list[_Arr] = [tail] * (len(core.segs) + 1)
+    VK: list[dict] = [{k: tail for k in KINDS}] * (len(core.segs) + 1)
     horizon = FINE_HOURS * 3600
+    cost_p = settings.switch_cost_p
     for k in range(len(core.segs) - 1, -1, -1):
         S = core.segs[k]
         fine_here = (S.seg.start - now).total_seconds() < horizon
         n, step = (nf, sf) if fine_here else (nc, sc)
-        Vn = V[k + 1]
-        row = []
+        Vk = VK[k + 1]
+        rows = {kind: [] for kind in KINDS}
         outcomes, scen = S.outcomes, S.scen
         for i in range(n + 1):
             e = i * step
-            if len(outcomes) == 1:
-                row.append(_best(S, e, scen, outcomes[0][1], Vn)[0])
-            else:
-                row.append(sum(pw * _best(S, e, scen, ip, Vn)[0] for pw, ip in outcomes))
-        V[k] = _Arr(row, step)
-    core.V = V
+            tot = dict.fromkeys(KINDS, 0.0)
+            for pw, ip in outcomes:
+                cands = _candidates(S, e, scen, ip, Vk)
+                for kind in KINDS:
+                    tot[kind] += pw * _pick(cands, kind, cost_p)
+            for kind in KINDS:
+                rows[kind].append(tot[kind])
+        VK[k] = {kind: _Arr(rows[kind], step) for kind in KINDS}
+    core.VK = VK
+    core.V = [d[NONE_K] for d in VK]
     return core
 
 
@@ -487,8 +523,21 @@ def _stretch_ends(segs: list[_Seg]) -> list[int]:
     return ends
 
 
+def _dp_choice(S: _Seg, e: float, imp_p: float, vk_next: dict, prev: str | None) -> tuple[str, float]:
+    """The mode (and the share of the segment it runs) the programme itself chooses at level e, coming from the mode
+    `prev`: the same candidates and the same cost of a change as the backward pass, so the expected timeline is the
+    policy the values were worked out for, not a second rule laid over the curve."""
+    prev_kind = KIND[prev] if prev else NONE_K
+    best, pick = math.inf, (SELF_USE, 1.0)
+    for g, mode, f in _candidates(S, e, S.scen, imp_p, vk_next):
+        g += switch_cost(prev_kind, KIND[mode], S.sw)
+        if g < best - EPS:
+            best, pick = g, (mode, f)
+    return pick
+
+
 def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band: float, front: bool = True,
-          prev: str | None = None, first: int = 0) -> list[dict]:
+          prev: str | None = None, first: int = 0, vks: list | None = None) -> list[dict]:
     """Run forward over `segs` from level e0 kWh; `rows[i]` is the value curve segment i compares against. kind: "mid"
     (middle sun, middle house), "low" / "high" (the low / high net-load group), "self" (Self-use wherever nothing is
     forced). The mode in each segment is what layer 5 would choose from the value curve at that level and those
@@ -509,7 +558,8 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
             _, so, ho, net = S.scen[-1] if kind == "high" else S.scen[0]
         imp_p = _outcome_price(S)
         if front and kind != "self" and not S.forced and i > target_to and (i == 0 or ends[i - 1] < i):
-            sub = _walk(segs[i:ends[i] + 1], rows[i:ends[i] + 1], step, e, kind, band, False, prev_mode)
+            sub = _walk(segs[i:ends[i] + 1], rows[i:ends[i] + 1], step, e, kind, band, False, prev_mode,
+                        vks=None if vks is None else vks[i:ends[i] + 1])
             reach = sub[-1]["e1"]
             target = reach if any(r["mode"] == CHARGE for r in sub) and reach > e + 1e-9 else None
             target_to = ends[i]
@@ -518,6 +568,12 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
         elif (front and target is not None and i <= target_to and not S.forced and CHARGE in S.allowed
               and e < target - 1e-9 and e < S.ceil - 1e-9):
             mode, stop = CHARGE, min(target, S.ceil)
+        elif vks is not None:
+            mode, share = _dp_choice(S, e, imp_p, vks[i], prev_mode)
+            stop = None
+            if share < 1.0:                                  # a charge or sale that stops part-way: where it stops
+                lo, hi = _phys(S, e, HOLD, net, imp_p)[0], _phys(S, e, mode, net, imp_p)[0]
+                stop = lo + share * (hi - lo)
         else:
             mode, stop = _policy(S, rows[i], step, e, imp_p, net, prev_mode, band)
         full = _phys(S, e, mode, net, imp_p)
@@ -528,9 +584,10 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
             f = min(1.0, max(0.0, (stop - hold[0]) / span)) if abs(span) > 1e-9 else 1.0
             if f < 1.0:
                 res, e_hold = _mix(full, hold, f), hold[0]
+        change = switch_cost(KIND[prev_mode], KIND[mode], S.sw) if prev_mode is not None else 0.0
         prev_mode = HOLD if f < 1.0 else mode
         recs.append({"k": first + i, "mode": mode, "f": f, "e0": e, "e1": res[0], "e_full": full[0], "e_hold": e_hold,
-                     "cost": res[1], "comfort": res[2], "imp": res[3], "exp": res[4], "evx": res[5],
+                     "cost": res[1] + change, "comfort": res[2], "imp": res[3], "exp": res[4], "evx": res[5],
                      "house": res[6], "sold": res[7], "gtb": res[8], "imp_p": imp_p})
         e = res[0]
     return recs
@@ -539,7 +596,7 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
 def _forward(core: _Core, lam: tuple, step: float, e0: float, kind: str, band: float) -> tuple[list[dict], float]:
     """`_walk` over the whole forecast. Returns (records, cost including the credit for the energy left at the end)."""
     rows = [_end_row(lam, k) for k in range(len(core.segs))]
-    recs = _walk(core.segs, rows, step, e0, kind, band)
+    recs = _walk(core.segs, rows, step, e0, kind, band, vks=[core.VK[k + 1] for k in range(len(core.segs))])
     return recs, sum(r["cost"] for r in recs) - core.tv * recs[-1]["e1"]
 
 
@@ -727,7 +784,8 @@ def solve(forecast: Forecast, start_soc: float, facts: BatteryFacts, settings: V
     timeline = _timeline(core, mid, lam, step, now, tz, facts)
     return ValueResult(made_at=now, because=because, forecast=forecast, step_kwh=step, lam=lam, timeline=timeline,
                        path=path, cost_expected_p=cost_mid, cost_selfuse_p=cost_self, comfort_given_up_p=given_up,
-                       calc_s=time.perf_counter() - t_start, limits=tuple(S.lim for S in core.segs))
+                       calc_s=time.perf_counter() - t_start, limits=tuple(S.lim for S in core.segs),
+                       vk=tuple(core.VK[1:]))
 
 
 def _segment_index(vr: ValueResult, t: datetime) -> int:
@@ -778,11 +836,33 @@ def run_target(vr: ValueResult, t: datetime, soc: float, import_p: float, facts:
         cut.append(_make(sg, facts, settings, vr.limits[k]))
     rows = [_end_row(vr.lam, k) for k in range(k0, k1 + 1)]
     cap = vr.step_kwh * (len(vr.lam[0]) - 1)
+    vks = [vr.vk[k] for k in range(k0, k1 + 1)] if len(vr.vk) == len(segs) else None
     recs = _walk(cut, rows, vr.step_kwh, min(cap, max(0.0, soc / 100 * cap)), "mid", settings.price_band_p, False,
-                 None, k0)
+                 None, k0, vks)
     if not any(r["mode"] == CHARGE for r in recs):
         return None
     return recs[-1]["e1"] / cap * 100
+
+
+def choice_now(vr: ValueResult, t: datetime, soc: float, import_p: float, facts: BatteryFacts,
+               settings: V2Settings, prev: str | None) -> tuple[str, float] | None:
+    """The mode the programme itself chooses for the segment running at `t`, at level `soc` (percent) and the live
+    import price, coming from the mode `prev`: (mode, share of the segment it runs). It is the backward pass's own
+    choice (same candidates, same cost of a change), so what the live decision does can't disagree with the plan about
+    a sale or a charge that only looks good one step at a time. None when it can't say (no curves, a forced segment)."""
+    segs = vr.forecast.segments
+    if not vr.lam or len(vr.vk) != len(segs) or len(vr.limits) != len(segs) or not segs or t >= segs[-1].end:
+        return None
+    k0 = _segment_index(vr, t)
+    sg = segs[k0]
+    if _forced_of(sg, vr.limits[k0]):
+        return None
+    if t > sg.start:                                    # only what is left of the segment now running
+        frac = (sg.end - t).total_seconds() / (sg.end - sg.start).total_seconds()
+        sg = replace(sg, start=t, solar_kwh=_scaled(sg.solar_kwh, frac), load_kwh=_scaled(sg.load_kwh, frac))
+    S = _make(sg, facts, settings, vr.limits[k0])
+    cap = vr.step_kwh * (len(vr.lam[0]) - 1)
+    return _dp_choice(S, min(cap, max(0.0, soc / 100 * cap)), import_p, vr.vk[k0], prev)
 
 
 def _forced_of(sg: Segment, lim: Limits) -> str | None:

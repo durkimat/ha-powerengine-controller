@@ -77,6 +77,10 @@ SETTINGS: dict[str, tuple] = {
                      "A mode starts only when better by this much, and stops only when worse by this much."),
     "level_band_pct": ("number", 1.0, 0, 5, "points", "Level band",
                        "A charge that reached its target restarts only this far below it (the same for a sale)."),
+    "switch_cost_p": ("number", 0.5, 0, 20, "p per change", "Cost of a mode change",
+                      "What each change of mode is counted as costing, in the plan and when deciding to change. A "
+                      "change between holding and charging counts a fifth of it. It stops cycles too small to be "
+                      "worth the commands."),
     "min_dwell_s": ("int", 120, 0, 3600, "s", "Shortest time in a mode",
                     "No change of mode sooner than this after the last one, except for safety events."),
     "deadline_grace_min": ("number", 10, 1, 60, "min", "Deadline grace",
@@ -121,9 +125,9 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
       "learn_scenario_weights", "scenario_half_life_days", "scenario_prior_days", "learn_solar_bias",
       "learn_soc_offset")),
     ("response", "Responsiveness",
-     ("price_band_p", "level_band_pct", "min_dwell_s", "deadline_grace_min", "debounce_s", "car_start_debounce_s",
-      "car_stop_debounce_s", "stale_after_s", "soc_filter_gain", "drift_kwh", "band_exit_min", "forecast_change_pct",
-      "revalue_coalesce_s", "max_value_age_min", "sample_s")),
+     ("price_band_p", "level_band_pct", "switch_cost_p", "min_dwell_s", "deadline_grace_min", "debounce_s",
+      "car_start_debounce_s", "car_stop_debounce_s", "stale_after_s", "soc_filter_gain", "drift_kwh",
+      "band_exit_min", "forecast_change_pct", "revalue_coalesce_s", "max_value_age_min", "sample_s")),
     ("model", "Model", ("level_step_kwh", "max_segment_min")),
 )
 
@@ -171,6 +175,7 @@ class V2Settings:
     learn_soc_offset: bool = True
     price_band_p: float = 0.5
     level_band_pct: float = 1.0
+    switch_cost_p: float = 0.5
     min_dwell_s: int = 120
     deadline_grace_min: float = 10
     debounce_s: int = 20

@@ -42,8 +42,11 @@ from .types import (
     Observation,
     ValueResult,
 )
+from .value import KIND, choice_now, switch_cost
 
 FLIP_FLOP_S = 600
+LEVEL_EPS = 0.1               # points: a mode that runs "until" a level is done within this of it. The filtered level
+                              # only approaches a reading (99.999...% at 100%), so a bare `level < target` never ends it
 
 
 @dataclass
@@ -122,19 +125,26 @@ class Executor:
 
         pick = self._pick_now(now, obs, lim, ln, vr, level, facts)
         cur = self.mode
+        if cur is not None and pick.mode in (CHARGE, EXPORT) and pick.mode != cur and not pick.forced and not urgent:
+            pick = self._with_the_programmes_choice(pick, now, lim, ln, vr, level, facts)
         if cur is not None and pick.mode != cur and not pick.forced and not urgent \
                 and self.since is not None and ts - self.since < self.s.min_dwell_s \
                 and not self._must_exit(cur, lim, ln, level):
             pick = self._pick_for(cur, lim, ln, level, facts, vr)        # minimum time: stay a little longer
+        elif cur is not None and pick.mode != cur and not pick.forced and not urgent \
+                and not self._must_exit(cur, lim, ln, level) and not self._worth_the_change(cur, pick, lim, ln, level,
+                                                                                            facts, obs):
+            pick = self._pick_for(cur, lim, ln, level, facts, vr)        # a change must pay for itself
 
         changed = cur != pick.mode
         if changed:
             chosen_by = pick.chosen_by or self._cause(events, cur, level, lim, ln)
             self._note_change(ts, cur, pick.mode)
             prior = self.target_soc
-            if cur == CHARGE and level is not None and prior is not None and level >= prior - 1e-9:
+            if cur == CHARGE and level is not None and prior is not None and level >= prior - LEVEL_EPS:
                 new_events.append(Event(now, "level", f"The battery reached {level:.0f}%: the charge ends"))
-            elif cur == EXPORT and level is not None and level <= (lim.floor_soc if prior is None else prior) + 1e-9:
+            elif cur == EXPORT and level is not None \
+                    and level <= (lim.floor_soc if prior is None else prior) + LEVEL_EPS:
                 new_events.append(Event(now, "level", f"The battery reached {level:.0f}%: the sale ends"))
             self.mode, self.since, self.chosen_by = pick.mode, ts, chosen_by
             self.deadline_fired = False
@@ -172,7 +182,7 @@ class Executor:
         if ln is None:
             return _Pick(SELF_USE, "no_lines", "The live comparison could not be made: the battery stays on self-use",
                          forced=True)
-        return self._pick_for(self._candidate(lim, ln, level), lim, ln, level, facts, vr)
+        return self._pick_for(self._candidate(lim, ln, level, vr, now), lim, ln, level, facts, vr)
 
     def _forced(self, lim: Limits, ln, level: float, facts) -> _Pick:
         s = self.s
@@ -212,17 +222,28 @@ class Executor:
     def _forced_charge(self, lim: Limits, level: float, rule: str, why: str, forced_mode: str = CHARGE) -> _Pick:
         target = lim.ceiling_soc
         staying = self.mode == forced_mode
-        if level < (target if staying else target - self.s.level_band_pct):
+        if level < (target - LEVEL_EPS if staying else target - self.s.level_band_pct):
             return _Pick(forced_mode, rule, why, target_soc=target, power_w=_w(lim.charge_cap_kw), forced=True)
         return _Pick(HOLD, rule, f"{why.split(':')[0]}: the battery has reached {target:.0f}%, so it holds",
                      target_soc=target, forced=True)
 
     # the mode the prices and levels ask for, with hysteresis from the mode now
-    def _candidate(self, lim: Limits, ln: Lines, level: float) -> str:
+    def _candidate(self, lim: Limits, ln: Lines, level: float, vr: ValueResult | None = None,
+                   now: datetime | None = None) -> str:
         cur, band = self.mode, self.s.price_band_p
-        if self._can_charge(lim, ln, level, staying=cur == CHARGE):
+        can_c = self._can_charge(lim, ln, level, staying=cur == CHARGE)
+        can_e = self._can_export(lim, ln, level, staying=cur == EXPORT)
+        if can_c and can_e:
+            # Both pay (the value is between the buy and sell lines: a cycle). Charging first would stop every sale one
+            # level band under the top and the two would alternate. The plan has priced the whole cycle, so it says
+            # which comes now; with no plan item, the mode already running goes on, else the sale.
+            planned = self._planned_mode(vr, now)
+            if planned in (CHARGE, EXPORT):
+                return planned
+            return cur if cur in (CHARGE, EXPORT) else EXPORT
+        if can_c:
             return CHARGE
-        if self._can_export(lim, ln, level, staying=cur == EXPORT):
+        if can_e:
             return EXPORT
         if SELF_USE not in lim.allowed:
             return HOLD if HOLD in lim.allowed else sorted(lim.allowed)[0]
@@ -234,6 +255,55 @@ class Executor:
         if ok:
             return SELF_USE
         return HOLD if HOLD in lim.allowed else SELF_USE
+
+    @staticmethod
+    def _planned_mode(vr: ValueResult | None, now: datetime | None) -> str | None:
+        """The mode of the expected timeline's item that covers `now`."""
+        if vr is None or now is None:
+            return None
+        for it in vr.timeline:
+            if it.start <= now < it.end:
+                return it.mode
+        return None
+
+    def _with_the_programmes_choice(self, pick: _Pick, now: datetime, lim: Limits, ln: Lines | None, vr, level,
+                                    facts: BatteryFacts) -> _Pick:
+        """A charge or a sale starts only when the value programme itself would start it here, from the mode now. The
+        lines compare one step at a time, and a sale that looks good now can be one the plan has priced as a worse
+        way to run the cycle (it sells a point, has to buy it back, and the two alternate every two minutes)."""
+        if vr is None or ln is None or level is None:
+            return pick
+        try:
+            choice = choice_now(vr, now, level, ln.import_p, facts, self.s, self.mode)
+        except Exception:
+            return pick
+        if choice is None or choice[0] == pick.mode or choice[0] not in lim.allowed:
+            return pick
+        return self._pick_for(choice[0], lim, ln, level, facts, vr)
+
+    def _worth_the_change(self, cur: str, pick: _Pick, lim: Limits, ln: Lines | None, level, facts,
+                          obs: Observation) -> bool:
+        """A change the plan did not ask for must earn more than it costs: how far the value is past the line, times
+        the energy the mode would move. A change into a mode is followed by a change out of it, so it has to cover
+        both. (`charge_now` is the plan's own run, and changes the rules or the levels force, safety events and forced
+        modes never come here.) A charge or a sale moves the energy up to its own exit level; self-use and hold move
+        what the house would draw or the sun supply in the next half-hour."""
+        cost = 2 * switch_cost(KIND[cur], KIND[pick.mode], self.s.switch_cost_p)
+        if cost <= 0 or ln is None or level is None:
+            return True
+        cap = facts.capacity_kwh
+        if pick.mode == CHARGE and not ln.charge_now:
+            move = max(0.0, (pick.target_soc if pick.target_soc is not None else lim.ceiling_soc) - level)
+            return (ln.value_p - ln.buy_line_p) * move / 100 * cap >= cost
+        if pick.mode == EXPORT:
+            move = max(0.0, level - (pick.target_soc if pick.target_soc is not None else lim.floor_soc))
+            return (ln.sell_line_p - ln.value_p) * move / 100 * cap >= cost
+        if {pick.mode, cur} == {SELF_USE, HOLD} and obs.net_load_kw is not None:
+            kwh = abs(obs.net_load_kw) * 0.5
+            line = ln.store_sun_line_p if self.sun_spare else ln.use_line_p
+            margin = (ln.value_p - line) if self.sun_spare else (line - ln.value_p)    # in favour of self-use
+            return (margin if pick.mode == SELF_USE else -margin) * kwh >= cost
+        return True
 
     def _plan_charge_target(self, vr: ValueResult | None, now: datetime) -> float | None:
         """Where the expected timeline says the charge running now ends (consecutive charge items merged)."""
@@ -268,7 +338,7 @@ class Executor:
         # (the same cost, and room left if the charge runs slower than modelled); the value test covers the rest
         if not (ln.charge_now or ln.value_p > ln.buy_line_p + (-band if staying else band)):
             return False
-        return level < (target if staying else target - self.s.level_band_pct)
+        return level < (target - LEVEL_EPS if staying else target - self.s.level_band_pct)
 
     def _sell_floor(self, lim: Limits, ln: Lines) -> float:
         return max(ln.sell_floor_soc if ln.sell_floor_soc is not None else lim.floor_soc, lim.floor_soc)
@@ -280,7 +350,7 @@ class Executor:
         if not ln.value_p < ln.sell_line_p + (band if staying else -band):
             return False
         floor = self._sell_floor(lim, ln)
-        return level > (floor if staying else floor + self.s.level_band_pct)
+        return level > (floor + LEVEL_EPS if staying else floor + self.s.level_band_pct)
 
     def _must_exit(self, cur: str, lim: Limits, ln: Lines | None, level) -> bool:
         """The mode now can't go on whatever the minimum time says."""
