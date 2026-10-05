@@ -70,6 +70,13 @@ A setting marked **fallback only** is read just by the reactive rule stack that 
 With a plan, preparing for an event is the planner's job: it charges in the cheapest earlier slot that pays against the
 event rate (or the optimiser finds it). The event value (£1/kWh) is a code constant, not a setting.
 
+### Overnight window (used only when the choice above is `fixed`)
+
+| Setting | Default (range) | Acts in | What it does |
+|---|---|---|---|
+| `overnight_start_h` | 23.5 h (0 to 24) | Plan, Cost book | When the regular cheap rate starts: hours since midnight in half-hour steps (23.5 is 23:30). A start after the end runs over midnight |
+| `overnight_end_h` | 5.5 h (0 to 24) | Plan, Cost book | When it stops (5.5 is 05:30, so the 05:00 half-hour is the last). The two must differ |
+
 ### Arbitrage
 
 | Setting | Default (range) | Acts in | What it does |
@@ -122,6 +129,7 @@ fixed: 30, 60, 120, then 240 minutes (page 8).
 | Setting | Default | Acts in | What it does |
 |---|---|---|---|
 | `control_method` | `timed_windows` (this install: `ram_remote`) | Plan, Control | How decisions reach the inverter; RAM caps the powers and lowers the switch cost |
+| `overnight_window` | `learned` | Plan, Cost book | Where the overnight window comes from: `learned` from the rates, or `fixed` times (next section). See page 1, 1.10 |
 | `house_load_includes_ev` | true | Readings, Plan, Live | The car is part of the house load, so the battery must not feed it and the profile subtracts it |
 | `battery_location` | `garage` | Plan | How fast the battery follows the outside temperature |
 | `publisher` | `auto` | Other | How entities are published |

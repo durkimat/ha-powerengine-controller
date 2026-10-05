@@ -68,7 +68,7 @@ longer than **48 h** (`build_slots`: `min_h=36`, `horizon_h=48`).
 | `smart_slot` | The slot overlaps a planned dispatch window | false |
 | `axle` | The grid-event window overlaps the slot | false |
 | `free` | The free-power window overlaps the slot | false |
-| `overnight` | The slot's time of day is in the learned overnight window | false |
+| `overnight` | The slot's time of day is in the overnight window in use: learned from the rates, or the owner's fixed times (1.10) | false |
 | `car_expected`, `car_kw` | Car state, see 1.5 | true only for the running half-hour while the car is charging; otherwise no car |
 | `charge_factor` | Cold-battery caution (1.5 below) | 1.0 |
 | `manual` | The owner's override (page 4) | none |
@@ -221,7 +221,7 @@ forced:
 | Dispatch windows (start, end) | Smart slots added, moved or withdrawn |
 | Grid-event start and end; free-power start and end | Events announced or changed |
 | Load-profile days | New profile |
-| All safety settings; all feature switches | A setting was changed on the config page |
+| All safety settings; all feature switches; the system settings | A setting was changed on the config page (including the overnight window choice) |
 | Car state; and the running half-hour while the car is charging | The car started or stopped, or is still charging in the next half-hour |
 | The active override | Set, changed or cancelled |
 
@@ -232,3 +232,29 @@ those only reach the plan at the 5-minute refresh.
 Mid-slot replans keep the running action unless changing it saves **£0.15** (`MID_SLOT_STICK`), and only from two minutes
 into the half-hour (page 3). A plan made part-way through a half-hour plans the first slot for the **rest** of it
 (`first_h`).
+
+## 1.10 The overnight window: learned or fixed
+
+The "overnight window" is the regular cheap rate the plan can count on every night. It matters in four places: smart slots
+inside it are not weighted by certainty (1.4); the optimiser may sell down further inside it, charges early inside it, and
+wants the battery full when it closes (page 3); and the cost book uses it to tell a smart slot from the regular cheap rate.
+
+**It is not read from the supplier.** The integration publishes prices, not a promise. PowerEngine works the window out from
+the price list, or the owner types it in (system setting `overnight_window`, on the Config page under *Tariff and planning*).
+
+| | **Learned** (default) | **Fixed** |
+|---|---|---|
+| Where it comes from | The half-hours that were at (or within 15% of) the day's lowest rate on **every** one of the last 14 days with a full rate list (`tariff.cheap_tods`, `overnight_window`, kept in `state.json` of the costs folder) | Two settings, `overnight_start_h` and `overnight_end_h` (hours since midnight in half-hour steps: 23.5 is 23:30; a start after the end runs over midnight) |
+| Smart slots | Drop out of the intersection because they move from day to day | Never part of it, whatever time they fall at |
+| New install | Needs at least two full days of rates; with one day a smart slot at the same time as the real window can't be told apart (errs towards a smaller saving) | Works from the first replan |
+| When it changes | Slowly: old days age out over up to 14 days | At once: the plan is remade and past half-hours are re-valued with the new window |
+| Failure mode | A smart slot that recurs at the same time every day is learned as part of the window | Times that don't make a window (start equals end) are refused when saving; if one slips through the learned window is used and the Config page says so |
+
+Use fixed if the learned window looks wrong, on a new install, or for a tariff with no integration. It is one range; two
+ranges (a night plus an afternoon boost) and a weekend variant are not supported yet.
+
+The Config page shows, next to the choice, **what is in use now** and **what has been learned** and from how many days
+(`sensor.pe_diag_overnight`: state is the window in use, attributes `source`, `learned`, `learned_days`, `fixed`,
+`fixed_not_valid`). Code: `PowerEngine._fixed_window`, `_overnight`, `_sync_window`, `_publish_overnight`;
+`CostBook.window()`; `tariff.fixed_window`, `chosen_window`, `describe_window`.
+

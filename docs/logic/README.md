@@ -1,6 +1,6 @@
 # How PowerEngine decides: the plan logic, written down
 
-> **Status:** written 5 Oct 2026 from the code at 0.9.100, refreshed for 0.9.101 to 0.9.103 (car idle blip, soft arbitrage band, the plan no longer waits for the car; `main` at `e0843a6`). It describes what the code does, not what
+> **Status:** written 5 Oct 2026 from the code at 0.9.100, refreshed for 0.9.101 to 0.9.104 (car idle blip, soft arbitrage band, the plan no longer waits for the car, smart slot used = unbroken charging time) and for the overnight window setting (built for 0.9.105, not released yet). It describes what the code does, not what
 > it was meant to do. Where the two differ, [09-review-findings.md](09-review-findings.md) says so. Nothing in the code was
 > changed to write these pages.
 >

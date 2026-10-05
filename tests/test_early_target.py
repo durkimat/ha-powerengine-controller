@@ -107,7 +107,8 @@ def test_the_summary_tool_reads_the_export_section():
 
 def test_plan_signature_changes_with_the_car_and_the_half_hour_while_it_charges(monkeypatch):
     pe = import_powerengine(monkeypatch)
-    stub = SimpleNamespace(profile=None, cfg=SimpleNamespace(safety={}, features={}), _active_override=lambda: None)
+    stub = SimpleNamespace(profile=None, cfg=SimpleNamespace(safety={}, features={}, system={}),
+                           _active_override=lambda: None)
     def sig(state, minute):
         r = SimpleNamespace(rates=[], dispatches=[], axle_start=None, axle_end=None, free_start=None, free_end=None,
                             now=datetime(2026, 10, 4, 19, minute, tzinfo=timezone.utc), ev_state=lambda: state)

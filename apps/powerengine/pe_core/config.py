@@ -66,6 +66,8 @@ SAFETY = {
     "smart_lookahead_h": (3, 1, 8),            # no request if a slot is planned within this many hours
     "car_min_charge_min": (2.0, 0.5, 10.0),    # the car must charge this long, unbroken, for a smart slot to count
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
+    "overnight_start_h": (23.5, 0, 24),       # fixed overnight window: start, hours since midnight in half-hours
+    "overnight_end_h": (5.5, 0, 24),          # ...and end (a start after the end runs over midnight)
     "cheap_threshold_p": (10.0, 0, 100),      # import at or below this is "cheap" (pence/kWh)
     "grid_charge_target_soc": (100, 10, 100), # charge to this in cheap periods (%)
     "charge_hysteresis_soc": (3, 0, 20),      # resume charging only below target minus this (%)
@@ -95,7 +97,7 @@ SAFETY = {
     "damp_burst_settle_min": (5.0, 1, 30),    # ...and then waits for the plan to be steady this long (min)
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage", "control_method": "timed_windows",
-                   "publisher": "auto"}
+                   "publisher": "auto", "overnight_window": "learned"}
 # system settings chosen from a list: key -> (config-page section, ((value, label), ...))
 SYSTEM_CHOICES = {
     "battery_location": ("cold", (("garage", "Garage or outbuilding (follows outside over about 24 h)"),
@@ -104,6 +106,8 @@ SYSTEM_CHOICES = {
                                   ("custom", "Custom: use Battery warm-up time below"))),
     "control_method": ("control", (("timed_windows", "Timed windows (the inverter's charge/discharge times; EEPROM)"),
                                    ("ram_remote", "RAM remote control (Battery control override; no EEPROM writes)"))),
+    "overnight_window": ("tariff", (("learned", "Learned from the rates (recommended)"),
+                                    ("fixed", "Fixed times (set below)"))),
     "publisher": ("system", (("auto", "Automatic (MQTT if AppDaemon has the MQTT plugin, else direct)"),
                              ("mqtt", "MQTT"),
                              ("direct", "Direct through AppDaemon (no MQTT broker)"))),
@@ -139,6 +143,12 @@ SETTING_TEXT = {
                            "How long the car's charger must report charging without a break inside a smart-charge "
                            "slot for the slot to count as used. Shorter bursts (the car waking up) are ignored. "
                            "With learning on, PowerEngine moves this towards what your confirmed slots show."),
+    "overnight_start_h": ("Fixed overnight window: starts", "h",
+                          "Used only when the overnight window is set to Fixed times. Hours since midnight, in "
+                          "half-hour steps: 23.5 is 23:30, 0.5 is 00:30. A start after the end runs over midnight."),
+    "overnight_end_h": ("Fixed overnight window: ends", "h",
+                        "Used only when the overnight window is set to Fixed times. The time the cheap rate stops: "
+                        "5.5 is 05:30, so the 05:00 half-hour is the last one. 24 is midnight."),
     "cheap_threshold_p": ("Cheap import threshold", "p/kWh",
                           "Import at or below this counts as cheap. With the automatic threshold on, this is the "
                           "most it can be; the day's prices can set it lower."),
@@ -241,6 +251,12 @@ SETTING_TEXT = {
                   "their switches be changed from HA. Direct needs no MQTT broker, but the entities are rebuilt at "
                   "each start and their switches are read-only. Automatic uses MQTT when it is set up. Takes effect "
                   "after a restart."),
+    "overnight_window": ("Overnight window", "",
+                         "The regular cheap overnight rate that the plan can rely on every night. Learned: "
+                         "PowerEngine works it out from the rates it has seen (the half-hours that were cheapest on "
+                         "every one of the last 14 days), so smart-charge slots that move about are left out. Fixed "
+                         "times: use the two times below instead, for a new install, a tariff with no integration, or "
+                         "if the learned window looks wrong."),
     "house_load_includes_ev": ("House load includes the car charger", "",
                                "Tick if the car is inside the inverter's house load. PowerEngine then subtracts it and "
                                "stops the battery discharging into the car."),
@@ -251,6 +267,7 @@ SETTING_TEXT = {
 SETTING_SECTIONS = (
     ("battery", "Battery and charging", ("min_reserve_soc", "cheap_threshold_p", "grid_charge_target_soc",
                                          "charge_hysteresis_soc")),
+    ("tariff", "Overnight window", ("overnight_start_h", "overnight_end_h")),
     ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
     ("axle", "Grid events", ("pre_axle_lookahead_h", "axle_margin_soc")),
     ("smart", "Smart-charge requests", ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h",
@@ -549,6 +566,9 @@ def parse_config(data: Any) -> Config:
         raise ConfigError("arbitrage lowest charge must be below its highest charge")
     if safety["min_reserve_soc"] >= safety["grid_charge_target_soc"]:
         raise ConfigError("minimum reserve must be below the grid-charge target")
+    for key in ("overnight_start_h", "overnight_end_h"):
+        if abs(safety[key] * 2 - round(safety[key] * 2)) > 1e-6:
+            raise ConfigError(f"'{key}' must be on the hour or half past (23.5 is 23:30)")
 
     notifications = _parse_notifications(data.get("notifications"))
 
@@ -566,6 +586,9 @@ def parse_config(data: Any) -> Config:
         elif not isinstance(value, bool):
             raise ConfigError(f"system setting '{key}' must be true or false")
         system[key] = value
+
+    if system["overnight_window"] == "fixed" and safety["overnight_start_h"] == safety["overnight_end_h"]:
+        raise ConfigError("a fixed overnight window needs a start and an end that differ")
 
     return Config(
         mode=mode,

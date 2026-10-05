@@ -65,6 +65,42 @@ def overnight_window(history: dict[str, list[int]] | dict[str, set[int]]) -> set
     return out
 
 
+def fixed_window(start_h: float, end_h: float) -> set[int]:
+    """The half-hours (0..47) of a window the owner typed in: hours since midnight in half-hour steps, so 23.5 is 23:30
+    and 5.5 is 05:30. The end is when it stops (05:30 means the 05:00 half-hour is the last). A start after the end
+    runs over midnight (23.5 to 5.5 is 23:30 to 05:30); 0 to 24 is the whole day. Equal times, or a value that is not
+    a half-hour step in 0..24, make an empty window."""
+    s, e = round(start_h * 2), round(end_h * 2)
+    if abs(start_h * 2 - s) > 1e-6 or abs(end_h * 2 - e) > 1e-6 or not (0 <= s <= 48 and 0 <= e <= 48) or s == e:
+        return set()
+    if e < s:
+        e += 48
+    return {t % 48 for t in range(s, e)}
+
+
+def chosen_window(history: dict[str, list[int]] | dict[str, set[int]], fixed: set[int] | None = None) -> set[int]:
+    """The overnight window in use: the owner's fixed one when they set it, else the one learned from the rates."""
+    return set(fixed) if fixed else overnight_window(history)
+
+
+def describe_window(window: set[int]) -> str:
+    """'23:30–05:30' for a window of half-hours (several ranges are joined with ', '); 'none yet' when empty."""
+    if not window:
+        return "none yet"
+    if len(window) >= 48:
+        return "all day"
+
+    def hhmm(x: int) -> str:
+        return f"{x // 2:02d}:{30 * (x % 2):02d}"
+    runs = []
+    for start in sorted(w for w in window if (w - 1) % 48 not in window):
+        end = start
+        while (end + 1) % 48 in window:
+            end = (end + 1) % 48
+        runs.append(f"{hhmm(start)}–{hhmm((end + 1) % 48)}")
+    return ", ".join(runs)
+
+
 @dataclass(frozen=True)
 class Rates:
     actual: float           # GBP/kWh charged

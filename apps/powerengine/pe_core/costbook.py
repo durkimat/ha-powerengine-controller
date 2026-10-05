@@ -16,7 +16,7 @@ from .costs import METHOD_VERSION, SimDefault, day_summary, process, steps, wate
 from .energy import FLOW_VERSION, HalfHour
 from .ledger import Ledger
 from .readings import Readings
-from .tariff import cheap_tods, overnight_window, rates_at, reclassify
+from .tariff import cheap_tods, chosen_window, rates_at, reclassify
 
 KEEP_DAYS = 400
 HISTORY_KEEP_DAYS = 60     # hourly plan snapshots (Plan history tab); the plan that ran is kept KEEP_DAYS
@@ -49,6 +49,7 @@ class CostBook:
         self.ledger = Ledger(st.get("ledger"))
         self.sim = SimDefault(st.get("sim_kwh"))
         self.cheap_history: dict[str, list[int]] = st.get("cheap_tods", {})
+        self.fixed_window: set[int] | None = None      # the owner's fixed window (set by the app); None: learned
         self.last_event: dict | None = st.get("last_event")
         self.flow_id: str = str(FLOW_VERSION)          # set by the app from the current input mapping
         # records valued by an older method are re-valued on start-up
@@ -88,6 +89,11 @@ class CostBook:
                 os.remove(os.path.join(self.folder, name))
 
     # --- recording ----------------------------------------------------------------------
+    def window(self) -> set[int]:
+        """The overnight window used to tell a smart slot from the regular cheap rate: the owner's fixed one, else the
+        one learned from the rates seen."""
+        return chosen_window(self.cheap_history, self.fixed_window)
+
     def learn_rates(self, r: Readings) -> None:
         for day, tods in cheap_tods(r.rates, self.tz).items():
             self.cheap_history[day] = sorted(tods)
@@ -103,7 +109,7 @@ class CostBook:
         record, but does fill in one cut short by a restart).
         """
         self.learn_rates(r)
-        window = overnight_window(self.cheap_history)
+        window = self.window()
         export = hh.export_rate if hh.export_rate is not None else (
             r.export_rate if r.export_rate is not None else (self.export_fallback or 0.0))
         rt = rates_at(hh.start, r.rates, window, export, hh.import_rate, self.tz)
@@ -144,7 +150,7 @@ class CostBook:
         Needed after a backfill (older half-hours arrived after newer ones) or a change of method. Smart slots are
         re-decided with the current overnight window. Returns the number of half-hours valued.
         """
-        window = overnight_window(self.cheap_history)
+        window = self.window()
         self.ledger, self.sim, self.last_event = Ledger(), SimDefault(), None
         n = 0
         names = sorted(x for x in os.listdir(self.folder) if x[:4].isdigit() and x.endswith(".json"))
