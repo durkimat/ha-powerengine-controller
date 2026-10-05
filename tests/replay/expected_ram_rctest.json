@@ -10,16 +10,16 @@ null
 },
 {
 "t": "2026-09-27T19:30:00+00:00",
-"plan": "EssssCCECECECECECECECEssssssssss",
+"plan": "EssssCCECECEHCECECECCsssssEsssss",
 "soc": [
 75,
 70,
 94,
-91,
-88,
-85,
-67,
-66
+78,
+75,
+95,
+90,
+75
 ]
 },
 {
@@ -104,16 +104,16 @@ true
 },
 {
 "t": "2026-09-27T19:35:00+00:00",
-"plan": "EssssCCECECECECECECECEssssssssss",
+"plan": "EssssCCECECEHCECECECCsssssEsssss",
 "soc": [
 77,
 71,
 94,
-91,
-88,
-85,
-67,
-66
+78,
+75,
+95,
+90,
+75
 ]
 },
 {
@@ -171,16 +171,16 @@ null
 },
 {
 "t": "2026-09-27T19:50:00+00:00",
-"plan": "sEsssCECCECECECECECECEssssssssss",
+"plan": "sEsssCCECECEHCECECECCsssssEsssss",
 "soc": [
 92,
 73,
+94,
+78,
+75,
 95,
-92,
-89,
-86,
-68,
-67
+90,
+75
 ]
 },
 {
@@ -198,16 +198,16 @@ null
 },
 {
 "t": "2026-09-27T19:55:00+00:00",
-"plan": "EEsssCCECECECECECECECEssssssssss",
+"plan": "EEssssCCECECECCECECECsssssEsssss",
 "soc": [
 88,
 69,
+79,
+76,
 94,
 91,
-88,
-85,
-67,
-66
+86,
+71
 ]
 },
 {
@@ -216,29 +216,16 @@ null
 },
 {
 "t": "2026-09-27T20:00:00+00:00",
-"decision": [
-"self_use",
-"plan",
-null,
-null
-]
-},
-{
-"t": "2026-09-27T20:00:00+00:00",
-"plan": "sssEEEECCCCEEECCCCCCEsssssssssss",
+"plan": "EsssEEECCCCEEECCHCCCsssssEssssss",
 "soc": [
-88,
+74,
 55,
 53,
 50,
-75,
-85,
-81,
-82
+61,
+99,
+94,
+81
 ]
-},
-{
-"t": "2026-09-27T20:00:00+00:00",
-"svc": "logbook/log"
 }
 ]

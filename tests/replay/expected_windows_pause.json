@@ -10,7 +10,7 @@ null
 },
 {
 "t": "2026-09-27T19:30:00+00:00",
-"plan": "ssEssssssCCECECCCCCCCsssssEsssss",
+"plan": "ssEssssssCCECECCCCCCCsssssssssss",
 "soc": [
 89,
 69,
@@ -19,7 +19,7 @@ null
 95,
 95,
 90,
-74
+89
 ]
 },
 {
@@ -28,17 +28,35 @@ null
 },
 {
 "t": "2026-09-27T19:35:00+00:00",
-"plan": "sEsssssssCCECCCCCCCCCsssssEsssss",
+"plan": "sEssssssCCECECCCCCCCCsssssssssss",
 "soc": [
 88,
 68,
-62,
-88,
+78,
+75,
 95,
 95,
 90,
-74
+89
 ]
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 30
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 1
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 30
 },
 {
 "t": "2026-09-27T19:35:00+00:00",
@@ -65,30 +83,30 @@ null
 },
 {
 "t": "2026-09-27T19:40:00+00:00",
-"plan": "sEsssssssCCECECCCCCCCsssssEsssss",
+"plan": "sEssssssCCECECECCCCCCsssssssssss",
 "soc": [
 88,
 68,
-63,
-89,
+78,
+75,
 95,
 95,
 90,
-74
+89
 ]
 },
 {
 "t": "2026-09-27T19:45:00+00:00",
-"plan": "sssEsssHHHHHHHHHHHHCCEssssssssss",
+"plan": "sssEsssssCCECECCCCCCCsssssssssss",
 "soc": [
 89,
 70,
-67,
-67,
-67,
-94,
-75,
-75
+64,
+90,
+95,
+95,
+90,
+89
 ]
 },
 {
@@ -96,12 +114,6 @@ null
 "svc": "select/select_option",
 "entity_id": "select.edf_energy_dev_intelligent_target_time",
 "option": "04:00"
-},
-{
-"t": "2026-09-27T19:45:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
-"value": 7
 },
 {
 "t": "2026-09-27T19:45:00+00:00",
@@ -114,12 +126,6 @@ null
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_end_hours",
 "value": 22
-},
-{
-"t": "2026-09-27T19:45:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_current",
-"value": 0
 },
 {
 "t": "2026-09-27T19:46:00+00:00",
@@ -132,7 +138,7 @@ null
 },
 {
 "t": "2026-09-27T19:50:00+00:00",
-"plan": "ssssEHHHHHHHHHHHHHHCCsssssEsssss",
+"plan": "ssssEHHHHHHHHHHHHHHCCsssssssssss",
 "soc": [
 92,
 72,
@@ -141,27 +147,126 @@ null
 72,
 95,
 90,
-74
+89
 ]
 },
 {
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours_2",
+"value": 23
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_2",
+"value": 23
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes_2",
+"value": 59
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_3",
+"value": 7
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes",
+"value": 30
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 23
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_current",
+"value": 0
+},
+{
+"t": "2026-09-27T19:51:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T19:51:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-27T19:51:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
+},
+{
 "t": "2026-09-27T19:55:00+00:00",
-"plan": "ssssssssssCECECCCCCCCsssssEsssss",
+"plan": "sssssssssCECECECCCCCCsssssssssss",
 "soc": [
 90,
 84,
 78,
-89,
+75,
 95,
 95,
 90,
-74
+89
 ]
 },
 {
 "t": "2026-09-27T19:55:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_charge_end_hours",
+"entity_id": "number.solis_timed_charge_start_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_3",
 "value": 0
 },
 {
@@ -173,13 +278,13 @@ null
 {
 "t": "2026-09-27T19:55:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_hours",
+"entity_id": "number.solis_timed_discharge_start_minutes",
 "value": 0
 },
 {
 "t": "2026-09-27T19:55:00+00:00",
 "svc": "number/set_value",
-"entity_id": "number.solis_timed_discharge_end_minutes",
+"entity_id": "number.solis_timed_discharge_end_hours",
 "value": 0
 },
 {
@@ -192,6 +297,16 @@ null
 "t": "2026-09-27T19:56:00+00:00",
 "svc": "button/press",
 "entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T19:56:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-27T19:56:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
 },
 {
 "t": "2026-09-27T20:00:00+00:00",
@@ -344,13 +459,13 @@ true
 },
 {
 "t": "2026-09-27T20:20:00+00:00",
-"plan": "sssEEEECCCCEEECCCCCCssssssssssss",
+"plan": "ssssEEEECCCCEEECCCCCssssssssssss",
 "soc": [
 90,
-56,
-53,
-50,
-76,
+70,
+38,
+64,
+61,
 99,
 94,
 95
@@ -421,13 +536,13 @@ false
 },
 {
 "t": "2026-09-27T20:45:00+00:00",
-"plan": "ssEEEECCCCEEECCCCCCsssssssssssss",
+"plan": "sssEEEECCCCEEECCCCCsssssssssssss",
 "soc": [
 87,
-40,
-66,
-34,
-89,
+54,
+51,
+48,
+74,
 97,
 94,
 98

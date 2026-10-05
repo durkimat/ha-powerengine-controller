@@ -10,7 +10,7 @@ null
 },
 {
 "t": "2026-09-27T19:30:00+00:00",
-"plan": "ssEssssssCCECECCCCCCCsssssEsssss",
+"plan": "ssEssssssCCECECCCCCCCsssssssssss",
 "soc": [
 89,
 69,
@@ -19,7 +19,7 @@ null
 95,
 95,
 90,
-74
+89
 ]
 },
 {
@@ -87,16 +87,16 @@ true
 },
 {
 "t": "2026-09-27T19:35:00+00:00",
-"plan": "sEsssssssCCECCCCCCCCCsssssEsssss",
+"plan": "sEssssssCCECECCCCCCCCsssssssssss",
 "soc": [
 88,
 68,
-62,
-88,
+78,
+75,
 95,
 95,
 90,
-74
+89
 ]
 },
 {
@@ -138,30 +138,30 @@ true
 },
 {
 "t": "2026-09-27T19:40:00+00:00",
-"plan": "sEsssssssCCECECCCCCCCsssssEsssss",
+"plan": "sEssssssCCECECECCCCCCsssssssssss",
 "soc": [
 88,
 68,
-63,
-89,
+78,
+75,
 95,
 95,
 90,
-74
+89
 ]
 },
 {
 "t": "2026-09-27T19:45:00+00:00",
-"plan": "sssEsssHHHHHHHHHHHHCCEssssssssss",
+"plan": "sssEsssssCCECECCCCCCCsssssssssss",
 "soc": [
 89,
 70,
-67,
-67,
-67,
-94,
-75,
-75
+64,
+90,
+95,
+95,
+90,
+89
 ]
 },
 {
@@ -170,7 +170,7 @@ true
 },
 {
 "t": "2026-09-27T19:50:00+00:00",
-"plan": "ssssEHHHHHHHHHHHHHHCCsssssEsssss",
+"plan": "ssssEHHHHHHHHHHHHHHCCsssssssssss",
 "soc": [
 92,
 72,
@@ -179,21 +179,21 @@ true
 72,
 95,
 90,
-74
+89
 ]
 },
 {
 "t": "2026-09-27T19:55:00+00:00",
-"plan": "ssssssssssCECECCCCCCCsssssEsssss",
+"plan": "sssssssssCECECECCCCCCsssssssssss",
 "soc": [
 90,
 84,
 78,
-89,
+75,
 95,
 95,
 90,
-74
+89
 ]
 },
 {

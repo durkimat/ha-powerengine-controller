@@ -85,7 +85,7 @@ event rate (or the optimiser finds it). The event value (£1/kWh) is a code cons
 | `arbitrage_min_soc` | 75 % (10 to 100) | Plan | Bottom of the band, a guide: outside the overnight window a sale may go up to 5 points below it (paying the band penalty); that lower point (70%) is the hard floor |
 | `arbitrage_max_soc` | 90 % (20 to 100) | Plan, Live | Top of the band, a guide: a grid charge may run up to 5 points past it (paying the band penalty); also the live car-charge top-up ceiling and the rules planner's buffer ceiling |
 | `arbitrage_band_penalty_p` | 2 p (0 to 50) | Plan | Extra cost per kWh outside the band |
-| `overnight_switch_cost_p` | 3 p (0 to 100) | Plan | Minimum cost of a full switch inside the overnight window (with deep overnight and arbitrage) |
+| `overnight_switch_cost_p` | 3 p (0 to 100) | Plan | Minimum cost of a full switch inside the overnight window (timed windows only, with deep overnight and arbitrage; RAM control uses `ram_switch_cost_p`) |
 
 Needs `arbitrage_min_soc` below `arbitrage_max_soc`. (`arbitrage_keep_soc`, 10 points above the reserve, is not a setting.)
 
