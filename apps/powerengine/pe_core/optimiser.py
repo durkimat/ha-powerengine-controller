@@ -144,6 +144,9 @@ EARLY_BIAS = 5e-4                     # GBP per kWh per half-hour of delay, in t
 SELL_BIAS = 5e-4                      # GBP per kWh per half-hour of delay, for a sale: banked sooner is surer (a
                                       # dispatch can be withdrawn, a forecast revised), and a plan that waits has
                                       # nothing over one that sells now, so a tie goes to selling early
+BIAS_CAP = 12                         # most half-hours of delay either bias counts. They are tie-breakers: counted from
+                                      # now without a limit they reached 1p/kWh by tonight's refill and outweighed a
+                                      # cycle's margin (about 4p/kWh), so no sale was planned (5 Oct 2026)
 FULL_PENALTY = 1.0                    # GBP per kWh short of the target at the end of the fixed overnight window
 
 
@@ -151,19 +154,31 @@ def switch_cost(prev: int, new: int, p: Params, overnight: bool = False) -> floa
     """GBP for changing what the inverter's timed windows do (EEPROM writes): a full switch between self-use,
     charging and discharging costs the setting; hold <-> charge only changes the current (a fifth of it).
 
-    Inside the fixed overnight window with deeper selling on, a full switch costs at least the overnight switch
+    Inside the fixed overnight window with deeper selling on (timed windows only: with RAM control a switch writes
+    nothing to the EEPROM, so the configured switch cost stands), a full switch costs at least the overnight switch
     cost: the refill is guaranteed there, so one deep sale earns about the same as several shallow cycles, and the
     fewer switches win (28 Sep 2026: two cycles overnight where one would do)."""
     if prev == new:
         return 0.0
     base = p.switch_cost_p
-    if overnight and p.deep_overnight and p.arbitrage:
+    if overnight and p.deep_overnight and p.arbitrage and not p.ram_control:
         base = max(base, p.overnight_switch_cost_p)
     if not base:
         return 0.0
     if {prev, new} == {HOLD_K, CHARGE_K}:
         return p.switch_cost_p / 500
     return base / 100
+
+
+def bias_delay(slots: list[Slot]) -> list[int]:
+    """Half-hours of delay the tie-breaking biases count for each slot: from the start of its fixed overnight window
+    inside one (a night's charge and sale order does not depend on how far off the night is), else from now; never
+    more than BIAS_CAP."""
+    out, run = [], 0
+    for t, s in enumerate(slots):
+        run = run + 1 if s.overnight and t and slots[t - 1].overnight else 0
+        out.append(min(run if s.overnight else t, BIAS_CAP))
+    return out
 
 
 def window_ends(slots: list[Slot]) -> list[bool]:
@@ -195,6 +210,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
     K = 4
     ends = window_ends(slots)
     final = final_topup(slots, p)
+    delay = bias_delay(slots)
     # value[t][level][k] = lowest cost from half-hour t onwards, at that level, the previous half-hour's kind k
     value = [[[0.0] * K for _ in range(LEVELS)] for _ in range(T + 1)]
     for lv in range(LEVELS):
@@ -224,9 +240,9 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
                 if ends[t] and p.fill_when_cheap and end < p.target_soc:
                     total += (p.target_soc - end) / 100 * cap * FULL_PENALTY
                 if a == EXPORT and end < lv:
-                    total += (lv - end) / 100 * cap * SELL_BIAS * t     # a tie sells now, not later
+                    total += (lv - end) / 100 * cap * SELL_BIAS * delay[t]     # a tie sells now, not later
                 if a == GRID_CHARGE and end > lv and s.overnight:
-                    total += (end - lv) / 100 * cap * EARLY_BIAS * t     # same price all night: charge sooner
+                    total += (end - lv) / 100 * cap * EARLY_BIAS * delay[t]     # same price all night: charge sooner
                 options.append((total, a, k))
             for kp in range(K):
                 best, best_a = None, SELF_USE

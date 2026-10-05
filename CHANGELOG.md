@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.105 (beta)
+
+### Behaviour changes
+
+- **Overnight sales and refills are planned again when the night is far off.** Two small tie-breakers in the optimiser (charge early, sell early) counted half-hours from now without a limit, so by tonight's refill they cost about 1p per kWh each and cancelled a cycle's margin (about 4p per kWh at a 79% round trip). No sale was planned and the battery sat on hold for hours at 90% (5 Oct 2026). They now count from the start of the overnight window and stop growing after 12 half-hours, so a night's sell and refill that pays is planned. Expect more overnight sales, and a changed evening: a sale may start earlier.
+- **With remote control, an overnight switch costs the configured 0.5p, not 3p.** The *Overnight switch cost* setting forced every overnight change between charging and selling to cost at least 3p, whatever the remote-control switch cost said. It now applies only to inverters on timed windows, where a change is an EEPROM write. The setting's help says so.
+- The overnight window itself is still learned from the rates by default, exactly as before (see New).
+
+### New
+
+- **You can fix the overnight window instead of learning it.** New setting **Overnight window** on the Config page, under *Tariff and planning*: **Learned from the rates (recommended)** or **Fixed times**. With Fixed times, set **Fixed overnight window: starts** and **ends** (hours since midnight in half-hour steps: 23.5 is 23:30, 5.5 is 05:30; a start after the end runs over midnight). Use it on a new install (the learned window needs two full days of rates), if a smart-charge slot at the same time every day has been learned as part of the window, or if the learned window looks wrong. It is one range for now.
+- **The Config page shows what is in use and what has been learned.** The window in use and the one learned from the rates (and from how many days) appear next to the choice. They are also on the new diagnostic sensor `sensor.pe_diag_overnight`.
+- Changing the window re-values past half-hours with the new window and remakes the plan at once. The plan also now remakes when any system setting changes.
+
 ## 0.9.104 (beta)
 
 ### Behaviour changes

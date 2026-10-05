@@ -10,16 +10,16 @@ null
 },
 {
 "t": "2026-09-27T15:00:00+00:00",
-"plan": "ssEsssssssssssCCCECECECEHCECECEs",
+"plan": "ssEssssssssssssCCCECECCEsCECECEs",
 "soc": [
 87,
 69,
 64,
 58,
-95,
-92,
-76,
-73
+81,
+78,
+79,
+76
 ]
 },
 {
@@ -36,7 +36,7 @@ null
 },
 {
 "t": "2026-09-27T15:02:00+00:00",
-"plan": "ssEsssssssssssCCCECECEHCECECECEs",
+"plan": "ssEsssssssssssCCCECECECCECECECss",
 "soc": [
 88,
 70,
@@ -44,13 +44,13 @@ null
 59,
 95,
 92,
-76,
-73
+80,
+78
 ]
 },
 {
 "t": "2026-09-27T15:07:00+00:00",
-"plan": "ssEsssssssssssCCCECECEHCECECECEs",
+"plan": "ssEsssssssssssCCCECECECCECECECss",
 "soc": [
 89,
 71,
@@ -58,13 +58,13 @@ null
 60,
 95,
 92,
-76,
-73
+80,
+78
 ]
 },
 {
 "t": "2026-09-27T15:12:00+00:00",
-"plan": "ssEsssssssssssCCCECECEHCECECECEs",
+"plan": "ssEsssssssssssCCCECECECCECECECss",
 "soc": [
 88,
 70,
@@ -72,8 +72,8 @@ null
 59,
 95,
 92,
-76,
-73
+80,
+78
 ]
 },
 {
@@ -82,7 +82,7 @@ null
 },
 {
 "t": "2026-09-27T15:17:00+00:00",
-"plan": "ssEsssssssssssCCCECECECHECECECEs",
+"plan": "ssEsssssssssssCCCECECECCECECECss",
 "soc": [
 86,
 68,
@@ -90,26 +90,12 @@ null
 57,
 95,
 92,
-76,
-73
+80,
+78
 ]
 },
 {
 "t": "2026-09-27T15:22:00+00:00",
-"plan": "ssEsssssssssssCCCECECEHCECECECEs",
-"soc": [
-89,
-72,
-66,
-60,
-95,
-92,
-76,
-73
-]
-},
-{
-"t": "2026-09-27T15:27:00+00:00",
 "decision": [
 "export",
 "plan",
@@ -118,8 +104,126 @@ null
 ]
 },
 {
+"t": "2026-09-27T15:22:00+00:00",
+"plan": "EEssssssssssssCCCECECECCECECECss",
+"soc": [
+85,
+67,
+62,
+56,
+94,
+91,
+80,
+78
+]
+},
+{
+"t": "2026-09-27T15:22:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T15:22:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T15:22:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T15:22:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T15:22:00+00:00",
+"warning": "[info] RAM remote control: Force discharge at 5000 W"
+},
+{
+"t": "2026-09-27T15:23:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T15:23:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T15:23:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T15:23:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T15:24:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T15:24:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T15:24:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T15:25:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T15:25:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T15:25:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T15:26:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T15:26:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T15:26:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
 "t": "2026-09-27T15:27:00+00:00",
-"plan": "EEssssssssssssCCCECECECCECECECEs",
+"plan": "EEssssssssssssCCCECECECCECECECss",
 "soc": [
 85,
 67,
@@ -130,10 +234,6 @@ null
 80,
 78
 ]
-},
-{
-"t": "2026-09-27T15:27:00+00:00",
-"svc": "logbook/log"
 },
 {
 "t": "2026-09-27T15:27:00+00:00",
@@ -149,16 +249,6 @@ null
 },
 {
 "t": "2026-09-27T15:27:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
-"value": 5000
-},
-{
-"t": "2026-09-27T15:27:00+00:00",
-"warning": "[info] RAM remote control: Force discharge at 5000 W"
-},
-{
-"t": "2026-09-27T15:28:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_inverter_battery_control_override_discharge_power",
 "value": 5000
@@ -201,7 +291,7 @@ null
 },
 {
 "t": "2026-09-27T15:30:00+00:00",
-"plan": "EssssssssssssEECCCCEEECCCCHHCsss",
+"plan": "EssssssssssssEECCCCEEECCCHHCCEEs",
 "soc": [
 72,
 68,
@@ -257,7 +347,7 @@ null
 },
 {
 "t": "2026-09-27T15:32:00+00:00",
-"plan": "EssssssssssssEECCCEEECCCCCHHCsss",
+"plan": "EssssssssssssEECCCEEECECCCCCCEEs",
 "soc": [
 73,
 69,
@@ -265,7 +355,7 @@ null
 57,
 54,
 24,
-76,
+49,
 100
 ]
 },
@@ -361,7 +451,7 @@ null
 },
 {
 "t": "2026-09-27T15:37:00+00:00",
-"plan": "EssssssssssssEECCCCEEEECCCCCCsss",
+"plan": "EssssssssssssEECCCCEEEECCCCCCEEs",
 "soc": [
 76,
 71,
@@ -483,7 +573,7 @@ null
 },
 {
 "t": "2026-09-27T15:42:00+00:00",
-"plan": "EssssssssssssEECCCCEEEECCCCCCsss",
+"plan": "EssssssssssssEECCCCEEEECCCCCCEEs",
 "soc": [
 78,
 74,
@@ -603,7 +693,7 @@ null
 },
 {
 "t": "2026-09-27T15:47:00+00:00",
-"plan": "EssssssssssssEECCCCEEEECCCCCCsss",
+"plan": "EssssssssssssEECCCCEEEECCCCCCEEs",
 "soc": [
 80,
 75,
@@ -727,7 +817,7 @@ null
 },
 {
 "t": "2026-09-27T15:52:00+00:00",
-"plan": "EssssssssssssEEECCCCEEECCCCCCsss",
+"plan": "EssssssssssssEEECCCCEEECCCCCCEEs",
 "soc": [
 82,
 78,
@@ -835,15 +925,15 @@ null
 },
 {
 "t": "2026-09-27T15:57:00+00:00",
-"plan": "EEsssssssssssEECCCCEEECCCCHHCsss",
+"plan": "EHEssssssssssEECCCCEEECCCHHCCEEs",
 "soc": [
 85,
-66,
-60,
-54,
-51,
-49,
-74,
+67,
+61,
+55,
+53,
+50,
+75,
 100
 ]
 },
@@ -911,7 +1001,7 @@ null
 },
 {
 "t": "2026-09-27T16:00:00+00:00",
-"plan": "EsssssssssssEECCCCEEECCCCHHCEsss",
+"plan": "EsssssssssssEECCCCEEECCCHHCCssss",
 "soc": [
 71,
 66,
@@ -919,8 +1009,8 @@ null
 41,
 66,
 35,
-88,
-85
+75,
+99
 ]
 },
 {
@@ -973,7 +1063,7 @@ null
 },
 {
 "t": "2026-09-27T16:02:00+00:00",
-"plan": "EsssssssssssEECCCEEECCCCCHHCEsss",
+"plan": "EsssssssssssEECCCEEECCECCCCCssss",
 "soc": [
 72,
 67,
@@ -981,8 +1071,8 @@ null
 42,
 67,
 36,
-89,
-85
+61,
+99
 ]
 },
 {
@@ -1077,7 +1167,7 @@ null
 },
 {
 "t": "2026-09-27T16:07:00+00:00",
-"plan": "EsssssssssssEECCCCEEEECCCCCCEsss",
+"plan": "EsssssssssssEECCCCEEEECCCCCCssss",
 "soc": [
 78,
 72,
@@ -1086,7 +1176,7 @@ null
 73,
 42,
 67,
-85
+99
 ]
 },
 {
@@ -1181,7 +1271,7 @@ null
 },
 {
 "t": "2026-09-27T16:12:00+00:00",
-"plan": "EsssssssssssEECCCCEEEECCCCCCEsss",
+"plan": "EsssssssssssEECCCCEEEECCCCCCssss",
 "soc": [
 81,
 76,
@@ -1190,7 +1280,7 @@ null
 76,
 45,
 70,
-85
+99
 ]
 },
 {
@@ -1285,7 +1375,7 @@ null
 },
 {
 "t": "2026-09-27T16:17:00+00:00",
-"plan": "EEssssssssssEECCCCEEECCCCHHCEsss",
+"plan": "EEssssssssssEECCCCEEECCCHHCCssss",
 "soc": [
 85,
 66,
@@ -1293,8 +1383,8 @@ null
 41,
 66,
 35,
-88,
-85
+75,
+99
 ]
 },
 {
@@ -1389,7 +1479,7 @@ null
 },
 {
 "t": "2026-09-27T16:22:00+00:00",
-"plan": "EEssssssssssEECCCCEEEECCCCCCEsss",
+"plan": "EEssssssssssEECCCCEEEECCCCCCssss",
 "soc": [
 89,
 70,
@@ -1398,7 +1488,7 @@ null
 70,
 40,
 65,
-85
+99
 ]
 },
 {
@@ -1493,7 +1583,7 @@ null
 },
 {
 "t": "2026-09-27T16:27:00+00:00",
-"plan": "EEssssssssssEECCCCEEEECCCCCCEsss",
+"plan": "EEssssssssssEECCCCEEEECCCCCCssss",
 "soc": [
 93,
 74,
@@ -1502,7 +1592,7 @@ null
 74,
 43,
 68,
-85
+99
 ]
 },
 {
@@ -1561,7 +1651,7 @@ null
 },
 {
 "t": "2026-09-27T16:30:00+00:00",
-"plan": "EssssssssssEECCCCEEEECCCCCCEssss",
+"plan": "EssssssssssEECCCCEEEECCCCCCEEsss",
 "soc": [
 79,
 74,
@@ -1570,7 +1660,7 @@ null
 88,
 30,
 83,
-84
+71
 ]
 },
 {
@@ -1593,7 +1683,7 @@ null
 },
 {
 "t": "2026-09-27T16:31:00+00:00",
-"plan": "EssssssssssEECCCCEEEECCCCCCEssss",
+"plan": "EssssssssssEECCCCEEEECCCCCCEEsss",
 "soc": [
 80,
 74,
@@ -1602,7 +1692,7 @@ null
 89,
 30,
 83,
-84
+71
 ]
 },
 {
@@ -1701,7 +1791,7 @@ null
 },
 {
 "t": "2026-09-27T16:36:00+00:00",
-"plan": "EssssssssssEEECCCCEEECCCCCCEssss",
+"plan": "EssssssssssEEECCCCEEECCCCCCEEsss",
 "soc": [
 80,
 75,
@@ -1710,7 +1800,7 @@ null
 62,
 31,
 84,
-84
+71
 ]
 },
 {
@@ -1805,7 +1895,7 @@ null
 },
 {
 "t": "2026-09-27T16:41:00+00:00",
-"plan": "EssssssssssEEECCCCEEECCCCCCEssss",
+"plan": "EssssssssssEEECCCCEEECCCCCCEEsss",
 "soc": [
 82,
 76,
@@ -1814,7 +1904,7 @@ null
 63,
 32,
 85,
-84
+71
 ]
 },
 {
@@ -1909,7 +1999,7 @@ null
 },
 {
 "t": "2026-09-27T16:46:00+00:00",
-"plan": "EssssssssssEEECCCCEEECCCCCCEssss",
+"plan": "EssssssssssEEECCCCEEECCCCCCEEsss",
 "soc": [
 82,
 76,
@@ -1918,7 +2008,7 @@ null
 63,
 33,
 86,
-84
+71
 ]
 },
 {
@@ -2013,7 +2103,7 @@ null
 },
 {
 "t": "2026-09-27T16:51:00+00:00",
-"plan": "EssssssssssEEECCCCEEECCCCCCEssss",
+"plan": "EssssssssssEEECCCCEEECCHCCCEEsss",
 "soc": [
 84,
 78,
@@ -2021,8 +2111,8 @@ null
 40,
 65,
 34,
-87,
-84
+74,
+71
 ]
 },
 {
@@ -2129,16 +2219,16 @@ null
 },
 {
 "t": "2026-09-27T16:56:00+00:00",
-"plan": "EEsssssssssEECCCCEEEECCCCCCEssss",
+"plan": "EEssssssssHEECCCCEEEECCCCCCEEsss",
 "soc": [
 86,
 67,
 61,
-29,
-82,
-23,
-76,
-84
+31,
+83,
+25,
+78,
+71
 ]
 },
 {
@@ -2225,7 +2315,7 @@ null
 },
 {
 "t": "2026-09-27T17:00:00+00:00",
-"plan": "EsssssssssEECCCCEEEECCCCCCsssssE",
+"plan": "EsssssssssEECCCCEEEECCCCCCEEssss",
 "soc": [
 73,
 68,
@@ -2234,7 +2324,7 @@ null
 69,
 38,
 91,
-96
+70
 ]
 },
 {
@@ -2343,7 +2433,7 @@ null
 },
 {
 "t": "2026-09-27T17:05:00+00:00",
-"plan": "EsssssssssEECCCCEEEECCCCCCsssssE",
+"plan": "EsssssssssEECCCCEEEECCCCCCEEssss",
 "soc": [
 76,
 70,
@@ -2352,7 +2442,7 @@ null
 72,
 41,
 94,
-96
+70
 ]
 },
 {
@@ -2461,7 +2551,7 @@ null
 },
 {
 "t": "2026-09-27T17:10:00+00:00",
-"plan": "EsssssssssEECCCCEEEECCCCCCsssssE",
+"plan": "EsssssssssEECCCCEEEECCCCCCEEssss",
 "soc": [
 77,
 71,
@@ -2470,7 +2560,7 @@ null
 73,
 42,
 95,
-96
+70
 ]
 },
 {
@@ -2585,7 +2675,7 @@ null
 },
 {
 "t": "2026-09-27T17:15:00+00:00",
-"plan": "EsssssssssEEECCCCEEECCCCCCsssssE",
+"plan": "EsssssssssEEECCCCEEECCCCCCEEssss",
 "soc": [
 80,
 74,
@@ -2594,7 +2684,7 @@ null
 75,
 45,
 98,
-96
+70
 ]
 },
 {
@@ -2709,7 +2799,7 @@ null
 },
 {
 "t": "2026-09-27T17:20:00+00:00",
-"plan": "EsssssssssEEECCCCEEECCCCCCsssssE",
+"plan": "EsssssssssEEECCCCEEECCCCCCEEssss",
 "soc": [
 81,
 75,
@@ -2718,7 +2808,7 @@ null
 77,
 46,
 99,
-96
+70
 ]
 },
 {
@@ -2833,7 +2923,7 @@ null
 },
 {
 "t": "2026-09-27T17:25:00+00:00",
-"plan": "EsssssssssEEECCCCEEECCCCCCsssssE",
+"plan": "EsssssssssEEECCCCEEECCHCCCEEssss",
 "soc": [
 83,
 77,
@@ -2841,8 +2931,8 @@ null
 26,
 78,
 48,
-100,
-96
+87,
+70
 ]
 },
 {
@@ -2957,16 +3047,16 @@ null
 },
 {
 "t": "2026-09-27T17:30:00+00:00",
-"plan": "EssssssssEECCCCEEEECCCCCCsssssEs",
+"plan": "EsssssssHEECCCCEEEECCCCCCEEsssHs",
 "soc": [
 70,
 65,
-59,
-56,
-53,
-50,
+60,
+57,
+54,
+52,
 100,
-95
+68
 ]
 },
 {
@@ -3087,7 +3177,7 @@ null
 },
 {
 "t": "2026-09-27T17:35:00+00:00",
-"plan": "EssssssssEECCCCEEEECCCCCCsssssEs",
+"plan": "EssssssssEECCCCEEEECCCCCCEEsssHs",
 "soc": [
 73,
 67,
@@ -3096,7 +3186,7 @@ null
 55,
 53,
 100,
-95
+68
 ]
 },
 {
@@ -3211,7 +3301,7 @@ null
 },
 {
 "t": "2026-09-27T17:40:00+00:00",
-"plan": "EssssssssEECCCCEEEECCCCCCsssssEs",
+"plan": "EssssssssEECCCCEEEECCCCCCEEsssHs",
 "soc": [
 74,
 68,
@@ -3220,7 +3310,7 @@ null
 57,
 54,
 100,
-95
+68
 ]
 },
 {
@@ -3335,7 +3425,7 @@ null
 },
 {
 "t": "2026-09-27T17:45:00+00:00",
-"plan": "EssssssssEECCCCEEEECCCCCCsssssEs",
+"plan": "EssssssssEECCCCEEEECCCCCCEEsssHs",
 "soc": [
 77,
 71,
@@ -3344,7 +3434,7 @@ null
 59,
 56,
 100,
-95
+68
 ]
 },
 {
@@ -3371,7 +3461,7 @@ null
 },
 {
 "t": "2026-09-27T17:46:00+00:00",
-"plan": "EssssssssEECCCCEEEECCCCCCsssssEs",
+"plan": "EssssssssEECCCCEEEECCCCCCEEsssHs",
 "soc": [
 77,
 71,
@@ -3380,7 +3470,7 @@ null
 60,
 57,
 100,
-95
+68
 ]
 },
 {
@@ -3499,7 +3589,7 @@ null
 },
 {
 "t": "2026-09-27T17:51:00+00:00",
-"plan": "EssssssssEEECCCCEEECCCCCCsssssEs",
+"plan": "EssssssssEEECCCCEEECCCCCCEEsssHs",
 "soc": [
 80,
 74,
@@ -3508,7 +3598,7 @@ null
 62,
 59,
 100,
-95
+68
 ]
 },
 {
@@ -3623,7 +3713,7 @@ null
 },
 {
 "t": "2026-09-27T17:56:00+00:00",
-"plan": "EssssssssEEECCCCEEECCCCCCsssssEs",
+"plan": "EssssssssEEECCCCEEECCHCCCEEsssHs",
 "soc": [
 81,
 75,
@@ -3632,7 +3722,7 @@ null
 64,
 61,
 100,
-95
+68
 ]
 },
 {
@@ -3734,16 +3824,16 @@ null
 },
 {
 "t": "2026-09-27T18:00:00+00:00",
-"plan": "ssssssssEEECCCEEECCCCCCCsssssEss",
+"plan": "ssssssssEEECCCEEECCCHCCCEEssssss",
 "soc": [
 82,
 76,
 57,
 54,
 23,
-76,
-99,
-94
+63,
+85,
+68
 ]
 },
 {
@@ -3762,21 +3852,21 @@ null
 },
 {
 "t": "2026-09-27T18:05:00+00:00",
-"plan": "ssssssssEEECCCEEECCCCCCCsssssEss",
+"plan": "ssssssssEEECCCEEECCCHCCCEEssssss",
 "soc": [
 83,
 77,
 58,
 55,
 24,
-77,
-99,
-94
+64,
+85,
+68
 ]
 },
 {
 "t": "2026-09-27T18:10:00+00:00",
-"plan": "sEssssssEECCCCEEEECCCCCCsssssEss",
+"plan": "sEssssssEECCCCEEEECCCCCCEEssssss",
 "soc": [
 85,
 66,
@@ -3784,13 +3874,13 @@ null
 72,
 41,
 66,
-99,
-94
+85,
+68
 ]
 },
 {
 "t": "2026-09-27T18:15:00+00:00",
-"plan": "sEssssssEECCCCEEEECCCCCCsssssEss",
+"plan": "sEssssssEECCCCEEEECCCCCCEEssssss",
 "soc": [
 87,
 68,
@@ -3798,13 +3888,13 @@ null
 74,
 44,
 68,
-99,
-94
+85,
+68
 ]
 },
 {
 "t": "2026-09-27T18:20:00+00:00",
-"plan": "sEssssssEECCCCEEEECCCCCCsssssEss",
+"plan": "sEssssssEECCCCEEEECCCCCCEEssssss",
 "soc": [
 89,
 70,
@@ -3812,13 +3902,13 @@ null
 75,
 45,
 70,
-99,
-94
+85,
+68
 ]
 },
 {
 "t": "2026-09-27T18:25:00+00:00",
-"plan": "sEssssssEEECCCCEEECCCCCCsssssEss",
+"plan": "sEssssssEEECCCCEEECCCCCCEEssssss",
 "soc": [
 90,
 71,
@@ -3826,22 +3916,31 @@ null
 49,
 46,
 71,
-99,
-94
+85,
+68
 ]
 },
 {
 "t": "2026-09-27T18:30:00+00:00",
-"plan": "ssssEssEEECCCCEEECCCCCCsssssEsss",
+"decision": [
+"export",
+"plan",
+null,
+null
+]
+},
+{
+"t": "2026-09-27T18:30:00+00:00",
+"plan": "EssssssEEECCCCEEECCCCCCEEsssssss",
 "soc": [
-91,
+77,
 72,
 39,
 64,
 34,
 86,
-97,
-79
+71,
+67
 ]
 },
 {
@@ -3851,87 +3950,692 @@ null
 "option": "04:00"
 },
 {
+"t": "2026-09-27T18:30:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T18:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:30:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:30:00+00:00",
+"warning": "[info] RAM remote control: Force discharge at 5000 W"
+},
+{
+"t": "2026-09-27T18:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:31:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:32:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:33:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:34:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:34:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:34:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
 "t": "2026-09-27T18:35:00+00:00",
-"plan": "sEsssssEEECCCCEEECCCCCCsssssEsss",
+"plan": "EssssssEEECCCCEEECCCHCCEEsssssss",
 "soc": [
-89,
-70,
-38,
-63,
-32,
-85,
-97,
-79
+78,
+72,
+40,
+65,
+34,
+74,
+71,
+67
+]
+},
+{
+"t": "2026-09-27T18:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:35:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:36:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:36:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:36:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:37:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:37:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:37:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:38:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:38:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:38:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:39:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:39:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:39:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:40:00+00:00",
+"plan": "EssssssEEECCCCEEECCHCCCEEsssssss",
+"soc": [
+79,
+73,
+41,
+66,
+36,
+75,
+71,
+67
 ]
 },
 {
 "t": "2026-09-27T18:40:00+00:00",
-"plan": "sEsssssEEECCCCEEECCCCCCsssssEsss",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:40:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:40:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:41:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:41:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:41:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:42:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:42:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:42:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:43:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:43:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:43:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:44:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:44:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:44:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:45:00+00:00",
+"plan": "EssssssEEECCCEEECCCHCCCEEsssssss",
 "soc": [
-88,
-69,
+81,
+75,
+43,
+68,
 37,
-62,
-31,
-84,
-97,
-79
+77,
+71,
+67
 ]
 },
 {
 "t": "2026-09-27T18:45:00+00:00",
-"plan": "sEsssssEECCCCEEEECCCCCCsssssEsss",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:45:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:45:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:46:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:46:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:46:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:46:00+00:00",
+"svc": "persistent_notification/create"
+},
+{
+"t": "2026-09-27T18:46:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1097 W, SoC 88.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:47:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:47:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:47:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:47:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1094 W, SoC 88.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:48:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:48:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:48:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:48:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1332 W, SoC 88.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:49:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:49:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:49:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:49:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1377 W, SoC 88.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:50:00+00:00",
+"plan": "EssssssEEECCCEEECCCHCCCEEsssssss",
 "soc": [
-87,
-68,
-36,
-89,
-30,
 83,
-97,
-79
+77,
+45,
+70,
+39,
+79,
+71,
+67
 ]
 },
 {
 "t": "2026-09-27T18:50:00+00:00",
-"plan": "sEsssssEECCCCEEEECCCCCCsssssEsss",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:50:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:50:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1266 W, SoC 88.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:51:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:51:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1273 W, SoC 88.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:52:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:52:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:52:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:52:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1295 W, SoC 88.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:53:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:53:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:53:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:53:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1361 W, SoC 88.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:54:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:54:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1335 W, SoC 88.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:55:00+00:00",
+"plan": "EEsssssEECCCCEEEECCCCCCEEsssssss",
 "soc": [
-88,
-69,
-36,
-89,
-31,
-83,
-97,
-79
+85,
+66,
+33,
+86,
+28,
+80,
+71,
+67
 ]
 },
 {
 "t": "2026-09-27T18:55:00+00:00",
-"plan": "sEsssssEECCCCEEEECCCCCCsssssEsss",
-"soc": [
-87,
-68,
-36,
-88,
-30,
-83,
-97,
-79
-]
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:55:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:55:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1244 W, SoC 87.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:56:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:56:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:56:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:56:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1252 W, SoC 87.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:57:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:57:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:57:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:57:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1345 W, SoC 87.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:58:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:58:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:58:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:58:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1241 W, SoC 86.0, power setting reads 5000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T18:59:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:59:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T18:59:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T18:59:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1255 W, SoC 86.0, power setting reads 5000, mode reads Force discharge)"
 },
 {
 "t": "2026-09-27T19:00:00+00:00",
-"decision": [
-"export",
-"plan",
-null,
-null
-]
-},
-{
-"t": "2026-09-27T19:00:00+00:00",
-"plan": "EsssssEECCCCEEEECCCCCCsssssEssss",
+"plan": "EsssssEECCCCEEEECCCCCCEEssssssss",
 "soc": [
 71,
 66,
@@ -3939,13 +4643,9 @@ null
 73,
 42,
 95,
-96,
-79
+70,
+67
 ]
-},
-{
-"t": "2026-09-27T19:00:00+00:00",
-"svc": "logbook/log"
 },
 {
 "t": "2026-09-27T19:00:00+00:00",
@@ -3967,11 +4667,11 @@ null
 },
 {
 "t": "2026-09-27T19:00:00+00:00",
-"warning": "[info] RAM remote control: Force discharge at 5000 W"
+"warning": "RAM remote control: inverter not following Force discharge at 5000 W (battery 1236 W, SoC 86.0, power setting reads 5000, mode reads Force discharge)"
 },
 {
 "t": "2026-09-27T19:01:00+00:00",
-"plan": "EsssssEECCCCEEEECCCCCCsssssEssss",
+"plan": "EsssssEECCCCEEEECCCCCCEEssssssss",
 "soc": [
 72,
 66,
@@ -3979,15 +4679,9 @@ null
 73,
 43,
 96,
-96,
-79
+70,
+67
 ]
-},
-{
-"t": "2026-09-27T19:01:00+00:00",
-"svc": "number/set_value",
-"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
-"value": 5000
 },
 {
 "t": "2026-09-27T19:01:00+00:00",
@@ -4085,16 +4779,16 @@ null
 },
 {
 "t": "2026-09-27T19:06:00+00:00",
-"plan": "EsssssEEECCCCEEECCCCCCsssssEssss",
+"plan": "EsssssEEECCCCEEECCCHCCEEssssssss",
 "soc": [
 76,
 70,
 25,
 78,
 47,
-100,
-96,
-79
+87,
+70,
+67
 ]
 },
 {
@@ -4189,16 +4883,16 @@ null
 },
 {
 "t": "2026-09-27T19:11:00+00:00",
-"plan": "EsssssEEECCCEEECCCCCCCsssssEssss",
+"plan": "EsssssEEECCCEEECCCHCCCEEssssssss",
 "soc": [
 81,
 75,
 30,
 55,
 52,
-100,
-96,
-79
+91,
+70,
+67
 ]
 },
 {
@@ -4297,16 +4991,16 @@ null
 },
 {
 "t": "2026-09-27T19:16:00+00:00",
-"plan": "EsssssEEECCCEEECCCCCCCsssssEssss",
+"plan": "EsssssEEECCCEEECCCHCCCEEssssssss",
 "soc": [
 83,
 77,
 32,
 57,
 54,
-100,
-96,
-79
+94,
+70,
+67
 ]
 },
 {
@@ -4411,7 +5105,7 @@ null
 },
 {
 "t": "2026-09-27T19:21:00+00:00",
-"plan": "EEssssEECCCCEEEECCCCCCsssssEssss",
+"plan": "EEssssEECCCCEEEECCCCCCEEssssssss",
 "soc": [
 86,
 67,
@@ -4419,8 +5113,8 @@ null
 74,
 43,
 96,
-96,
-79
+70,
+67
 ]
 },
 {
@@ -4529,7 +5223,7 @@ null
 },
 {
 "t": "2026-09-27T19:26:00+00:00",
-"plan": "EEssssEEECCCCEEECCCCCCsssssEssss",
+"plan": "EEssssEEECCCCEEECCCCCCEEssssssss",
 "soc": [
 88,
 69,
@@ -4537,8 +5231,8 @@ null
 77,
 46,
 99,
-96,
-79
+70,
+67
 ]
 },
 {
@@ -4653,44 +5347,427 @@ null
 },
 {
 "t": "2026-09-27T19:31:00+00:00",
-"decision": [
-"self_use",
-"plan",
-null,
-null
-]
-},
-{
-"t": "2026-09-27T19:31:00+00:00",
-"plan": "sssssEEEECCCEECCCCHHCsssssEsssss",
+"plan": "EssssEEECCCCEEECCHCCCEEsssssssss",
 "soc": [
-89,
-83,
-24,
-49,
-74,
+76,
+70,
+39,
+64,
+61,
 100,
-95,
-80
+68,
+68
 ]
 },
 {
 "t": "2026-09-27T19:31:00+00:00",
-"svc": "logbook/log"
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
 },
 {
 "t": "2026-09-27T19:31:00+00:00",
 "svc": "select/select_option",
 "entity_id": "select.solis_inverter_battery_control_override",
-"option": "Off"
+"option": "Force discharge"
 },
 {
 "t": "2026-09-27T19:31:00+00:00",
-"warning": "[info] RAM remote control: Off (Self-Use)"
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:31:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 3000 W (battery 70 W, SoC 90.0, power setting reads 3000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T19:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:32:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:34:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:34:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:34:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
 },
 {
 "t": "2026-09-27T19:36:00+00:00",
-"plan": "ssEssEEECCCCEEECCCCCCsssssEsssss",
+"plan": "EssssEEECCCEEECCCHCCCEEsssssssss",
+"soc": [
+77,
+71,
+41,
+38,
+63,
+100,
+68,
+68
+]
+},
+{
+"t": "2026-09-27T19:36:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:36:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:36:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:37:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:37:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:37:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:38:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:38:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:38:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:39:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:39:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:39:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:40:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:40:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:40:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:41:00+00:00",
+"plan": "EssssEEECCCEEECCCHCCCEEsssssssss",
+"soc": [
+80,
+74,
+43,
+40,
+65,
+100,
+68,
+68
+]
+},
+{
+"t": "2026-09-27T19:41:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:41:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:41:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:42:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:42:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:42:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:43:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:43:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:43:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:44:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:44:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:44:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:45:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:45:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:45:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:46:00+00:00",
+"plan": "EssssEEECCCEEECCCCCCCEEsssssssss",
+"soc": [
+84,
+78,
+48,
+45,
+70,
+100,
+68,
+68
+]
+},
+{
+"t": "2026-09-27T19:46:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:46:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:46:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:47:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:47:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:47:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:48:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:48:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:48:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:49:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:49:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:49:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:51:00+00:00",
+"plan": "EEsssEEECCCCEEECCCCCCEEsssssssss",
 "soc": [
 88,
 69,
@@ -4698,75 +5775,299 @@ null
 63,
 60,
 100,
-95,
-80
+68,
+68
 ]
 },
 {
-"t": "2026-09-27T19:41:00+00:00",
-"plan": "sssEsEEECCCCEEECCCCCCsssssEsssss",
+"t": "2026-09-27T19:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:51:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:52:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:52:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:52:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:53:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:53:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:53:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:56:00+00:00",
+"plan": "EEsssEEECCCCEEECCCHCCEEsssssssss",
 "soc": [
 88,
 69,
 38,
 63,
-61,
+60,
 100,
-95,
-80
-]
-},
-{
-"t": "2026-09-27T19:46:00+00:00",
-"plan": "ssssEEEECCCEEECCCCCCCsssssEsssss",
-"soc": [
-90,
-71,
-41,
-38,
-63,
-100,
-95,
-80
-]
-},
-{
-"t": "2026-09-27T19:51:00+00:00",
-"plan": "ssssEEEECCCEEECCCCCCCsssssEsssss",
-"soc": [
-92,
-73,
-42,
-39,
-64,
-100,
-95,
-80
+68,
+68
 ]
 },
 {
 "t": "2026-09-27T19:56:00+00:00",
-"plan": "ssssEEEECCCEEECCCCCCCsssssEsssss",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:56:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:56:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:57:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:57:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:57:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:58:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:58:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:58:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:59:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T19:59:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T19:59:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:00:00+00:00",
+"plan": "EsssEEECCCCEEECCHCCCsssssEssssss",
 "soc": [
-90,
-71,
-40,
-37,
-62,
-100,
-95,
-80
+74,
+55,
+53,
+50,
+61,
+99,
+94,
+81
 ]
 },
 {
 "t": "2026-09-27T20:00:00+00:00",
-"plan": "sssEEEECCCCEEECCCCCCsssssEssssss",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:00:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:00:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:01:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:01:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:01:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:02:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:02:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:02:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:03:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:03:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:03:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:04:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:04:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:04:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:05:00+00:00",
+"plan": "EsssEEECCCEEECCCHCCCsssssEssssss",
 "soc": [
-88,
+77,
+58,
 55,
-53,
-50,
-75,
+24,
+64,
 99,
 94,
 81
@@ -4774,13 +6075,243 @@ null
 },
 {
 "t": "2026-09-27T20:05:00+00:00",
-"plan": "sssEEEECCCCEEECCCCCCsssssEssssss",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:05:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:05:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:05:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 3000 W (battery 112 W, SoC 89.0, power setting reads 3000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T20:06:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:06:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:06:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:06:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 3000 W (battery 102 W, SoC 89.0, power setting reads 3000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T20:07:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:07:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:07:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:07:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 3000 W (battery 102 W, SoC 89.0, power setting reads 3000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T20:08:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:08:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:08:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:08:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 3000 W (battery 91 W, SoC 89.0, power setting reads 3000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T20:09:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:09:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:09:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:09:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 3000 W (battery 85 W, SoC 89.0, power setting reads 3000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T20:10:00+00:00",
+"plan": "EsssEEECCCEEECCCHCCCsssssEssssss",
 "soc": [
-88,
-56,
-53,
-50,
-75,
+79,
+60,
+57,
+27,
+66,
+99,
+94,
+81
+]
+},
+{
+"t": "2026-09-27T20:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:10:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:10:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 3000 W (battery 85 W, SoC 89.0, power setting reads 3000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T20:11:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:11:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:11:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:11:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 3000 W (battery 91 W, SoC 89.0, power setting reads 3000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T20:12:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:12:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:12:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:12:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 3000 W (battery 85 W, SoC 89.0, power setting reads 3000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T20:13:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:13:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:13:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:13:00+00:00",
+"warning": "RAM remote control: inverter not following Force discharge at 3000 W (battery 80 W, SoC 89.0, power setting reads 3000, mode reads Force discharge)"
+},
+{
+"t": "2026-09-27T20:14:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:14:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:14:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:15:00+00:00",
+"plan": "EsssEEECCCEEECCCHCCCsssssEssssss",
+"soc": [
+81,
+62,
+59,
+28,
+68,
 99,
 94,
 81
@@ -4788,13 +6319,31 @@ null
 },
 {
 "t": "2026-09-27T20:15:00+00:00",
-"plan": "ssssEEEECCCEECCCCHHCsssssEssssss",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:15:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:16:00+00:00",
+"plan": "EsssEEECCCEEECCCCCCCsssssEssssss",
 "soc": [
-87,
-68,
-38,
-35,
-88,
+82,
+63,
+60,
+30,
+82,
 99,
 94,
 81
@@ -4802,31 +6351,221 @@ null
 },
 {
 "t": "2026-09-27T20:16:00+00:00",
-"plan": "sssEEEECCCCEEECCCCCCsssssEssssss",
-"soc": [
-88,
-56,
-53,
-50,
-75,
-99,
-94,
-81
-]
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:16:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:16:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
 },
 {
 "t": "2026-09-27T20:16:00+00:00",
 "warning": "Load history from HA was empty; retrying in an hour. PowerEngine's own load record is still used."
 },
 {
+"t": "2026-09-27T20:17:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:17:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:17:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:18:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:18:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:18:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:19:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:19:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:19:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:20:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
+"t": "2026-09-27T20:20:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:20:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 3000
+},
+{
 "t": "2026-09-27T20:21:00+00:00",
-"plan": "sssEEEECCCEEECCCCCCCsssssEssssss",
+"plan": "EEssEEECCCCEEECCCCCCsssssEssssss",
 "soc": [
-90,
+86,
+53,
+51,
+48,
+73,
+99,
+94,
+81
+]
+},
+{
+"t": "2026-09-27T20:21:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:21:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:21:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:21:00+00:00",
+"warning": "[info] RAM remote control: Force discharge at 5000 W"
+},
+{
+"t": "2026-09-27T20:22:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:22:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:22:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:22:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:23:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:23:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:23:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:24:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:24:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:24:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:25:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:25:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:25:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:26:00+00:00",
+"plan": "EEssEEECCCEEECCCHCCCsssssEssssss",
+"soc": [
+89,
 57,
-55,
-24,
-77,
+54,
+23,
+63,
 99,
 94,
 81
@@ -4834,17 +6573,75 @@ null
 },
 {
 "t": "2026-09-27T20:26:00+00:00",
-"plan": "sssEEEECCCEEECCCCCCCsssssEssssss",
-"soc": [
-91,
-59,
-56,
-25,
-78,
-99,
-94,
-81
-]
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:26:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:26:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:27:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:27:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:27:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:28:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:28:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:28:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:29:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:29:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:29:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
 },
 {
 "t": "2026-09-27T20:30:00+00:00",
@@ -4853,14 +6650,136 @@ null
 "option": "04:30"
 },
 {
+"t": "2026-09-27T20:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:30:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:30:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
 "t": "2026-09-27T20:31:00+00:00",
-"plan": "ssEEEECCCEEECCCCCCCsssssEsssssss",
+"plan": "EssEEECCCEEECCCHCCCsssssEsssssss",
 "soc": [
-91,
-45,
-70,
+78,
+46,
+71,
 40,
-92,
+80,
+97,
+79,
+84
+]
+},
+{
+"t": "2026-09-27T20:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:31:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:31:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:32:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:33:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:34:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:34:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:34:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:35:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:35:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:36:00+00:00",
+"plan": "EssEEECCCEEECCCHCCCsssssEsssssss",
+"soc": [
+79,
+47,
+72,
+41,
+81,
 97,
 79,
 84
@@ -4868,13 +6787,103 @@ null
 },
 {
 "t": "2026-09-27T20:36:00+00:00",
-"plan": "ssEEEECCCEEECCCCCCCsssssEsssssss",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:36:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:36:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:37:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:37:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:37:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:38:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:38:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:38:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:39:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:39:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:39:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:40:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:40:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:40:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:41:00+00:00",
+"plan": "EssEEECCCEEECCCCCCCsssssEsssssss",
 "soc": [
-90,
-45,
-69,
-39,
-92,
+81,
+49,
+74,
+43,
+95,
 97,
 79,
 84
@@ -4882,27 +6891,193 @@ null
 },
 {
 "t": "2026-09-27T20:41:00+00:00",
-"plan": "ssEEEECCCEEECCCCCCCsssssEsssssss",
-"soc": [
-89,
-44,
-69,
-38,
-91,
-97,
-79,
-84
-]
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:41:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:41:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:42:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:42:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:42:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:43:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:43:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:43:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:44:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:44:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:44:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:45:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:45:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:45:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
 },
 {
 "t": "2026-09-27T20:46:00+00:00",
-"plan": "ssEEEECCCEEECCCCCCCsssssEsssssss",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:46:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:46:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:47:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:47:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:47:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:48:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:48:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:48:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:49:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:49:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:49:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:50:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:50:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:51:00+00:00",
+"plan": "EssEEECCCEEECCCCCCCsssssEsssssss",
 "soc": [
-87,
-42,
-67,
-36,
-89,
+83,
+50,
+75,
+45,
+95,
 97,
 79,
 84
@@ -4910,13 +7085,103 @@ null
 },
 {
 "t": "2026-09-27T20:51:00+00:00",
-"plan": "ssEEEECCCCEEECCCCCCsssssEsssssss",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:51:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:51:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:52:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:52:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:52:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:53:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:53:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:53:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:54:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:55:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:56:00+00:00",
+"plan": "EEsEEECCCEEECCCHCCCsssssEsssssss",
 "soc": [
-87,
-41,
-66,
-36,
 88,
+43,
+68,
+37,
+77,
 97,
 79,
 84
@@ -4924,41 +7189,172 @@ null
 },
 {
 "t": "2026-09-27T20:56:00+00:00",
-"plan": "ssEEEECCCEEECCCCCCCsssssEsssssss",
-"soc": [
-90,
-44,
-69,
-39,
-92,
-97,
-79,
-84
-]
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:56:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:56:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:57:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:57:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:57:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:58:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:58:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:58:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:59:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T20:59:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T20:59:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
 },
 {
 "t": "2026-09-27T21:00:00+00:00",
-"plan": "sEEEECCCEEECCCCCCCsssssEssssssss",
+"plan": "EsEEECCCEEECCCHCCCssssssEsssssss",
 "soc": [
-90,
+76,
 31,
 56,
 53,
-100,
+93,
 96,
 79,
 86
 ]
 },
 {
+"t": "2026-09-27T21:00:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T21:00:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T21:00:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T21:01:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T21:01:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Force discharge"
+},
+{
+"t": "2026-09-27T21:01:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_inverter_battery_control_override_discharge_power",
+"value": 5000
+},
+{
+"t": "2026-09-27T21:02:00+00:00",
+"decision": [
+"self_use",
+"plan",
+null,
+null
+]
+},
+{
+"t": "2026-09-27T21:02:00+00:00",
+"plan": "sEEEECCCEEECCCHCCCssssssEsssssss",
+"soc": [
+90,
+31,
+56,
+53,
+93,
+96,
+79,
+86
+]
+},
+{
+"t": "2026-09-27T21:02:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T21:02:00+00:00",
+"svc": "select/select_option",
+"entity_id": "select.solis_inverter_battery_control_override",
+"option": "Off"
+},
+{
+"t": "2026-09-27T21:02:00+00:00",
+"warning": "[info] RAM remote control: Off (Self-Use)"
+},
+{
 "t": "2026-09-27T21:07:00+00:00",
-"plan": "sEEEECCCEEECCCCCCCsssssEssssssss",
+"plan": "sEEEECCCEEECCCHCCCssssssEsssssss",
 "soc": [
 91,
 32,
 57,
 55,
-100,
+94,
 96,
 79,
 86
@@ -4966,7 +7362,7 @@ null
 },
 {
 "t": "2026-09-27T21:12:00+00:00",
-"plan": "sEEEECCCEEECCCCCCCsssssEssssssss",
+"plan": "sEEEECCCEEECCCCCCCssssssEsssssss",
 "soc": [
 93,
 35,
@@ -4980,7 +7376,7 @@ null
 },
 {
 "t": "2026-09-27T21:22:00+00:00",
-"plan": "sEEEECCCEEECCCCCCCsssssEssssssss",
+"plan": "sEEEECCCEEECCCCCCCssssssEsssssss",
 "soc": [
 94,
 35,
@@ -5003,7 +7399,7 @@ null
 },
 {
 "t": "2026-09-27T21:30:00+00:00",
-"plan": "EEEECCCEEECCCCCCCsssssEsssssssss",
+"plan": "EEEECCCEEECCCCCCCssssssEssssssss",
 "soc": [
 79,
 49,
@@ -5012,7 +7408,7 @@ null
 100,
 95,
 80,
-89
+88
 ]
 },
 {
@@ -5043,16 +7439,16 @@ null
 },
 {
 "t": "2026-09-27T21:31:00+00:00",
-"plan": "EEEECCCEEECCCCCCCEssssssssssssss",
+"plan": "EEEECCCEEECCCCCCCsssssEsssssssss",
 "soc": [
 80,
 49,
 46,
 71,
 100,
-82,
-81,
-90
+95,
+80,
+89
 ]
 },
 {
@@ -5157,16 +7553,16 @@ null
 },
 {
 "t": "2026-09-27T21:36:00+00:00",
-"plan": "EEEECCCEEECCCCCCCEssssssssssssss",
+"plan": "EEEECCCEEECCCCCCCsssssEsssssssss",
 "soc": [
 80,
 50,
 47,
 72,
 100,
-82,
-81,
-90
+95,
+80,
+89
 ]
 },
 {
@@ -5261,16 +7657,16 @@ null
 },
 {
 "t": "2026-09-27T21:41:00+00:00",
-"plan": "EEEEECCCEECCCCCCCEssssssssssssss",
+"plan": "EEEEECCCEECCCCCCCsssssEsssssssss",
 "soc": [
 82,
 23,
 48,
 73,
 100,
-82,
-81,
-90
+95,
+80,
+89
 ]
 },
 {
@@ -5365,16 +7761,16 @@ null
 },
 {
 "t": "2026-09-27T21:46:00+00:00",
-"plan": "EEEEECCCEECCCCHHCEssssssssssssss",
+"plan": "EEEEECCCEECCCHHCCsssssEsssssssss",
 "soc": [
 82,
 24,
 49,
 74,
 100,
-82,
-81,
-90
+95,
+80,
+89
 ]
 },
 {
@@ -5469,16 +7865,16 @@ null
 },
 {
 "t": "2026-09-27T21:51:00+00:00",
-"plan": "EEEEECCEECCCCCHHCEssssssssssssss",
+"plan": "EEEEECCEECCCCHHCCsssssEsssssssss",
 "soc": [
 84,
 25,
 22,
 75,
 100,
-82,
-81,
-90
+95,
+80,
+89
 ]
 },
 {
@@ -5587,16 +7983,16 @@ null
 },
 {
 "t": "2026-09-27T21:56:00+00:00",
-"plan": "EEEEECCCEEECCCCCCEssssssssssssss",
+"plan": "EEEEECCCEEECCCCCCsssssEsssssssss",
 "soc": [
 86,
 28,
 53,
 50,
 100,
-82,
-81,
-90
+95,
+80,
+89
 ]
 },
 {
@@ -5677,16 +8073,16 @@ null
 },
 {
 "t": "2026-09-27T22:00:00+00:00",
-"plan": "EEEECCCEEECCCCCCEssssHssssssssss",
+"plan": "EEEECCCEEECCCCCCsssssEssssssssss",
 "soc": [
 73,
 43,
 40,
 65,
-85,
+99,
+94,
 81,
-83,
-93
+91
 ]
 },
 {
@@ -5791,16 +8187,16 @@ null
 },
 {
 "t": "2026-09-27T22:05:00+00:00",
-"plan": "EEEECCCEEECCCCCCEssssHssssssssss",
+"plan": "EEEECCCEEECCCCCCsssssEssssssssss",
 "soc": [
 76,
 45,
 42,
 67,
-85,
+99,
+94,
 81,
-83,
-93
+91
 ]
 },
 {
@@ -5919,16 +8315,16 @@ null
 },
 {
 "t": "2026-09-27T22:10:00+00:00",
-"plan": "EEEECCCEEECCCCCCEssssHssssssssss",
+"plan": "EEEECCCEEECCCCCCsssssEssssssssss",
 "soc": [
 78,
 48,
 45,
 70,
-85,
+99,
+94,
 81,
-83,
-93
+91
 ]
 },
 {
@@ -6043,16 +8439,16 @@ null
 },
 {
 "t": "2026-09-27T22:15:00+00:00",
-"plan": "EEEEECCCEECCCCCCEssssHssssssssss",
+"plan": "EEEEECCCEECCCCCCsssssEssssssssss",
 "soc": [
 82,
 23,
 48,
 73,
-85,
+99,
+94,
 81,
-83,
-93
+91
 ]
 },
 {
@@ -6167,16 +8563,16 @@ null
 },
 {
 "t": "2026-09-27T22:20:00+00:00",
-"plan": "EEEEECCEECCCCCCCEssssHssssssssss",
+"plan": "EEEEECCEECCCHCCCsssssEssssssssss",
 "soc": [
 84,
 26,
 23,
-76,
-85,
+62,
+99,
+94,
 81,
-83,
-93
+91
 ]
 },
 {
@@ -6291,16 +8687,16 @@ null
 },
 {
 "t": "2026-09-27T22:25:00+00:00",
-"plan": "EEEEECCEECCCCCCCEssssHssssssssss",
+"plan": "EEEEECCEECCCHCCCsssssEssssssssss",
 "soc": [
 87,
 28,
 25,
-78,
-85,
+65,
+99,
+94,
 81,
-83,
-93
+91
 ]
 },
 {
@@ -6415,16 +8811,16 @@ null
 },
 {
 "t": "2026-09-27T22:30:00+00:00",
-"plan": "EEEECCEECCCCCCCEssssHsssssssssss",
+"plan": "EEEECCEECCCCHCCsssssEsssssssssss",
 "soc": [
 74,
 44,
 41,
-94,
+80,
+97,
+79,
 84,
-81,
-85,
-95
+93
 ]
 },
 {
@@ -6531,16 +8927,16 @@ null
 },
 {
 "t": "2026-09-27T22:35:00+00:00",
-"plan": "EEEECCEECCCCCCCEssssHsssssssssss",
+"plan": "EEEECCEECCCCCCCsssssEsssssssssss",
 "soc": [
 76,
 45,
 42,
 95,
+97,
+79,
 84,
-81,
-85,
-95
+93
 ]
 },
 {
@@ -6635,16 +9031,16 @@ null
 },
 {
 "t": "2026-09-27T22:40:00+00:00",
-"plan": "EEEECCEECCCCCCCEssssHsssssssssss",
+"plan": "EEEECCEECCCCHCCsssssEsssssssssss",
 "soc": [
 75,
 45,
 42,
-95,
-84,
 81,
-85,
-95
+97,
+79,
+84,
+93
 ]
 },
 {
@@ -6739,16 +9135,16 @@ null
 },
 {
 "t": "2026-09-27T22:45:00+00:00",
-"plan": "EEEECCEECCCCCCCEssssHsssssssssss",
+"plan": "EEEECCEECCCCCCCsssssEsssssssssss",
 "soc": [
 77,
 46,
 43,
 95,
+97,
+79,
 84,
-81,
-85,
-95
+93
 ]
 },
 {
@@ -6771,16 +9167,16 @@ null
 },
 {
 "t": "2026-09-27T22:46:00+00:00",
-"plan": "EEEECCEECCCCCCCEssssHsssssssssss",
+"plan": "EEEECCEECCCCCCCsssssEsssssssssss",
 "soc": [
 76,
 46,
 43,
 95,
+97,
+79,
 84,
-81,
-85,
-95
+93
 ]
 },
 {
@@ -6879,16 +9275,16 @@ null
 },
 {
 "t": "2026-09-27T22:51:00+00:00",
-"plan": "EEEECCEECCCCCCCEssssHsssssssssss",
+"plan": "EEEECCEECCCCCCCsssssEsssssssssss",
 "soc": [
 78,
 47,
 44,
 95,
+97,
+79,
 84,
-81,
-85,
-95
+93
 ]
 },
 {
@@ -6983,16 +9379,16 @@ null
 },
 {
 "t": "2026-09-27T22:56:00+00:00",
-"plan": "EEEECCEECCCCCCCEssssHsssssssssss",
+"plan": "EEEECCEECCCCCCCsssssEsssssssssss",
 "soc": [
 77,
 46,
 44,
 95,
+97,
+79,
 84,
-81,
-85,
-95
+93
 ]
 },
 {
@@ -7073,16 +9469,16 @@ null
 },
 {
 "t": "2026-09-27T23:00:00+00:00",
-"plan": "EEECCEECCCCCCCEssssHssssssssssss",
+"plan": "EEECCEECCCCCCCsssssEssssssssssss",
 "soc": [
 63,
 61,
 58,
 100,
-83,
-81,
-88,
-96
+96,
+79,
+86,
+94
 ]
 },
 {
@@ -7183,16 +9579,16 @@ null
 },
 {
 "t": "2026-09-27T23:05:00+00:00",
-"plan": "EEECCEECCCCCCCEssssHssssssssssss",
+"plan": "EEECCEECCCCCCCsssssEssssssssssss",
 "soc": [
 63,
 60,
 57,
 100,
-83,
-81,
-88,
-96
+96,
+79,
+86,
+94
 ]
 },
 {
@@ -7287,16 +9683,16 @@ null
 },
 {
 "t": "2026-09-27T23:10:00+00:00",
-"plan": "EEECCEECCCCCCCEssssHssssssssssss",
+"plan": "EEECCEECCCCCCCsssssEssssssssssss",
 "soc": [
 63,
 60,
 58,
 100,
-83,
-81,
-88,
-96
+96,
+79,
+86,
+94
 ]
 },
 {
@@ -7391,16 +9787,16 @@ null
 },
 {
 "t": "2026-09-27T23:15:00+00:00",
-"plan": "EEECCEECCCCCCCEssssHssssssssssss",
+"plan": "EEECCEECCCCCCCsssssEssssssssssss",
 "soc": [
 63,
 60,
 57,
 100,
-83,
-81,
-88,
-96
+96,
+79,
+86,
+94
 ]
 },
 {
@@ -7675,16 +10071,16 @@ null
 },
 {
 "t": "2026-09-27T23:30:00+00:00",
-"plan": "EECCEECCCCCCCEssssHsssssssssssss",
+"plan": "EECCEECCCCCCCsssssEsssssssssssss",
 "soc": [
 48,
 46,
 70,
 100,
-82,
-81,
-90,
-96
+95,
+80,
+89,
+95
 ]
 },
 {
@@ -7725,16 +10121,16 @@ null
 },
 {
 "t": "2026-09-27T23:32:00+00:00",
-"plan": "EECCEECCCCCCCEssssHsssssssssssss",
+"plan": "EECCEECCCCCCCsssssEsssssssssssss",
 "soc": [
 49,
 47,
 71,
 100,
-82,
-81,
-90,
-96
+95,
+80,
+89,
+95
 ]
 },
 {
@@ -7833,16 +10229,16 @@ null
 },
 {
 "t": "2026-09-27T23:37:00+00:00",
-"plan": "EEECECCECCCCCEssssHsssssssssssss",
+"plan": "EEECECCECCCCCsssssEsssssssssssss",
 "soc": [
 54,
 23,
 48,
 100,
-82,
-81,
-90,
-96
+95,
+80,
+89,
+95
 ]
 },
 {
@@ -7937,16 +10333,16 @@ null
 },
 {
 "t": "2026-09-27T23:42:00+00:00",
-"plan": "EEECCEECCCCCCEssssHsssssssssssss",
+"plan": "EEECCEECCCCCCsssssEsssssssssssss",
 "soc": [
 58,
 55,
 53,
 100,
-82,
-81,
-90,
-96
+95,
+80,
+89,
+95
 ]
 },
 {
@@ -8041,16 +10437,16 @@ null
 },
 {
 "t": "2026-09-27T23:47:00+00:00",
-"plan": "EEECCEECCCCCCEssssHsssssssssssss",
+"plan": "EEECCEECCCCCCsssssEsssssssssssss",
 "soc": [
 62,
 59,
 56,
 100,
-82,
-81,
-90,
-96
+95,
+80,
+89,
+95
 ]
 },
 {
@@ -8145,16 +10541,16 @@ null
 },
 {
 "t": "2026-09-27T23:52:00+00:00",
-"plan": "EEEECCECCCCCCEssssHsssssssssssss",
+"plan": "EEEECCECCCCCCsssssEsssssssssssss",
 "soc": [
 66,
 35,
 60,
 100,
-82,
-81,
-90,
-96
+95,
+80,
+89,
+95
 ]
 },
 {
@@ -8249,16 +10645,16 @@ null
 },
 {
 "t": "2026-09-27T23:57:00+00:00",
-"plan": "EEEECECCCCCCCEssssHsssssssssssss",
+"plan": "EEEECECCCCCCCsssssEsssssssssssss",
 "soc": [
 71,
 40,
 65,
 100,
-82,
-81,
-90,
-96
+95,
+80,
+89,
+95
 ]
 },
 {
@@ -8317,16 +10713,16 @@ null
 },
 {
 "t": "2026-09-28T00:00:00+00:00",
-"plan": "EEECECCCCCCCEssssHssssssssssssss",
+"plan": "EEECECCCCCCCsssssEssssssssssssss",
 "soc": [
 58,
 28,
 80,
-85,
+99,
+94,
 81,
-83,
-93,
-96
+91,
+94
 ]
 },
 {
@@ -8358,16 +10754,16 @@ null
 },
 {
 "t": "2026-09-28T00:01:00+00:00",
-"plan": "CEEEECCCCCCCEssssHssssssssssssss",
+"plan": "CEEEECCCCCCCsssssEssssssssssssss",
 "soc": [
 87,
 28,
 81,
-85,
+99,
+94,
 81,
-83,
-93,
-96
+91,
+94
 ]
 },
 {
@@ -8402,16 +10798,16 @@ null
 },
 {
 "t": "2026-09-28T00:02:00+00:00",
-"plan": "CEEEECCCCCCCEssssHssssssssssssss",
+"plan": "CEEEECCCCCCCsssssEssssssssssssss",
 "soc": [
 86,
 28,
 81,
-85,
+99,
+94,
 81,
-83,
-93,
-96
+91,
+94
 ]
 },
 {
@@ -8529,16 +10925,16 @@ null
 },
 {
 "t": "2026-09-28T00:07:00+00:00",
-"plan": "CEEEECCCCCCCEssssHssssssssssssss",
+"plan": "CEEEECCCCCCCsssssEssssssssssssss",
 "soc": [
 85,
 27,
 79,
-85,
+99,
+94,
 81,
-83,
-93,
-96
+91,
+94
 ]
 },
 {
@@ -8656,16 +11052,16 @@ null
 },
 {
 "t": "2026-09-28T00:12:00+00:00",
-"plan": "CEEEECCCCCCCEssssHssssssssssssss",
+"plan": "CEEEECCCCCCCsssssEssssssssssssss",
 "soc": [
 85,
 26,
 79,
-85,
+99,
+94,
 81,
-83,
-93,
-96
+91,
+94
 ]
 },
 {
@@ -8897,16 +11293,16 @@ null
 },
 {
 "t": "2026-09-28T00:22:00+00:00",
-"plan": "CEEEECCCCCCCEssssHssssssssssssss",
+"plan": "CEEEECCCCCCCsssssEssssssssssssss",
 "soc": [
 84,
 25,
 78,
-85,
+99,
+94,
 81,
-83,
-93,
-96
+91,
+94
 ]
 },
 {
@@ -9034,16 +11430,16 @@ null
 },
 {
 "t": "2026-09-28T00:27:00+00:00",
-"plan": "CEEEECCCCCCCEssssHssssssssssssss",
+"plan": "CEEEECCCCCCCsssssEssssssssssssss",
 "soc": [
 82,
 24,
 77,
-85,
+99,
+94,
 81,
-83,
-93,
-96
+91,
+94
 ]
 },
 {
@@ -9127,16 +11523,16 @@ null
 },
 {
 "t": "2026-09-28T00:30:00+00:00",
-"plan": "EEEECCCCCCCEssssHsssssssssssssss",
+"plan": "EEEECCCCCCCsssssEsssssssssssssss",
 "soc": [
 67,
 37,
 89,
+97,
+79,
 84,
-81,
-85,
-95,
-95
+93,
+94
 ]
 },
 {
@@ -9191,16 +11587,16 @@ null
 },
 {
 "t": "2026-09-28T00:32:00+00:00",
-"plan": "EEEECCCCCCCEssssHsssssssssssssss",
+"plan": "EEEECCCCCCCsssssEsssssssssssssss",
 "soc": [
 69,
 39,
 91,
+97,
+79,
 84,
-81,
-85,
-95,
-95
+93,
+94
 ]
 },
 {
@@ -9295,16 +11691,16 @@ null
 },
 {
 "t": "2026-09-28T00:37:00+00:00",
-"plan": "EEEECCCCCCCEssssHsssssssssssssss",
+"plan": "EEEECCCCCCCsssssEsssssssssssssss",
 "soc": [
 70,
 39,
 92,
+97,
+79,
 84,
-81,
-85,
-95,
-95
+93,
+94
 ]
 },
 {
@@ -9399,16 +11795,16 @@ null
 },
 {
 "t": "2026-09-28T00:42:00+00:00",
-"plan": "EEEECCCCCCCEssssHsssssssssssssss",
+"plan": "EEEECCCCCCCsssssEsssssssssssssss",
 "soc": [
 71,
 41,
 93,
+97,
+79,
 84,
-81,
-85,
-95,
-95
+93,
+94
 ]
 },
 {
@@ -9503,16 +11899,16 @@ null
 },
 {
 "t": "2026-09-28T00:47:00+00:00",
-"plan": "EEEECCCCCCCEssssHsssssssssssssss",
+"plan": "EEEECCCCCCCsssssEsssssssssssssss",
 "soc": [
 73,
 42,
 95,
+97,
+79,
 84,
-81,
-85,
-95,
-95
+93,
+94
 ]
 },
 {
@@ -9697,16 +12093,16 @@ null
 },
 {
 "t": "2026-09-28T00:57:00+00:00",
-"plan": "EEEECCCCCCCEssssHsssssssssssssss",
+"plan": "EEEECCCCCCCsssssEsssssssssssssss",
 "soc": [
 75,
 44,
 95,
+97,
+79,
 84,
-81,
-85,
-95,
-95
+93,
+94
 ]
 },
 {
@@ -9765,16 +12161,16 @@ null
 },
 {
 "t": "2026-09-28T01:00:00+00:00",
-"plan": "EEECCCCCCCEssssHssssssssssssssss",
+"plan": "EEECCCCCCCsssssEssssssssssssssss",
 "soc": [
 60,
 58,
 100,
-83,
-81,
-88,
 96,
-92
+79,
+86,
+94,
+91
 ]
 },
 {
@@ -9869,16 +12265,16 @@ null
 },
 {
 "t": "2026-09-28T01:05:00+00:00",
-"plan": "EEECCCCCCCEssssHssssssssssssssss",
+"plan": "EEECCCCCCCsssssEssssssssssssssss",
 "soc": [
 60,
 57,
 100,
-83,
-81,
-88,
 96,
-92
+79,
+86,
+94,
+91
 ]
 },
 {
@@ -9973,16 +12369,16 @@ null
 },
 {
 "t": "2026-09-28T01:10:00+00:00",
-"plan": "EEECCCCCCCEssssHssssssssssssssss",
+"plan": "EEECCCCCCCsssssEssssssssssssssss",
 "soc": [
 61,
 58,
 100,
-83,
-81,
-88,
 96,
-92
+79,
+86,
+94,
+91
 ]
 },
 {
@@ -10077,16 +12473,16 @@ null
 },
 {
 "t": "2026-09-28T01:15:00+00:00",
-"plan": "EEECCCCCCCEssssHssssssssssssssss",
+"plan": "EEECCCCCCCsssssEssssssssssssssss",
 "soc": [
 62,
 59,
 100,
-83,
-81,
-88,
 96,
-92
+79,
+86,
+94,
+91
 ]
 },
 {
@@ -10109,16 +12505,16 @@ null
 },
 {
 "t": "2026-09-28T01:16:00+00:00",
-"plan": "EEECCCCCCCEssssHssssssssssssssss",
+"plan": "EEECCCCCCCsssssEssssssssssssssss",
 "soc": [
 61,
 58,
 100,
-83,
-81,
-88,
 96,
-92
+79,
+86,
+94,
+91
 ]
 },
 {
@@ -10217,16 +12613,16 @@ null
 },
 {
 "t": "2026-09-28T01:21:00+00:00",
-"plan": "EEECCCCCCCEssssHssssssssssssssss",
+"plan": "EEECCCCCCCsssssEssssssssssssssss",
 "soc": [
 63,
 60,
 100,
-83,
-81,
-88,
 96,
-92
+79,
+86,
+94,
+91
 ]
 },
 {
@@ -10321,16 +12717,16 @@ null
 },
 {
 "t": "2026-09-28T01:26:00+00:00",
-"plan": "EEECCCCCCCEssssHssssssssssssssss",
+"plan": "EEECCCCCCCsssssEssssssssssssssss",
 "soc": [
 62,
 59,
 100,
-83,
-81,
-88,
 96,
-92
+79,
+86,
+94,
+91
 ]
 },
 {
@@ -10425,16 +12821,16 @@ null
 },
 {
 "t": "2026-09-28T01:31:00+00:00",
-"plan": "EECCCCCCCEssssHssssssssssssssssF",
+"plan": "EECCCCCCCsssssEssssssssssssssssF",
 "soc": [
 47,
 72,
 100,
-82,
-81,
-90,
-96,
-89
+95,
+80,
+89,
+95,
+88
 ]
 },
 {
@@ -10709,16 +13105,16 @@ null
 },
 {
 "t": "2026-09-28T01:46:00+00:00",
-"plan": "EECCCCCCCEssssHssssssssssssssssF",
+"plan": "EECCCCCCCsssssEssssssssssssssssF",
 "soc": [
 46,
 71,
 100,
-82,
-81,
-90,
-96,
-89
+95,
+80,
+89,
+95,
+88
 ]
 },
 {
@@ -10813,16 +13209,16 @@ null
 },
 {
 "t": "2026-09-28T01:51:00+00:00",
-"plan": "EECCCCCCCEssssHssssssssssssssssF",
+"plan": "EECCCCCCCsssssEssssssssssssssssF",
 "soc": [
 47,
 72,
 100,
-82,
-81,
-90,
-96,
-89
+95,
+80,
+89,
+95,
+88
 ]
 },
 {
@@ -10917,16 +13313,16 @@ null
 },
 {
 "t": "2026-09-28T01:56:00+00:00",
-"plan": "EECCCCCCCEssssHssssssssssssssssF",
+"plan": "EECCCCCCCsssssEssssssssssssssssF",
 "soc": [
 46,
 71,
 100,
-82,
-81,
-90,
-96,
-89
+95,
+80,
+89,
+95,
+88
 ]
 },
 {

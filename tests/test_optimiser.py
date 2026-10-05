@@ -131,3 +131,31 @@ def test_a_cycle_uses_whole_half_hours_with_no_charge_then_idle_sliver():
     assert acts[:8].count(EXPORT) >= 3, acts[:8]                  # it keeps cycling
     assert all(r > 10 or r < 0.05 for r in rises[:6]), rises      # no 1-3 point sliver of a charge slot in the cycles
     assert max(soc[:26]) <= 95.5 and min(soc[:26]) >= 69.5, soc   # the give is limited, the floor holds
+
+
+def test_ram_control_switches_cost_the_configured_amount_not_the_overnight_minimum():
+    from pe_core.optimiser import CHARGE_K, DISCHARGE_K, switch_cost
+    ram = Params(arbitrage=True, deep_overnight=True, switch_cost_p=0.5, overnight_switch_cost_p=3.0, ram_control=True)
+    assert switch_cost(CHARGE_K, DISCHARGE_K, ram, overnight=True) == 0.005          # no EEPROM write: 0.5p
+    timed = Params(arbitrage=True, deep_overnight=True, switch_cost_p=0.5, overnight_switch_cost_p=3.0)
+    assert switch_cost(CHARGE_K, DISCHARGE_K, timed, overnight=True) == 0.03         # timed windows: still 3p
+
+
+def test_the_tie_break_biases_do_not_grow_with_how_far_off_the_night_is():
+    from pe_core.optimiser import BIAS_CAP, bias_delay
+    far = [Slot(T0 + i * SLOT, PEAK, 0.15, overnight=30 <= i < 44) for i in range(60)]
+    d = bias_delay(far)
+    assert d[30:44] == [min(i, BIAS_CAP) for i in range(14)]     # counted from the window's start, not from now
+    assert max(d) == BIAS_CAP and d[59] == BIAS_CAP and d[5] == 5
+
+
+def test_a_night_far_ahead_still_sells_and_refills_when_the_margin_pays():
+    # 5 Oct 2026: the biases were counted from now, so a refill 24 half-hours off cost over 1p/kWh in tie-breakers
+    # and a cycle worth about 4p/kWh was never planned. The night below is 30 half-hours away, as that one was.
+    p = Params(arbitrage=True, max_charge_kw=4.8, max_discharge_kw=4.95, capacity_kwh=18.0, efficiency=0.889,
+               switch_cost_p=0.5, ram_control=True)
+    slots = [Slot(T0 + i * SLOT, CHEAP if 30 <= i < 44 else PEAK, 0.15, load_kwh=0.3, overnight=30 <= i < 44)
+             for i in range(60)]
+    opt = optimise(slots, 90.0, p, wear=p.wear_p / 100)
+    assert opt["actions"][30:44].count(EXPORT) >= 2, opt["actions"][30:44]
+    assert opt["soc"][43] >= 99                                 # and the battery is full when the cheap window closes
