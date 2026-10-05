@@ -113,7 +113,7 @@ from pe_core.slots import DEFAULT_MIN_CHARGE_MIN, SlotTracker, learn_min_charge
 from pe_core.smartcharge import SmartCharger, ask_message, worth_asking
 from pe_core.status import entity_states
 from pe_core.store import coerce_flags, save_config, with_operation
-from pe_core.tariff import overnight_window
+from pe_core.tariff import describe_window, fixed_window, overnight_window
 from pe_core.verification import active_refusal
 from pe_core.version import MIN_CARD_VERSION, installed_version
 from pe_core.weather import Weather
@@ -406,6 +406,7 @@ class PowerEngine(hass.Hass):
             self.costbook.export_fallback = self._current_export_rate()
             if self.cfg is not None:
                 self.costbook.flow_id = flow_id(self.cfg)
+                self._sync_window()
             self._measure(revalue=False)
             if self.costbook.needs_revalue and self.cfg is not None:
                 n = self.costbook.revalue(**self._cost_params())
@@ -1365,7 +1366,8 @@ class PowerEngine(hass.Hass):
         return (len(r.rates), r.rates[0].start if r.rates else None,
                 tuple((w.start, w.end) for w in r.dispatches), r.axle_start, r.axle_end, r.free_start, r.free_end,
                 self.profile.days if self.profile else None, json.dumps(self.cfg.safety, sort_keys=True),
-                json.dumps(self.cfg.features, sort_keys=True), r.ev_state(),
+                json.dumps(self.cfg.features, sort_keys=True), json.dumps(self.cfg.system, sort_keys=True),
+                r.ev_state(),
                 slot_start(r.now) if r.ev_state() == "charging" else None,
                 json.dumps(self._active_override().as_dict()) if self._active_override() else None)  # set / cancelled
 
@@ -1377,13 +1379,45 @@ class PowerEngine(hass.Hass):
             return setting
         return learn_min_charge(self.slots.slots, setting)[0]
 
+    def _fixed_window(self):
+        """The owner's fixed overnight window as half-hours of the day, or None to use the one learned from the rates
+        (the setting says learned, or the two times don't make a window)."""
+        if self.cfg is None or self.cfg.system.get("overnight_window") != "fixed":
+            return None
+        s = self.cfg.safety
+        return fixed_window(s["overnight_start_h"], s["overnight_end_h"]) or None
+
+    def _sync_window(self):
+        """Hand the cost book the fixed window (None: learned). True if the window in use changed."""
+        old = self.costbook.window()
+        self.costbook.fixed_window = self._fixed_window()
+        return self.costbook.window() != old
+
+    def _overnight(self):
+        """The regular cheap overnight window (half-hours of the day) the plan relies on: fixed or learned."""
+        if self.costbook is not None:
+            return self.costbook.window()
+        return self._fixed_window() or set()
+
+    def _publish_overnight(self, window):
+        """Show on the config page which window is in use, and what has been learned from the rates."""
+        learned = overnight_window(self.costbook.cheap_history) if self.costbook is not None else set()
+        fixed = self._fixed_window()
+        wanted_fixed = self.cfg.system.get("overnight_window") == "fixed"
+        self._publish_if_changed("diag_overnight", describe_window(window), {
+            "source": "fixed" if fixed else "learned", "fixed_not_valid": bool(wanted_fixed and not fixed),
+            "learned": describe_window(learned),
+            "learned_days": len(self.costbook.cheap_history) if self.costbook is not None else 0,
+            "fixed": describe_window(fixed) if fixed else None})
+
     def _maybe_replan(self, r, force=False):
         sig = self._plan_signature(r)
         due = self._plan_time is None or (r.now - self._plan_time).total_seconds() >= REPLAN_SECONDS
         if (sig == self._plan_sig and not due and not force) or r.battery_soc is None:
             return
         cert = Certainty(self.slots.slots, self.tz, self._min_charge_min())
-        window = overnight_window(self.costbook.cheap_history) if self.costbook is not None else set()
+        window = self._overnight()
+        self._publish_overnight(window)
         slots = build_slots(r, self._solar_forecast(), self.profile, self.tz, certainty=cert,
                             first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
                             overnight=window, whole_house=bool(self.cfg.features.get("slots_whole_house", True)))
@@ -3279,6 +3313,12 @@ class PowerEngine(hass.Hass):
                     self.log(f"Battery now {p_after.capacity_kwh:.2f} kWh, {p_after.efficiency ** 2 * 100:.1f}% "
                              f"round trip; costs re-valued ({n} half-hours)")
                     self._refresh_months()
+            if self._sync_window():                        # a different overnight window: past half-hours re-valued
+                n = self.costbook.revalue(**self._cost_params())
+                self.log(f"Overnight window now {describe_window(self.costbook.window())}; costs re-valued ({n} "
+                         "half-hours)")
+                self._refresh_months()
+                self._plan_sig = None
             self._measure(revalue=False)                   # republish which capacity is in use
         self._last_checks = None
         self._evaluate()

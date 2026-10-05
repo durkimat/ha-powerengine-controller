@@ -192,6 +192,17 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Backlog
 
+- **Manual rates provider (own item; designed 5 Oct 2026, not built).** For homes with no tariff integration: `site.tariff: manual`, a new tariff adapter (`pe_core/adapters/manual.py`,
+  registered like `kraken.py`, so `site_choices()` and the Your system picker list it) that builds the `Window` list for today and tomorrow from the config instead of from entities.
+  The owner's decisions: rates entered as **bands** (from, to, p/kWh) that expand to 48 half-hour slots, **weekday and weekend patterns from the start**, plus a flat export rate and a
+  standing charge; **one provider at a time** (no partial price override of an integration: the plan, cost book and simulator would disagree about what a half-hour cost). Things to get right:
+  (1) with `manual` the rate roles (`import_rate_now`, `import_rates_today`, `import_rates_tomorrow`, `export_rate`, `standing_charge`) must drop out of `required_roles`, as `none` does for
+  a car charger (`SKIPPED_PART_GROUPS`, `left_out_roles`), or the app sits at "inputs missing"; (2) `Readings.import_rate` is derived from the schedule at `now`; (3) no smart slots, free
+  power or supplier events (grid events, Axle, stay a separate part); (4) **cost-book trap**: `tariff.rates_at` classes any cheap half-hour outside the overnight window as a smart slot and
+  prices its "standard" rate at the day's peak, so a manual tariff with a second cheap band (an afternoon boost) is misclassified unless the window covers it or the classifier is off when
+  the provider has no dispatches; (5) a new adapter needs a detect entry (`adapters/detect.py`: always available) and a card UI for the bands (card repo, so `MIN_CARD_VERSION`/`MIN_APP_VERSION`
+  and a joint release). Open: effective-from dates for a rate change, and whether the fixed overnight window also needs a weekday/weekend variant and a second range (it has one range today).
+  Plan doc to write first: `docs/plans/tariff-sources.md`. This is the "fixed-rate tariff adapter" in the setup wizard item below.
 - **Zappi Eco+ and solar (monitor):** Eco+ is required for EDF/Octopus smart charging. The owner has only seen the car charge from the grid, not from solar, so some
   threshold (probably on the charger) decides. If the Zappi ever starts and stops with solar surplus, `car_charging` (an urgent rule, no damping) and the plan signature will flip with it:
   watch `ev_state` changes per day in the diagnostics export, and add a short debounce on stop only if it happens. Do nothing until it is seen.
@@ -235,6 +246,12 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Recent fixes
 
+- **Overnight window: learned or fixed (built for 0.9.105, not released; `docs/logic/01-inputs.md` 1.10).** New system setting `overnight_window` (`learned` default / `fixed`) and safety settings
+  `overnight_start_h` / `overnight_end_h` (hours since midnight in half-hour steps, 23.5 = 23:30; a start after the end runs over midnight). `PowerEngine._overnight()` is the one place the plan
+  gets the window (`CostBook.window()` for the cost book, which `_reload` re-values when the window in use changes); `tariff.fixed_window` / `chosen_window` / `describe_window` are the pure
+  helpers; `sensor.pe_diag_overnight` (state = window in use; attributes `source`, `learned`, `learned_days`, `fixed`, `fixed_not_valid`) is the readout the card shows under the choice. The plan
+  signature now includes the system settings. Default learned = byte-identical (replay unchanged). Card: choice and times sit under "Tariff and planning", readout from the sensor; neither side
+  needs a `MIN_*_VERSION` bump (a card without the sensor shows no readout; an app without the settings lists none).
 - **The 0.2 kWh "car drew something" figure is gone (0.9.104, F14, `slots.py`, `certainty.py`).** A smart slot now counts as used when the charger reported "charging" without a break for
   at least `car_min_charge_min` (2 minutes; `SlotTracker` keeps `longest_min` per slot, a break resets `run_min`), because blips (the car waking, 15 to 70 s, 0.01 kWh) come in bursts and the
   total would count them. One figure for certainty and the Health tab (`DEFAULT_MIN_CHARGE_MIN`). Learned with `learn_car_min` (on): `slots.learn_min_charge`, from supplier-confirmed slots,
