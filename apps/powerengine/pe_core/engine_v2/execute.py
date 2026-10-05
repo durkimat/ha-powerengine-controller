@@ -257,7 +257,6 @@ class Executor:
             target = self._plan_target if target is None else max(target, self._plan_target)
         return None if target is None else min(target, lim.ceiling_soc)
 
-
     def _can_charge(self, lim, ln, level, staying: bool) -> bool:
         if CHARGE not in lim.allowed:
             return False
@@ -265,7 +264,9 @@ class Executor:
         if target is None:
             return False
         band = self.s.price_band_p
-        if not ln.value_p > ln.buy_line_p + (-band if staying else band):
+        # charge_now: the plan charges in this stretch at one price, so the charge starts now rather than at its end
+        # (the same cost, and room left if the charge runs slower than modelled); the value test covers the rest
+        if not (ln.charge_now or ln.value_p > ln.buy_line_p + (-band if staying else band)):
             return False
         return level < (target if staying else target - self.s.level_band_pct)
 

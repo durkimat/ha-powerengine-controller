@@ -418,3 +418,29 @@ def test_without_a_timeline_charge_the_lines_target_ends_it():
     step(ex, 0, level=12.0, ln=lines(30.0, target=23.0))
     ms, dec, new, changed = step(ex, 10, level=23.5, ln=lines(30.0, target=23.0))
     assert changed and ms.mode != CHARGE
+
+
+def test_charge_starts_when_the_plan_charges_in_this_stretch_even_on_a_tie():
+    """A flat cheap night: the value equals the buy line (charging now or later costs the same), but the plan charges
+    in this stretch, so the charge starts now (charge_now), not at the end of the cheap rate."""
+    from datetime import datetime, timezone
+
+    from pe_core.engine_v2.execute import Executor
+    from pe_core.engine_v2.settings import V2Settings
+    from pe_core.engine_v2.types import CHARGE, HOLD, SELF_USE, BatteryFacts, Limits, Lines, Observation
+
+    now = datetime(2026, 10, 5, 22, 35, tzinfo=timezone.utc)
+    ex = Executor(V2Settings(min_dwell_s=0))
+    lim = Limits(allowed=frozenset({SELF_USE, HOLD, CHARGE}), floor_soc=12, ceiling_soc=100)
+    obs = Observation(now=now, level_reported=40.0, level_filtered=40.0, net_load_kw=0.5, car_charging=False,
+                      data_ok=True)
+    tie = dict(value_p=7.36, buy_line_p=7.36, sell_line_p=14.25, use_line_p=6.64, store_sun_line_p=15.79,
+               import_p=6.99, export_p=15.0)
+    from test_engine_v2_observe import forecast, segment, value_result
+    vr = value_result(now, forecast(now, [segment(now, import_p=6.99)]))
+    mode, _, _, _ = ex.step(now, obs, lim, Lines(**tie), vr, (), BatteryFacts())
+    assert mode.mode != CHARGE                     # a tie alone does not buy
+    ex2 = Executor(V2Settings(min_dwell_s=0))
+    ln = Lines(**tie, charge_target_soc=71.0, charge_now=True, run_target_soc=71.0)
+    mode, decision, _, _ = ex2.step(now, obs, lim, ln, vr, (), BatteryFacts())
+    assert mode.mode == CHARGE and decision.target_soc == 71.0

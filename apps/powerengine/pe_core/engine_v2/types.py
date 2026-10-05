@@ -127,6 +127,8 @@ class Lines:
     export_p: float
     charge_target_soc: float | None = None    # where buying stops being worth it now (None: not charging territory)
     sell_floor_soc: float | None = None       # where selling stops being worth it now
+    charge_now: bool = False                  # buying is worth it now: by value, or the equal-price stretch's run
+    run_target_soc: float | None = None       # level the policy reaches by the end of the equal-price stretch
 
 
 @dataclass(frozen=True)
@@ -153,6 +155,7 @@ class ValueResult:
     cost_selfuse_p: float                 # the same with plain self-use (pence)
     comfort_given_up_p: float | None = None   # cash difference against no comfort cost (None: not worked out)
     calc_s: float = 0.0
+    limits: tuple = ()                    # the Limits each segment was solved with (value.run_target reuses them)
 
 
 # --- layer 1 and the triggers: events -----------------------------------------------------------------------------

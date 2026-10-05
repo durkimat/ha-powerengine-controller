@@ -246,7 +246,9 @@ def test_a_grid_event_raises_the_value_before_it():
     assert v_plain == pytest.approx(15 * 0.95, abs=0.1)
     assert v_event == pytest.approx(15 / 0.95, abs=0.1) and v_event > v_plain + 1
     ln = V.lines(boosted, before, 30.0, 15.0, 15.0, FACTS, NO_COMFORT)
-    assert ln.charge_target_soc is None                       # tie: charging now or later costs the same
+    assert ln.charge_target_soc is not None and ln.charge_now  # a run of one price: charge early, same cost
+    assert not ln.charge_now or ln.run_target_soc == pytest.approx(ln.charge_target_soc)
+    assert V.lines(boosted, before, 97.0, 15.0, 15.0, FACTS, NO_COMFORT).charge_now is False
     # where nothing more can be bought (no grid charging allowed) the value rises towards the event's pay
     no_charge = lambda s: Limits(allowed=frozenset({SELF_USE, HOLD}), forced=EVENT if s.event else None)   # noqa: E731
     stuck = solve(ev, 50.0, lim=no_charge)
@@ -456,3 +458,57 @@ def test_forecast_and_value_work_together_on_the_real_pipeline():
     ev = next(it for it in vr.timeline if it.mode == EVENT)
     assert ev.start == now + timedelta(hours=26)
     assert "event" in ev.until or "event" in ev.reason
+
+
+# --- charging early within a stretch of one price ---------------------------------------------------------------------
+def night_and_day(n_cheap=12, n_dear=20):
+    return [seg(i, imp=6.99) for i in range(n_cheap)] + [seg(n_cheap + i, imp=28.84) for i in range(n_dear)]
+
+
+def test_charge_in_a_flat_night_starts_with_the_night_and_ends_at_the_same_level():
+    segs = night_and_day()
+    vr = solve(segs, soc=12.0)
+    need = (0.12 * 18 + 20 * 0.5 / 0.95) / 18 * 100                     # 70.5%
+    first = vr.timeline[0]
+    assert first.mode == CHARGE and first.start == t(0)                  # from the first half-hour, not the last
+    assert first.level_end == pytest.approx(need, abs=1.0) and first.until == f"until {first.level_end:.0f}%"
+    assert vr.timeline[1].mode == HOLD and first.end < t(6)                # done in the first hours of the night
+    # the same total as the plain policy, which charges late
+    core_rows = [V._end_row(vr.lam, k) for k in range(len(segs))]
+    plain = V._walk([V._make(sg, FACTS, NO_COMFORT, limits_for(sg)) for sg in segs], core_rows, vr.step_kwh,
+                    0.12 * 18, "mid", NO_COMFORT.price_band_p, front=False)
+    late_end = max(r["e1"] for r in plain if r["k"] < 12) / 18 * 100
+    assert late_end == pytest.approx(first.level_end, abs=0.7)
+    assert next(r for r in plain if r["mode"] == CHARGE)["k"] > 3        # the late plan really does start later
+    # live, five minutes into the night: charge now, up to that level
+    ln = V.lines(vr, t(0) + timedelta(minutes=5), 12.0, 6.99, 15.0, FACTS, NO_COMFORT)
+    assert ln.charge_now is True
+    assert ln.run_target_soc == pytest.approx(first.level_end, abs=0.7)
+    assert ln.charge_target_soc == pytest.approx(ln.run_target_soc)
+    # at the target the run has nothing more to do; during the day it is not asked
+    done = V.lines(vr, t(3), need, 6.99, 15.0, FACTS, NO_COMFORT)
+    assert done.charge_now is False
+    day = V.lines(vr, t(14), 40.0, 28.84, 15.0, FACTS, NO_COMFORT)
+    assert day.run_target_soc is None and day.charge_now is False
+    assert V.run_target(vr, t(14), 40.0, 6.99, FACTS, NO_COMFORT) is None   # price no longer the one asked about
+
+
+def test_a_tie_never_charges_to_the_ceiling():
+    # tomorrow needs little, and the end-of-horizon value equals the refill price: ties are not bought
+    segs = night_and_day(n_cheap=12, n_dear=2)
+    st = replace(NO_COMFORT, terminal_value="refill")
+    vr = solve(segs, soc=12.0, settings=st)
+    need = (0.12 * 18 + 2 * 0.5 / 0.95) / 18 * 100                      # 17.9%
+    top = max(it.level_end for it in vr.timeline)
+    assert top < need + 2.0
+    ln = V.lines(vr, t(0) + timedelta(minutes=5), 12.0, 6.99, 15.0, FACTS, st)
+    assert ln.charge_target_soc is None or ln.charge_target_soc < need + 2.0
+    assert ln.run_target_soc is None or ln.run_target_soc < need + 2.0
+
+
+def test_run_target_is_cheap_and_does_not_resolve():
+    vr = solve(night_and_day(), soc=12.0)
+    started = time.perf_counter()
+    for _ in range(50):
+        V.run_target(vr, t(2), 20.0, 6.99, FACTS, NO_COMFORT)
+    assert (time.perf_counter() - started) / 50 < 0.05
