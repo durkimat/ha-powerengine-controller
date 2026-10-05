@@ -1,7 +1,8 @@
 # Engine v2: build plan
 
-> **Status (5 Oct 2026): in progress.** Contracts written (`pe_core/engine_v2/settings.py`, `types.py`, the `engine`
-> setting and the `engine_v2:` block in `pe_core/config.py`). Work packages below are built by sub-agents and reviewed.
+> **Status (5 Oct 2026): built for 0.9.106.** Packages A to E built by sub-agents and reviewed; F (release) prepared. Additions
+> beyond this page: `Lines.charge_now`/`run_target_soc` and `value.run_target` (charge at the start of a cheap stretch),
+> `ValueResult.limits`, `StepInput.slots_whole_house`.
 > Design and decisions: [engine-v2.md](engine-v2.md). This page is how it is built: who owns which files, the
 > interfaces, the published sensors (the card's contract), the tests, and what "done" means.
 

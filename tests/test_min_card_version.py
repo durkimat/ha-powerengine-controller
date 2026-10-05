@@ -25,7 +25,7 @@ def test_versions_compare_as_numbers():
 def test_card_warning_only_when_older_than_minimum():
     assert card_warning("0.9.69") and MIN_CARD_VERSION in card_warning("0.9.69")
     assert card_warning(MIN_CARD_VERSION) is None
-    assert card_warning("0.9.99") is None  # newer than the minimum: fine, even if not the app's version
+    assert card_warning("0.9.199") is None  # newer than the minimum: fine, even if not the app's version
     assert card_warning(None) is None and card_warning("?") is None
 
 

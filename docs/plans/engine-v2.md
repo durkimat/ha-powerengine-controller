@@ -1,6 +1,6 @@
 # Engine v2: event-driven planning and control
 
-> **Status: design draft for review (5 Oct 2026). Nothing built.** No code, no settings and no entities exist yet. The
+> **Status: built for 0.9.106 (5 Oct 2026), not yet run live.** See [engine-v2-build.md](engine-v2-build.md). The
 > owner's decisions so far: v2 is a clean design (it does not reuse v1's planner, optimiser or `decide`); the Plan view shows
 > both the expected timeline and the value curve; no shadow run, v2 is tested on recorded and simulated data and then
 > switched on live; v1 and v2 settings are separate. The card layout comes after this plan has been reviewed (section 12).
