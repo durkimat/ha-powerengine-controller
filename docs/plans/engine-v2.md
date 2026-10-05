@@ -3,7 +3,13 @@
 > **Status: design draft for review (5 Oct 2026). Nothing built.** No code, no settings and no entities exist yet. The
 > owner's decisions so far: v2 is a clean design (it does not reuse v1's planner, optimiser or `decide`); the Plan view shows
 > both the expected timeline and the value curve; no shadow run, v2 is tested on recorded and simulated data and then
-> switched on live; v1 and v2 settings are separate. The card layout comes after this plan has been reviewed (section 11).
+> switched on live; v1 and v2 settings are separate. The card layout comes after this plan has been reviewed (section 12).
+>
+> **Decided at the first review (5 Oct 2026):** house facts shared, engine choices separate (section 11); a comfort band
+> as a cost inside the model, with its effect measured and shown (6.1); grid events may go below the owner's reserve but
+> never below the battery's hard floor (7); wear set separately for the battery covering the house and for sales, both 0p by
+> default because the owner treats the battery as a sunk cost (6); scenario weights start at 25/50/25 and are learned from
+> experience (5.1). Still open: section 18.
 
 The engine that runs today becomes **engine v1**. Engine v2 is a second engine the owner can choose with one setting.
 Both sit on the same adapters, readings, learning and inverter control. Only the part that decides changes.
@@ -227,7 +233,9 @@ measurements, which are **shared with v1** (they are facts about the house, not 
 |---|---|---|
 | `max_segment_min` (v2) | 30 | Longest segment |
 | `horizon_min_h`, `horizon_max_h` (v2) | 36, 48 | How far ahead; prices beyond the published ones are estimated |
-| `solar_weights` (v2) | 0.25 / 0.5 / 0.25 | Weight of the low, central and high solar forecast (the bands v1 never used, F6) |
+| `solar_weights` (v2) | 0.25 / 0.5 / 0.25 | **Starting** weights of the low, central and high solar forecast (the bands v1 never used, F6); learned from then on (5.1) |
+| `load_weights` (v2) | 0.25 / 0.5 / 0.25 | The same for the house load scenarios |
+| `learn_scenario_weights` (v2) | on | Learn both sets of weights from what actually happened (5.1). Off: the starting weights are used as set |
 | `load_spread` (v2) | learned | How far the house usually is from its profile, per time of day |
 
 ### Outputs: `Forecast`
@@ -240,13 +248,43 @@ high; whether the car is charging (only the running segment, as in v1 0.9.103: t
 ### The model
 
 * **Sun:** the forecast adapter's central and 10/90 percent bands, scaled by a **learned bias** per time of day
-  (actual divided by forecast over the last 14 days; `learn_solar_bias`, on). Three scenarios, weighted by `solar_weights`.
+  (actual divided by forecast over the last 14 days; `learn_solar_bias`, on). Three scenarios, weighted by the learned
+  solar weights (5.1).
 * **House:** the shared profile (weekday/weekend, half-life 7 days) as the centre; low and high from the learned spread of
-  the actual load around it (the 20th and 80th percentiles of the residual for that time of day). Three scenarios.
+  the actual load around it (the 20th and 80th percentiles of the residual for that time of day). Three scenarios, weighted
+  by the learned load weights (5.1).
 * **Smart slots:** two outcomes, the slot happens (its price) or does not (the standard price), with the learned certainty
   as the probability. Unlike v1, the slot is **not** averaged into one expected price (section 6 explains why).
 * **Estimated prices** beyond the published ones: the same time yesterday, except that yesterday's smart-slot price is
   not carried over (v1's rule, kept).
+
+### 5.1 Learning the scenario weights from experience
+
+**Decided:** start at 25/50/25 and let experience move the weights.
+
+**The model: counting which scenario came true, with a prior** (a Dirichlet-multinomial estimate, the standard way to
+learn the probabilities of a few outcomes from counts while starting from a sensible guess).
+
+1. After each half-hour of daylight, look at the actual solar energy and see which scenario it was **closest to**: low,
+   central or high (after the bias correction, so the weights learn the spread and the bias learns the centre). Count it,
+   weighted by recency (half-life `scenario_half_life_days`, 14 days).
+2. Separately for three parts of the day (morning, middle, afternoon), because forecasts tend to miss in different ways
+   at dawn and at midday.
+3. The weights are `(prior count + observed count) / (total)`, where the prior is the starting weights worth
+   `scenario_prior_days` (7) days of observations. So nothing moves on the first day, and a week of experience counts as
+   much as the starting guess.
+4. Each weight is kept between 0.05 and 0.8, so no scenario is ever ignored or made certain.
+5. The same for the house load, against its low, central and high (all 48 half-hours a day count, not only daylight).
+
+**What it does to behaviour.** If the sun usually comes in at the low figure, the low weight grows, λ before a dull-prone
+afternoon rises, and the engine keeps or buys a little more energy. If the forecast is usually right, the central weight
+grows and the plan becomes less cautious. The change shows on the Health tab as the weights over time, next to the counts
+they came from.
+
+| Setting (v2) | Default | Meaning |
+|---|---|---|
+| `scenario_half_life_days` | 14 | How quickly old days stop counting |
+| `scenario_prior_days` | 7 | How much the starting weights count |
 
 ### Expected behaviour
 
@@ -258,7 +296,7 @@ high; whether the car is charging (only the running segment, as in v1 0.9.103: t
 
 | Parameter | Set or learned | What changes |
 |---|---|---|
-| `solar_weights` | Set | Heavier low weight: more cautious (more grid charging on doubtful days) |
+| Solar and load weights | Learned from the starting values (5.1) | Heavier low weight: more cautious (more grid charging on doubtful days) |
 | Solar bias | Learned | Corrects a forecast that is consistently high or low |
 | Load spread | Learned | Wider: more caution about the evening; narrower: closer to the central plan |
 | Smart-slot certainty | Learned (shared with v1) | How much an announced slot is relied on |
@@ -282,12 +320,13 @@ worth, in pence. From it, derive the price thresholds layer 5 uses, and an **exp
 | Setting | Default | Meaning |
 |---|---|---|
 | `level_step_kwh` | 0.1 | Resolution of the level grid (181 levels for 18 kWh) |
-| `wear_p` | 2 p/kWh | Battery wear per kWh taken out (question 18.4: also on Self-use?) |
+| `wear_house_p` | 0 p/kWh | Wear per kWh the battery supplies to the house (Self-use) |
+| `wear_sale_p` | 0 p/kWh | Wear per kWh the battery sells (Export, grid events) |
 | `event_value_p` | 100 p/kWh | What a grid event pays per kWh, before the export rate (v1's constant, F7) |
 | `event_plus_export` | on | The export rate is paid on top |
 | `terminal_value` | `refill` | Value of energy left at the end of the horizon: `refill` = the cheapest non-free import price expected in the last 24 h of the horizon, divided by the charge efficiency (fixes F11); or a fixed figure |
-| `comfort_low_soc`, `comfort_high_soc` | none / none | Optional soft band for battery health: a cost per kWh of time spent outside it (replaces v1's arbitrage band; off unless set) |
-| `comfort_cost_p` | 1 p/kWh | That cost |
+| `comfort_low_soc`, `comfort_high_soc` | 20 / 90 % | The comfort band (6.1): a soft guide, priced inside the model |
+| `comfort_cost_p` | 0.3 p per kWh per hour | The price of each kWh held outside the band for an hour (6.1) |
 
 ### The model: stochastic dynamic programming for the value of stored energy
 
@@ -297,7 +336,7 @@ so it is solved exactly on a grid, backwards from the end of the horizon.
 **Notation.** Segments `k = 1..K`, each `Δk` hours long. Level `e` (kWh). Scenario `ω` (sun low/central/high × house
 low/central/high × smart slot yes/no, with their probabilities). Mode `m` from the allowed set `Mk`. `f(e, m, ω)` is the
 level at the end of the segment (the battery physics, with tapers and limits); `c(e, m, ω)` is its cash cost (import ×
-price − export × price + wear + comfort cost).
+price − export × price + wear on what the battery supplies or sells + the comfort cost of 6.1).
 
 **Expected cost from segment k on, starting at level e:**
 
@@ -320,13 +359,14 @@ V_k(e)     = Σ_price-outcomes P(outcome) × min over m in M_k [ Σ_ω P(ω) × 
 
 λ is high when the battery is low before a dear evening, and falls as the level rises (each extra kWh is needed less).
 
-**From value to thresholds** (with `η_c`, `η_d` the one-way efficiencies, `w` the wear, all at the current level):
+**From value to thresholds** (with `η_c`, `η_d` the one-way efficiencies, `w_h` the wear on supplying the house and `w_s`
+the wear on a sale, all at the current level):
 
 | Question | Yes when | Name in the outputs |
 |---|---|---|
 | Is it worth buying a kWh to store? | import price < η_c × λ | `charge_below_p` = η_c × λ |
-| Is it worth selling a stored kWh? | export price > λ / η_d + w | `export_above_p` |
-| Should the battery cover the house (Self-use), rather than the grid (Hold)? | import price > λ / η_d + w | `use_above_p` |
+| Is it worth selling a stored kWh? | export price > λ / η_d + w_s | `export_above_p` |
+| Should the battery cover the house (Self-use), rather than the grid (Hold)? | import price > λ / η_d + w_h | `use_above_p` |
 | Should spare sun go into the battery rather than out? | η_c × λ > export price | `store_sun_above_p` (the export price it beats) |
 
 These four comparisons are the minimum of the "cost now plus value of energy moved" per mode (in control theory, the
@@ -336,11 +376,60 @@ arbitrage finds this structure is optimal or close to it.
 
 **Where a mode should stop.** For a charge, the level `e*` where η_c × λ(e*) meets the import price is the level at which
 another kWh is no longer worth buying: that is the **charge target**, worked out, not set. For a sale, the level where
-λ / η_d + w meets the export price is the **sell floor**. Both move when the value curve is recalculated.
+λ / η_d + w_s meets the export price is the **sell floor**. Both move when the value curve is recalculated.
 
 **The expected timeline.** Running forward from the real level with the central scenario and the threshold policy gives the
 modes and levels expected over time (and with the low and high scenarios, a band around the level). This is what the plot
 draws. It is **only a forecast**: nothing waits for its times.
+
+### Wear: two settings, both 0p by default
+
+**Decided:** wear is set separately for the battery **supplying the house** and for **sales**, and both start at 0p. The
+owner treats the battery as a sunk cost: replacements are getting much cheaper and it will be obsolete within about 12 years
+whatever is done, so the aim is to get the most out of it now. The round-trip loss is always counted (it is real energy, in
+the efficiencies), so a cycle still has to beat the loss to happen; the price band (8) stops cycles for a fraction of a
+penny.
+
+| Wear setting raised | Effect |
+|---|---|
+| `wear_house_p` | The battery covers the house only when the import price beats the stored kWh's value by that much; more Hold in near-ties, more energy kept for later |
+| `wear_sale_p` | Sales need a wider spread; fewer, deeper cycles |
+
+### 6.1 The comfort band: a soft guide inside the model
+
+**Decided:** a comfort band, as part of the model and not a fix laid over it, with the owner able to see when it acts and
+what it costs.
+
+**The model: a holding cost.** Batteries age faster sitting at a high level (and, less so, near empty): calendar ageing
+grows with the level the cell is kept at. That is a cost of **time spent** outside the band, not of passing through it, so
+it enters the dynamic programme as one more term of the cost:
+
+```
+comfort cost of a segment = comfort_cost_p × Δk × ( kWh above comfort_high_soc + kWh below comfort_low_soc )
+```
+
+(averaged over the segment). It is part of `c(e, m, ω)`, so it changes the value curve itself: λ near the top falls a
+little (a kWh up there costs something to keep), and λ near the bottom rises a little. No rule says "stop at 90%". Instead:
+
+* **When it acts:** only when the battery would **sit** outside the band, and only if that gains less than it costs. A
+  charge to 95% just before a dear evening, which uses the energy within the hour, pays almost nothing and goes ahead. A charge
+  to 95% at 01:00 for a sale at 17:00 pays for 16 hours up there, so it waits and charges later, or stops at 90%, if that
+  costs less than the comfort cost.
+* **When it does not act:** inside the band; for a grid event or free power (forced modes pay it but are not stopped by it);
+  never below the owner's reserve or the hard floor, which are limits, not costs.
+* **Default 0.3p per kWh per hour:** a kWh kept at 95% for a whole night (8 hours) costs 2.4p, enough to move a charge later
+  in the night or trim a top-up that only pays a penny or two, never enough to give up a sale worth several pence.
+
+**Measuring its effect.** At each revalue, a second, coarser value calculation runs without the comfort cost (`level_step` 0.5
+kWh, in the background, at most once an hour). From the two:
+
+* each mode change records whether the comfort cost **changed the choice** (`comfort_acted` in the journal);
+* the expected timeline gives **"comfort cost given up today"**: the cash difference between the plan with and without it;
+* the Health tab shows per day: hours spent above and below the band, the cash given up for comfort, and the number of
+  decisions it changed. If the cash given up is large, the cost is set too high for what it buys.
+
+The closed-loop simulations (14) also run with and without it, so its effect on cost and on time spent at a high level is
+known before it goes live. Setting `comfort_cost_p` to 0 switches it off.
 
 ### Outputs
 
@@ -366,9 +455,9 @@ draws. It is **only a forecast**: nothing waits for its times.
 | Parameter | Set or learned | Effect |
 |---|---|---|
 | `level_step_kwh` | Set | Smaller: finer targets, slower to compute (section 17) |
-| `wear_p` | Set | Higher: fewer cycles, more Hold in near-ties |
+| `wear_house_p`, `wear_sale_p` | Set (0p) | Higher: more Hold in near-ties / fewer, deeper sales |
 | `terminal_value` | Set | Low: the plan lets the battery run down near the end of the horizon; high: it keeps energy |
-| `comfort_*` | Set | Keeps the battery out of the top or bottom when nothing is lost by it |
+| `comfort_*` | Set | Keeps the battery out of the top or bottom when little is lost by it; the effect is measured (6.1) |
 | Efficiencies, power limits, tapers, capacity | Learned (shared) | All thresholds |
 | Smart-slot certainty, solar bias, load spread | Learned (layer 2) | λ before slots and on doubtful days |
 
@@ -385,16 +474,31 @@ decision can never disagree about the rules (v1's F4, F5 and F12 came from two r
 Entities: grid event state, free-power session, the car's state (from layer 1, debounced), the override, pause and mode,
 BMS limits, cold caution, fuse headroom. Settings: as in the table below.
 
+### Two floors
+
+**Decided:** a grid event pays so well that it is worth going below the owner's reserve, even if the house then buys at
+a dear rate until the battery is refilled. It must never go below the battery's own hard limit.
+
+| Floor | What it is | Setting | Who may go below it |
+|---|---|---|---|
+| **Hard floor** | The level at which the battery or inverter stops discharging (its over-discharge cut-off). A fact about the hardware | Shared: `battery_floor_soc`, raised by the learned level at which the battery really stops supplying (v1's `learn_reserve` measurement) | **Nobody.** A grid event stops `hard_floor_margin_pct` (1 point) above it, so the inverter's own cut-off is never the thing that ends the event |
+| **Owner's reserve** | The level kept back in normal running (for a power cut, or peace of mind) | v2: `reserve_soc` | Grid events only |
+
+The value calculation knows both: below the reserve after an event, the battery cannot cover the house, so the house buys at
+the going rate until the battery is back above it. That cost is counted against the event's earnings, so the engine
+discharges below the reserve only when the event pays for it (at £1 + 15p per kWh, almost always). After the event the
+battery is refilled when the value curve says it is worth it, like any other charge; there is no special refill rule.
+
 ### The rules, in order (the first that applies wins)
 
 | # | Situation | Allowed / forced | Notes |
 |---|---|---|---|
 | 1 | Not Active (Passive, Paused, unconfigured, Active refused) | Decided as normal, **not sent** ("Would ...") | Unchanged from v1: Active, Passive and Pause are the owner's |
-| 2 | Grid event in progress, `events` on | **Forced Export** at the event's power | The reserve applies unless `event_below_reserve` is on (question 18.3) |
-| 3 | Owner's override | **Forced** to the override's mode | Same choices and periods as v1's override; the reserve still applies to Self-use and Export; Charge stops at its target with hysteresis |
+| 2 | Grid event in progress, `events` on | **Forced Export** at the event's power | Down to the **hard floor**, not the owner's reserve (two floors, below) |
+| 3 | Owner's override | **Forced** to the override's mode | Same choices and periods as v1's override; the owner's reserve still applies to Self-use and Export; Charge stops at its target with hysteresis |
 | 4 | Free-power session | **Forced Charge** to 100% | |
 | 5 | Car charging (debounced), `house_load_includes_ev` | Allowed: **Hold, Charge** only | The battery never feeds the car |
-| 6 | Level at or below the reserve | No discharge mode (Self-use becomes Hold, no Export) | Applies to **every** discharge mode, at the **learned** reserve (fixes F5, F12) |
+| 6 | Level at or below the owner's reserve (outside a grid event) | No discharge mode (Self-use becomes Hold, no Export) | Applies to **every** discharge mode except a grid event (fixes F5, F12) |
 | 7 | Otherwise | Self-use, Hold, Charge; Export if `arbitrage` is on | |
 
 **Caps** (applied to the power of the chosen mode): fuse headroom (house + car + battery under 90% of the main fuse), BMS
@@ -414,12 +518,11 @@ restriction ("car charging: the battery holds").
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `reserve_soc` | 12 % | Floor for every discharge (raised by the learned reserve, shared) |
+| `reserve_soc` | v1's value when v2 is first chosen | The owner's reserve: floor for every discharge except a grid event |
 | `charge_ceiling_soc` | 100 % | Highest level a grid charge may reach (a real ceiling, unlike v1's F2) |
 | `arbitrage` | off | Allow Export outside grid events |
 | `events` | on | Act on grid events |
 | `free_power` | on | Act on free-power sessions |
-| `event_below_reserve` | off | May a grid event discharge below the reserve? |
 
 ---
 
@@ -600,8 +703,8 @@ tuned without moving the other.
 
 | Shared (facts about the house and the owner's equipment) | Separate (engine choices) |
 |---|---|
-| Battery capacity, efficiencies, power limits (roles and their measured values) | Reserve, charge ceiling, wear cost |
-| Main fuse, export limit, inverter output limit, car charger kW | Arbitrage on/off, grid events on/off, free power on/off |
+| Battery capacity, efficiencies, power limits (roles and their measured values); the battery's hard floor | Owner's reserve, charge ceiling, the two wear costs |
+| Main fuse, export limit, inverter output limit, car charger kW | Arbitrage on/off, grid events on/off, free power on/off, comfort band |
 | Control method, `ram_max_power_w`, write budget, dampening (all layer 6) | Event value, terminal value, comfort band |
 | House load includes the car, battery location | Everything in sections 4 to 10 marked (v2) |
 | Overnight window (learned or fixed: a fact about the tariff) | v1's whole current list (arbitrage band, cheap threshold, top-up, switch costs, ...) stays v1's |
@@ -671,6 +774,9 @@ Each line becomes a test case (section 14). "Should" is the acceptance condition
 | B12 | Import rate missing for 10 minutes | Data-missing rule (as v1: hand back to Self-use after the grace) | Layer 4 |
 | B13 | Export price above the value of a stored kWh, arbitrage on | Export until the sell floor, then stop | Threshold and exit level |
 | B14 | Level at the reserve with a planned Export or Self-use | No discharge | Layer 4 rule 6 for every discharge mode |
+| B14a | Grid event with the battery at 30%, reserve 25%, hard floor 10% | Export until 11% (hard floor + 1), then Hold; the house buys until the value curve says refill | Two floors |
+| B14b | Comfort band 20 to 90%, cheap night, dear evening, battery used within the hour of reaching 95% | Charge to 95% | The comfort cost of a short stay is small (6.1) |
+| B14c | Same band, a sale at 17:00 and cheap power only at 01:00 | Charge to 95% only if the sale's gain beats 16 hours of comfort cost; the journal says whether comfort changed the choice | 6.1 |
 | B15 | BMS limit drops to 0 while charging | Charge becomes Hold at once (layer 6, as v1) and the deadline check revalues if the charge cannot finish | Safety event |
 | B16 | Price 30p, sun short, battery high, the evening is covered | Self-use (battery runs the house), never Charge | Charge only below `charge_below_p` |
 | B17 | Spare sun, battery worth more than the export price | Self-use (stores the sun), never Hold | `store_sun_above_p` |
@@ -775,15 +881,24 @@ Each stage is a PR; nothing changes behaviour for v1 (the replay passes unchange
 
 ## 18. Questions for the owner
 
-1. **Shared or separate:** is the split in section 11 right (house facts shared, engine choices separate)?
-2. **Comfort band:** v2 does not need an arbitrage band to work. Do you want the optional comfort band for battery health,
-   and if so, where (for example 20 to 90%)?
-3. **Grid event and the reserve:** may a grid event discharge below the reserve (v1 allows it, F5)?
-4. **Wear on Self-use:** should wear be charged on the battery covering the house, or only on sales (v1 charges it on both,
-   F10)? Charging it on Self-use makes the battery hold back for near-ties.
-5. **Caution:** the default solar weights (25/50/25) plan on the middle. Do you want a more cautious default (for example
-   40/50/10)?
-6. **Backstop:** is 2 hours right for the one plain timer?
+**Answered at the first review (5 Oct 2026):**
+
+| # | Question | Answer | Where |
+|---|---|---|---|
+| 1 | Shared or separate settings | The split in section 11 is fine for now | 11 |
+| 2 | Comfort band | Yes, as a soft guide inside the model, with when it acts and what it costs shown | 6.1 |
+| 3 | Grid event and the reserve | Below the owner's reserve: yes. Below the battery's hard limit: never | 7 (two floors) |
+| 4 | Wear | Two settings (house, sales), both 0p by default: the battery is a sunk cost | 6 |
+| 5 | Scenario weights | 25/50/25 to start, then learned from experience | 5.1 |
+
+**Still open:**
+
+6. **Backstop timer.** v2 recalculates the value curve only when a trigger fires (section 10). In case a trigger is ever
+   missed, there is one plain timer: if nothing has caused a recalculation for 2 hours, it recalculates anyway. Is 2 hours
+   right? The Health tab will count recalculations by cause, so if the backstop fires often, that shows a trigger is missing
+   and the timer is not the fix.
+7. **The hard floor's value.** What is the battery's own cut-off on your inverter (the over-discharge level in its battery
+   settings)? Until it is known, the hard floor is the learned level at which the battery stops supplying, or 10%.
 
 ## 19. Sources
 
