@@ -114,14 +114,23 @@ flowchart TD
 
 | Slot outcome | Counts as |
 |---|---|
-| Ran to its end, and the supplier lists it as completed or the car drew at least 0.2 kWh | 1 (delivered) |
+| Ran to its end, and the supplier lists it as completed or the charger reported charging, unbroken, for at least the shortest real charge (2 minutes) | 1 (delivered) |
 | Ran to its end but neither | 0 (probably not billed as a slot) |
 | Cut short while running (and not carried on by another slot within 10 minutes) | 0.5 |
 | Cancelled before it started | 0 |
-| Cut short, but another slot began within 10 minutes (the supplier re-lists a running dispatch) | 1 if the car drew 0.2 kWh or confirmed, else 0.5 |
+| Cut short, but another slot began within 10 minutes (the supplier re-lists a running dispatch) | 1 if the charger reported an unbroken charge of that length or the supplier confirmed, else 0.5 |
 
-The 0.2 kWh line (`MIN_CAR_KWH` in `certainty.py`) is used here, for scoring, and in the Health tab's smart-slot summary
-(`USED_KWH` in `slots.py`). It no longer has any part in how the plan treats the car (1.5).
+"Charged" is the charger's own state, not energy: `SlotTracker` keeps, for each slot, the **longest unbroken run** of the
+charger reporting "charging" (`longest_min`; a break starts the count again). The shortest run that counts is the
+**Shortest real charge** setting (`car_min_charge_min`, 2 minutes). The car waking up and probing shows as bursts of 15 to
+70 seconds drawing 0.01 kWh, so a slot full of them does not count however many there are (4 Oct 2026: blips under 1.2
+minutes, the shortest real charge 3.7). The same figure scores the Health tab's smart-slot summary ("used", "done, no car"). It
+has no part in how the plan treats the car (1.5). Records from before `longest_min` was kept use the total charging time.
+
+With **Learn: shortest real charge** (`learn_car_min`, on) the figure moves from the setting towards what the history shows
+(`slots.learn_min_charge`): the evidence is the slots the supplier lists as completed that the car charged in; the aim is half
+of the 20th-percentile run of those; nothing moves until 8 of them are seen, then by n / (n + 20) of the way, within half to
+double the setting (1 minute at the least). The figure in use is on the Health export (`smart_slots.min_charge_min`).
 
 The overall score starts from a prior of **70% worth 4 slots**, so a few early results cannot swing it to 0 or 100. The
 score is then worked out per group, pulled towards the overall figure until the group has about 4 slots of its own:

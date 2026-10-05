@@ -109,7 +109,7 @@ from pe_core.simhistory import History, months_wanted, parse_upload
 from pe_core.simjob import SimContext, SimStore
 from pe_core.simjob import run as sim_run
 from pe_core.simulate import SimBattery
-from pe_core.slots import SlotTracker
+from pe_core.slots import DEFAULT_MIN_CHARGE_MIN, SlotTracker, learn_min_charge
 from pe_core.smartcharge import SmartCharger, ask_message, worth_asking
 from pe_core.status import entity_states
 from pe_core.store import coerce_flags, save_config, with_operation
@@ -1369,12 +1369,20 @@ class PowerEngine(hass.Hass):
                 slot_start(r.now) if r.ev_state() == "charging" else None,
                 json.dumps(self._active_override().as_dict()) if self._active_override() else None)  # set / cancelled
 
+    def _min_charge_min(self) -> float:
+        """The shortest unbroken charge (minutes) that counts as a smart slot used: the setting, or with learning on
+        (`learn_car_min`) that setting moved towards what the supplier-confirmed slots show."""
+        setting = float(self.cfg.safety.get("car_min_charge_min", DEFAULT_MIN_CHARGE_MIN))
+        if not self.cfg.features.get("learn_car_min", True) or getattr(self, "slots", None) is None:
+            return setting
+        return learn_min_charge(self.slots.slots, setting)[0]
+
     def _maybe_replan(self, r, force=False):
         sig = self._plan_signature(r)
         due = self._plan_time is None or (r.now - self._plan_time).total_seconds() >= REPLAN_SECONDS
         if (sig == self._plan_sig and not due and not force) or r.battery_soc is None:
             return
-        cert = Certainty(self.slots.slots, self.tz)
+        cert = Certainty(self.slots.slots, self.tz, self._min_charge_min())
         window = overnight_window(self.costbook.cheap_history) if self.costbook is not None else set()
         slots = build_slots(r, self._solar_forecast(), self.profile, self.tz, certainty=cert,
                             first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
@@ -3061,7 +3069,8 @@ class PowerEngine(hass.Hass):
         try:
             h = self.costbook.health(self._today(), getattr(self, "_checks", None))
             h["slots"] = self.slots.summary(datetime.now(timezone.utc), tz=self.tz,
-                                                max_kw=float(self.cfg.safety.get("ev_charger_kw", 7.4)))
+                                                max_kw=float(self.cfg.safety.get("ev_charger_kw", 7.4)),
+                                                min_charge_min=self._min_charge_min())
             h["smart_requests"] = self.smart.summary(datetime.now(timezone.utc), tz=self.tz)
             f = clock.finding(getattr(self, "_clock_drift", None))
             if f:
@@ -3309,7 +3318,8 @@ class PowerEngine(hass.Hass):
             if getattr(self, "plan", None) is not None else None,
             "test": run.as_dict() | {"status": run.status} if run is not None else None,
             "smart_requests": s(lambda: self.smart.attempts[-40:]) if getattr(self, "smart", None) else None,
-            "smart_slots": s(lambda: self.slots.summary(now, tz=self.tz)) if getattr(self, "slots", None) else None,
+            "smart_slots": s(lambda: self.slots.summary(now, tz=self.tz, min_charge_min=self._min_charge_min()))
+            if getattr(self, "slots", None) else None,
             "bms": s(self._bms_bundle),
             "early_target": s(lambda: {**self._early.summary(), "records": self._early.records[-60:]}),
             "attribute_sizes": s(lambda: diagnostics.largest_attrs(self.__dict__.get("_attr_sizes", {}))),

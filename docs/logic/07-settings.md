@@ -32,6 +32,7 @@ A setting marked **fallback only** is read just by the reactive rule stack that 
 | `learn_reserve` | on | Plan | Raise the reserve to the SoC where the battery really stops |
 | `learn_export` | on | Plan | Lower the export limit to the one actually hit |
 | `learn_car` | on | Plan | Use the car's typical kW |
+| `learn_car_min` | on | Smart-slot history (certainty, Health tab) | Move the shortest real charge towards what the supplier-confirmed slots show (see page 1) |
 | `learn_conversion` | on | Plan | Include the inverter's AC/DC losses in the efficiency |
 | `cold_caution` | on | Plan, Control | Plan slower charging when the battery is cold; the BMS-limit fallback |
 | `cold_learning` | on | Plan | Learn the cold threshold and factor |
@@ -111,6 +112,7 @@ Needs `arbitrage_min_soc` below `arbitrage_max_soc`. (`arbitrage_keep_soc`, 10 p
 | `smart_max_requests_per_day` | 6 (4 to 10) | The most ready-by changes a day |
 | `smart_min_gap_min` | 20 min (10 to 120) | The shortest wait after any ready-by change |
 | `smart_lookahead_h` | 3 h (1 to 8) | No request if a slot is planned within this long |
+| `car_min_charge_min` | 2 min (0.5 to 10) | Shortest unbroken run of the charger saying "charging" for a smart slot to count as used (certainty, Health tab); with `learn_car_min` on it is moved towards what confirmed slots show. Not a request setting, but it sits in the car section of the config page |
 
 These do not enter the plan; they decide whether to ask the supplier for slots the plan can then use. The extra back-off is
 fixed: 30, 60, 120, then 240 minutes (page 8).
@@ -144,8 +146,8 @@ Changing any of these needs a code change and a release.
 | `HIGH_DWELL`, `EARLY_BIAS`, `SELL_BIAS` | £0.0015, £0.0005, £0.0005 | `optimiser.py` | Tie-breakers |
 | `MID_SLOT_STICK` | £0.15 | `optimiser.py` | Reluctance to change a running half-hour |
 | `SOFT_BAND_MARGIN` | 5 points | `optimiser.py` | How far past the arbitrage band's edges a charge or sale may go, priced by the band penalty (0.9.102) |
-| `MIN_CAR_KWH` | 0.2 kWh | `certainty.py` | A smart slot that ran to its end counts as delivered if the car drew at least this (or the supplier confirms it) |
-| `USED_KWH` | 0.2 kWh | `slots.py` | A smart slot the car drew less than this in counts as not used in the Health tab's summary. Added to `car_idle` in 0.9.101, taken out again in 0.9.103; it is a second copy of the same figure as `MIN_CAR_KWH` |
+| `DEFAULT_MIN_CHARGE_MIN` | 2 min | `slots.py` | The default of the `car_min_charge_min` setting (one figure for certainty and the Health tab; was two copies of 0.2 kWh until 0.9.104) |
+| `LEARN_MIN_SLOTS`, `LEARN_WEIGHT`, `LEARN_SHARE` | 8, 20, 0.5 | `slots.py` | How the shortest real charge is learned: confirmed charges needed, how many move it half way, and its share of the 20th-percentile run |
 | `LATCH_BAND_SOC` | 2 points | `decide.py`, `override.py` | Target-reached latch |
 | `MIN_LEFT_MIN` | 5 min | `earlytarget.py` | Least time left for an early-target replan |
 | `DATA_GAP_GRACE_S` | 180 s | `powerengine.py` | Missing-reading bridge |

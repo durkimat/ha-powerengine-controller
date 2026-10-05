@@ -20,7 +20,42 @@ from .readings import Window
 CONTINUE_GAP = timedelta(minutes=10)     # a new slot starting this soon after one vanishes mid-run continues it
 
 KEEP_DAYS = 30
-USED_KWH = 0.2                           # a slot the car drew at least this in was used; less is a blip
+# A smart slot was used if the charger reported "charging" without a break for at least this long (minutes).
+# The state is what counts, not the energy: the car wakes and probes for 15 to 70 seconds, drawing 0.01 kWh, while a
+# real charge, even a short top-up, runs for several minutes (4 Oct 2026: blips under 1.2 min, shortest charge 3.7 min).
+DEFAULT_MIN_CHARGE_MIN = 2.0
+LEARN_MIN_SLOTS = 8                      # confirmed charges needed before the figure moves at all
+LEARN_WEIGHT = 20.0                      # ...and how many it takes to move it half way (n / (n + this))
+LEARN_SHARE = 0.5                        # the aim: this share of a typical short real charge (the 20th percentile)
+
+
+def unbroken_min(rec: dict) -> float:
+    """Longest unbroken run of "charging" in the slot, in minutes. Records from before it was kept fall back to the
+    total charging time, which counts every blip and so can only overstate it."""
+    value = rec.get("longest_min")
+    return float(value if value is not None else rec.get("charging_min") or 0.0)
+
+
+def drew(rec: dict, min_charge_min: float = DEFAULT_MIN_CHARGE_MIN) -> bool:
+    """The car really charged in this slot (rather than waking for a moment)."""
+    return unbroken_min(rec) >= min_charge_min
+
+
+def learn_min_charge(slots: dict[str, dict], setting: float = DEFAULT_MIN_CHARGE_MIN) -> tuple[float, int]:
+    """(minutes, evidence): the shortest real charge, moved from the `setting` towards what the history shows.
+
+    The evidence is slots the supplier lists as completed that the car did charge in: real charges by its word. The
+    aim is half of their 20th-percentile run, so a typical short charge is well above the line and a blip well below.
+    It moves only after LEARN_MIN_SLOTS of them, by n / (n + LEARN_WEIGHT) of the way, and stays within half to double
+    the setting (1 minute at the least): one odd day can't swing it."""
+    runs = sorted(unbroken_min(r) for r in slots.values()
+                  if r.get("confirmed") and r.get("status") in ("done", "cut_short") and unbroken_min(r) > 0.5)
+    n = len(runs)
+    if n < LEARN_MIN_SLOTS:
+        return setting, n
+    target = LEARN_SHARE * runs[int(0.2 * (n - 1))]
+    value = setting + (target - setting) * n / (n + LEARN_WEIGHT)
+    return round(min(max(value, max(1.0, 0.5 * setting)), 2 * setting), 1), n
 
 
 class SlotTracker:
@@ -63,6 +98,10 @@ class SlotTracker:
             if start <= now < end and charging and dt_s > 0:
                 rec["car_kwh"] = round(rec["car_kwh"] + max(0.0, car_w or 0.0) * dt_s / 3.6e6, 4)
                 rec["charging_min"] = round(rec["charging_min"] + dt_s / 60, 1)
+                rec["run_min"] = round(rec.get("run_min", 0.0) + dt_s / 60, 2)
+                rec["longest_min"] = round(max(rec.get("longest_min", 0.0), rec["run_min"]), 2)
+            elif start <= now < end and not charging and rec.get("run_min"):
+                rec["run_min"] = 0.0                                  # a break: the next burst starts again
             if now >= end:
                 rec["status"], changed = "done", True
             elif key not in listed and key not in done:
@@ -125,16 +164,19 @@ class SlotTracker:
         kwh = value * min(1.0, hours / listed) if listed else min(value, max_kw * hours)
         return round(kwh, 2)
 
-    def summary(self, now: datetime, days: int = 14, tz=None, max_kw: float = 7.4) -> dict:
-        """Counts and recent slots for the Health tab. `max_kw`: the car charger's rating (caps old records)."""
+    def summary(self, now: datetime, days: int = 14, tz=None, max_kw: float = 7.4,
+                min_charge_min: float = DEFAULT_MIN_CHARGE_MIN) -> dict:
+        """Counts and recent slots for the Health tab. `max_kw`: the car charger's rating (caps old records);
+        `min_charge_min`: the shortest unbroken charge that counts as the slot being used."""
         since = (now - timedelta(days=days)).isoformat()
         recent = sorted((r for k, r in self.slots.items() if k >= since), key=lambda r: r["start"])
         finished = [r for r in recent if r["status"] != "planned"]
-        used = [r for r in finished if r["status"] in ("done", "cut_short") and r["car_kwh"] >= USED_KWH]
+        used = [r for r in finished if r["status"] in ("done", "cut_short") and drew(r, min_charge_min)]
         out = {
             "days": days, "slots": len(finished),
             "used": len(used),
-            "done_no_car": len([r for r in finished if r["status"] == "done" and r["car_kwh"] < USED_KWH]),
+            "done_no_car": len([r for r in finished if r["status"] == "done" and not drew(r, min_charge_min)]),
+            "min_charge_min": min_charge_min,
             "cancelled": len([r for r in finished if r["status"] == "cancelled"]),
             "cut_short": len([r for r in finished if r["status"] == "cut_short"]),
             # what EDF planned for the slots that ran (a withdrawn slot never ran, and EDF re-plans often: counting
@@ -150,6 +192,7 @@ class SlotTracker:
             ls, le = (s.astimezone(tz), e.astimezone(tz)) if tz else (s, e)
             rows.append({"day": ls.strftime("%a %d %b"), "time": f"{ls:%H:%M}–{le:%H:%M}", "status": r["status"],
                          "planned_kwh": self.planned_kwh(r, max_kw), "car_kwh": round(r["car_kwh"], 2),
-                         "charging_min": r["charging_min"], "confirmed": r["confirmed"]})
+                         "charging_min": r["charging_min"], "longest_min": round(unbroken_min(r), 1),
+                         "confirmed": r["confirmed"]})
         out["recent"] = rows
         return out
