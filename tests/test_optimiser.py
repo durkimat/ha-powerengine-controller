@@ -159,3 +159,38 @@ def test_a_night_far_ahead_still_sells_and_refills_when_the_margin_pays():
     opt = optimise(slots, 90.0, p, wear=p.wear_p / 100)
     assert opt["actions"][30:44].count(EXPORT) >= 2, opt["actions"][30:44]
     assert opt["soc"][43] >= 99                                 # and the battery is full when the cheap window closes
+
+
+def _evening(fragment: int, soc_slots: int = 12):
+    """19:30 on: three dear half-hours, then `fragment` cheap half-hours the learned window holds on its own (smart
+    slots that were cheap on every learned day), cheap smart slots (not in the window), then dear again and a real
+    night 6 hours later is out of the horizon."""
+    t0 = T0.replace(hour=19, minute=30)
+    slots = []
+    for i in range(3 + fragment + soc_slots):
+        cheap = i >= 3
+        s = Slot(t0 + i * SLOT, CHEAP if cheap else PEAK, 0.15, load_kwh=0.35)
+        s.overnight = 3 <= i < 3 + fragment
+        slots.append(s)
+    return slots
+
+
+def test_a_short_window_fragment_does_not_make_the_plan_buy_dear_energy_to_fill_it():
+    # a one-half-hour "window" (a smart slot's half-hour cheap on every learned day) cannot refill the battery, so
+    # being short at its end must not be penalised: the plan bought 6.7 kWh at 30.28p before it, to sell at 15p
+    p = Params(arbitrage=True, max_charge_kw=5.0, max_discharge_kw=5.0)
+    slots = _evening(fragment=1)
+    opt = optimise(slots, 55.0, p)
+    assert "grid_charge" not in opt["actions"][:3], opt["actions"]
+    plan = make_plan(slots, 55.0, p, slots[0].start, strategy="optimiser")
+    assert all(ps.action != GRID_CHARGE for ps in plan.slots[:3]), [ps.action for ps in plan.slots[:3]]
+
+
+def test_fill_penalty_ends_only_for_runs_that_can_refill_or_start_with_the_plan():
+    from pe_core.optimiser import fill_ends, window_ends
+    p = Params(arbitrage=True, max_charge_kw=5.0)
+    short, night = _evening(fragment=1), _evening(fragment=12, soc_slots=2)
+    assert any(window_ends(short)) and not any(fill_ends(short, p))          # a lone half-hour: no penalty
+    assert fill_ends(night, p) == window_ends(night)                         # a real night keeps it
+    now_in_it = _evening(fragment=1)[3:]                                      # the plan starts inside the run
+    assert fill_ends(now_in_it, p) == window_ends(now_in_it)
