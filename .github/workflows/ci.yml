@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
       - run: ruff check .
-      - run: pytest -q
+      - run: pytest -q -n auto
 
   hacs:
     name: HACS validation
