@@ -748,8 +748,15 @@ layout is agreed after this plan has been reviewed.
   the card, with an "along the expected path" line for phones), `powerengine-v2-health-card`. The config card gains the engine
   choice (inline confirm) and three groups: Your house (shared), Engine v1 settings, Engine v2 settings; the engine not in use
   is dimmed but editable.
-* Open questions with the mockup: v2 settings editable while v1 runs; whether the phone needs the full map; price bars always
-  shown or folded.
+* **Decided with the mockup:** the v2 settings can be edited while v1 runs; phones get the value map (scrolling sideways) as
+  well as the single line; the value bar is always shown on the Monitoring panel; switching engines asks the same
+  confirmation in **both** directions.
+* **Show thresholds as values, not as prices.** The export price is normally a fixed 15p (grid events are the rare
+  exception), so a line saying "sell above 31.6p" names a price that never happens. The Monitoring panel puts **the value of
+  a stored kWh** on one scale, with the real prices turned into lines after losses: "buy while it is worth more than 7.4p"
+  (import 6.99p ÷ η_c) and "sell when it is worth less than 14.3p" (export 15p × η_d, less the sale wear). The marker is the
+  value at the level now, and it moves as the battery fills. `sensor.pe_v2_value` therefore also publishes `buy_line_p` and
+  `sell_line_p` (and `use_line_p` for battery against grid for the house) in value terms; the sentences use the same form.
 
 **Earlier first ideas:**
 
