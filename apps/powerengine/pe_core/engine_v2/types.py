@@ -255,6 +255,7 @@ class StepInput:
     overnight: set = field(default_factory=set)          # half-hours of the day in the overnight window
     settings_changed: bool = False        # the v2 settings were saved since the last tick
     learned_changed: bool = False         # shared learned facts changed (efficiency, limits, profile)
+    slots_whole_house: bool = True        # the supplier gives the house the smart-slot rate (v1 `slots_whole_house`)
 
 
 @dataclass
