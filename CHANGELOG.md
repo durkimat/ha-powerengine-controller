@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.104 (beta)
+
+### Behaviour changes
+
+- **A smart-charge slot now counts as used when the charger says the car was charging for 2 minutes without a break, not when it drew 0.2 kWh.** The car waking up and probing for a few seconds at a time (0.01 kWh, 4 Oct 2026) no longer counts, however many times it happens, and a short real top-up (3.7 minutes that day) does. This one figure replaces two copies of the 0.2 kWh line, and feeds how likely PowerEngine thinks a planned smart slot is to happen (so it moves the expected price of future smart slots) and the Health tab's "used" and "done, no car" counts.
+- **The figure is a setting that learns.** New setting **Shortest real charge** (2 minutes, 0.5 to 10) and tick box **Learn: shortest real charge** (on) in the car section of the Config page. With learning on, once 8 smart slots the supplier confirmed have been seen it moves slowly towards half of a typical short real charge, never below half or above double the setting. The figure in use is on the diagnostics export (`smart_slots.min_charge_min`).
+
+### Other changes
+
+- Each smart slot's record keeps the longest unbroken charge (`longest_min`); records from before use their total charging time.
+- The Config page section is now "Car and smart charging" (it carried the supplier's name).
+
 ## 0.9.103 (beta)
 
 ### Behaviour changes
