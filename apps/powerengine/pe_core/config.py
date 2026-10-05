@@ -13,6 +13,7 @@ from typing import Any
 
 import yaml
 
+from .engine_v2.settings import SettingsError, V2Settings, parse_v2
 from .names import fill
 from .roles import RETIRED_ROLES, ROLE_BY_KEY, is_forbidden_control
 
@@ -38,6 +39,7 @@ KNOWN_KEYS = frozenset(
         "operation",
         "notifications",
         "site",
+        "engine_v2",
         "remove_entities",
     }
 )
@@ -66,6 +68,7 @@ SAFETY = {
     "smart_lookahead_h": (3, 1, 8),            # no request if a slot is planned within this many hours
     "car_min_charge_min": (2.0, 0.5, 10.0),    # the car must charge this long, unbroken, for a smart slot to count
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
+    "battery_floor_soc": (12, 0, 50),         # the battery's own lowest level (BMS cut-off); engine v2's hard floor (%)
     "overnight_start_h": (23.5, 0, 24),       # fixed overnight window: start, hours since midnight in half-hours
     "overnight_end_h": (5.5, 0, 24),          # ...and end (a start after the end runs over midnight)
     "cheap_threshold_p": (10.0, 0, 100),      # import at or below this is "cheap" (pence/kWh)
@@ -97,7 +100,7 @@ SAFETY = {
     "damp_burst_settle_min": (5.0, 1, 30),    # ...and then waits for the plan to be steady this long (min)
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage", "control_method": "timed_windows",
-                   "publisher": "auto", "overnight_window": "learned"}
+                   "publisher": "auto", "overnight_window": "learned", "engine": "v1"}
 # system settings chosen from a list: key -> (config-page section, ((value, label), ...))
 SYSTEM_CHOICES = {
     "battery_location": ("cold", (("garage", "Garage or outbuilding (follows outside over about 24 h)"),
@@ -108,6 +111,9 @@ SYSTEM_CHOICES = {
                                    ("ram_remote", "RAM remote control (Battery control override; no EEPROM writes)"))),
     "overnight_window": ("tariff", (("learned", "Learned from the rates (recommended)"),
                                     ("fixed", "Fixed times (set below)"))),
+    "engine": ("engine", (("v1", "Engine v1: a half-hour plan, remade every 5 minutes and on changes"),
+                          ("v2", "Engine v2: acts on conditions (a level reached, a price change, "
+                                 "the sun falling short)"))),
     "publisher": ("system", (("auto", "Automatic (MQTT if AppDaemon has the MQTT plugin, else direct)"),
                              ("mqtt", "MQTT"),
                              ("direct", "Direct through AppDaemon (no MQTT broker)"))),
@@ -130,6 +136,13 @@ NOTIFY_DEFAULT = "persistent_notification"      # HA's own notification area (th
 # Labels and one-line help for the config page (kept next to the defaults they describe).
 SETTING_TEXT = {
     "min_reserve_soc": ("Minimum reserve", "%", "PowerEngine never plans to take the battery below this."),
+    "battery_floor_soc": ("Battery's hard floor", "%",
+                          "The lowest level the battery itself allows (its BMS cut-off). Engine v2 never goes "
+                          "below it, not even for a grid event. Engine v1 uses the Minimum reserve instead."),
+    "engine": ("Planning engine", "",
+               "Which engine plans and decides. Engine v1 plans in half-hours. Engine v2 works out what a stored "
+               "kWh is worth and acts when a condition is met. Switching changes neither Active, Passive nor Pause; "
+               "each engine keeps its own settings."),
     "smart_max_requests_per_day": ("Requests per day", "requests",
                                    "The most times a day PowerEngine changes the car's ready-by time to ask for "
                                    "slots. Each change makes the supplier re-plan the car's charging."),
@@ -266,8 +279,8 @@ SETTING_TEXT = {
 
 # Config-page sections for the numeric settings (in display order).
 SETTING_SECTIONS = (
-    ("battery", "Battery and charging", ("min_reserve_soc", "cheap_threshold_p", "grid_charge_target_soc",
-                                         "charge_hysteresis_soc")),
+    ("battery", "Battery and charging", ("min_reserve_soc", "battery_floor_soc", "cheap_threshold_p",
+                                         "grid_charge_target_soc", "charge_hysteresis_soc")),
     ("tariff", "Overnight window", ("overnight_start_h", "overnight_end_h")),
     ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
     ("axle", "Grid events", ("pre_axle_lookahead_h", "axle_margin_soc")),
@@ -399,6 +412,7 @@ class Config:
     solar_plants: tuple[SolarPlant, ...] = ()
     devices: tuple[Device, ...] = ()
     site: Site = field(default_factory=Site)
+    engine_v2: V2Settings = field(default_factory=V2Settings)
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -591,6 +605,11 @@ def parse_config(data: Any) -> Config:
     if system["overnight_window"] == "fixed" and safety["overnight_start_h"] == safety["overnight_end_h"]:
         raise ConfigError("a fixed overnight window needs a start and an end that differ")
 
+    try:
+        engine_v2 = parse_v2(data.get("engine_v2"), features, safety)
+    except SettingsError as err:
+        raise ConfigError(str(err)) from err
+
     return Config(
         mode=mode,
         features=features,
@@ -602,6 +621,7 @@ def parse_config(data: Any) -> Config:
         solar_plants=_parse_plants(data.get("solar_plants")),
         devices=_parse_devices(data.get("devices")),
         site=_parse_site(data.get("site")),
+        engine_v2=engine_v2,
         raw=data,
     )
 
