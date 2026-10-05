@@ -31,7 +31,7 @@ def test_entity_states_cover_every_state_entity():
     out = entity_states(read(CONFIG, get_state(), NOW), PASSIVE, BST)
     # plus one dynamic sensor per configured solar plant (main, garage), not in the static STATE_ENTITIES list
     assert ({e.key for e in STATE_ENTITIES} - {"state_decision", "state_activity", "state_control_method",
-                                              "state_status", "state_override"}
+                                              "state_status", "state_override", "state_engine"}
             | {"state_solar_main_power", "state_solar_garage_power"}) == set(out)
     assert out["state_import_rate"][1]["pence"] == 30.28
     assert out["state_ev"][0] == "Plugged in"

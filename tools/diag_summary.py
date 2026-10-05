@@ -252,6 +252,42 @@ def early_of(app):
             "by_outcome": as_dict(e.get("by_outcome")), "replan_chose": as_dict(e.get("replan_chose"))}
 
 
+def engine_v2_of(app, tz):
+    """Engine v2 (the export's `engine_v2` section): which engine runs, revalues by cause, mode changes, flip-flops
+    and the timeline's first items. None when the export has no such section (an older app)."""
+    e = as_dict(app.get("engine_v2"))
+    if not e:
+        return None
+    health, rows = as_dict(e.get("health")), [as_dict(x) for x in as_list(e.get("journal"))]
+    today = as_dict(health.get("today"))
+    modes = [x for x in rows if x.get("kind") == "mode"]
+    causes = Counter(x.get("because") for x in rows if x.get("kind") == "revalue")
+    flips, last = 0, []
+    for x in modes:
+        t = parse_time(x.get("at"))
+        last = [(m, tm) for m, tm in last if t and tm and (t - tm).total_seconds() <= FLIP_FLOP_S]
+        if t and len(last) >= 2 and last[-2][0] == x.get("to") and last[-1][0] == x.get("from"):
+            flips += 1
+        last.append((x.get("to"), t))
+    items = as_list(as_dict(e.get("timeline")).get("items"))[:PLAN_SLOTS]
+    return {
+        "in_use": e.get("in_use"),
+        "mode": health.get("mode"),
+        "values_age_min": health.get("values_age_min"),
+        "revalues_today": today.get("revalues"),
+        "revalues_by_cause": dict(as_dict(today.get("causes"))) or {k: v for k, v in causes.most_common() if k},
+        "mode_changes_today": today.get("mode_changes"),
+        "mode_changes_in_journal": len(modes),
+        "flip_flops_today": today.get("flip_flops"),
+        "flip_flops_in_journal": flips,
+        "errors_today": health.get("errors_today"),
+        "timeline": [
+            {k: as_dict(x).get(k) for k in ("mode", "start", "end", "level_start", "level_end", "until")}
+            for x in items
+        ],
+    }
+
+
 def summarise(export, since=None):
     export = as_dict(export)
     app = as_dict(export.get("app"))
@@ -313,6 +349,7 @@ def summarise(export, since=None):
         "plan": plan_of(app, generated, tz),
         "writes": writes_of(app),
         "early_target": early_of(app),
+        "engine_v2": engine_v2_of(app, tz),
     }
     return out
 
@@ -434,6 +471,27 @@ def render(s):
         add(f"early targets (#175), {e['count']} since {e['since']}: " + "; ".join(parts))
         if e["replan_chose"]:
             add("  replans chose: " + ", ".join(f"{k} x{v}" for k, v in e["replan_chose"].items()))
+    v = s.get("engine_v2")
+    if v:
+        add(
+            f"engine in use: {v['in_use']}"
+            + (f"; v2 mode {v['mode']}, values {v['values_age_min']} min old" if v.get("mode") else "")
+        )
+        if v.get("revalues_by_cause") or v.get("revalues_today") is not None:
+            add(
+                f"  revalues today {v.get('revalues_today')}: "
+                + (", ".join(f"{k} x{n}" for k, n in v["revalues_by_cause"].items()) or "none")
+            )
+        add(
+            f"  mode changes today {v.get('mode_changes_today')} (journal {v['mode_changes_in_journal']}); "
+            f"flip-flops today {v.get('flip_flops_today')} (journal {v['flip_flops_in_journal']}); "
+            f"errors today {v.get('errors_today')}"
+        )
+        if v["timeline"]:
+            add("  timeline: " + "  ".join(
+                f"{hhmm(parse_time(x['start']), tz)} {x['mode']} {x['level_start']}>{x['level_end']}%"
+                for x in v["timeline"]
+            ))
     w = s.get("writes")
     if w:
         add(

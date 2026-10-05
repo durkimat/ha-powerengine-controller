@@ -18,7 +18,7 @@ AVAILABILITY_TOPIC = f"{BASE_TOPIC}/status"
 ONLINE, OFFLINE = "online", "offline"
 REPO_URL = "https://github.com/durkimat/ha-powerengine-controller"
 
-GROUPS = ("cfg", "ctl", "state", "plan", "map", "diag", "cost", "event", "ui")
+GROUPS = ("cfg", "ctl", "state", "plan", "map", "diag", "cost", "event", "ui", "v2")
 _KEY = re.compile(r"^(" + "|".join(GROUPS) + r")(_[a-z0-9_]+)?$")   # e.g. plan, plan_next_mode
 
 # HA only allows entity_category "config" on controllable entities (switch,
@@ -101,6 +101,10 @@ ENTITIES: tuple[EntityDef, ...] = (
                "entity_category": "diagnostic", "suggested_display_precision": 1}),
     EntityDef("sensor", "diag_overnight", "Overnight window in use",
               {"icon": "mdi:weather-night", "entity_category": "diagnostic"}),
+    EntityDef("sensor", "diag_v2", "Engine v2 health",
+              {"icon": "mdi:engine-outline", "entity_category": "diagnostic"}),
+    EntityDef("sensor", "diag_v2_settings", "Engine v2 settings",
+              {"icon": "mdi:tune-variant", "entity_category": "diagnostic"}),
     EntityDef("sensor", "diag_system_losses", "System losses yesterday",
               {"device_class": "energy", "unit_of_measurement": "kWh", "icon": "mdi:fire",
                "entity_category": "diagnostic", "suggested_display_precision": 1}),
@@ -127,6 +131,7 @@ STATE_ENTITIES: tuple[EntityDef, ...] = (
                "options": ["self_use", "grid_charge", "hold", "force_discharge", "export", "none"]}),
     EntityDef("sensor", "state_activity", "Activity", {"icon": "mdi:history"}),
     EntityDef("sensor", "state_override", "Manual override", {"icon": "mdi:hand-back-right"}),
+    EntityDef("sensor", "state_engine", "Planning engine", {"icon": "mdi:engine"}),
     EntityDef("sensor", "state_control_method", "Inverter control", {"icon": "mdi:tune-variant"}),
     EntityDef("sensor", "state_battery_soc", "Battery",
               {"device_class": "battery", "unit_of_measurement": "%", "state_class": "measurement"}),
@@ -142,6 +147,15 @@ STATE_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "state_smart_charge", "Smart charge", {"icon": "mdi:ev-station"}),
     EntityDef("sensor", "state_axle", "Axle", {"icon": "mdi:transmission-tower-export"}),
     EntityDef("sensor", "state_free_power", "Free power", {"icon": "mdi:gift-outline"}),
+)
+
+# Engine v2's own sensors (pe_core/engine_v2/publish.py; the card's contract is in docs/plans/engine-v2-build.md).
+V2_ENTITIES: tuple[EntityDef, ...] = (
+    EntityDef("sensor", "v2_mode", "Engine v2 mode", {"icon": "mdi:state-machine"}),
+    EntityDef("sensor", "v2_value", "Engine v2 value of stored energy", {"icon": "mdi:scale-balance"}),
+    EntityDef("sensor", "v2_timeline", "Engine v2 timeline", {"icon": "mdi:timeline-clock-outline"}),
+    EntityDef("sensor", "v2_value_curve", "Engine v2 value curve", {"icon": "mdi:chart-bell-curve"}),
+    EntityDef("sensor", "v2_triggers", "Engine v2 triggers", {"icon": "mdi:flash-outline"}),
 )
 
 PLAN_ENTITIES: tuple[EntityDef, ...] = (
@@ -207,7 +221,8 @@ RETIRED_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("select", "ui_history_day", "History day", {"command_topic": f"{BASE_TOPIC}/ui_history_day/set"}),
 )
 
-ENTITIES = ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + COST_ENTITIES + UI_ENTITIES + CONTROL_SWITCHES + HISTORY_ENTITIES
+ENTITIES = (ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + V2_ENTITIES + COST_ENTITIES + UI_ENTITIES + CONTROL_SWITCHES
+            + HISTORY_ENTITIES)
 
 
 def device(version: str) -> dict[str, Any]:

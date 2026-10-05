@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shutil
+import threading
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -70,6 +71,10 @@ from pe_core.demo.world import DemoWorld
 from pe_core.earlytarget import EarlyTargets
 from pe_core.eeprom import BlockWriteModel, WriteLog, WriteModel
 from pe_core.energy import Recorder
+from pe_core.engine_v2 import publish as v2publish
+from pe_core.engine_v2.engine import EngineV2
+from pe_core.engine_v2.settings import V2Settings
+from pe_core.engine_v2.types import BatteryFacts, Situation, StepInput
 from pe_core.entities import (
     ENTITIES,
     RETIRED_ENTITIES,
@@ -120,6 +125,8 @@ from pe_core.weather import Weather
 from pe_core.wizard import wizard_info
 
 HEARTBEAT_SECONDS = 60
+V2_SAVE_SECONDS = 300             # engine v2's state file is saved this often (and on terminate)
+V2_CACHE_SECONDS = 60             # the certainty scores and the forecast points the v2 tick reuses
 DATA_GAP_GRACE_S = 180             # a reading missing this long or less keeps the last decision (_bridge_data_gap)
 LOWWRITE_START = "02:40:00"       # after the Simulator has had its hour
 LOWWRITE_SLICE = 3                # new days planned per pass (about a second each); more passes follow a minute apart
@@ -360,6 +367,8 @@ class PowerEngine(hass.Hass):
         self._last_checks = None
         self._published = {}
         self._decision, self._since = None, None
+        self._v2, self._v2_lock, self._v2_saved = None, threading.Lock(), None     # engine v2 (_engine_v2)
+        self._v2_cache, self._v2_learned_sig = {}, None
         self._no_data_since = None                 # when the readings last went missing (see DATA_GAP_GRACE_S)
         try:   # keep the activity log across restarts (it lives in the entity's attributes)
             saved = self.get_state("sensor.pe_state_activity", attribute="entries")
@@ -414,6 +423,7 @@ class PowerEngine(hass.Hass):
             self._refresh_months()
         except Exception as err:
             self.log(f"Could not open the cost book: {err!r}", level="WARNING")
+        self._publish_v2_settings()
         self._evaluate()                                   # also publishes mode + config status
         self._cycle({})
         self._sync_dashboard()
@@ -429,6 +439,8 @@ class PowerEngine(hass.Hass):
         self.run_every(self._beat, "now+60", HEARTBEAT_SECONDS)
         self.run_every(lambda kwargs: self._evaluate(), f"now+{RECHECK_SECONDS}", RECHECK_SECONDS)
         self.run_every(self._cycle, f"now+{CYCLE_SECONDS}", CYCLE_SECONDS)
+        sample_s = self.cfg.engine_v2.sample_s if self.cfg is not None else V2Settings().sample_s
+        self.run_every(self._engine_tick, f"now+{sample_s}", sample_s)   # engine v2's tick; does nothing on v1
         self.run_in(self._learn_load, 5)                     # load profile from history, then daily
         self.run_daily(self._learn_load, "00:10:00")
         self.run_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
@@ -457,6 +469,7 @@ class PowerEngine(hass.Hass):
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
 
     def terminate(self):
+        self._save_engine_state()
         if self._get_publisher() is not None:
             self._get_publisher().available(False)
         try:
@@ -578,7 +591,7 @@ class PowerEngine(hass.Hass):
         self._note_absent_guards(absent)
         paused = self.get_state(PAUSE_ENTITY) == "on"
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused,
-                              unverified=self._unverified())
+                              unverified=self._unverified() or self._v2_refusal())
         self._leave_active(getattr(self, "mode", None), mode, guards)
         prev = getattr(self, "mode", None)
         if mode.effective == "active" and (prev is None or prev.effective != "active"):
@@ -646,12 +659,17 @@ class PowerEngine(hass.Hass):
                 self._refresh_temps(readings.now)
                 self._expire_override(readings.now)
                 self._maybe_replan(readings)
-                decision = self._bridge_data_gap(
-                    decide(readings, self.cfg, self._decision, self.tz, plan=self.plan,
-                           override=self._active_override()), readings.now)
-                decision = self._early_target(readings, decision)
-                self._note_command(decision)
-                sim = self.sim.update(decision, readings, self._params(), self.tz)
+                if self._engine_name() == "v2":
+                    # engine v2 decides in its own tick (_engine_tick); v1's plan above is still made, for comparison
+                    shown = self._decision
+                else:
+                    decision = self._bridge_data_gap(
+                        decide(readings, self.cfg, self._decision, self.tz, plan=self.plan,
+                               override=self._active_override()), readings.now)
+                    decision = self._early_target(readings, decision)
+                    self._note_command(decision)
+                    shown = decision
+                sim = self.sim.update(shown, readings, self._params(), self.tz) if shown is not None else None
                 if sim is not None:
                     self._publish_if_changed("state_sim_soc", round(sim, 1),
                                              {"cost_today": round(self.sim.cost_today, 2),
@@ -659,22 +677,191 @@ class PowerEngine(hass.Hass):
             except Exception as err:          # never let one bad reading stop the app
                 self.log(f"Reading, planning or deciding failed: {err!r}", level="WARNING")
         if decision is not None:
-            passive = self.mode.effective != "active"
-            entry = self.activity.record(decision, readings.now, passive, self.tz)
-            if entry:
-                self._since = entry["hhmm"]
-                self.log(f"Decision: {entry['text']}")
-                self._logbook(entry["text"])
-                self._publish_state("state_activity", entry["time"], {"entries": self.activity.entries})
-            self._decision = decision
-            self._count_would_writes(readings, decision)
-            self._control(readings, decision)
-        for key, (state, attrs) in entity_states(readings, self.mode, self.tz, decision, self._since).items():
+            self._hand_over(readings, decision)
+        shown = self._decision if readings is not None and self._engine_name() == "v2" else decision
+        for key, (state, attrs) in entity_states(readings, self.mode, self.tz, shown, self._since).items():
             self._publish_if_changed(key, state, attrs)
+        self._publish_if_changed("state_engine", self._engine_name(), {"v2_available": True})
         self._publish_override()
         if not self._dashboard_readings_synced and getattr(self, "_last_readings", None) is not None:
             self._dashboard_readings_synced = True     # now the real capacity, not the 18000 Wh fallback
             self._sync_dashboard()
+
+    def _hand_over(self, readings, decision, send=True):
+        """A decision (either engine's) goes the one way: the activity log, the decision on record, the would-write
+        counts and the inverter control (RAM refresh, BMS caps, fuse cap, following check, write budget). With
+        send=False (engine v2 on timed windows) it is logged and counted as a would-do, and nothing is sent."""
+        passive = self.mode.effective != "active" or not send
+        entry = self.activity.record(decision, readings.now, passive, self.tz)
+        if entry:
+            self._since = entry["hhmm"]
+            self.log(f"Decision: {entry['text']}")
+            self._logbook(entry["text"])
+            self._publish_state("state_activity", entry["time"], {"entries": self.activity.entries})
+        self._decision = decision
+        self._count_would_writes(readings, decision)
+        if send:
+            self._control(readings, decision)
+
+    # --- engine v2 (pe_core/engine_v2, docs/plans/engine-v2.md) ------------------------------------
+
+    def _engine_name(self):
+        """The engine the system setting chooses: "v1" (the half-hour plan) or "v2" (values and exit conditions)."""
+        return "v2" if self.cfg is not None and self.cfg.system.get("engine") == "v2" else "v1"
+
+    def _v2_refusal(self):
+        """Why engine v2 may not send commands (it only drives RAM remote control in this release), or None."""
+        if self._engine_name() == "v2" and self.cfg.system.get("control_method") != "ram_remote":
+            return "Engine v2 needs RAM remote control"
+        return None
+
+    def _v2_state_path(self):
+        return os.path.join(os.path.dirname(self._save_path()), "engine_v2_state.json")
+
+    def _engine_v2(self):
+        """The engine, built on first use from the saved state (a broken file is ignored with a warning) and kept in
+        step with the settings."""
+        eng = self._v2
+        if eng is None:
+            state = None
+            try:
+                with open(self._v2_state_path(), encoding="utf-8") as fh:
+                    state = json.load(fh)
+                if not isinstance(state, dict):
+                    raise ValueError("not a mapping")
+            except FileNotFoundError:
+                state = None
+            except (OSError, ValueError) as err:
+                self.log(f"Engine v2: the saved state could not be read ({err}); starting fresh", level="WARNING")
+                state = None
+            try:
+                eng = EngineV2(self.cfg.engine_v2, state)
+            except Exception as err:
+                self.log(f"Engine v2: the saved state was not usable ({err!r}); starting fresh", level="WARNING")
+                eng = EngineV2(self.cfg.engine_v2)
+            self._v2, self._v2_saved = eng, datetime.now(timezone.utc)
+        elif eng.s != self.cfg.engine_v2:
+            eng.update_settings(self.cfg.engine_v2)
+        return eng
+
+    def _save_engine_state(self, now=None):
+        eng = self.__dict__.get("_v2")
+        if eng is None:
+            return
+        self._v2_saved = now or datetime.now(timezone.utc)
+        path = self._v2_state_path()
+        try:
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(eng.state(), fh, separators=(",", ":"), default=str)
+            os.replace(tmp, path)
+        except (OSError, TypeError, ValueError) as err:
+            self.log(f"Engine v2: could not save its state ({err!r})", level="WARNING")
+
+    def _publish_v2_settings(self):
+        """The v2 settings catalogue with the values in use (the config page's schema)."""
+        state, attrs = v2publish.settings_state(self.cfg.engine_v2 if self.cfg is not None else V2Settings())
+        self._publish_if_changed("diag_v2_settings", state, attrs)
+
+    def _engine_switched(self, was):
+        """The engine setting changed in a config save. Active, Passive and Pause stay as they are. Engine v2 starts
+        from its saved state and works its values out at once; going back to v1 hands control to v1's next cycle (the
+        inverter keeps its last command, and the RAM refresh carries on, meanwhile)."""
+        now = self._engine_name()
+        self._save_engine_state()
+        self._v2 = None                                    # rebuilt from the saved state; its first step revalues
+        self._v2_cache, self._v2_learned_sig = {}, None
+        self.log(f"Engine changed from {was} to {now}: the mode (Active, Passive or Pause) is unchanged; "
+                 + ("engine v2 works out its values on its next tick" if now == "v2"
+                    else "engine v1 takes over at its next cycle"))
+        self._logbook(f"planning engine changed from {was} to {now}")
+        self._notify("health", (f"engine:{now}:{datetime.now(timezone.utc).isoformat(timespec='minutes')}",
+                                f"PowerEngine: engine {now}",
+                                f"The planning engine was changed from {was} to {now}. Active, Passive and Pause "
+                                "are unchanged."))
+
+    def _cold_factor_now(self, now):
+        """The cold-battery caution's charge fraction for the half-hour running now (1.0: none)."""
+        if not self.cfg.features.get("cold_caution", True) or not getattr(self, "_caution", None):
+            return 1.0
+        _, fac, _ = self._cold_in_use()
+        return learning.slot_factors([slot_start(now)], self._caution, fac)[0]
+
+    def _v2_facts(self, r):
+        """The battery and supply as the engine needs them, from the same sources v1's planner and controller use."""
+        p, pc = self._params(r), self._control_params(r)
+        floor = float(self.cfg.safety.get("battery_floor_soc", 12))
+        lr = getattr(self, "learned", None)
+        if lr is not None and self.cfg.features.get("learn_reserve", True) and lr.reserve_soc is not None \
+                and floor < lr.reserve_soc <= floor + 15:
+            floor = float(lr.reserve_soc)                         # learned: the battery really stops here
+        limits = self._bms_limits(r, pc.max_charge_kw * 1000)
+        bms_c = limits.charge_w / 1000 if limits.charge_source == "bms" and limits.charge_w is not None else None
+        bms_d = limits.discharge_w / 1000 if limits.discharge_source == "bms" and limits.discharge_w is not None \
+            else None
+        return BatteryFacts(capacity_kwh=p.capacity_kwh, eta_charge=p.efficiency, eta_discharge=p.efficiency,
+                            max_charge_kw=p.max_charge_kw, max_discharge_kw=p.max_discharge_kw, taper=p.taper,
+                            dtaper=p.dtaper, hard_floor_soc=floor, export_limit_kw=p.export_limit_kw,
+                            fuse_kw=p.fuse_kw, ev_charger_kw=p.ev_charger_kw,
+                            charge_factor=self._cold_factor_now(r.now), bms_charge_kw=bms_c, bms_discharge_kw=bms_d)
+
+    def _v2_cached(self, key, now, make):
+        """Something slow to make that the 10-second tick may reuse for a minute."""
+        held = self._v2_cache.get(key)
+        if held is None or (now - held[0]).total_seconds() >= V2_CACHE_SECONDS:
+            held = self._v2_cache[key] = (now, make())
+        return held[1]
+
+    def _v2_input(self, r, send, method):
+        now = r.now
+        facts = self._v2_facts(r)
+        reason = "" if send else (self._v2_refusal() or self.mode.reason)
+        cert = self._v2_cached("cert", now, lambda: Certainty(self.slots.slots, self.tz, self._min_charge_min()))
+        solar = self._v2_cached("solar", now, self._solar_forecast)
+        sig = (facts.capacity_kwh, facts.eta_charge, facts.max_charge_kw, facts.max_discharge_kw, facts.taper,
+               facts.dtaper, facts.hard_floor_soc, facts.export_limit_kw, facts.ev_charger_kw,
+               round(self.profile.days, 1) if self.profile else None)
+        learned = self._v2_learned_sig is not None and sig != self._v2_learned_sig
+        self._v2_learned_sig = sig
+        situation = Situation(active=send, mode_reason=reason, override=self._active_override(),
+                              house_load_includes_ev=bool(self.cfg.system.get("house_load_includes_ev", True)),
+                              control_method=method)
+        return StepInput(now=now, readings=r, facts=facts, situation=situation, tz=self.tz or timezone.utc,
+                         solar_points=solar, load_profile=self.profile, slot_certainty=cert.score,
+                         slot_first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
+                         overnight=self._overnight(), learned_changed=learned,
+                         slots_whole_house=bool(self.cfg.features.get("slots_whole_house", True)))
+
+    def _engine_tick(self, kwargs):
+        """Engine v2's tick (every sample_s): read, step the engine, publish its sensors, and hand its decision to the
+        same control path v1 uses. Does nothing on engine v1. Skips a tick while the last one is still running."""
+        if self._engine_name() != "v2" or self.cfg_error or self.mode.effective == "unconfigured":
+            return
+        if not self._v2_lock.acquire(blocking=False):
+            return
+        try:
+            r = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None,
+                     self._tariff(), self._events(), self._ev(), self._forecast())
+            eng = self._engine_v2()
+            method = self._control_method()
+            ram = method == "ram_remote"
+            active = self.mode.effective == "active"
+            send = active and ram
+            out = eng.step(self._v2_input(r, send, method))
+            tz = self.tz or timezone.utc
+            for key, (state, attrs) in v2publish.entity_states(out, eng, eng.s, tz).items():
+                self._publish_if_changed(key, state, attrs)
+            if send:
+                self._note_command(out.decision)
+            else:
+                self.recorder.note(None, None)
+            self._hand_over(r, out.decision, send=ram)       # timed windows: logged, counted, nothing sent
+            if (r.now - self._v2_saved).total_seconds() >= V2_SAVE_SECONDS:
+                self._save_engine_state(r.now)
+        except Exception as err:                   # never let one bad tick stop the app
+            self.log(f"Engine v2 tick failed: {err!r}", level="WARNING")
+        finally:
+            self._v2_lock.release()
 
     # --- manual override (pe_core/override.py, docs/plans/mode-override.md) -------------------------
 
@@ -3289,6 +3476,7 @@ class PowerEngine(hass.Hass):
     def _reload(self):
         """Re-read config.yaml in place and republish status (no app restart)."""
         self._temps_at = None                              # cold settings may have changed: recompute soon
+        engine_before = self._engine_name()
         p_before = self._params(conversion=False) if self.cfg is not None else None
         self.cfg_error = None
         try:
@@ -3299,6 +3487,9 @@ class PowerEngine(hass.Hass):
         self._watch_ready_by()
         if self.cfg is not None:
             self._publish_names()                          # the site's adapters may have changed
+            self._publish_v2_settings()
+            if self._engine_name() != engine_before:
+                self._engine_switched(engine_before)
         if self.cfg is not None and self.costbook is not None:
             fid = flow_id(self.cfg)
             if fid != self.costbook.flow_id:              # inputs that shape the flows changed: rebuild from history
@@ -3361,6 +3552,9 @@ class PowerEngine(hass.Hass):
             "smart_slots": s(lambda: self.slots.summary(now, tz=self.tz, min_charge_min=self._min_charge_min()))
             if getattr(self, "slots", None) else None,
             "bms": s(self._bms_bundle),
+            "engine_v2": s(lambda: diagnostics.engine_v2_section(
+                self.__dict__.get("_v2"), self._engine_name(), now,
+                (self._published.get("v2_timeline") or (None, None))[1])),
             "early_target": s(lambda: {**self._early.summary(), "records": self._early.records[-60:]}),
             "attribute_sizes": s(lambda: diagnostics.largest_attrs(self.__dict__.get("_attr_sizes", {}))),
             "log": list(getattr(self.__dict__.get("_log_ring"), "lines", [])),
