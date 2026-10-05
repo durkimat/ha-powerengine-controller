@@ -195,9 +195,8 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 - **Zappi Eco+ and solar (monitor):** Eco+ is required for EDF/Octopus smart charging. The owner has only seen the car charge from the grid, not from solar, so some
   threshold (probably on the charger) decides. If the Zappi ever starts and stops with solar surplus, `car_charging` (an urgent rule, no damping) and the plan signature will flip with it:
   watch `ev_state` changes per day in the diagnostics export, and add a short debounce on stop only if it happens. Do nothing until it is seen.
-- Release workflow, still to do (the workflow itself is done and used for 0.9.87 to 0.9.92): the card path ran as a **dry run** on 3 Oct
-  (card branch checked out, script ran, nothing pushed), but a **real** card release in the same run (card PR pushed, merged, card
-  release created, `card_notes` given) is untested; it needs a real card change to ride along. Untested too: a slow CI (the script
+- Release workflow, still to do (the workflow itself is done and used for 0.9.87 to 0.9.104): the card path ran as a **dry run** on 3 Oct, and as a **real** card
+  release in 0.9.104 (5 Oct: card branch checked out, card PR pushed, merged, card release created with `card_notes`; it worked). Still untested: a slow CI (the script
   waits up to 12 minutes). The owner chose not to test a red-CI run. `RELEASE_TOKEN` is a fine-grained token with an expiry: when it
   lapses the checkout steps fail with an auth error, and the owner renews it and replaces the secret. Created about 26 Sep 2026
   with a 90-day expiry (the owner can't see the exact date), so it lapses around 25 Dec 2026: ask him to renew it in early December.
