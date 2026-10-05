@@ -19,9 +19,10 @@ def installed_version(path: str) -> str | None:
 
 # The oldest card this app works with, published as `min_card_version` on sensor.pe_diag_version. 0.9.88 is the card
 # with the setup wizard (now the Your system card, `powerengine-system-card`, which the dashboard's Config page
-# holds). Raise it only when the app starts to need something a newer card does. The card holds the matching
-# MIN_APP_VERSION for the other direction.
-MIN_CARD_VERSION = "0.9.97"
+# holds). 0.9.106 is the card with the engine v2 cards (powerengine-engine-card, powerengine-v2-plan-card,
+# powerengine-v2-health-card), which the dashboard's Engine v2 page holds. Raise it only when the app starts to need
+# something a newer card does. The card holds the matching MIN_APP_VERSION for the other direction.
+MIN_CARD_VERSION = "0.9.106"
 
 _DOTTED = re.compile(r"^\s*v?(\d+(?:\.\d+)*)\s*$")
 

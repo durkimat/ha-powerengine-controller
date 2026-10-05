@@ -11,6 +11,7 @@ rules and for what the code does now, and GitHub issues are the backlog.
 | [multiple-devices.md](multiple-devices.md) | More than one inverter, battery, car, charger, tariff or grid-event provider: devices as capability sets, a plan per battery, per-device control, stages M0 to M3 | Anything that adds a second device of a kind |
 | [equipment-manager.md](equipment-manager.md) | Replacing the setup wizard with a "Your system" list and one add/edit/replace/remove panel, with removal warnings; stages E1 to E3 | The config page's equipment UI, the wizard, adding or removing a device |
 | [mode-override.md](mode-override.md) | A manual override of the inverter's mode for a slot-aligned period, and the Power Engine / Inverter split of the top panel; stages O1 to O3 | The Monitoring page's top panel, manual control, `decide` priorities |
+| [engine-v2.md](engine-v2.md) | A second, selectable planning engine: event-driven, value of stored energy (water value), modes with exit conditions; layers, settings kept apart from v1, expected behaviours, closed-loop testing, stages V0 to V5 | Anything about engine v2 or choosing between engines |
 | [demo-and-easier-install.md](demo-and-easier-install.md) | Demo mode design, install simplification, steps A1–D1, decisions, risks | Demo or install work (#192), the native integration (#177) |
 
 Keep these up to date: when a step lands, update the plan's Status box in the same PR.

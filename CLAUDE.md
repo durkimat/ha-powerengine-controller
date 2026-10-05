@@ -279,6 +279,37 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   (in-memory ring, lost on restart). **Not done:** Modbus read-back of 43136/43129 (no entity for it). To watch in the
   first cold spell: the export's `bms` rows against the actual battery power; the conversion assumes battery-side watts.
 
+## Current work: engine v2 (built for 0.9.106)
+
+Design `docs/plans/engine-v2.md` (owner's decisions in its status box and section 18), build plan `docs/plans/engine-v2-build.md`.
+A second, selectable engine: system setting `engine` (`v1` default, `v2`); v2's own settings are the `engine_v2:` block
+(`pe_core/engine_v2/settings.py`; missing keys seeded once from v1's equivalents: arbitrage, events, free power, reserve). New shared
+safety setting `battery_floor_soc` (12 %, the BMS's own limit; v2's hard floor, v1 does not read it).
+
+- **How it decides:** `pe_core/engine_v2/` (pure). `forecast.py` cuts the look-ahead into segments at the data's own times (a smart slot's
+  real minutes) with low/mid/high sun and house; `value.py` is a stochastic dynamic programme for the value of a stored kWh (smart slots are
+  two price outcomes known before the choice), giving `Lines` (value against prices turned into lines after losses), a charge target and an
+  expected timeline; `rules.py` one rules core for plan and live (grid event > override > free power > car > reserve; events may go below the
+  owner's reserve to the hard floor + 1); `execute.py` the mode automaton (exit conditions, price and level bands, minimum time, deadlines that
+  only re-check); `observe.py` filtered battery level and events; `triggers.py` revalue only on events (coalesced; 2 h backstop);
+  `learning.py` scenario weights, solar bias, load spread, level offset; `engine.py` `EngineV2.step` never raises; `publish.py` the sensors.
+- **Charge early within a cheap stretch:** the DP decides how much (ties not bought); `value.run_target` / `Lines.charge_now` start it at
+  the beginning of the stretch at one price, not at its end.
+- **In the app:** `_engine_tick` (every `sample_s`, a no-op on v1) steps the engine; the 30 s `_cycle` keeps its bookkeeping and still makes
+  v1's plan (a comparison) but does not decide with v2; both engines' decisions go through `_hand_over` (activity log, would-writes,
+  `_control`), so RAM control, BMS and fuse caps, following check and write budget are shared. **v2 needs RAM remote control:** on timed
+  windows Active is refused ("Engine v2 needs RAM remote control"). State in `engine_v2_state.json` beside the config. Diagnostics export
+  section `engine_v2`; `tools/diag_summary.py` prints it.
+- **Sensors (the card's contract, `engine-v2-build.md`):** `sensor.pe_state_engine`, `pe_v2_mode`, `pe_v2_value`, `pe_v2_timeline`,
+  `pe_v2_value_curve`, `pe_v2_triggers`, `pe_diag_v2`, `pe_diag_v2_settings`. Card: `powerengine-engine-card`, `powerengine-v2-plan-card`,
+  `powerengine-v2-health-card` on the dashboard's **Engine v2** page (after Plan); the config card has the engine choice (confirm both ways)
+  and Your house / Engine v1 / Engine v2 groups, sending `engine`/`engine_v2` only when the app publishes `pe_diag_v2_settings`.
+  `MIN_CARD_VERSION` 0.9.106. The existing pages don't switch with the engine yet (a later release).
+- **Comparison:** `tools/engine_compare.py` runs the whole app closed loop in the demo world on the pack's days, v1 against v2, with a
+  perfect-foresight bound.
+- **Not done / to watch:** not yet run on a live HA; `sample_s` changes need a restart; `band_exit` may revalue often on real data
+  (watch the Health card's causes); the design's offset sign: the learned offset is reported minus true.
+
 ## Current work: making it generic (Phase 0)
 
 Plan: `docs/plans/making-it-generic.md` (index: `docs/plans/README.md`; each plan opens with a Status box, and the box is updated in the PR that lands a step). Phase 0 restructures the code behind adapters, with no

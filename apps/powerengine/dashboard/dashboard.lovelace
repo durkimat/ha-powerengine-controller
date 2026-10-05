@@ -708,6 +708,31 @@ views:
 
               **Planned inverter writes, next 24 h: {{ wf }}** (purple bars on the chart; an estimate if the plan runs as it stands, not counting replans). Today so far: {{ states('sensor.pe_diag_writes_today') }}.
               {%- endif %}
+  - title: Engine v2
+    path: engine-v2
+    icon: mdi:engine
+    type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Engine v2"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
+          - type: custom:powerengine-demo-card
+            grid_options: {columns: full}
+          - type: custom:powerengine-engine-card
+            grid_options: {columns: full}
+          - type: custom:powerengine-v2-plan-card
+            grid_options: {columns: full}
+          - type: custom:powerengine-v2-health-card
+            grid_options: {columns: full}
   - title: Plan history
     path: history
     icon: mdi:history
