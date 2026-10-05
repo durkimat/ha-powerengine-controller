@@ -481,7 +481,7 @@ a dear rate until the battery is refilled. It must never go below the battery's 
 
 | Floor | What it is | Setting | Who may go below it |
 |---|---|---|---|
-| **Hard floor** | The level at which the battery or inverter stops discharging (its over-discharge cut-off). A fact about the hardware | Shared: `battery_floor_soc`, raised by the learned level at which the battery really stops supplying (v1's `learn_reserve` measurement) | **Nobody.** A grid event stops `hard_floor_margin_pct` (1 point) above it, so the inverter's own cut-off is never the thing that ends the event |
+| **Hard floor** | The level at which the battery or inverter stops discharging (its over-discharge cut-off). A fact about the hardware: **12% on this install** (the BMS limit) | Shared: `battery_floor_soc` (12), raised by the learned level at which the battery really stops supplying (v1's `learn_reserve` measurement) | **Nobody.** A grid event stops `hard_floor_margin_pct` (1 point) above it, so the inverter's own cut-off is never the thing that ends the event |
 | **Owner's reserve** | The level kept back in normal running (for a power cut, or peace of mind) | v2: `reserve_soc` | Grid events only |
 
 The value calculation knows both: below the reserve after an event, the battery cannot cover the house, so the house buys at
@@ -739,7 +739,19 @@ layout is agreed after this plan has been reviewed.
 | Triggers | `sensor.pe_v2_triggers` | The last 30 events and what each caused (re-check, revalue, mode change) | About 4 KB |
 | Journal | Diagnostics export section `engine_v2` | Mode changes and revalues with their inputs | Not an entity |
 
-**First ideas for the card, for discussion after review:**
+**Card suggestions (5 Oct 2026, shown to the owner as a mockup with example figures; not yet agreed):**
+
+* A small entity **`sensor.pe_state_engine`** (state `v1` or `v2`), because Home Assistant's card visibility can test only an
+  entity's state. The dashboard shows each page's v1 or v2 cards by it.
+* New elements: `powerengine-engine-card` (Monitoring top panel: mode, why with prices and value, price bars against the
+  thresholds, exit conditions, reading and filtered level), `powerengine-v2-plan-card` (timeline and value map, drawn as SVG by
+  the card, with an "along the expected path" line for phones), `powerengine-v2-health-card`. The config card gains the engine
+  choice (inline confirm) and three groups: Your house (shared), Engine v1 settings, Engine v2 settings; the engine not in use
+  is dimmed but editable.
+* Open questions with the mockup: v2 settings editable while v1 runs; whether the phone needs the full map; price bars always
+  shown or folded.
+
+**Earlier first ideas:**
 
 * **Plan view, timeline:** the existing plot style, with modes as coloured bands whose edges are **expected** times
   (shown softer than the past), the level line with its low-to-high band, and the exit condition written on each band
@@ -891,14 +903,10 @@ Each stage is a PR; nothing changes behaviour for v1 (the replay passes unchange
 | 4 | Wear | Two settings (house, sales), both 0p by default: the battery is a sunk cost | 6 |
 | 5 | Scenario weights | 25/50/25 to start, then learned from experience | 5.1 |
 
-**Still open:**
+| 6 | Backstop timer | 2 hours | 10 |
+| 7 | The hard floor | 12%, the BMS's own limit (v1's `min_reserve_soc` was set to it). So `battery_floor_soc` is 12%; v2's own reserve starts at 12% too and has no extra effect until it is raised above the floor | 7 |
 
-6. **Backstop timer.** v2 recalculates the value curve only when a trigger fires (section 10). In case a trigger is ever
-   missed, there is one plain timer: if nothing has caused a recalculation for 2 hours, it recalculates anyway. Is 2 hours
-   right? The Health tab will count recalculations by cause, so if the backstop fires often, that shows a trigger is missing
-   and the timer is not the fix.
-7. **The hard floor's value.** What is the battery's own cut-off on your inverter (the over-discharge level in its battery
-   settings)? Until it is known, the hard floor is the learned level at which the battery stops supplying, or 10%.
+Nothing is open. The card suggestions are in section 12.
 
 ## 19. Sources
 
