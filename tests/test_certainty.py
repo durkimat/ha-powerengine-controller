@@ -9,15 +9,22 @@ UTC = timezone.utc
 T = datetime(2026, 9, 20, 1, 0, tzinfo=UTC)
 
 
-def rec(start, status, car=0.0, confirmed=False, seen_h=5):
+def rec(start, status, car=0.0, confirmed=False, seen_h=5, run=None):
+    """`car` is kWh drawn; the unbroken charge defaults to 10 minutes per kWh (a real charge) unless `run` is given."""
+    run = car * 10 if run is None else run
     return {"start": start.isoformat(), "end": (start + timedelta(hours=1)).isoformat(), "status": status,
-            "car_kwh": car, "confirmed": confirmed, "first_seen": (start - timedelta(hours=seen_h)).isoformat()}
+            "car_kwh": car, "charging_min": run, "longest_min": run, "confirmed": confirmed,
+            "first_seen": (start - timedelta(hours=seen_h)).isoformat()}
 
 
 def test_outcomes():
     assert outcome(rec(T, "done", car=3)) == 1
     assert outcome(rec(T, "done", confirmed=True)) == 1
     assert outcome(rec(T, "done")) == 0
+    assert outcome(rec(T, "done", car=0.01, run=1.2)) == 0            # a blip: the car woke for a moment
+    assert outcome(rec(T, "done", car=0.4, run=2.0)) == 1             # the shortest charge that counts
+    assert outcome(rec(T, "done", car=0.4, run=3.0), min_charge_min=4.0) == 0     # a stricter setting
+    assert outcome({**rec(T, "done"), "charging_min": 5.0, "longest_min": None}) == 1   # old record: total time
     assert outcome(rec(T, "cut_short")) == 0.5
     assert outcome(rec(T, "cancelled")) == 0
     assert outcome(rec(T, "planned")) is None
@@ -84,7 +91,7 @@ def test_relisted_running_slot_is_a_continuation_not_cut_short():
 def test_old_cut_short_records_that_carried_on_count_as_delivered():
     from pe_core.certainty import Certainty
     recs = {"a": {"start": "2026-09-26T18:10:00+01:00", "end": "2026-09-27T04:00:00+01:00", "status": "cut_short",
-                  "ended": "2026-09-26T17:31:27+00:00", "car_kwh": 2.4, "confirmed": False},
+                  "ended": "2026-09-26T17:31:27+00:00", "car_kwh": 2.4, "charging_min": 20.0, "confirmed": False},
             "b": {"start": "2026-09-26T18:30:00+01:00", "end": "2026-09-27T04:00:00+01:00", "status": "planned",
                   "car_kwh": 0.0, "confirmed": False}}
     c = Certainty(recs)

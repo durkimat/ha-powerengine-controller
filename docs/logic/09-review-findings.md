@@ -2,7 +2,7 @@
 
 Found while writing pages 0 to 8, on 5 Oct 2026, against 0.9.100. **Re-checked against 0.9.102:** the three confirmed-by-running
 findings (F2, F3, F5) still reproduce, and the stale docstring (F1) is still there. The soft arbitrage band and the car-blip
-fix (0.9.101 and 0.9.102) do not touch any finding. **Nothing here has been fixed.** Each item says how
+fix (0.9.101 and 0.9.102) do not touch any finding. **Nothing here has been fixed, except F14 (0.9.104).** Each item says how
 sure the finding is:
 
 * **Confirmed**: I ran the code (a small script, not committed) and saw it.
@@ -28,7 +28,7 @@ sure the finding is:
 | [F11](#f11) | Leftover energy is valued at the cheapest price, which can be zero or negative | Read | Low |
 | [F12](#f12) | The learned reserve reaches the plan but not the live decision | Read | Low |
 | [F13](#f13) | The plan is not re-optimised when learned parameters change | Read | Low |
-| [F14](#f14) | The 0.2 kWh "car drew something" line is defined twice | Read | Low |
+| [F14](#f14) | The 0.2 kWh "car drew something" line is defined twice | Read | Low (fixed in 0.9.104) |
 
 ---
 
@@ -222,11 +222,10 @@ capacity. They reach the plan at the next 5-minute refresh. Not a problem in pra
 <a id="f14"></a>
 ## F14. The 0.2 kWh line is defined twice
 
-`certainty.MIN_CAR_KWH` and `slots.USED_KWH` are both 0.2 kWh and both mean "the car really drew from this smart slot".
-One scores a slot's certainty; the other feeds the Health tab's "used" count. 0.9.101 briefly used `USED_KWH` inside `car_idle`
-too; 0.9.103 took that out. Nothing in the live plan uses either now. If one is ever tuned, the other will quietly disagree.
-
-**What I would do:** keep one constant (for example in `slots.py`) and import it in `certainty.py`.
+**Fixed in 0.9.104.** `certainty.MIN_CAR_KWH` and `slots.USED_KWH` were both 0.2 kWh and both meant "the car really charged in this
+smart slot". Both are gone: the test is now the charger's own state, the longest unbroken run of "charging" in the slot,
+against one setting (`car_min_charge_min`, 2 minutes, learned over time with `learn_car_min`). See page 1 (slot certainty).
+It never touched the live plan; it scored smart-slot certainty and the Health tab.
 
 ---
 

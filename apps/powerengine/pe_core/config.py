@@ -47,7 +47,8 @@ FORECAST_SOURCES = ("none", "solcast_site", "scaled")
 FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
             "free_power_days", "tariff_simulator", "optimised_plan", "learn_taper", "learn_reserve", "learn_export",
             "learn_car", "cold_caution", "cold_learning", "damp_restart", "damp_bursts", "deep_overnight",
-            "use_check_meter", "axle_plus_export", "learn_conversion", "slots_whole_house", "smart_skip_full_car")
+            "use_check_meter", "axle_plus_export", "learn_conversion", "slots_whole_house", "smart_skip_full_car",
+            "learn_car_min")
 LEGACY_FEATURES = ("use_learned",)          # 0.8.0's single switch, replaced by one per figure: ignored if saved
 FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
                     "arbitrage": False, "axle": True,
@@ -56,13 +57,14 @@ FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smar
                     "cold_caution": True, "cold_learning": True, "damp_restart": True, "damp_bursts": False,
                     "deep_overnight": True, "use_check_meter": True,
                     "axle_plus_export": True, "learn_conversion": True, "slots_whole_house": True,
-                    "smart_skip_full_car": False}
+                    "smart_skip_full_car": False, "learn_car_min": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 INT_SAFETY = ("smart_max_requests_per_day",)     # whole numbers: a fractional value is rounded
 SAFETY = {
     "smart_max_requests_per_day": (6, 4, 10),  # smart-charge ready-by changes a day
     "smart_min_gap_min": (20, 10, 120),        # minutes between ready-by changes
     "smart_lookahead_h": (3, 1, 8),            # no request if a slot is planned within this many hours
+    "car_min_charge_min": (2.0, 0.5, 10.0),    # the car must charge this long, unbroken, for a smart slot to count
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
     "cheap_threshold_p": (10.0, 0, 100),      # import at or below this is "cheap" (pence/kWh)
     "grid_charge_target_soc": (100, 10, 100), # charge to this in cheap periods (%)
@@ -133,6 +135,10 @@ SETTING_TEXT = {
                           "minutes."),
     "smart_lookahead_h": ("Skip if a slot is due within", "h",
                           "Don't ask when a slot is already planned to start within this time."),
+    "car_min_charge_min": ("Shortest real charge", "min",
+                           "How long the car's charger must report charging without a break inside a smart-charge "
+                           "slot for the slot to count as used. Shorter bursts (the car waking up) are ignored. "
+                           "With learning on, PowerEngine moves this towards what your confirmed slots show."),
     "cheap_threshold_p": ("Cheap import threshold", "p/kWh",
                           "Import at or below this counts as cheap. With the automatic threshold on, this is the "
                           "most it can be; the day's prices can set it lower."),
@@ -247,7 +253,8 @@ SETTING_SECTIONS = (
                                          "charge_hysteresis_soc")),
     ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
     ("axle", "Grid events", ("pre_axle_lookahead_h", "axle_margin_soc")),
-    ("smart", "Smart-charge requests", ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h")),
+    ("smart", "Smart-charge requests", ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h",
+                                                  "car_min_charge_min")),
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p", "overnight_switch_cost_p")),
     ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p", "ram_refresh_min",

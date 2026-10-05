@@ -150,7 +150,7 @@ def test_smart_request_settings_defaults_ranges_and_rounding():
     for key in ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h"):
         assert key in SETTING_TEXT
     sec = next(s for s in settings_catalogue()["sections"] if s["key"] == "smart")
-    assert sec["label"] == "Smart-charge requests" and len(sec["keys"]) == 3
+    assert sec["label"] == "Smart-charge requests" and len(sec["keys"]) == 4
     assert parse_config({"safety": {"smart_max_requests_per_day": 10}}).safety["smart_max_requests_per_day"] == 10
     got = parse_config({"safety": {"smart_max_requests_per_day": 7.6}}).safety["smart_max_requests_per_day"]
     assert got == 8 and isinstance(got, int)
@@ -158,6 +158,23 @@ def test_smart_request_settings_defaults_ranges_and_rounding():
                      ("smart_min_gap_min", 121), ("smart_lookahead_h", 0.5), ("smart_lookahead_h", 9)):
         with pytest.raises(ConfigError, match="must be between"):
             parse_config({"safety": {key: bad}})
+
+
+def test_shortest_real_charge_setting_and_its_learning_switch():
+    import pytest
+
+    from pe_core.config import FEATURE_DEFAULTS, SAFETY, SETTING_TEXT, ConfigError
+    from pe_core.slots import DEFAULT_MIN_CHARGE_MIN
+    assert SAFETY["car_min_charge_min"] == (DEFAULT_MIN_CHARGE_MIN, 0.5, 10.0) == (2.0, 0.5, 10.0)
+    assert "car_min_charge_min" in SETTING_TEXT
+    cfg = parse_config({})
+    assert cfg.safety["car_min_charge_min"] == 2.0 and cfg.features["learn_car_min"] is True
+    assert FEATURE_DEFAULTS["learn_car_min"] is True
+    assert parse_config({"safety": {"car_min_charge_min": 0.5}}).safety["car_min_charge_min"] == 0.5
+    for bad in (0.4, 10.5):
+        with pytest.raises(ConfigError, match="must be between"):
+            parse_config({"safety": {"car_min_charge_min": bad}})
+    assert parse_config({"features": {"learn_car_min": False}}).features["learn_car_min"] is False
 
 
 def test_smart_request_features_defaults():

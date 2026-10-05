@@ -2,7 +2,7 @@
 
 Built from the slot history SlotTracker keeps. Each finished slot counts as delivered (1), half delivered (0.5)
 or not delivered (0):
-    done, and EDF lists it as completed or the car drew at least 0.2 kWh   -> 1
+    done, and EDF lists it as completed or the car charged for the minimum run  -> 1
     done, but neither                                                     -> 0 (probably not billed as a slot)
     cut short while running (car unplugged, or the charge finished)       -> 0.5
     cancelled before it started                                           -> 0
@@ -19,16 +19,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from .slots import DEFAULT_MIN_CHARGE_MIN, drew
+
 PRIOR, PRIOR_WEIGHT = 0.7, 4.0
 GROUP_WEIGHT = 4.0
 SHORT_NOTICE = timedelta(hours=2)
-MIN_CAR_KWH = 0.2
 
 
-def outcome(rec: dict) -> float | None:
+def outcome(rec: dict, min_charge_min: float = DEFAULT_MIN_CHARGE_MIN) -> float | None:
     status = rec.get("status")
     if status == "done":
-        return 1.0 if rec.get("confirmed") or (rec.get("car_kwh") or 0.0) >= MIN_CAR_KWH else 0.0
+        return 1.0 if rec.get("confirmed") or drew(rec, min_charge_min) else 0.0
     if status == "cut_short":
         return 0.5
     if status == "cancelled":
@@ -51,16 +52,16 @@ def group(start: datetime, first_seen: datetime | None, tz=None) -> tuple[str, s
 
 
 class Certainty:
-    def __init__(self, slots: dict[str, dict], tz=None):
+    def __init__(self, slots: dict[str, dict], tz=None, min_charge_min: float = DEFAULT_MIN_CHARGE_MIN):
         self.tz = tz
         self.n = 0.0
         self.total = 0.0
         self.groups: dict[tuple[str, str], list[float]] = {}
         starts = [datetime.fromisoformat(r["start"]) for r in slots.values()]
         for rec in slots.values():
-            o = outcome(rec)
+            o = outcome(rec, min_charge_min)
             if rec.get("status") == "cut_short" and rec.get("ended") and continued(rec, starts):
-                o = 1.0 if (rec.get("car_kwh") or 0.0) >= MIN_CAR_KWH or rec.get("confirmed") else 0.5
+                o = 1.0 if drew(rec, min_charge_min) or rec.get("confirmed") else 0.5
             if o is None:
                 continue
             start = datetime.fromisoformat(rec["start"])

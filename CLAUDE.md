@@ -192,10 +192,6 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Backlog
 
-- **Review the 0.2 kWh "car drew something" figure in the code (docs/logic/09-review-findings.md, F14).** It is defined twice, `certainty.MIN_CAR_KWH` (smart-slot
-  certainty: delivered or not) and `slots.USED_KWH` (the Health tab's "used" count), and neither affects the live plan since 0.9.103 took it out of `car_idle`. Decide
-  whether the figure is right (is 0.2 kWh the real line between a blip and a charge?), keep one constant and import it in the other module, or drop it where it only
-  scores history. Any change to `certainty.py` moves the planner's expected smart-slot prices, so re-record the replay and say so in the PR.
 - **Zappi Eco+ and solar (monitor):** Eco+ is required for EDF/Octopus smart charging. The owner has only seen the car charge from the grid, not from solar, so some
   threshold (probably on the charger) decides. If the Zappi ever starts and stops with solar surplus, `car_charging` (an urgent rule, no damping) and the plan signature will flip with it:
   watch `ev_state` changes per day in the diagnostics export, and add a short debounce on stop only if it happens. Do nothing until it is seen.
@@ -239,6 +235,12 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Recent fixes
 
+- **The 0.2 kWh "car drew something" figure is gone (0.9.104, F14, `slots.py`, `certainty.py`).** A smart slot now counts as used when the charger reported "charging" without a break for
+  at least `car_min_charge_min` (2 minutes; `SlotTracker` keeps `longest_min` per slot, a break resets `run_min`), because blips (the car waking, 15 to 70 s, 0.01 kWh) come in bursts and the
+  total would count them. One figure for certainty and the Health tab (`DEFAULT_MIN_CHARGE_MIN`). Learned with `learn_car_min` (on): `slots.learn_min_charge`, from supplier-confirmed slots,
+  moved n / (n + 20) of the way after 8, within half to double the setting; the app uses `_min_charge_min()`. Config page: setting and tick box in the car section, now titled "Car and smart
+  charging" in the card. The replay did not change. **Observe** `smart_slots.min_charge_min` and `used` / `done_no_car` on the export, and whether certainty moved. Old records have no `longest_min`
+  (they fall back to the total, which can only overstate).
 - **The plan assumes no car, except the running half-hour while it charges (0.9.103, `forecast.build_slots`, `Readings.ev_state()`).** The planner used to expect the
   car in every future smart slot (battery held, no selling) and guessed otherwise from history (`car_idle`, `ev_complete`, a running dispatch with no draw); a 1-minute 0.01 kWh blip
   made it hold flat at 90% all evening (4 Oct 2026, 0.9.101 patched the threshold, 0.9.103 removed the guess). Now only the state counts: `car_expected` is true only for the running
