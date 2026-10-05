@@ -2,45 +2,6 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
-## 0.9.106 (beta)
-
-### Behaviour changes
-
-- **None while you stay on engine v1** (the default). Everything v1 plans and sends is unchanged.
-- **A second planning engine, engine v2, that you can choose on the Config page.** Instead of a plan of half-hours, it works
-  out what a stored kWh is worth at every battery level over the next day and a half, and acts the moment a condition is
-  met: the battery reaches the level where more charge isn't worth the price, a price changes, a smart slot starts at its
-  real minute, the sun falls short of the forecast, the car starts. It doesn't wait for the next half-hour.
-- **Engine v2 needs RAM remote control.** On timed windows it shows what it would do, and Active is refused with "Engine v2
-  needs RAM remote control".
-- **Switching engines doesn't change Active, Passive or Pause.** The inverter keeps its command until the other engine has
-  decided (a few seconds). Switch back the same way.
-- **On the four recorded demo days** (sunny, dull, grid event, car), run closed loop in the demo world, engine v2 saved
-  £25.52 against plain self-use where engine v1 saved £21.82 (the best possible with perfect hindsight: £26.74), with 2
-  or fewer back-and-forth changes a day on three days and 8 on the grid-event day. It hasn't run on a real house yet.
-
-### New
-
-- **Engine v2 page** on the dashboard (after Plan): what it is doing now and what ends it, the value of a stored kWh against
-  today's prices, the expected timeline, the value map, and a health card (why it worked the values out, mode changes,
-  flip-flops, the comfort band's cost, what it has learned).
-- **Config page:** the engine choice at the top (it asks before switching, either way), then three groups: Your house
-  (used by both engines), Engine v1 settings and Engine v2 settings. The engine not in use is dimmed but can be set up in
-  advance.
-- **Engine v2's own settings** start from your v1 values where there is one (selling, grid events, free power, reserve):
-  a comfort band (20 to 90%, a soft guide with a small cost per hour outside it, never a hard limit), wear for the battery
-  supplying the house and for sales (both 0p: the battery treated as a sunk cost), a switching cost (0.5p), the starting
-  weights for the solar and house forecasts (learned from then on), and how quickly it reacts.
-- **Battery's hard floor** (new, under Battery, 12%): the battery's own lowest level. Engine v2 never goes below it, not even
-  for a grid event; grid events may go below your reserve. Engine v1 doesn't use it.
-- **Diagnostics export:** a section `engine_v2` (its health and the last 300 decisions with the prices and values behind
-  them).
-
-### Other changes
-
-- `tools/engine_compare.py` compares the two engines on the demo days.
-- The card needs to be 0.9.106 or newer (the dashboard's new page uses its new cards).
-
 ## 0.9.105 (beta)
 
 ### Behaviour changes
