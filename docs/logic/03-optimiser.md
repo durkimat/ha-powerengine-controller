@@ -84,8 +84,8 @@ Cash cost comes from `step`. These extra terms steer the choice but are **not** 
 | **Band penalty** | Arbitrage on: selling below the band's bottom, or grid-charging above its top | `arbitrage_band_penalty_p` (2p) per kWh outside the band | The band is a guide, with 5 points of give each side (3.4a). Not charged for deep selling inside the overnight window |
 | **Dwell above the band** | Arbitrage on: ending a half-hour above `arbitrage_max_soc` | £0.0015 per kWh per half-hour (`HIGH_DWELL`) | The full zone wears the battery; fill the top last |
 | **Not full at the end of the cheap window** | The last half-hour of each overnight window run, with *top up when cheap* on, ending below `grid_charge_target_soc` | **£1.00 per kWh short** (`FULL_PENALTY`) | The battery should be full when the cheap window closes |
-| **Charge early** | Grid-charge inside the overnight window | £0.0005 per kWh per half-hour of delay (`EARLY_BIAS`) | Same price all night: charge sooner, leave room for a replan |
-| **Sell early** | Export | £0.0005 per kWh per half-hour of delay (`SELL_BIAS`) | A sale banked sooner is surer (a dispatch can be withdrawn, a forecast revised); a tie sells now |
+| **Charge early** | Grid-charge inside the overnight window | £0.0005 per kWh per half-hour of delay (`EARLY_BIAS`), counted from the window's start, at most 12 (`BIAS_CAP`) | Same price all night: charge sooner, leave room for a replan |
+| **Sell early** | Export | £0.0005 per kWh per half-hour of delay (`SELL_BIAS`), counted from the overnight window's start inside one, else from now, at most 12 (`BIAS_CAP`) | A sale banked sooner is surer (a dispatch can be withdrawn, a forecast revised); a tie sells now. Counted from now without a limit they reached 1p/kWh by a night 12 hours off and outweighed a cycle's margin (5 Oct 2026) |
 | **Mid-slot stick** | The first half-hour only, when a replan runs part-way through it, and the action differs from what is running | £0.15 (`MID_SLOT_STICK`), none when forced | Near-ties flip-flopped the inverter (page 5) |
 | **Switch cost** | Between half-hours whose kind differs | See 3.5 | Each change of the inverter's mode is a write |
 
@@ -124,13 +124,15 @@ flowchart TD
     A -- no --> B{"Hold to charge,<br/>or charge to hold?"}
     B -- yes --> C["one fifth of the switch cost<br/>(only the current changes)"]
     B -- no --> D["the switch cost:<br/>RAM control 0.5p<br/>timed windows 5p"]
-    D --> E{"Inside the overnight window<br/>with deep overnight and arbitrage on?"}
+    D --> E{"Timed windows, inside the overnight window<br/>with deep overnight and arbitrage on?"}
     E -- yes --> F["at least the overnight switch cost (3p)<br/>so one deep sale and one refill beat<br/>several shallow cycles"]
     E -- no --> G["as above"]
 ```
 
-Timed windows pay for EEPROM wear, so a switch is dear (5p). RAM control writes volatile registers, so a switch is nearly
-free (0.5p) and the plan is allowed to be choppier.
+Timed windows pay for EEPROM wear, so a switch is dear (5p), and inside the overnight window at least the overnight switch
+cost. RAM control writes volatile registers, so a switch is nearly free (0.5p, `ram_switch_cost_p`) and the plan is allowed
+to be choppier: `overnight_switch_cost_p` is not applied (`Params.ram_control`; it was, until 5 Oct 2026, which made every
+overnight switch cost 3p whatever `ram_switch_cost_p` said).
 
 ## 3.6 From the optimiser's table to "the plan"
 

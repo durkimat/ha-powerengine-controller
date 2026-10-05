@@ -202,9 +202,10 @@ SETTING_TEXT = {
                               "can only get the rest, so a battery giving less than the command then is not reported "
                               "as not following."),
     "overnight_switch_cost_p": ("Overnight switch cost", "p",
-                                "With deeper selling overnight: the cost counted for each switch between charging and "
-                                "selling inside the fixed overnight window. Higher favours one deep sale and one "
-                                "refill over several shallow cycles that earn about the same."),
+                                "For inverters on timed windows, with deeper selling overnight: the cost counted for each "
+                                "switch between charging and selling inside the fixed overnight window. Higher favours "
+                                "one deep sale and one refill over several shallow cycles that earn about the same. "
+                                "Not used with remote control, where a switch writes nothing to the EEPROM."),
     "ram_switch_cost_p": ("RAM switch cost", "p",
                           "With RAM remote control: the same, but a switch is only a temporary setting (no memory "
                           "wear), so it's small: just enough to avoid pointless back-and-forth. Lower lets the plan "

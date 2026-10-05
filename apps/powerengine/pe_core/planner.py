@@ -61,6 +61,8 @@ class Params:
     plan_tier: int = 4                # optimiser: how much it may do. 4 all; 3 sells only inside the overnight window;
                                       # 2 also charges only inside it; 1 no selling; 0 self-use (the low-write profiles)
     overnight_switch_cost_p: float = 3.0  # with deep_overnight: at least this per full switch inside the window, p
+    ram_control: bool = False         # RAM remote control: a switch writes no EEPROM, so switch_cost_p alone
+                                      # prices it (overnight_switch_cost_p is for timed windows)
     taper: tuple = ()                 # learned: ((soc_from, fraction of the charge rate), ...) near full
     dtaper: tuple = ()                # learned: ((below soc, fraction of the discharge rate), ...) near empty
 
@@ -737,6 +739,7 @@ def params_from(cfg, readings=None) -> Params:
         arbitrage_band_penalty_p=s.get("arbitrage_band_penalty_p", 2.0),
         switch_cost_p=s.get("ram_switch_cost_p", 0.5) if ram else s.get("window_switch_cost_p", 5.0),
         overnight_switch_cost_p=s.get("overnight_switch_cost_p", 3.0),
+        ram_control=ram,
         export_limit_kw=s.get("export_limit_kw", 6.0),
         wear_p=s.get("battery_wear_p", 2.0),
         min_margin_p=s.get("arbitrage_min_margin_p", 1.0),

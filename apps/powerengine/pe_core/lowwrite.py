@@ -47,7 +47,7 @@ def profile_params(base: Params, profile: tuple, timed_price_p: float) -> Params
     """`base` with the profile's tier, price per window change and arbitrage setting."""
     _id, _label, tier, price, arbitrage = profile
     price = timed_price_p if price is None else price
-    return replace(base, plan_tier=tier, switch_cost_p=price,
+    return replace(base, plan_tier=tier, switch_cost_p=price, ram_control=False,
                    overnight_switch_cost_p=max(base.overnight_switch_cost_p, price),
                    arbitrage=base.arbitrage if arbitrage is None else arbitrage)
 
