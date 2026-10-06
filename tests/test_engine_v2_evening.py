@@ -68,8 +68,9 @@ def test_the_plan_never_cycles_above_the_top_except_for_the_last_fill(run):
         assert len(above) <= 1, [(it.start, it.level_end) for it in above]
 
 
-@pytest.mark.parametrize("soc0", [40.0, 66.0, 85.0])
-@pytest.mark.parametrize("event", [True, False])
+# the variants with most room to cycle (no grid event to empty the battery first) and the emptiest start; the main run
+# above is 66% with the event (each night-long run takes about 20 s, and CI's release check waits 12 minutes)
+@pytest.mark.parametrize(("soc0", "event"), [(66.0, False), (85.0, False), (40.0, True)])
 def test_every_variant_keeps_under_the_top_until_the_last_fill_and_ends_full(soc0, event):
     # at the default top-up price (5p) a cycle above the top earns less than it costs (about 7p of spread between
     # 6.66p in and 15p out after losses), so even the variant that topped a cycle at 96% at 2p stays under the top
