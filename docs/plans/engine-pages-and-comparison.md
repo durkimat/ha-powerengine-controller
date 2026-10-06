@@ -1,6 +1,6 @@
 # Engine pages and the same-day engine comparison
 
-> **Status (6 Oct 2026): designed, being built for 0.9.110.** Owner's decisions: the Plan page becomes "Engine v1"; both engine
+> **Status (6 Oct 2026): built for 0.9.110 (packages A, B and C merged; not yet run on a live HA).** Owner's decisions: the Plan page becomes "Engine v1"; both engine
 > pages get an engine icon with v1 / v2 on it and an **Active / Passive** badge; Plan history moves to the bottom of the Engine v1
 > page and a matching history goes at the bottom of the Engine v2 page; the Costs page keeps everything it has and gains a
 > **fair same-day comparison** of the two engines (no Predbat). Work packages A (recording), B (comparison), C (card and dashboard).

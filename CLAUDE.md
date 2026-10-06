@@ -308,6 +308,23 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   (in-memory ring, lost on restart). **Not done:** Modbus read-back of 43136/43129 (no entity for it). To watch in the
   first cold spell: the export's `bms` rows against the actual battery power; the conversion assumes battery-side watts.
 
+## Engine pages and same-day comparison (built for 0.9.110)
+
+Plan `docs/plans/engine-pages-and-comparison.md` (section 6: as built). The Plan tab is titled **Engine v1** (path `plan` kept), Plan history
+is at its bottom, and the Engine v2 page ends with its own history; both carry `powerengine-engine-badge-card` (Active / Paused / Passive) and
+the card's icons `pe:engine-v1` / `pe:engine-v2` (`window.customIcons`).
+- **Forecast snapshots** (`pe_core/fcsnap.py`, `<costs>/snapshots/YYYY-MM-DD.json`, 14 days): deltas of the raw states of the roles that
+  carry future information, the house profile and smart slots' first-seen times; a full entry at the first cycle of each day. Never in a demo.
+- **Cost records** carry `engine` and `live`; `costbook.day_engine(_info)`. v1's "As run" (`_record_ran`) is written only on engine v1.
+- **Engine v2 history** (`pe_core/v2history.py`, `<costs>/v2history/`, 30 days; `sensor.pe_v2_history`, event `pe_v2_history_day`).
+- **Same-day comparison** (`pe_core/compare/`): nightly at 03:20 the app starts `python -m pe_core.compare.run` as a **subprocess**
+  (90-minute limit, one at a time, yesterday plus one missing day of the last week) that replays the whole app in the demo world on
+  yesterday's records and snapshot, v1 and v2, self-use and the bound, plus calibration against the meter; results in `<costs>/compare/`,
+  `sensor.pe_cost_engines`, the Costs page's "Engines compared, same day". Feature `engine_compare` (on). A day with no snapshot house
+  profile by 00:30 is refused (else the replay would know the load). The fake AppDaemon moved to `pe_core/compare/harness.py`
+  (`tests/replay_harness.py` and `tools/engine_compare.py` use it). About 3 minutes a day here. **Watch** the first results: the
+  calibration gap, `took_s` on the owner's host, and that the first full day after release is compared.
+
 ## Current work: engine v2 (built for 0.9.106)
 
 Design `docs/plans/engine-v2.md` (owner's decisions in its status box and section 18), build plan `docs/plans/engine-v2-build.md`.
