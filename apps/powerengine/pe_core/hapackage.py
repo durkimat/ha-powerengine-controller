@@ -81,6 +81,8 @@ def plan(packages_dir: str, controller: str, shipped: dict[str, str], read) -> l
                 out.append(FileAction(name, "write", True, text))
         elif not recognised(existing):
             out.append(FileAction(name, "skip_unmanaged", False))
+        elif name not in wanted and controller == "unset" and name == PREDBAT:
+            out.append(FileAction(name, "keep", True))          # not chosen yet: leave a handover file alone
         elif name not in wanted:
             out.append(FileAction(name, "remove", True))
         elif _norm(existing) == _norm(text):
@@ -173,7 +175,7 @@ def reload_needed(controller: str, result: dict, entity_present) -> bool:
         predbat_in_place = predbat is not None and predbat.managed and PREDBAT not in failed
         if predbat_in_place and not entity_present(PREDBAT_ENTITY):
             return True
-    else:
+    elif controller != "unset":
         p = by.get(PREDBAT)
         gone = p is None or (p.action == "remove" and PREDBAT not in failed)
         if gone and entity_present(PREDBAT_ENTITY):                 # no file any more, but Home Assistant has it
@@ -203,7 +205,8 @@ def report(result: dict, entity_present) -> tuple[str, dict]:
                    "put its own in place.")
     elif needed:
         state = "reload_needed"
-        message = "PowerEngine changed its Home Assistant package. Press Load on the Config page to use the change."
+        message = ("PowerEngine changed its Home Assistant package. Press \"Load PowerEngine's Home Assistant "
+                   "changes\" on the Config page to use the change.")
     else:
         state = "ok"
         message = "PowerEngine's Home Assistant package is in place and loaded."

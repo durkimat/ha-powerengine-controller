@@ -14,6 +14,7 @@ SHIPPED = ROOT / "apps" / "powerengine" / "ha_packages"
 DOCS = ROOT / "docs" / "ha"
 MAIN_TEXT = hp.MARKER + "\nscript: {}\n"
 PREDBAT_TEXT = hp.MARKER + "\ninput_select: {}\n"
+LOAD = "Load PowerEngine's Home Assistant changes"
 SHIP = {hp.MAIN: MAIN_TEXT, hp.PREDBAT: PREDBAT_TEXT}
 
 
@@ -143,7 +144,7 @@ def test_reload_is_not_claimed_for_a_file_that_is_not_ours():
 
 def test_report_states_and_wording():
     state, attrs = hp.report(result("none", [fa(hp.MAIN, "update")]), lambda e: False)
-    assert state == "reload_needed" and attrs["reload_needed"] is True and "Load" in attrs["message"]
+    assert state == "reload_needed" and attrs["reload_needed"] is True and LOAD in attrs["message"]
     assert "redbat" not in attrs["message"]
     state, attrs = hp.report(result("none", [fa(hp.MAIN, "keep")]), lambda e: e == hp.MAIN_ENTITY)
     assert state == "ok" and attrs["reload_needed"] is False and set(attrs) == {"files", "reload_needed", "message"}
@@ -180,7 +181,7 @@ def test_the_app_writes_backs_up_logs_notifies_and_publishes(monkeypatch, tmp_pa
     assert (pkgs / hp.MAIN).read_text() == hp.shipped_texts()[hp.MAIN] and not (pkgs / hp.PREDBAT).exists()
     assert len([n for n in os.listdir(pkgs) if ".bak-" in n]) == 2
     assert len([m for lvl, m in s.logs if m.startswith("Home Assistant package:")]) == 2
-    assert len(s.notes) == 1 and "press Load" in s.notes[0][2]
+    assert len(s.notes) == 1 and LOAD in s.notes[0][2]
     key, state, attrs = s.published[-1]
     assert key == "diag_package" and state == "reload_needed" and attrs["reload_needed"] is True
     s.present.add(hp.MAIN_ENTITY)
@@ -223,3 +224,14 @@ def test_shipped_files_are_recognised_as_ours_and_not_yaml_for_appdaemon():
     for name, text in hp.shipped_texts().items():
         assert hp.recognised(text) and name.endswith(".yaml")
     assert not [p for p in (ROOT / "apps" / "powerengine" / "ha_packages").iterdir() if p.suffix == ".yaml"]
+
+
+def test_unset_controller_leaves_the_predbat_file_alone():
+    files = {hp.MAIN: MAIN_TEXT, hp.PREDBAT: PREDBAT_TEXT.replace("{}", "{x: 1}")}
+    assert acts(files, "unset") == {hp.MAIN: "keep", hp.PREDBAT: "keep"}       # recognised, even if different
+    assert acts({hp.MAIN: MAIN_TEXT}, "unset") == {hp.MAIN: "keep"}              # absent: not written
+    assert acts(files, "other")[hp.PREDBAT] == "remove" and acts(files, "none")[hp.PREDBAT] == "remove"
+    r = result("unset", [fa(hp.MAIN, "keep"), fa(hp.PREDBAT, "keep")])
+    for present in (lambda e: e == hp.MAIN_ENTITY, lambda e: True):
+        assert hp.reload_needed("unset", r, present) is False
+    assert hp.reload_needed("unset", result("unset", [fa(hp.MAIN, "keep")]), lambda e: e == hp.MAIN_ENTITY) is False

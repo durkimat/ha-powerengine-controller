@@ -3422,8 +3422,9 @@ class PowerEngine(hass.Hass):
                 key = "package:" + ",".join(f"{a.name}:{a.action}" for a in changed) + ":" + datetime.now(
                     timezone.utc).strftime("%Y%m%d")
                 self._notify("health", (key, "PowerEngine updated its Home Assistant package",
-                                        "PowerEngine updated its Home Assistant package: press Load on the Config "
-                                        "page so Home Assistant uses the change."))
+                                        "PowerEngine updated its Home Assistant package: press \"Load PowerEngine's "
+                                        "Home Assistant changes\" on the Config page so Home Assistant "
+                                        "uses the change."))
         except Exception as err:
             self._pkg_result = {"dir_exists": True, "actions": [], "controller": "unset",
                                 "errors": [("", f"{err!r}")]}
