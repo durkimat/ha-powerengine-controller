@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.111 (beta)
+
+### Behaviour changes
+
+- **A configuration save is answered at once.** PowerEngine used to reply to the card only after reloading everything
+  (checking inputs, rewriting the dashboard, a full cycle), which on a slower host, or while engine v2 was working out its
+  values, could take longer than the card waited, so switching engine showed "No reply from PowerEngine" although the
+  switch had worked. It now replies as soon as the file is saved, then reloads. Nothing else about saving changes.
+
+### Fixes
+
+- The card now draws the Engine v1 and Engine v2 tab icons (card fix; see the card's notes).
+
 ## 0.9.110 (beta)
 
 ### Behaviour changes
