@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.107 (beta)
+
+### Behaviour changes
+
+- **The plan no longer buys dear energy to fill a short cheap half-hour.** If the learned overnight window contained a lone half-hour (a smart-charge slot that happened to be cheap on every day learned), the optimiser charged the battery before it, to be full when it ended. On the demo "sunny" day that meant 6.7 kWh bought at 30.28p from 19:30, to be sold at 15p an hour later. The "full when the cheap window closes" penalty now applies only to a window long enough to refill the battery (or one already running when the plan is made). A normal overnight window is planned exactly as before.
+- **Preview of engine v2 while engine v1 is in control.** Engine v1 still makes every decision. But engine v2 now works out, on your real house, what it would do and shows it on the dashboard's Engine v2 page, marked "Preview: engine v1 is in control. Nothing is sent." It never sends a command, never writes to the activity log and never changes what v1 does. It also learns from your house meanwhile. Turn it off with "Preview while engine v1 is in control" in the engine v2 settings (it is on by default).
+
 ## 0.9.106 (beta)
 
 ### Behaviour changes

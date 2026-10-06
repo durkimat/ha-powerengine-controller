@@ -186,6 +186,30 @@ def window_ends(slots: list[Slot]) -> list[bool]:
     return [s.overnight and (t + 1 == len(slots) or not slots[t + 1].overnight) for t, s in enumerate(slots)]
 
 
+def fill_ends(slots: list[Slot], p: Params) -> list[bool]:
+    """The window ends where ending short of the target is penalised (FULL_PENALTY): the end of a run long enough to
+    be the night's refill, from the deep floor (reserve plus keep) to the target at full power, or a run that begins
+    with the plan (its start is before the horizon, so nothing earlier could buy for it).
+
+    A short run, such as a smart slot's half-hour that was cheap on every day of the learned history, cannot refill the
+    battery, and a £1/kWh penalty for ending it short only moves the buying to before it: the plan bought 6.7 kWh at
+    30.28p to be full when a lone half-hour at 6.99p ended, then sold at 15p (demo `sunny` day, 6 Oct 2026). The
+    penalty is for charging at the window's cheap price, which only a run that can charge enough offers."""
+    ends = window_ends(slots)
+    gap_kwh = max(0.0, p.target_soc - p.min_reserve_soc - p.arbitrage_keep_soc) / 100 * p.capacity_kwh
+    out = list(ends)
+    for t, end in enumerate(ends):
+        if not end:
+            continue
+        rate = max(0.1, p.max_charge_kw * 0.5 * p.efficiency * (slots[t].charge_factor or 1.0))
+        need = int(-(-gap_kwh // rate))
+        n = 0
+        while t - n >= 0 and slots[t - n].overnight:
+            n += 1
+        out[t] = t - n < 0 or n >= need               # started before the plan (-1), or long enough to refill
+    return out
+
+
 MID_SLOT_STICK = 0.15                 # GBP: changing the running half-hour's action part-way through (a replan
                                       # mid-slot): only for a clear gain, not a near-tie (changes cost writes)
 
@@ -208,7 +232,7 @@ def optimise(slots: list[Slot], soc: float, p: Params, wear: float = 0.0, prev_a
     T = len(slots)
     hours = [first_h if (t == 0 and first_h is not None and first_h < DT_H) else DT_H for t in range(T)]
     K = 4
-    ends = window_ends(slots)
+    ends = fill_ends(slots, p)
     final = final_topup(slots, p)
     delay = bias_delay(slots)
     # value[t][level][k] = lowest cost from half-hour t onwards, at that level, the previous half-hour's kind k
