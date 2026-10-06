@@ -332,7 +332,7 @@ A second, selectable engine: system setting `engine` (`v1` default, `v2`); v2's 
 (`pe_core/engine_v2/settings.py`; missing keys seeded once from v1's equivalents: arbitrage, events, free power, reserve). New shared
 safety setting `battery_floor_soc` (12 %, the BMS's own limit; v2's hard floor, v1 does not read it).
 
-- **Soft top and steady legs (0.9.113, `docs/plans/engine-v2.md` 18a, from the first live evening):** `top_up_cost_p` (2p/kWh) prices grid energy charged
+- **Soft top and steady legs (0.9.113, `docs/plans/engine-v2.md` 18a, from the first live evening):** `top_up_cost_p` (5p/kWh) prices grid energy charged
   above `comfort_high_soc` (inside the comfort figure; seeded from v1 `arbitrage_max_soc`; the early charge of a stretch only goes up to the top);
   `reversal_cost_p` (3p) prices charge-to-sale turns in the plan and in `_worth_the_change`; a running leg goes on to its plan step's end when both
   pay (`Executor._leg_going`); "learned" revalues only on a 1% fact or 1 day change (`triggers.learned_moved`). Closed-loop check: `tests/evening_world.py`.

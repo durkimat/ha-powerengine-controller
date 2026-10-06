@@ -924,7 +924,7 @@ What the owner saw on engine v2's first evening in control (diagnostics 6 Oct 19
 expected; v2 needs a **soft top of 90%** with one exception, the **last charge before the end of the cheap slot**; no
 hacks on the engine. The changes, all inside the model:
 
-1. **A price for grid charging above the comfort band's top** (`top_up_cost_p`, p per kWh, default 2, section Comfort
+1. **A price for grid charging above the comfort band's top** (`top_up_cost_p`, p per kWh, default 5 (2 in the first build), section Comfort
    band). In `value._phys`, a Charge pays it on the grid energy that lands above `comfort_high_soc`. A cycle above the top
    pays it every time, while the same cycle under the top earns the same without it, so cycling moves below the top; a
    last fill before a dear stretch pays it once and saves far more (about 23p/kWh at the morning's rate), so it still
@@ -995,7 +995,10 @@ Six variants (start at 40, 66 or 85%, with and without the event), before to now
 8, 9, 8, 9; short turns 21, 2, 13, 29, 23, 12 down to 0 in every one; cash 1.3p to 11.4p dearer (6.8p on average). That is what the
 soft top costs: a few pence a night. One variant (66%, no event) still tops a cycle at 96%: with a 7p spread between buying at 6.66p
 and selling at 15p, a cycle's extra kWh above the top still earns about 5p after the 2p top-up, so the plan takes it when there is
-time; the setting is the lever (about 5p and above keeps the cycle under the top). Read literally, "no reversal within 25 minutes of
+time; the setting is the lever (about 5p and above keeps the cycle under the top). **The default was then set to 5p:** every
+variant stays at the top until the last fill (highest 91.2%, one 30 s step past it), all end at 97% or more, no short turns; on the
+demo days at 5p: adjusted saving 26.44 (sunny 10.22, dull 3.76, axle 9.33, car 3.13), flips 25 (axle 17: self-use/hold toggles
+on spare sun and sales pausing at the sell line, not reversals; to look at next). Read literally, "no reversal within 25 minutes of
 the previous mode change" is met except for the two turns at the top and the bottom of the one cycle, which follow the 2 minute Hold
 that ends a leg of 1.5 to 2.5 hours (the minimum time); no leg is turned before 25 minutes.
 
