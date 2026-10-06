@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.112 (beta)
+
+### Behaviour changes
+
+- None. This release carries a card fix only.
+
+### Fixes
+
+- The Engine v1 and Engine v2 tab icons now show their 1 and 2 (card fix; see the card's notes).
+
 ## 0.9.111 (beta)
 
 ### Behaviour changes
