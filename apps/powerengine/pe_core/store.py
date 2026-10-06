@@ -96,7 +96,7 @@ def coerce_flags(data):
 
 
 def with_operation(raw: dict | None, mode: str) -> dict:
-    """A copy of the saved config with operation.mode set (the Predbat/PowerEngine switch). Raises ConfigError."""
+    """A copy of the saved config with operation.mode set (the handover scripts). Raises ConfigError."""
     if mode not in ("active", "passive"):
         raise ConfigError(f"operation must be 'active' or 'passive', not {mode!r}")
     new = copy.deepcopy(raw or {})

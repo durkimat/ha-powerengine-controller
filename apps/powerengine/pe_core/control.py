@@ -8,7 +8,7 @@ Design (spec: Active mode design):
 - Storage mode stays Self-Use; windows do the work.
 - Grid charge / hold: a charge window from now to the window end, charge current = power / battery voltage
   (0 A for hold). Force discharge / export: a discharge window and discharge current.
-- Self-use: both windows closed (00:00-00:00), as the legacy automations do.
+- Self-use: both windows closed (00:00-00:00), as a simple automation would.
 - Window end depends on the strategy: "rolling" = at most 35 minutes ahead, extended as it nears its end (a
   stopped PowerEngine leaves nothing running for long); "block" = the end of the plan's block (fewer writes;
   needs the HA watchdog automation). Windows never span midnight.

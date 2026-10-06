@@ -1,0 +1,150 @@
+# PowerEngine and Predbat handover (OPTIONAL: only if you run Predbat alongside PowerEngine).
+#
+# One switch for which controller drives the battery, Predbat or PowerEngine. Without Predbat, don't install this
+# file: the main package (powerengine_handover.yaml) is all PowerEngine needs. In PowerEngine's Config page, Inverter
+# control, set "Other battery controller" to "Predbat, switched over with the handover package".
+#
+# Install: copy into /config/packages/ next to powerengine_handover.yaml (packages: !include_dir_named packages),
+# check config, restart HA. Switch from the Battery controller panel on PowerEngine's Config tab (or by changing
+# input_select.battery_controller). Either way the chosen controller ends up fully live; nothing else to do.
+#
+# To PowerEngine: Predbat read-only on, PowerEngine un-paused and set to Active (saved in its config), then waits up
+#   to 90 s for PowerEngine to report active and says whether it did.
+# To Predbat: PowerEngine set to Passive (it closes its inverter windows: Self-Use) and un-paused, then Predbat
+#   read-only off so Predbat takes over at its next update. PowerEngine goes first: if Predbat were released
+#   first, PowerEngine's guard would trip and it would stop without tidying up its windows.
+# For testing, pause PowerEngine (panel or Monitoring tab) while it's the controller: nobody drives the battery
+# (Self-Use) and supervised tests are allowed. Un-pause to go live again.
+#
+# Also here: restart Predbat if it didn't connect after a Home Assistant restart.
+
+input_select:
+  battery_controller:
+    name: PowerEngine - Battery controller
+    icon: mdi:battery-sync
+    options:
+      - Predbat                    # first = what HA falls back to if the saved choice is no longer an option
+      - PowerEngine
+
+script:
+  battery_handover_to_powerengine:
+    alias: PowerEngine - Hand control to PowerEngine (live)
+    icon: mdi:battery-sync
+    mode: single
+    sequence:
+      - action: switch.turn_on
+        target:
+          entity_id: switch.predbat_set_read_only
+      - delay: "00:00:10"          # let Predbat finish any write in progress
+      - action: switch.turn_off
+        target:
+          entity_id: switch.pe_ctl_pause
+      - event: pe_set_control
+        event_data:
+          operation: active
+      - wait_template: "{{ is_state('sensor.pe_state_operation_mode', 'active') }}"
+        timeout: "00:01:30"
+        continue_on_timeout: true
+      - action: persistent_notification.create
+        data:
+          notification_id: battery_handover
+          title: >-
+            {{ 'PowerEngine is live' if is_state('sensor.pe_state_operation_mode', 'active')
+               else 'PowerEngine did NOT go live' }}
+          message: >-
+            Predbat is read-only.
+            PowerEngine: {{ states('sensor.pe_state_operation_mode') }} -
+            {{ state_attr('sensor.pe_state_operation_mode', 'reason') }}
+            {% if not is_state('sensor.pe_state_operation_mode', 'active') %}
+            The inverter stays on Self-Use until this is fixed; switch back to Predbat if it can't be fixed now.
+            {% endif %}
+
+  battery_handover_to_predbat:
+    alias: PowerEngine - Hand control to Predbat (live)
+    icon: mdi:battery-sync
+    mode: single
+    sequence:
+      - event: pe_set_control
+        event_data:
+          operation: passive
+      - wait_template: "{{ states('sensor.pe_state_operation_mode') not in ['active', 'paused'] }}"
+        timeout: "00:01:00"
+        continue_on_timeout: true
+      - delay: "00:00:20"          # PowerEngine closes its windows, returns the inverter to Self-Use, reads it back
+      - action: switch.turn_off
+        target:
+          entity_id: switch.pe_ctl_pause
+      - action: switch.turn_off
+        target:
+          entity_id: switch.predbat_set_read_only
+      - action: persistent_notification.create
+        data:
+          notification_id: battery_handover
+          title: Predbat is live
+          message: >-
+            PowerEngine is Passive (inverter windows closed, still planning and costing) and Predbat is out of
+            read-only, so it takes over at its next update.
+
+automation:
+  - alias: PowerEngine - Battery controller switch
+    id: battery_controller_selector
+    mode: queued
+    triggers:
+      - trigger: state
+        entity_id: input_select.battery_controller
+    conditions:
+      # only real changes between the two options (not start-up, or the selector being created or re-optioned)
+      - condition: template
+        value_template: >-
+          {{ trigger.from_state is not none and trigger.to_state is not none
+             and trigger.from_state.state in ['PowerEngine', 'Predbat']
+             and trigger.to_state.state in ['PowerEngine', 'Predbat']
+             and trigger.to_state.state != trigger.from_state.state }}
+    actions:
+      - if:
+          - condition: template
+            value_template: "{{ trigger.to_state.state == 'PowerEngine' }}"
+        then:
+          - action: script.battery_handover_to_powerengine
+        else:
+          - action: script.battery_handover_to_predbat
+
+  # Predbat (add-on) gives up if Home Assistant isn't ready when it starts, and then never creates its entities,
+  # including the read-only switch. Restart it if that switch is missing: 5 minutes after HA starts, or if it goes
+  # missing for 10 minutes while running. At most once an hour, so a real Predbat fault doesn't cause a restart loop.
+  # (PowerEngine carries on meanwhile: a missing switch means Predbat can't be controlling the inverter.)
+  - alias: PowerEngine - Restart Predbat if it didn't connect
+    id: powerengine_restart_predbat
+    mode: single
+    triggers:
+      - trigger: homeassistant
+        event: start
+        id: start
+      - trigger: template
+        value_template: "{{ states('switch.predbat_set_read_only') in ['unknown', 'unavailable'] }}"
+        for: "00:10:00"
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ this.attributes.last_triggered is none
+             or (now() - this.attributes.last_triggered).total_seconds() > 3600 }}
+    actions:
+      - if:
+          - condition: trigger
+            id: start
+        then:
+          - delay: "00:05:00"
+      - if:
+          - condition: template
+            value_template: "{{ states('switch.predbat_set_read_only') in ['unknown', 'unavailable'] }}"
+        then:
+          - action: hassio.addon_restart
+            data:
+              addon: 6adb4f0d_predbat
+          - action: persistent_notification.create
+            data:
+              notification_id: powerengine_predbat_restart
+              title: Predbat restarted
+              message: >-
+                Predbat wasn't connected to Home Assistant (its read-only switch was missing), so its add-on was
+                restarted.

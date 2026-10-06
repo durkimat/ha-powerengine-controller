@@ -100,7 +100,8 @@ SAFETY = {
     "damp_burst_settle_min": (5.0, 1, 30),    # ...and then waits for the plan to be steady this long (min)
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage", "control_method": "timed_windows",
-                   "publisher": "auto", "overnight_window": "learned", "engine": "v1"}
+                   "publisher": "auto", "overnight_window": "learned", "engine": "v1",
+                   "other_controller": ""}      # "" = not chosen: derived from the mapped guards (other_controller())
 # system settings chosen from a list: key -> (config-page section, ((value, label), ...))
 SYSTEM_CHOICES = {
     "battery_location": ("cold", (("garage", "Garage or outbuilding (follows outside over about 24 h)"),
@@ -114,6 +115,9 @@ SYSTEM_CHOICES = {
     "engine": ("engine", (("v1", "Engine v1: a half-hour plan, remade every 5 minutes and on changes"),
                           ("v2", "Engine v2: acts on conditions (a level reached, a price change, "
                                  "the sun falling short)"))),
+    "other_controller": ("control", (("none", "No other battery controller"),
+                                     ("predbat", "Predbat, switched over with the handover package"),
+                                     ("other", "Another controller: PowerEngine checks the guard entities below"))),
     "publisher": ("system", (("auto", "Automatic (MQTT if AppDaemon has the MQTT plugin, else direct)"),
                              ("mqtt", "MQTT"),
                              ("direct", "Direct through AppDaemon (no MQTT broker)"))),
@@ -139,6 +143,12 @@ SETTING_TEXT = {
     "battery_floor_soc": ("Battery's hard floor", "%",
                           "The lowest level the battery itself allows (its BMS cut-off). Engine v2 never goes "
                           "below it, not even for a grid event. Engine v1 uses the Minimum reserve instead."),
+    "other_controller": ("Other battery controller", "",
+                         "Whether anything else also controls the battery. With none, PowerEngine does not check or "
+                         "need the handover guards below, and Active is allowed as far as they are concerned. With "
+                         "Predbat or another controller, PowerEngine stays Passive unless the guard entities show "
+                         "that controller is switched off or read only. If you have not chosen, PowerEngine goes "
+                         "by the guards you have mapped."),
     "engine": ("Planning engine", "",
                "Which engine plans and decides. Engine v1 plans in half-hours. Engine v2 works out what a stored "
                "kWh is worth and acts when a condition is met. Switching changes neither Active, Passive nor Pause; "
@@ -595,7 +605,7 @@ def parse_config(data: Any) -> Config:
         if key not in SYSTEM_DEFAULTS:
             raise ConfigError(f"unknown system setting '{key}'")
         if key in SYSTEM_CHOICES:
-            if value not in [v for v, _ in SYSTEM_CHOICES[key][1]]:
+            if value not in [v for v, _ in SYSTEM_CHOICES[key][1]] + ([""] if key == "other_controller" else []):
                 raise ConfigError(f"system setting '{key}' must be one of "
                                   + ", ".join(v for v, _ in SYSTEM_CHOICES[key][1]))
         elif not isinstance(value, bool):
@@ -719,6 +729,27 @@ def left_out_roles(site: Site) -> set[str]:
     """Role keys that belong to parts the site leaves out."""
     groups = {g for part, gs in SKIPPED_PART_GROUPS.items() if getattr(site, part) == "none" for g in gs}
     return {r.key for r in ROLE_BY_KEY.values() if r.group in groups}
+
+
+GUARD_KEYS = ("guard_read_only", "guard_off_1", "guard_off_2")
+OTHER_CONTROLLER_UNSET = "unset"
+
+
+def other_controller(cfg: Config | None) -> str:
+    """Whether another battery controller is installed: none, predbat, other, or unset (never chosen and no guard
+    mapped). Not chosen: derived from the guards, so an install that has them mapped behaves as it always did.
+    Nothing is written to the saved config."""
+    if cfg is None:
+        return OTHER_CONTROLLER_UNSET
+    chosen = cfg.system.get("other_controller") or ""
+    if chosen:
+        return chosen
+    mapped = {k: (cfg.inputs.get(k) or {}).get("entity") for k in GUARD_KEYS}
+    if "predbat" in str(mapped["guard_read_only"] or "").lower():
+        return "predbat"
+    if any(mapped.values()):
+        return "other"
+    return OTHER_CONTROLLER_UNSET
 
 
 def required_roles(cfg: Config) -> list[str]:

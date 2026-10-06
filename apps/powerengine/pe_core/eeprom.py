@@ -1,8 +1,8 @@
 """Inverter write tracking: how fast settings writes would use up the inverter's EEPROM.
 
 Inverter settings live in EEPROM, typically rated for about 100,000 writes. Two counts are kept per day:
-  observed  writes by whatever controls the inverter now (Predbat, automations): each state change of a mapped
-            control entity; a press of the timed-window update button counts as one write.
+  observed  writes by whatever controls the inverter now (another controller, automations): each state change of
+            a mapped control entity; a press of the timed-window update button counts as one write.
             (Setting a number to the value it already has doesn't change its state, so this can undercount.)
   would     writes PowerEngine's Active design would make for its own decisions (see WriteModel).
 From each daily average comes a lifespan: how many years 100,000 writes would last at that rate.

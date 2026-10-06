@@ -8,12 +8,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .config import Config
+from .config import GUARD_KEYS, Config, other_controller
 
 UNCONFIGURED, PASSIVE, ACTIVE, PAUSED = "unconfigured", "passive", "active", "paused"
 
 # Handover guards: role -> the state it must be in before PowerEngine may control the inverter.
 GUARDS = (("guard_read_only", "on"), ("guard_off_1", "off"), ("guard_off_2", "off"))
+assert tuple(k for k, _ in GUARDS) == GUARD_KEYS
+
+# Shown when the owner has not said whether another battery controller is installed and no guard is mapped.
+CHOOSE_CONTROLLER = ("Choose whether another battery controller is installed (Config page, Inverter control)")
 
 # Active is available from 0.5.14. Kept as a switch so a build can be made Passive-only again if needed.
 BUILD_SUPPORTS_ACTIVE = True
@@ -42,17 +46,21 @@ def guard_status(cfg: Config | None, get_state) -> tuple[list[str], list[str]]:
     """(problems, absent) for the handover guards.
 
     problems: why another controller might still be in charge (empty when every mapped guard is safe). At least
-    one guard must be mapped: without any, PowerEngine can't tell Predbat or the legacy automations aren't also
-    writing to the inverter.
+    one guard must be mapped when another controller is installed (or not yet chosen): without any, PowerEngine
+    can't tell that controller isn't also writing to the inverter. With "No other battery controller" (system
+    setting other_controller = none) nothing is checked and a mapped guard is ignored.
     absent: guard entities Home Assistant doesn't have right now (missing, unknown or unavailable). These count as
-    safe: an entity that doesn't exist can't be controlling anything; e.g. Predbat's read-only switch is missing
-    only while Predbat isn't connected to Home Assistant, and then Predbat can't write to the inverter either."""
+    safe: an entity that doesn't exist can't be controlling anything; e.g. a controller's read-only switch is
+    missing only while it isn't connected to Home Assistant, and then it can't write to the inverter either."""
     if cfg is None:
         return ["no config"], []
+    kind = other_controller(cfg)
+    if kind == "none":
+        return [], []
     mapped = [(key, want, cfg.inputs[key]["entity"]) for key, want in GUARDS
               if "entity" in (cfg.inputs.get(key) or {})]
     if not mapped:
-        return ["no handover guards are mapped"], []
+        return [CHOOSE_CONTROLLER if kind == "unset" else "no handover guards are mapped"], []
     problems, absent = [], []
     for _key, want, eid in mapped:
         state = str(get_state(eid))
@@ -86,6 +94,8 @@ def effective_mode(cfg: Config | None, config_error: str | None = None,
         return ModeDecision(ACTIVE, PASSIVE, "Active was requested, but this build only supports Passive.")
     if unverified:
         return ModeDecision(ACTIVE, PASSIVE, f"Active refused: {unverified}.")
+    if list(guards) == [CHOOSE_CONTROLLER]:
+        return ModeDecision(ACTIVE, PASSIVE, f"Active refused: {CHOOSE_CONTROLLER}.")
     if guards:
         return ModeDecision(ACTIVE, PASSIVE, "Active refused: another controller may be in charge ("
                             + "; ".join(guards) + ").")

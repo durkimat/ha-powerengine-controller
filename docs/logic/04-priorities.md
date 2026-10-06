@@ -28,12 +28,19 @@ flowchart TD
     E -- no --> D1
     E -- yes --> F{"Inverter definition not verified<br/>for this firmware?"}
     F -- yes --> D1b["PASSIVE: 'Active refused: ...'"]
-    F -- no --> G{"A handover guard tripped?<br/>(another controller may be in charge)"}
+    F -- no --> G{"A handover guard tripped?<br/>(another controller may be in charge;<br/>not checked when Other battery controller is none)"}
     G -- yes --> D1c["PASSIVE: 'Active refused'.<br/>No writes to the timed windows"]
     G -- no --> H{"Pause switch on?"}
     H -- yes --> H1["PAUSED: inverter returned to Self-Use,<br/>no changes until resumed"]
     H -- no --> I["ACTIVE"]
 ```
+
+The guards depend on the system setting `other_controller` (`none` / `predbat` / `other`; page 7). With `none` nothing is
+checked and a mapped guard is ignored. With `predbat` or `other` every mapped guard must be safe, and at least one must be
+mapped. Not chosen: it is derived at read time from the mapped guards (`guard_read_only` containing `predbat` gives `predbat`,
+any other guard gives `other`; nothing is saved); with no guard mapped Active is refused with "Choose whether another battery
+controller is installed (Config page, Inverter control)". `config.other_controller()` is the one place that derives it, and
+`sensor.pe_diag_version` publishes the result as attribute `other_controller` (`none`, `predbat`, `other` or `unset`).
 
 Leaving Active hands the inverter back to Self-Use once (RAM control: remote control is switched Off, always). Going Active
 (or resuming) starts a **5-minute restart hold-off** for timed-window writes (page 6).

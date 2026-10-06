@@ -289,10 +289,13 @@ Work through it top to bottom:
 5. **Axle events, Free-power sessions, Cold battery:** switch on what you use; their inputs become required.
 6. **Inverter control (needed to go live):** the Solis timed-window hours/minutes, currents, apply button and
    storage mode (amber until you go live, then required), the **Inverter clock** and **Sync inverter clock**,
-   and the **Handover guards** (read only: **Other controller read-only** = `switch.predbat_set_read_only`,
-   **Other control off (1)/(2)** = `automation.charge_house_battery_on` and
-   `automation.house_battery_start_charging`). Map them now so PowerEngine can count the writes your current
-   setup makes (Health tab, EEPROM wear) and show what it would set.
+   **Other battery controller** (choose *No other battery controller*, *Predbat, switched over with the handover
+   package*, or *Another controller*) and, if you have one, the **Handover guards** (read only: **Other controller
+   read-only** is a switch that must be on, **Other control off (1)/(2)** are automations or switches that must be
+   off). Map them now so PowerEngine can count the writes your current setup makes (Health tab, EEPROM wear) and show
+   what it would set. With *No other battery controller* the guards are not needed, not shown and not checked.
+   If you have not chosen, PowerEngine goes by the guards you have mapped, and with none mapped it stays Passive
+   and says "Choose whether another battery controller is installed".
 7. **Notifications:** shown in Home Assistant's notification area (the bell) by default, and each clears itself
    when the problem is over. Or pick your phone's notify service (usually `notify.mobile_app_<phone name>`), or
    Off. Tick what you want to hear about.
@@ -389,36 +392,42 @@ and only rewritten when they change, so a repeating night costs next to no write
 current (0 A to hold). With only one window it falls back to a single window at most 35 minutes ahead. And, if *Smart-charge optimisation* is on, sets EDF's ready-by time to ask for
 slots. It never uses Backup or Off-Grid mode and never writes bump/boost entities.
 
-### How switching works
+### How switching works (only if you run Predbat alongside)
+
+This whole section, down to "Switching back to Predbat", is for homes that run Predbat next to PowerEngine and want
+one switch between them. Without Predbat, skip it: set *Other battery controller* to *No other battery controller*
+and go live from the Operation setting. It needs the optional package `docs/ha/powerengine_predbat_handover.yaml`
+(see "One-off setup"); the main package `docs/ha/powerengine_handover.yaml` is for everyone and does not mention Predbat.
 
 There is one switch: the **Battery controller** panel at the top of the Config tab, **Predbat | PowerEngine**.
 Whichever you choose is **fully live** when the switch finishes; there is nothing else to turn on.
 
 | You choose | What the switch does, in order | Result |
 | --- | --- | --- |
-| **PowerEngine** | Legacy automations off → Predbat read-only **on** → wait 10 s → PowerEngine un-paused and *Operation* set to **Active** (saved) → waits for PowerEngine to report *active* | PowerEngine is driving the battery. A notification says **PowerEngine is live**, or **did NOT go live** with the reason (the inverter then stays on Self-Use). |
-| **Predbat** | PowerEngine *Operation* set to **Passive** → it closes its windows (Self-Use) → wait 20 s → pause off → legacy automations off → Predbat read-only **off** | Predbat is driving the battery from its next update. PowerEngine keeps planning and costing, but writes nothing. |
+| **PowerEngine** | Predbat read-only **on** → wait 10 s → PowerEngine un-paused and *Operation* set to **Active** (saved) → waits for PowerEngine to report *active* | PowerEngine is driving the battery. A notification says **PowerEngine is live**, or **did NOT go live** with the reason (the inverter then stays on Self-Use). |
+| **Predbat** | PowerEngine *Operation* set to **Passive** → it closes its windows (Self-Use) → wait 20 s → pause off → Predbat read-only **off** | Predbat is driving the battery from its next update. PowerEngine keeps planning and costing, but writes nothing. |
 
 The panel then shows a status line (**PowerEngine is live** / **Predbat is live** / **paused for testing** /
 **not fully live**) and a table of what each related entity should be against what it is. If anything shows ✗
-(changed by hand, or a switch that didn't finish), **Re-apply** runs the handover again. The legacy automations are
-no longer an option; both directions keep them off.
+(changed by hand, or a switch that didn't finish), **Re-apply** runs the handover again.
 
 The *Operation* setting further down the Config tab is what the switch sets; you don't need to touch it.
 
 ### One-off setup (before the first switch)
 
-1. **Map on the Config tab** and save:
+1. **Map on the Config tab** and save (with Predbat, set *Other battery controller* to *Predbat, switched over with
+   the handover package*):
    everything in the *Inverter control* section:
    - the timed-window entities (found automatically; check none show a problem);
    - *Inverter clock* = `sensor.solis_rtc`, *Sync inverter clock* = `button.solis_sync_rtc`;
-   - the handover guards: *Other controller read-only* = `switch.predbat_set_read_only`,
-     *Other control off (1)* = `automation.charge_house_battery_on`,
-     *Other control off (2)* = `automation.house_battery_start_charging`.
-     (You only map them. The switch puts them in the right state: read-only **on**, both automations **off**.)
+   - the handover guards: *Other controller read-only* = `switch.predbat_set_read_only`, and if you have other
+     automations that must stay off while PowerEngine drives, *Other control off (1)* and *(2)*.
+     (You only map them. The switch puts Predbat's read-only on; turn your own automations off yourself.)
 2. Check the **Daily write limit** (same section, default 150).
-3. **Install the handover package**: copy `docs/ha/powerengine_handover.yaml` to `/config/packages/`, check the
-   config, restart HA. The panel says so if it's missing.
+3. **Install the packages**: copy `docs/ha/powerengine_handover.yaml` (everyone: the update button, the AppDaemon
+   restarts and the watchdog) and, **only if you run Predbat alongside**, `docs/ha/powerengine_predbat_handover.yaml`
+   (the switch between the two) to `/config/packages/`, check the config, restart HA. The panel says so if the
+   second one is missing.
 
 ### Testing (switch out of live)
 
@@ -445,6 +454,17 @@ While paused, remember nobody is optimising the battery: don't leave it paused o
 5. First night: the battery reaches the planned level by 06:00.
 6. Rollback drill (daytime): panel → **Predbat** → *Switch*, check *Predbat is live*; then back to **PowerEngine**.
 
+### Removing Predbat
+
+When you uninstall Predbat (or any other battery controller):
+
+1. Config tab, **Inverter control**, **Other battery controller** = *No other battery controller*. PowerEngine then
+   stops needing or checking the handover guards, and Active is allowed as far as they are concerned.
+2. Remove `powerengine_predbat_handover.yaml` from `/config/packages/` (keep `powerengine_handover.yaml`), check the
+   config and restart HA. The Battery controller panel hides itself.
+3. Unmap the three handover guards on the Config tab (they are ignored now, but unmapping keeps the page tidy).
+4. Switching to Active, pausing and Passive are still your choice: PowerEngine changes none of them for you.
+
 ### Switching back to Predbat at any time
 
 Panel → **Predbat** → *Switch to Predbat*. About 30 seconds later Predbat is live. Switching to PowerEngine again
@@ -452,7 +472,7 @@ later is the same one step.
 
 ### Safety
 
-- **Handover guards:** if a guard becomes unsafe while PowerEngine is in control (e.g. Predbat taken out of
+- **Handover guards** (when *Other battery controller* is not *No other battery controller*): if a guard becomes unsafe while PowerEngine is in control (e.g. Predbat taken out of
   read-only by hand), PowerEngine stops writing at once and notifies you; it writes nothing more, since something
   else has taken over. A guard entity that doesn't exist at all (e.g. Predbat not connected to Home
   Assistant) counts as safe: PowerEngine carries on and notifies you once. The panel shows ✗; use the switch or *Re-apply* to put things straight.

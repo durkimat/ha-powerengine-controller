@@ -36,8 +36,9 @@ owner approves each run on GitHub. It can't run `tools/release.sh` itself (it ne
 - `docs/logic/`: the plan and decision logic as flowcharts and tables (inputs, rules planner, optimiser, priorities, control, settings,
   decision log, review findings). Start at `docs/logic/README.md`. A PR that changes planning or `decide` updates the matching page.
 - `docs/INSTALL.md`: the install guide. Keep it current: any release that changes setup updates it in the same PR.
-- `docs/ha/powerengine_handover.yaml`: the HA package (handover scripts, update script, watchdog automations).
-  The owner installs it into HA; see "HA config" below.
+- `docs/ha/powerengine_handover.yaml`: the HA package everyone needs (update script, AppDaemon restarts, watchdog); it names no
+  other controller. `docs/ha/powerengine_predbat_handover.yaml`: the optional Predbat handover (input_select, two scripts, restart
+  Predbat). The owner installs them into HA; see "HA config" below.
 - `tools/release.sh`: the release (below). `tools/diag_summary.py`: summarises a diagnostics export (below).
   `tools/build_demo_pack.py`: rebuilds the demo pack.
 - `tests/`: pytest. `tests/test_replay.py` with `tests/replay_harness.py` replays a recorded night through the
@@ -256,6 +257,12 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   leftovers are done: see Phase 1 below.)
 
 ## Recent fixes
+
+- **Other battery controller is optional (0.9.108, `config.other_controller()`, `modes.guard_status`).** System setting `other_controller` (`none` / `predbat` / `other`;
+  default `""` = not chosen, derived at read time from the mapped guards: `guard_read_only` containing "predbat" gives `predbat`, any guard `other`, none `unset`; nothing is saved).
+  `none`: guards not required, not checked, not evaluated (`_evaluate` skips the handover roles), Active allowed as far as guards go. `unset` with no guard: Active refused with
+  `modes.CHOOSE_CONTROLLER`. Published as `other_controller` on `sensor.pe_diag_version`. The owner's personal automations are gone from code, roles and docs; user text names no
+  Predbat except where `predbat` is chosen. HA packages split (see Layout). The replay config maps guards, so it derives `predbat` and is unchanged.
 
 - **Overnight window: learned or fixed (built for 0.9.105, not released; `docs/logic/01-inputs.md` 1.10).** New system setting `overnight_window` (`learned` default / `fixed`) and safety settings
   `overnight_start_h` / `overnight_end_h` (hours since midnight in half-hour steps, 23.5 = 23:30; a start after the end runs over midnight). `PowerEngine._overnight()` is the one place the plan
