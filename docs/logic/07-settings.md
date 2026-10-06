@@ -33,6 +33,7 @@ A setting marked **fallback only** is read just by the reactive rule stack that 
 | `learn_export` | on | Plan | Lower the export limit to the one actually hit |
 | `learn_car` | on | Plan | Use the car's typical kW |
 | `learn_car_min` | on | Smart-slot history (certainty, Health tab) | Move the shortest real charge towards what the supplier-confirmed slots show (see page 1) |
+| `engine_compare` | on | Costs page (Engines compared, same day) | Each night (03:20) replay yesterday through the whole app once with engine v1 and once with engine v2, from the day's forecast record and the cost records, in a separate process; publishes `sensor.pe_cost_engines`. Needs the forecast records (kept 14 days) and uses about 15 minutes of one core at low priority |
 | `learn_conversion` | on | Plan | Include the inverter's AC/DC losses in the efficiency |
 | `cold_caution` | on | Plan, Control | Plan slower charging when the battery is cold; the BMS-limit fallback |
 | `cold_learning` | on | Plan | Learn the cold threshold and factor |

@@ -50,6 +50,10 @@ from pe_core.adapters.solcast import ROLES as FORECAST_ROLES
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
 from pe_core.commands import from_pe_command, from_service
+from pe_core.compare import results as compare_results
+from pe_core.compare import sensor as compare_sensor
+from pe_core.compare.schedule import Scheduler as CompareScheduler
+from pe_core.compare.snapfeed import snapshot_path
 from pe_core.config import (
     DEFAULT_PATHS,
     LOCATION_LAG_H,
@@ -136,6 +140,8 @@ V2_PREVIEW_REASON = "Preview: engine v1 is in control"
 V2_CACHE_SECONDS = 60             # the certainty scores and the forecast points the v2 tick reuses
 DATA_GAP_GRACE_S = 180             # a reading missing this long or less keeps the last decision (_bridge_data_gap)
 LOWWRITE_START = "02:40:00"       # after the Simulator has had its hour
+COMPARE_START = "03:20:00"         # after the low-write study: the same-day engine comparison (a separate process)
+COMPARE_POLL_S = 300              # how often the app looks at that process
 LOWWRITE_SLICE = 3                # new days planned per pass (about a second each); more passes follow a minute apart
 SIM_START = "01:30:00"            # after the midnight jobs (00:05-00:20), well before the morning
 SIM_SLICE_SECONDS = 2.0           # work per callback, then hand AppDaemon back for a second
@@ -466,6 +472,10 @@ class PowerEngine(hass.Hass):
         self.run_in(lambda kwargs: self._sim_publish(), 20)
         self.run_daily(self._lowwrite_start, LOWWRITE_START)        # low-write study: shadow only, changes nothing
         self.run_in(lambda kwargs: self._lowwrite_publish(), 25)
+        if not self._demo:                                       # engine comparison: yesterday, replayed apart
+            self.run_daily(self._compare_start, COMPARE_START)
+            self.run_every(self._compare_poll, f"now+{COMPARE_POLL_S}", COMPARE_POLL_S)
+        self.run_in(lambda kwargs: self._compare_publish(), 30)
         self.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
         self.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
         self.run_every(self._check_update, "now+120", 60)        # a new version installed: ask HA to restart us
@@ -490,6 +500,12 @@ class PowerEngine(hass.Hass):
 
     def terminate(self):
         self._save_engine_state()
+        try:
+            sched = self.__dict__.get("_compare")
+            if sched is not None:
+                sched.kill()                                      # a comparison runner stops with the app
+        except Exception:
+            pass
         if self._get_publisher() is not None:
             self._get_publisher().available(False)
         try:
@@ -3382,6 +3398,99 @@ class PowerEngine(hass.Hass):
                  else "waiting for recorded days")
         self._publish_state("diag_lowwrite", state, s or {"days": 0})
 
+    # --- same-day engine comparison (docs/plans/engine-pages-and-comparison.md, 2.4): never touches Home Assistant ----
+    #
+    # Each night a separate process (pe_core.compare.run, the whole app against a fake AppDaemon in a temp folder)
+    # replays yesterday once with each engine from the day's forecast record; this side starts it, looks at it every
+    # five minutes, stops it at 90 minutes, runs one at a time, and publishes sensor.pe_cost_engines.
+
+    def _compare_on(self):
+        return self.cfg is not None and not self._demo and bool(self.cfg.features.get("engine_compare", True))
+
+    def _compare_costs(self):
+        return os.path.join(os.path.dirname(self._save_path()), "costs")
+
+    def _compare_scheduler(self):
+        sched = self.__dict__.get("_compare")
+        if sched is None:
+            sched = self._compare = CompareScheduler(os.path.dirname(self._save_path()),
+                                                     os.path.dirname(os.path.abspath(__file__)))
+        return sched
+
+    def _compare_start(self, kwargs=None):
+        if not self._compare_on():
+            return
+        try:
+            sched = self._compare_scheduler()
+            today = self._today()
+            days = sched.nightly(today)
+            compare_results.prune(self._compare_costs(), today)
+            if days:
+                self.log("Engine comparison: replaying " + ", ".join(d.isoformat() for d in days))
+            self._compare_events(sched.poll())
+        except Exception as err:
+            self.log(f"Engine comparison could not start: {err!r}", level="WARNING")
+        self._compare_publish()
+
+    def _compare_poll(self, kwargs=None):
+        sched = self.__dict__.get("_compare")
+        if sched is None or not self._compare_on():
+            return
+        try:
+            was = sched.running
+            events = sched.poll()
+            self._compare_events(events)
+            if events or was != sched.running:
+                self._compare_publish()
+        except Exception as err:
+            self.log(f"Engine comparison check failed: {err!r}", level="WARNING")
+
+    def _compare_events(self, events):
+        for ev in events:
+            if ev.get("status") == "failed":
+                self.log(f"Engine comparison for {ev['day']} failed: {ev.get('message')}", level="WARNING")
+            else:
+                self.log(f"Engine comparison for {ev['day']}: {ev.get('status')} in {ev.get('took_s')} s")
+
+    def _compare_results(self, today):
+        costs = self._compare_costs()
+        days = [today - timedelta(days=n) for n in range(1, compare_sensor.DAYS_SHOWN + 1)]
+        res = {d.isoformat(): compare_results.read_result(costs, d) for d in days}
+        snaps = {d.isoformat() for d in days if os.path.exists(snapshot_path(costs, d))}
+        return res, snaps
+
+    def _compare_next_run(self):
+        now = datetime.now(self.tz or timezone.utc)
+        hh, mm, ss = (int(x) for x in COMPARE_START.split(":"))
+        nxt = now.replace(hour=hh, minute=mm, second=ss, microsecond=0)
+        return (nxt if nxt > now else nxt + timedelta(days=1)).isoformat(timespec="seconds")
+
+    def _compare_publish(self):
+        try:
+            if self.cfg is None:
+                return
+            on = self._compare_on()
+            res, snaps = self._compare_results(self._today()) if not self._demo else ({}, set())
+            sched = self.__dict__.get("_compare")
+            running = ({"day": sched.day.isoformat(), "since": sched.started.isoformat(timespec="seconds")}
+                       if sched is not None and sched.running else None)
+            state, attrs = compare_sensor.build(self._today(), res, snaps, feature_on=on, running=running,
+                                                next_run=self._compare_next_run() if on else None)
+            self._publish_if_changed("cost_engines", state, attrs)
+        except Exception as err:
+            self.log(f"Engine comparison sensor failed: {err!r}", level="WARNING")
+
+    def _compare_bundle(self):
+        """The diagnostics export's `engine_compare`: the last week's result files and the job's state."""
+        res, snaps = self._compare_results(self._today())
+        sched = self.__dict__.get("_compare")
+        state, attrs = compare_sensor.build(self._today(), res, snaps, feature_on=self._compare_on(),
+                                            running=None, next_run=None)
+        return {"feature": self._compare_on(), "state": state, "running": bool(sched and sched.running),
+                "queue": [d.isoformat() for d in (sched.queue if sched else [])],
+                "forecast_records": sorted(snaps), "results": [r for r in res.values() if r],
+                "calib": attrs["calib"], "totals": attrs["totals"]}
+
     def _sim_notify(self, out):
         month = self._today().strftime("%Y-%m")
         opps = out.get("opportunities") or []
@@ -3746,6 +3855,7 @@ class PowerEngine(hass.Hass):
             "v2_history": s(lambda: v2history.summary(self._v2hist.folder, self.tz)) if self.__dict__.get("_v2hist")
             else None,
             "early_target": s(lambda: {**self._early.summary(), "records": self._early.records[-60:]}),
+            "engine_compare": s(self._compare_bundle),
             "attribute_sizes": s(lambda: diagnostics.largest_attrs(self.__dict__.get("_attr_sizes", {}))),
             "log": list(getattr(self.__dict__.get("_log_ring"), "lines", [])),
         }

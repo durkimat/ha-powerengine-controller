@@ -90,10 +90,19 @@ def _num(x: float, places: int = 1):
 
 
 class DemoWorld:
-    def __init__(self, pack: dict, day: str, tz, now_fn):
+    def __init__(self, pack: dict, day: str, tz, now_fn, *, capacity_kwh: float = CAPACITY_KWH,
+                 efficiency: float = EFFICIENCY, charge_limit_w: float = LIMIT_W, discharge_limit_w: float = LIMIT_W,
+                 floor_pct: float = FLOOR_PCT, feed=None):
+        """The defaults are the demo's own battery. The engine comparison passes the owner's (size, one-way
+        efficiency, power limits, floor) and a `feed` (pe_core.compare.snapfeed.SnapshotFeed: `get(role, when)` gives
+        the (state, attributes) a role's entity had then, or None) that replaces the forecast, rate, smart-slot, free
+        power and grid-event entities the world would derive from the day."""
         if day not in pack["days"]:
             raise ValueError(f"unknown demo day {day!r}; the pack has {', '.join(packmod.days(pack))}")
         self.pack, self.day, self.tz, self.now_fn = pack, day, tz, now_fn
+        self.capacity_kwh, self.efficiency, self.floor_pct = float(capacity_kwh), float(efficiency), float(floor_pct)
+        self.charge_limit_w, self.discharge_limit_w = float(charge_limit_w), float(discharge_limit_w)
+        self.feed = feed
         self.order = packmod.days(pack)
         self.base = self.order.index(day)
         self.refused: list[tuple[str, str, str]] = []
@@ -103,9 +112,9 @@ class DemoWorld:
         self.t = now
         self.today0 = self._local(now).date()
         row = self._row(now)
-        self.energy = min(max(row["soc"], FLOOR_PCT), 100.0) / 100 * CAPACITY_KWH      # kWh in the battery
+        self.energy = min(max(row["soc"], self.floor_pct), 100.0) / 100 * self.capacity_kwh      # kWh in the battery
         self.option, self.charge_w, self.discharge_w, self.rc_at = "Off", 0.0, 0.0, None
-        self.min_soc = FLOOR_PCT
+        self.min_soc = self.floor_pct
         self.flows = {"charge_w": 0.0, "discharge_w": 0.0, "grid_w": 0.0, "house_w": 0.0, "car_w": 0.0, "solar_w": 0.0}
         self._start_counters(now)
         self._flows_at(now, 0.0)
@@ -151,23 +160,23 @@ class DemoWorld:
         row = self._row(t)
         house, car, solar = row["house"] * 2000.0, row["car"] * 2000.0, row["solar"] * 2000.0
         load = house + car
-        floor_kwh = max(FLOOR_PCT, self.min_soc) / 100 * CAPACITY_KWH
+        floor_kwh = max(self.floor_pct, self.min_soc) / 100 * self.capacity_kwh
         span_h = dt_h or STEP_S / 3600                # dt 0: what the next minute would allow, for the readings
-        room_w = max(0.0, CAPACITY_KWH - self.energy) * 1000 / (EFFICIENCY * span_h)
-        out_w = max(0.0, self.energy - floor_kwh) * 1000 * EFFICIENCY / span_h
+        room_w = max(0.0, self.capacity_kwh - self.energy) * 1000 / (self.efficiency * span_h)
+        out_w = max(0.0, self.energy - floor_kwh) * 1000 * self.efficiency / span_h
         mode, power = self._command()
         surplus = solar - load
         charge = discharge = 0.0
         if mode == "off":
-            charge = min(max(surplus, 0.0), LIMIT_W, room_w)
-            discharge = min(max(-surplus, 0.0), LIMIT_W, out_w)
+            charge = min(max(surplus, 0.0), self.charge_limit_w, room_w)
+            discharge = min(max(-surplus, 0.0), self.discharge_limit_w, out_w)
         elif mode == "charge":
             if power <= 0:                                        # hold: no discharge; solar may still charge it
-                charge = min(max(surplus, 0.0), LIMIT_W, room_w)
+                charge = min(max(surplus, 0.0), self.charge_limit_w, room_w)
             else:
-                charge = min(power, LIMIT_W, room_w)
+                charge = min(power, self.charge_limit_w, room_w)
         else:
-            discharge = min(power, LIMIT_W, out_w)
+            discharge = min(power, self.discharge_limit_w, out_w)
         self.flows = {"charge_w": charge, "discharge_w": discharge, "house_w": house, "car_w": car, "solar_w": solar,
                       "grid_w": load - solar + charge - discharge}
         self._row_now = row
@@ -196,8 +205,8 @@ class DemoWorld:
 
     def _integrate(self, dt_h: float) -> None:
         f = self.flows
-        self.energy += f["charge_w"] * dt_h / 1000 * EFFICIENCY - f["discharge_w"] * dt_h / 1000 / EFFICIENCY
-        self.energy = min(max(self.energy, 0.0), CAPACITY_KWH)
+        self.energy += f["charge_w"] * dt_h / 1000 * self.efficiency - f["discharge_w"] * dt_h / 1000 / self.efficiency
+        self.energy = min(max(self.energy, 0.0), self.capacity_kwh)
         c = self.counters
         c["charge"] += f["charge_w"] * dt_h / 1000
         c["discharge"] += f["discharge_w"] * dt_h / 1000
@@ -228,7 +237,7 @@ class DemoWorld:
 
     @property
     def soc(self) -> float:
-        return self.energy / CAPACITY_KWH * 100
+        return self.energy / self.capacity_kwh * 100
 
     # --- Home Assistant's side ----------------------------------------------------------------------
 
@@ -271,6 +280,10 @@ class DemoWorld:
         row = self._row_now
         d = self._local(now).date()
         role = next(k for k, v in IDS.items() if v == entity_id)
+        if self.feed is not None:
+            fed = self.feed.get(role, now)
+            if fed is not None:
+                return fed
         W = {"unit_of_measurement": "W", "device_class": "power", "state_class": "measurement"}
         KWH = {"unit_of_measurement": "kWh", "device_class": "energy", "state_class": "total_increasing"}
         RATE = {"unit_of_measurement": "GBP/kWh"}

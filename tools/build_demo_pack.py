@@ -26,9 +26,12 @@ import os
 import re
 import sys
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 
-TZ = ZoneInfo("Europe/London")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "apps", "powerengine"))
+
+from pe_core.demo.pack import TZ, day_complete, day_from_records, day_stats, forecast  # noqa: E402,F401
+
 RULES = (  # key, title, what wins
     ("sunny", "Sunny day", "most solar"),
     ("dull", "Dull day", "least solar of the complete days"),
@@ -66,39 +69,9 @@ def scrub_check(rec: dict, where: str) -> None:
     walk(rec, "")
 
 
-def _local(iso: str) -> datetime:
-    dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-    return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).astimezone(TZ)
-
-
-def day_stats(records: list[dict]) -> dict:
-    r2 = lambda x: round(x, 2)  # noqa: E731
-    return {
-        "solar": r2(sum(r["solar"] for r in records)),
-        "house": r2(sum(r["house"] for r in records)),
-        "car": r2(sum(r["car"] for r in records)),
-        "axle_kwh": r2(sum(r["v"].get("event_kwh") or 0.0 for r in records if r.get("axle"))),
-        "grid_import": r2(sum(r["grid_import"] for r in records)),
-        "grid_export": r2(sum(r["grid_export"] for r in records)),
-    }
-
-
 def complete(records: list[dict]) -> str | None:
     """None if the day is complete, else why not."""
-    if len(records) != 48:
-        return f"{len(records)} records, not 48"
-    if sum(r.get("seconds") or 0 for r in records) < 0.95 * 86400:
-        return "under 95% coverage"
-    starts = [_local(r["start"]) for r in records]
-    if len(set(starts)) != 48:
-        return "duplicate starts"
-    first = starts[0]
-    if first.hour or first.minute:
-        return "does not start at local midnight"
-    for i, s in enumerate(starts):
-        if (s.hour, s.minute) != (i // 2, i % 2 * 30) or s.date() != first.date():
-            return "half-hours are not consecutive from local midnight"
-    return None
+    return day_complete(records, TZ)
 
 
 def select_days(days: dict[str, dict]) -> dict[str, str]:
@@ -116,39 +89,8 @@ def select_days(days: dict[str, dict]) -> dict[str, str]:
     return taken
 
 
-def forecast(solar: list[float], scale: float) -> list[float]:
-    """Derived forecast: the actual solar smoothed over 2 hours (a centred window of 4 half-hours), scaled so the day's
-    total is `scale` times the actual total."""
-    n = len(solar)
-    smooth = []
-    for i in range(n):
-        window = solar[max(0, i - 2):min(n, i + 2)]
-        smooth.append(sum(window) / 4.0)          # /4 even at the edges: no solar outside the day
-    total, actual = sum(smooth), sum(solar)
-    k = scale * actual / total if total else 0.0
-    return [round(x * k, 4) for x in smooth]
-
-
 def build_day(records: list[dict], key: str, title: str, why: str, scale: float) -> dict:
-    solar = [max(0.0, float(r["solar"])) for r in records]
-    v = [r["v"] for r in records]
-    return {
-        "title": title, "rule": why, "recorded": _local(records[0]["start"]).date().isoformat(),
-        "stats": day_stats(records),
-        "house": [round(float(r["house"]), 4) for r in records],
-        "car": [round(float(r["car"]), 4) for r in records],
-        "solar": [round(x, 4) for x in solar],
-        "forecast": forecast(solar, scale),
-        "act": [round(float(x["act"]), 5) for x in v], "std": [round(float(x["std"]), 5) for x in v],
-        "ovn": [round(float(x["ovn"]), 5) for x in v], "exp": [round(float(x["exp"]), 5) for x in v],
-        "standing": [round(float(r["standing"]), 4) for r in records],
-        "soc": [round(float(r["soc_start"]), 1) for r in records],
-        "slot": [int(bool(x["slot"])) for x in v],
-        "axle": [int(bool(r["axle"])) for r in records],
-        "free": [int(bool(r["free"])) for r in records],
-        "as_recorded": {k: [round(float(r[k]), 3) for r in records]
-                        for k in ("grid_import", "grid_export", "battery_in", "battery_out")},
-    }
+    return day_from_records(records, title, why, scale, TZ)
 
 
 def scrub_pack(pack: dict) -> None:

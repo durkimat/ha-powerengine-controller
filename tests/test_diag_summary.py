@@ -173,3 +173,32 @@ def test_summary_lines_for_forecast_snapshots_and_the_v2_history():
             "7 mode changes") in text
     assert ds.summarise(export())["history_records"] is None            # an older export has neither
     assert "snapshots" not in ds.render(ds.summarise(export()))
+def compare_section():
+    def ok(day, v1, v2, bound, cal=None):
+        return {"day": day, "status": "ok", "reason": "", "took_s": 412, "made_at": f"{day}T03:40:00+00:00",
+                "in_control": "v1", "live": cal is not None, "v1": {"saving": v1, "flips": 2},
+                "v2": {"saving": v2, "flips": 4}, "bound": {"saving": bound}, "calibration": cal}
+    return {"feature": True, "state": "ok", "running": False, "queue": [],
+            "forecast_records": ["2026-10-05", "2026-10-06"],
+            "totals": {"days": 2, "v1": 2.5, "v2": 2.7, "bound": 3.0, "diff": 0.2}, "calib": None,
+            "results": [ok("2026-10-05", 1.3, 1.38, 1.51, {"engine": "v1", "diff": -0.04, "diff_pct": -2.0}),
+                        {"day": "2026-10-04", "status": "no_snapshot", "reason": "no forecast record for the day"},
+                        ok("2026-10-06", 1.2, 1.32, 1.49)]}
+
+
+def test_the_engine_comparison_has_a_line_per_day():
+    e = export()
+    e["app"]["engine_compare"] = compare_section()
+    s = ds.summarise(e)
+    c = s["engine_compare"]
+    assert [d["day"] for d in c["days"]] == ["2026-10-06", "2026-10-05", "2026-10-04"]          # newest first
+    assert c["days"][1]["calibration"]["diff_pct"] == -2.0 and c["days"][2]["status"] == "no_snapshot"
+    text = ds.render(s)
+    assert "engine comparison: ok, 3 day(s) compared, 2 forecast record(s)" in text
+    assert "2026-10-05 v1 +1.30 (flips 2) v2 +1.38 (flips 4) bound +1.51 GBP, 412 s; in control v1 (live)" in text
+    assert "replay -0.04 GBP (-2.0%) off metered" in text and "2026-10-04 no_snapshot: no forecast record" in text
+    assert json.loads(json.dumps(s))
+    off = export()
+    off["app"]["engine_compare"] = {**compare_section(), "feature": False}
+    assert ds.summarise(off)["engine_compare"] is None
+    assert ds.summarise(export())["engine_compare"] is None                                     # an older app
