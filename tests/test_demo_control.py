@@ -334,4 +334,4 @@ def test_the_demo_dashboard_is_written_where_home_assistant_loads_it(make):
 def test_every_view_starts_with_the_demo_card_in_the_shipped_dashboard():
     from pathlib import Path
     text = (Path(__file__).parent.parent / "apps/powerengine/dashboard/dashboard.lovelace").read_text()
-    assert text.count("- type: custom:powerengine-demo-card") == text.count("\n  - title:") == 9
+    assert text.count("- type: custom:powerengine-demo-card") == text.count("\n  - title:") == 8

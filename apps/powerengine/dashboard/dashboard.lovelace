@@ -388,9 +388,9 @@ views:
 
               </details>
               {%- endif %}
-  - title: Plan
+  - title: Engine v1
     path: plan
-    icon: mdi:calendar-clock
+    icon: pe:engine-v1
     type: sections
     # page title: on a phone only the tab icons show, so say which page this is
     header:
@@ -398,7 +398,7 @@ views:
       card:
         type: markdown
         text_only: true
-        content: "## Plan"
+        content: "## Engine v1"
     max_columns: 3
     sections:
       - type: grid
@@ -406,6 +406,10 @@ views:
         cards:
           # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
           - type: custom:powerengine-demo-card
+            grid_options: {columns: full}
+          # engine badge: Active / Paused / Passive for this engine, and what that means
+          - type: custom:powerengine-engine-badge-card
+            engine: v1
             grid_options: {columns: full}
           - type: markdown
             grid_options: {columns: full}
@@ -708,50 +712,11 @@ views:
 
               **Planned inverter writes, next 24 h: {{ wf }}** (purple bars on the chart; an estimate if the plan runs as it stands, not counting replans). Today so far: {{ states('sensor.pe_diag_writes_today') }}.
               {%- endif %}
-  - title: Engine v2
-    path: engine-v2
-    icon: mdi:engine
-    type: sections
-    # page title: on a phone only the tab icons show, so say which page this is
-    header:
-      layout: start
-      card:
-        type: markdown
-        text_only: true
-        content: "## Engine v2"
-    max_columns: 3
-    sections:
       - type: grid
         column_span: 3
         cards:
-          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
-          - type: custom:powerengine-demo-card
-            grid_options: {columns: full}
-          - type: custom:powerengine-engine-card
-            grid_options: {columns: full}
-          - type: custom:powerengine-v2-plan-card
-            grid_options: {columns: full}
-          - type: custom:powerengine-v2-health-card
-            grid_options: {columns: full}
-  - title: Plan history
-    path: history
-    icon: mdi:history
-    type: sections
-    # page title: on a phone only the tab icons show, so say which page this is
-    header:
-      layout: start
-      card:
-        type: markdown
-        text_only: true
-        content: "## Plan history"
-    max_columns: 3
-    sections:
-      - type: grid
-        column_span: 3
-        cards:
-          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
-          - type: custom:powerengine-demo-card
-            grid_options: {columns: full}
+          - type: heading
+            heading: History
           # the day: previous / next arrows and a date box (any day the app still holds); hides itself on an older app
           - type: custom:powerengine-history-date-card
             entity: sensor.pe_plan_history
@@ -761,7 +726,7 @@ views:
             content: |-
               {%- set h = states.sensor.pe_plan_history %}
               {%- if h and h.attributes.date is defined %}{% set a = h.attributes %}{% set s = a.summary %}
-              **{{ a.label }}**{{ ' · plan made at the start of the day (no as-run record for this day)' if a.plan == 'Start of day' else '' }}{{ ' · no stored plan for this day' if not a.plan else '' }}
+              **{{ a.label }}**{{ ' · Engine v1 was passive: its plan at the start of the day' if a.get('in_control') == 'v2' else (' · plan made at the start of the day (no as-run record for this day)' if a.plan == 'Start of day' else '') }}{{ ' · no stored plan for this day' if not a.plan else '' }}
 
               {%- if s or a.day_import_export_cost is not none %}
               <details><summary>Plan against actual</summary>
@@ -1022,6 +987,43 @@ views:
               {%- else %}
               No actions stored for this day.
               {%- endif %}
+  - title: Engine v2
+    path: engine-v2
+    icon: pe:engine-v2
+    type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Engine v2"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
+          - type: custom:powerengine-demo-card
+            grid_options: {columns: full}
+          # engine badge: Active / Paused / Passive for this engine, and what that means
+          - type: custom:powerengine-engine-badge-card
+            engine: v2
+            grid_options: {columns: full}
+          - type: custom:powerengine-engine-card
+            grid_options: {columns: full}
+          - type: custom:powerengine-v2-plan-card
+            grid_options: {columns: full}
+          - type: custom:powerengine-v2-health-card
+            grid_options: {columns: full}
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: History
+          - type: custom:powerengine-v2-history-card
+            entity: sensor.pe_v2_history
+            grid_options: {columns: full}
   - title: Costs
     path: costs
     icon: mdi:cash-multiple
@@ -1089,6 +1091,14 @@ views:
               - **PowerEngine:** what the battery and PowerEngine saved on top of that, by choosing when to charge, discharge and export. It is the real metered cost of your normal half-hours, set against the line before it. Energy bought for later or used from earlier counts on the day it was bought or used, so a single day can look dearer or cheaper than the battery really made it; it evens out over a week.
               - **<<event>> & free power:** the <<event>> and free-power half-hours, which are kept out of the everyday figures. Negative means money in: <<event>>'s £1/kWh plus <<supplier>>'s export payment.
               - **You paid:** the real total for the period, after <<event>>'s payments.
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Engines compared, same day
+          - type: custom:powerengine-engine-compare-card
+            entity: sensor.pe_cost_engines
+            grid_options: {columns: full}
       - type: grid
         column_span: 3
         cards:
