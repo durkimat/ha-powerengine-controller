@@ -29,6 +29,7 @@ from pe_core import (
     diagnostics,
     earlytarget,
     gridcheck,
+    hapackage,
     ramcontrol,
     rctest,
     releases,
@@ -427,6 +428,7 @@ class PowerEngine(hass.Hass):
             self.log(f"Could not open the cost book: {err!r}", level="WARNING")
         self._publish_v2_settings()
         self._evaluate()                                   # also publishes mode + config status
+        self._package_sync("start")
         self._cycle({})
         self._sync_dashboard()
 
@@ -651,6 +653,7 @@ class PowerEngine(hass.Hass):
             # control resumes within a cycle of them coming back, not up to 5 minutes
             self._evaluate()
         self._release_if_still_missing()
+        self._publish_package()                            # whether Home Assistant has loaded the package files
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
                 readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None,
@@ -3392,6 +3395,55 @@ class PowerEngine(hass.Hass):
             except OSError as err:
                 self.log(f"Could not write the dashboard file {target}: {err}", level="WARNING")
 
+    # --- PowerEngine's own Home Assistant package files -----------------------------------
+
+    def _ha_config_dir(self):
+        return os.path.dirname(os.path.dirname(self._save_path()))        # e.g. /homeassistant
+
+    def _package_sync(self, why="start"):
+        """Keep the package files in <ha config>/packages in step with this version and with the chosen other
+        controller. Never in a demo, never creates the folder, never raises: a problem is a warning and the sensor."""
+        if self._demo or self.cfg is None:
+            return
+        try:
+            controller = other_controller(self.cfg)
+            result = hapackage.sync(self._ha_config_dir(), controller, hapackage.shipped_texts(),
+                                    datetime.now().strftime("%Y%m%d-%H%M%S"))
+            self._pkg_result = result
+            for a in hapackage.changes(result):
+                self.log(f"Home Assistant package: {hapackage.describe_change(a)}")
+            for _name, err in result["errors"]:
+                self.log(f"Home Assistant package could not be written: {err}", level="WARNING")
+            if not result["dir_exists"] and why == "start":
+                self.log("Home Assistant package: there is no packages folder, so PowerEngine does not write its "
+                         "package (see the install guide)")
+            changed = hapackage.changes(result)
+            if changed:
+                key = "package:" + ",".join(f"{a.name}:{a.action}" for a in changed) + ":" + datetime.now(
+                    timezone.utc).strftime("%Y%m%d")
+                self._notify("health", (key, "PowerEngine updated its Home Assistant package",
+                                        "PowerEngine updated its Home Assistant package: press \"Load PowerEngine's "
+                                        "Home Assistant changes\" on the Config page so Home Assistant "
+                                        "uses the change."))
+        except Exception as err:
+            self._pkg_result = {"dir_exists": True, "actions": [], "controller": "unset",
+                                "errors": [("", f"{err!r}")]}
+            self.log(f"Home Assistant package sync failed: {err!r}", level="WARNING")
+        self._publish_package()
+
+    def _entity_present(self, entity_id):
+        try:
+            return self.get_state(entity_id) is not None
+        except Exception:
+            return True                                   # can't tell: don't claim a reload is needed
+
+    def _publish_package(self):
+        result = self.__dict__.get("_pkg_result")
+        if result is None or self._demo:
+            return
+        state, attrs = hapackage.report(result, self._entity_present)
+        self._publish_if_changed("diag_package", state, attrs)
+
     # --- saving from the config card -------------------------------------------------
 
     def _save_path(self):
@@ -3410,6 +3462,7 @@ class PowerEngine(hass.Hass):
             if not isinstance(new, dict):
                 raise ConfigError("no configuration received")
             new = coerce_flags(new)          # true/false that arrived as text or 0/1 (the demo's settings save)
+            controller_before = other_controller(self.cfg)
             old_devices = self.cfg.raw.get("devices") if self.cfg else None
             if old_devices is not None and "devices" not in new:     # a card that doesn't know devices keeps them
                 new = {**new, "devices": old_devices}
@@ -3428,6 +3481,8 @@ class PowerEngine(hass.Hass):
                      f"supervised tests need running again", level="WARNING")
             self._logbook(f"site changed by {user}: the inverter or its firmware; Passive until the tests are re-run")
         self._reload()
+        if other_controller(self.cfg) != controller_before:
+            self._package_sync("save")
         if switched:
             self._notify("health", (f"site:{new['site'].get('inverter')}:{new['site'].get('inverter_firmware')}",
                                     "PowerEngine: inverter changed",
