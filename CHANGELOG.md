@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.109 (beta)
+
+### Behaviour changes
+
+- **PowerEngine now looks after its own Home Assistant package files.** When it starts (so after every update), and when you change *Other battery controller* and save, PowerEngine writes or updates `powerengine_handover.yaml` in your Home Assistant `packages` folder, and `powerengine_predbat_handover.yaml` as well while the setting is Predbat. If you choose another setting it removes the Predbat file. The old file is kept beside it as `<name>.bak-<date>`. A file in that folder that PowerEngine did not write is never touched, and PowerEngine never creates the `packages` folder.
+- Home Assistant only uses a changed package after a reload. PowerEngine notifies you when it has changed a file, and the new sensor `sensor.pe_diag_package` says whether a reload is needed (the Config page shows a **Load** button for it).
+- To remove Predbat there is nothing to copy by hand any more: set *Other battery controller* to *No other battery controller*, save, press Load, then uninstall Predbat.
+- If you copy the package files by hand today, nothing breaks: a file with PowerEngine's older headers (including the old single combined file) is replaced by the new one, with a backup. If you keep a git copy of your Home Assistant configuration, pull before you push, or the push will put the old file back.
+
+### Other
+
+- The package files are now shipped inside the app (`apps/powerengine/ha_packages/`), and start with a line saying PowerEngine manages them.
+- The install guide's "Install the packages" and "Removing Predbat" sections are rewritten around this.
+
 ## 0.9.108 (beta)
 
 ### Behaviour changes
