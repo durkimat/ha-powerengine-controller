@@ -254,6 +254,19 @@ def test_switching_the_engine_in_a_config_save_keeps_the_mode_and_rebuilds_v2(tm
     assert app._published["state_engine"][0] == "v2"
 
 
+def test_a_save_is_answered_before_the_reload(v2_run):
+    """The card waits for pe_config_result; the reload (inputs, dashboard, a whole cycle) comes after the answer."""
+    app = v2_run["app"]
+    order, reload, fire = [], app._reload, app.fire_event
+    app._reload = lambda: (order.append("reload"), reload())
+    app.fire_event = lambda event, **kw: (order.append(event), fire(event, **kw))
+    try:
+        app._on_save("pe_config_save", {"config": json.loads(json.dumps(app.cfg.raw))}, {})
+    finally:
+        del app._reload, app.fire_event
+    assert order[:2] == ["pe_config_result", "reload"]
+
+
 def test_the_diagnostics_export_has_an_engine_v2_section(v2_run):
     app = v2_run["app"]
     from datetime import datetime, timezone

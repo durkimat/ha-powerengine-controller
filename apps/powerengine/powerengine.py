@@ -3694,6 +3694,11 @@ class PowerEngine(hass.Hass):
             self.log(f"Site: the inverter or its firmware was changed by {user}; PowerEngine is Passive and the "
                      f"supervised tests need running again", level="WARNING")
             self._logbook(f"site changed by {user}: the inverter or its firmware; Passive until the tests are re-run")
+        # answer as soon as the file is saved: the reload below re-checks inputs, rewrites the dashboard and runs a
+        # cycle, which on a slow host (or behind an engine v2 calculation on the app's thread) outlasted the card's wait
+        self.fire_event(RESULT_EVENT, ok=True, message=f"Saved. {changed}."
+                        + (" The inverter changed, so PowerEngine is Passive until the tests are re-run."
+                           if switched else ""))
         self._reload()
         if other_controller(self.cfg) != controller_before:
             self._package_sync("save")
@@ -3702,9 +3707,6 @@ class PowerEngine(hass.Hass):
                                     "PowerEngine: inverter changed",
                                     "The inverter or its firmware was changed in the site settings. PowerEngine is "
                                     "Passive (nothing is controlled) until you run the supervised tests again."))
-        self.fire_event(RESULT_EVENT, ok=True, message=f"Saved. {changed}."
-                        + (" The inverter changed, so PowerEngine is Passive until the tests are re-run."
-                           if switched else ""))
 
     def _check_update(self, kwargs):
         """HACS replaces the app's files but AppDaemon keeps the old modules loaded. When the version on disk differs
