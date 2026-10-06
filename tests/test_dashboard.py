@@ -29,7 +29,9 @@ def test_no_stray_yaml_in_app_folder():
     # AppDaemon takes files ending ".yaml" (app_management: file[-5:] == ".yaml"); the inverter definitions are
     # ".yml" so it leaves them alone, and they may only live in the definitions folder.
     assert [y for y in yamls if y.endswith(".yaml")] == ["powerengine.yaml"], yamls
-    assert [y for y in yamls if not y.endswith(".yaml")] == ["pe_core/adapters/devices/solis.yml"], yamls
+    assert [y for y in yamls if not y.endswith(".yaml")] == [
+        "ha_packages/powerengine_handover.yml", "ha_packages/powerengine_predbat_handover.yml",
+        "pe_core/adapters/devices/solis.yml"], yamls
 
 
 def test_dashboard_templates_parse():

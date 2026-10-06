@@ -396,8 +396,9 @@ slots. It never uses Backup or Off-Grid mode and never writes bump/boost entitie
 
 This whole section, down to "Switching back to Predbat", is for homes that run Predbat next to PowerEngine and want
 one switch between them. Without Predbat, skip it: set *Other battery controller* to *No other battery controller*
-and go live from the Operation setting. It needs the optional package `docs/ha/powerengine_predbat_handover.yaml`
-(see "One-off setup"); the main package `docs/ha/powerengine_handover.yaml` is for everyone and does not mention Predbat.
+and go live from the Operation setting. It needs the optional Predbat package, which PowerEngine puts in place itself
+while *Other battery controller* is Predbat (see "One-off setup"); the main package is for everyone and does not mention
+Predbat.
 
 There is one switch: the **Battery controller** panel at the top of the Config tab, **Predbat | PowerEngine**.
 Whichever you choose is **fully live** when the switch finishes; there is nothing else to turn on.
@@ -424,10 +425,23 @@ The *Operation* setting further down the Config tab is what the switch sets; you
      automations that must stay off while PowerEngine drives, *Other control off (1)* and *(2)*.
      (You only map them. The switch puts Predbat's read-only on; turn your own automations off yourself.)
 2. Check the **Daily write limit** (same section, default 150).
-3. **Install the packages**: copy `docs/ha/powerengine_handover.yaml` (everyone: the update button, the AppDaemon
-   restarts and the watchdog) and, **only if you run Predbat alongside**, `docs/ha/powerengine_predbat_handover.yaml`
-   (the switch between the two) to `/config/packages/`, check the config, restart HA. The panel says so if the
-   second one is missing.
+3. **Install the packages** (one-off, then PowerEngine looks after them). Make sure `configuration.yaml` has
+
+   ```yaml
+   homeassistant:
+     packages: !include_dir_named packages
+   ```
+
+   and that the `packages` folder exists next to it (`/config/packages/`), then restart Home Assistant once if you
+   had to add either. After that PowerEngine writes and updates its own files in that folder when it starts (so after
+   every update): `powerengine_handover.yaml` (everyone: the update button, the AppDaemon restarts and the watchdog)
+   and, only while *Other battery controller* is Predbat, `powerengine_predbat_handover.yaml` (the switch between the
+   two). Each file starts with a line saying PowerEngine manages it; edits are replaced, and the old file is kept
+   beside it as `<name>.bak-<date>`. A file in that folder that PowerEngine did not write is never touched. It never
+   creates the `packages` folder. The copies in `docs/ha/` are the same files, for reading.
+   When a file changes, PowerEngine notifies you and the Config page offers **Load PowerEngine's Home Assistant
+   changes**: press it and Home Assistant starts using the change (no restart). If you keep a git copy of your Home
+   Assistant configuration, pull before you push, or the push puts the old file back.
 
 ### Testing (switch out of live)
 
@@ -460,10 +474,12 @@ When you uninstall Predbat (or any other battery controller):
 
 1. Config tab, **Inverter control**, **Other battery controller** = *No other battery controller*. PowerEngine then
    stops needing or checking the handover guards, and Active is allowed as far as they are concerned.
-2. Remove `powerengine_predbat_handover.yaml` from `/config/packages/` (keep `powerengine_handover.yaml`), check the
-   config and restart HA. The Battery controller panel hides itself.
-3. Unmap the three handover guards on the Config tab (they are ignored now, but unmapping keeps the page tidy).
-4. Switching to Active, pausing and Passive are still your choice: PowerEngine changes none of them for you.
+2. Save. PowerEngine removes `powerengine_predbat_handover.yaml` from your `packages` folder (keeping a backup, and
+   never touching a file it did not write).
+3. Press **Load PowerEngine's Home Assistant changes** on the Config page. Home Assistant drops the switch and the
+   Battery controller panel hides itself. Then uninstall Predbat.
+4. Unmap the three handover guards on the Config tab (they are ignored now, but unmapping keeps the page tidy).
+5. Switching to Active, pausing and Passive are still your choice: PowerEngine changes none of them for you.
 
 ### Switching back to Predbat at any time
 

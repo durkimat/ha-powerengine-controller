@@ -38,7 +38,9 @@ owner approves each run on GitHub. It can't run `tools/release.sh` itself (it ne
 - `docs/INSTALL.md`: the install guide. Keep it current: any release that changes setup updates it in the same PR.
 - `docs/ha/powerengine_handover.yaml`: the HA package everyone needs (update script, AppDaemon restarts, watchdog); it names no
   other controller. `docs/ha/powerengine_predbat_handover.yaml`: the optional Predbat handover (input_select, two scripts, restart
-  Predbat). The owner installs them into HA; see "HA config" below.
+  Predbat). **PowerEngine installs and updates them itself** (0.9.109): the shipped copies are `apps/powerengine/ha_packages/*.yml`
+  (`.yml`, not `.yaml`: AppDaemon loads every `.yaml` under apps/), `docs/ha/*.yaml` must stay identical (a test), each starts with the
+  `hapackage.MARKER` line, and `pe_core/hapackage.py` decides. Edit the docs file, then copy it over the shipped one. See "HA config" below.
 - `tools/release.sh`: the release (below). `tools/diag_summary.py`: summarises a diagnostics export (below).
   `tools/build_demo_pack.py`: rebuilds the demo pack.
 - `tests/`: pytest. `tests/test_replay.py` with `tests/replay_harness.py` replays a recorded night through the
@@ -258,6 +260,14 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
 
 ## Recent fixes
 
+- **PowerEngine keeps its HA package files in step (0.9.109, `pe_core/hapackage.py`, `_package_sync` in `powerengine.py`).** At start (after the config loads) and after a
+  save that changes `other_controller`, the app compares `<ha config>/packages/` (the parent of the folder holding config.yaml; never created, never in a demo, skipped with no
+  config) with the shipped files: `write` / `update` / `remove` / `keep` / `skip_unmanaged`. Wanted: the main file always, the Predbat file only when `other_controller()` is `predbat`.
+  Recognised as ours: the marker line, an older shipped header, or the old combined file (header "PowerEngine handover" plus `battery_handover_to_powerengine`); anything else is
+  never touched. Before an update or removal the old file is copied to `<name>.bak-YYYYMMDD` (HA loads only `*.yaml`, so it ignores it). One INFO line per change, one notification,
+  failures a warning. `sensor.pe_diag_package` (state `ok` / `reload_needed` / `no_packages_dir` / `unmanaged` / `error`; attributes `files`, `reload_needed`, `message`) is rechecked
+  every 30 s cycle from entity presence (`script.powerengine_update`, `input_select.battery_controller`). **Rule:** a change to either package file is shipped by editing both copies, and
+  the owner's git copy of HA config must be pulled before he pushes, or the push undoes PowerEngine's file.
 - **Other battery controller is optional (0.9.108, `config.other_controller()`, `modes.guard_status`).** System setting `other_controller` (`none` / `predbat` / `other`;
   default `""` = not chosen, derived at read time from the mapped guards: `guard_read_only` containing "predbat" gives `predbat`, any guard `other`, none `unset`; nothing is saved).
   `none`: guards not required, not checked, not evaluated (`_evaluate` skips the handover roles), Active allowed as far as guards go. `unset` with no guard: Active refused with
