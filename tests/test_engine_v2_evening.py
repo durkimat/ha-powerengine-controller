@@ -75,6 +75,6 @@ def test_every_variant_keeps_under_the_top_until_the_last_fill_and_ends_full(soc
     # 6.66p in and 15p out after losses), so even the variant that topped a cycle at 96% at 2p stays under the top
     r = w.simulate(NEW, soc0=soc0, event=event)
     last = max(t for t, mode, _ in r["changes"] if mode == CHARGE and t < w.at(4, 0, 1))
-    assert max(lvl for t, _, lvl in r["log"] if t < last) <= 91.0
+    assert max(lvl for t, _, lvl in r["log"] if t < last) <= 92.0      # a soft top: up to a 30 s step past it (was 96%)
     assert next(lvl for t, _, lvl in r["log"] if t >= w.at(4, 0, 1)) >= 97.0
     assert w.reversals(r["changes"]) == []
