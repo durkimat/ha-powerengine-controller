@@ -30,6 +30,35 @@ BECAUSE = {
 }
 
 
+LEARNED_REL = 0.01            # a battery or supply fact must move by this share of itself to count as learned
+LEARNED_DAYS = 1.0            # the house profile must have gained or lost this many days to count
+
+
+def _moved(old, new) -> bool:
+    """True when `new` differs from `old` by LEARNED_REL of itself (numbers; tuples element by element, a changed
+    length or a change between a number and None counts)."""
+    if isinstance(old, (tuple, list)) and isinstance(new, (tuple, list)):
+        return len(old) != len(new) or any(_moved(a, b) for a, b in zip(old, new, strict=True))
+    if isinstance(old, (int, float)) and isinstance(new, (int, float)):
+        return abs(new - old) > LEARNED_REL * max(abs(old), abs(new), 1e-9)
+    return old != new
+
+
+def learned_moved(old: tuple | None, new: tuple) -> bool:
+    """Have the learned facts moved enough to work the values out again? Each signature is (facts, days): the battery
+    and supply facts (capacity, efficiency, powers, tapers, floor, limits) and the days the house profile holds. The
+    facts count at a 1% relative change, the profile at a whole day, so rounding in a learned figure doesn't cause a
+    revalue (17 of 45 on 6 Oct 2026). No `old` (the first look) is not a change. The caller keeps `new` as the next
+    `old` only when this says True (or when there was none), so a slow drift adds up instead of slipping past."""
+    if old is None:
+        return False
+    facts0, days0 = old
+    facts1, days1 = new
+    if (days0 is None) != (days1 is None) or (days1 is not None and abs(days1 - days0) >= LEARNED_DAYS):
+        return True
+    return _moved(facts0, facts1)
+
+
 def _day(now: datetime, tz) -> str:
     return (now.astimezone(tz) if tz else now).date().isoformat()
 

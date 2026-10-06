@@ -32,7 +32,8 @@ from pe_core.readings import Readings, Window
 UTC = timezone.utc
 T0 = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
 FACTS = BatteryFacts()                      # 18 kWh, 95% each way, 4.8 kW, floor 12%
-NO_COMFORT = V2Settings(comfort_cost_p=0.0, terminal_value="fixed", terminal_value_p=0.0, switch_cost_p=0.0)
+NO_COMFORT = V2Settings(comfort_cost_p=0.0, top_up_cost_p=0.0, reversal_cost_p=0.0, terminal_value="fixed",
+                        terminal_value_p=0.0, switch_cost_p=0.0)
 BUY = 6.99 / 0.95
 
 

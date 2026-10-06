@@ -615,6 +615,7 @@ mode on its own; it only makes the engine look again.
 | `level_band_pct` | 1 | As above, for levels |
 | `min_dwell_s` | 120 (RAM) / 900 (timed) | Larger: fewer writes, slower to follow |
 | `deadline_grace_min` | 10 | How late a mode may run past its expected end before the engine looks again |
+| `reversal_cost_p` | 3 p | Cost of turning a charge into a sale or back (0.9.113): in the plan and in "a change must pay for itself"; other changes use `switch_cost_p` |
 
 ---
 
@@ -947,6 +948,73 @@ Check: a closed-loop scenario built like 6 Oct evening (smart slot 19:12 to 04:0
 19:30 to 20:30, morning at 28.84p) must show no reversal within 25 minutes of the last, the cycle under 90% until the last
 charge, the battery at or near 100% when the slot ends, and a cost no worse than before; on the four demo days the flip-flops
 fall and the adjusted saving stays within 2% of before (or improves). The replay (engine v1) does not change.
+
+**As built (0.9.113).** All four changes as designed, in `pe_core/engine_v2/` (`value.py`, `execute.py`, `triggers.py`,
+`settings.py`, and `powerengine.py` `_v2_input`). Where the build had to go beyond the wording:
+
+* **Top-up** (`top_up_cost_p`, `value._top_up`): `top_up_cost_p` x the grid kWh drawn for the part of a Charge that ends above
+  `S.hi` (the share of the charge that came from the grid, so sun is free; the charging loss is counted as bought). It is
+  **part of the comfort figure** (element 2 of `_phys`, so `segment_step`'s `comfort_p` and the cash split stay as they were),
+  and `comfort_given_up_p` is the cash difference against a plan with `comfort_cost_p` **and** `top_up_cost_p` at 0: "what the
+  soft top cost", and the solve runs when either is above 0. A part-way charge is priced from the level it ends at
+  (`_partial`, `_mix(..., S)`), not as a share of the full charge, otherwise a charge stopping exactly at the top would pay for
+  the part it never charges. `comfort_high_soc` is seeded from v1's `arbitrage_max_soc`.
+* **Two consequences the spec did not list, found in the closed loop** (without them the 6 Oct night still charged to 100% early
+  and sat there): (1) the stretch's early charge (`_walk` front, `run_target`) is only moved to the start **up to the comfort
+  band's top** when comfort or top-up has a price, because above it early and late are no longer the same cost: the
+  early charge takes whole steps up to the top, the step that would cross it is the programme's own choice, which puts the last
+  fill at the end of the cheap slot; (2) the buy line the executor
+  compares with is `(import + top-up) / eta` for energy landing above the top (`lines`, `_charge_cross`, `_policy`), so a charge
+  running up through the top ends where the top-up stops it paying, not at the lines' flat crossing.
+* **Reversal** (`reversal_cost_p`, `switch_cost(prev, new, cost_p, reversal_p=None)`): threaded through `_pick`, `_backward`,
+  `_dp_choice`, `_walk` and the executor's `_worth_the_change`. `None` keeps the old behaviour (the ordinary cost).
+* **Legs** (`Executor._leg_going`, `_plan_leg_end`, `_sell_floor(staying)`): in the both-pay branch of `_candidate` a running
+  charge or sale goes on until it reaches the end level of its plan step (consecutive steps of the same mode merged) or,
+  with no step of its mode covering now, until the lines end it (`_must_exit`). An urgent event, a forced mode or a mode that
+  must exit still act at once. A sale in progress also goes down to the plan step's end level when that is lower than the
+  lines' floor, as a charge goes up to the higher of the two. Not done: the plan's first item is still made without knowing
+  the mode running (`_walk` starts with no previous mode), so a revaluation can start with the other direction; the leg rule
+  is what stops the executor following it.
+* **Learned** (`triggers.learned_moved`, `learned_sig`-style tuple in `_v2_input`): facts at 1% relative, the profile's days at
+  1 day; the reference signature moves only when something counted, so a slow drift adds up instead of slipping by.
+
+*The closed loop* (`tests/evening_world.py`, `tests/test_engine_v2_evening.py`: real forecast, value and executor, simulated
+battery, 19:00 to 04:30, 66% at the start, smart slot 19:12 to 04:00 at 6.66p, export 15p, grid event 19:30 to 20:30, standard
+28.84p, 0.6 kW house, no sun). Settings before 18a (top-up 0, reversal = 0.5p) against now:
+
+| | before (dc56430) | now |
+|---|---|---|
+| mode changes | 22 | 8 |
+| turns of a charge or sale that had run under 25 minutes | 13 | 0 |
+| A to B to A within 10 minutes | 7 | 0 |
+| highest level before the last charge | 100% | 90% |
+| level at 04:00 | 99.9% | 100% |
+| cash of the night (simulated meter) | -450.0p | -443.1p (6.9p dearer) |
+
+Six variants (start at 40, 66 or 85%, with and without the event), before to now: mode changes 30, 9, 22, 37, 32, 23 down to 12, 7,
+8, 9, 8, 9; short turns 21, 2, 13, 29, 23, 12 down to 0 in every one; cash 1.3p to 11.4p dearer (6.8p on average). That is what the
+soft top costs: a few pence a night. One variant (66%, no event) still tops a cycle at 96%: with a 7p spread between buying at 6.66p
+and selling at 15p, a cycle's extra kWh above the top still earns about 5p after the 2p top-up, so the plan takes it when there is
+time; the setting is the lever (about 5p and above keeps the cycle under the top). Read literally, "no reversal within 25 minutes of
+the previous mode change" is met except for the two turns at the top and the bottom of the one cycle, which follow the 2 minute Hold
+that ends a leg of 1.5 to 2.5 hours (the minimum time); no leg is turned before 25 minutes.
+
+*The four demo days* (`tools/engine_compare.py`, engine v2, adjusted saving against self-use, pounds; flips = the tool's
+A-B-A count within 10 minutes):
+
+| day | adj. saving before | after | commands before / after | flips before / after |
+|---|---|---|---|---|
+| sunny | 9.93 | 10.19 | 22 / 19 | 1 / 2 |
+| dull | 3.96 | 3.79 | 24 / 20 | 2 / 0 |
+| axle | 8.92 | 9.26 | 35 / 42 | 8 / 13 |
+| car | 2.70 | 3.14 | 37 / 17 | 6 / 3 |
+| **total** | **25.52** | **26.39 (+3.4%)** | **118 / 98** | **17 / 18** |
+
+What the flips are: the charge-to-sale and sale-to-charge turns (the thing 18a is about) went from 9 to 0 (axle 4, car 4, sunny 1).
+The 18 left are not reversals: Self-use and Hold changing on spare sun (axle 8, as before 4), a sale paused for a few minutes
+as the value brushes the sale line by under the 0.5p price band (axle 5, car 3, sunny 2: `discharge>self>discharge`,
+`hold>discharge>hold`), which 18a does not touch. So the total did **not** fall (17 to 18, all on the axle day, +5); the
+reversals did. The dull day is 4% down (0.17), the other three are up; engine v1's rows are identical before and after.
 
 ## 19. Sources
 

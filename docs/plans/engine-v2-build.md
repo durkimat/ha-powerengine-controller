@@ -245,8 +245,10 @@ The diagnostics export gains a section `engine_v2`: `health`, the last 300 journ
   plain `reason` naming the prices and the value. `path` every 15 minutes: middle, and low/high from the low and high
   net-load scenarios.
 * `cost_expected_p` (policy, middle scenario) and `cost_selfuse_p` (Self-use throughout, same physics).
-* `comfort_given_up_p`: when `comfort_cost_p` > 0, a second solve at 0.5 kWh steps without the comfort cost; the cash
-  (no comfort term) difference of the two policies' middle-scenario runs.
+* `comfort_given_up_p`: when `comfort_cost_p` > 0 (or, since 0.9.113, `top_up_cost_p` > 0), a second solve at 0.5 kWh steps
+  without the comfort cost and the top-up; the cash (no comfort term, no top-up) difference of the two policies'
+  middle-scenario runs. The top-up is counted inside the comfort figure (`_phys` element 2), so "given up for comfort"
+  includes what the soft top cost.
 * **Time budget:** a 48 h horizon must solve in under 3 s in this container (measure with a test using
   `time.perf_counter`, limit 6 s to allow for slow CI). Say in the report what was done to meet it.
 

@@ -80,6 +80,7 @@ from pe_core.earlytarget import EarlyTargets
 from pe_core.eeprom import BlockWriteModel, WriteLog, WriteModel
 from pe_core.energy import Recorder
 from pe_core.engine_v2 import publish as v2publish
+from pe_core.engine_v2 import triggers as v2_triggers
 from pe_core.engine_v2.engine import EngineV2
 from pe_core.engine_v2.settings import V2Settings
 from pe_core.engine_v2.types import BatteryFacts, Situation, StepInput
@@ -871,11 +872,12 @@ class PowerEngine(hass.Hass):
         reason = "" if send else (V2_PREVIEW_REASON if preview else (self._v2_refusal() or self.mode.reason))
         cert = self._v2_cached("cert", now, lambda: Certainty(self.slots.slots, self.tz, self._min_charge_min()))
         solar = self._v2_cached("solar", now, self._solar_forecast)
-        sig = (facts.capacity_kwh, facts.eta_charge, facts.max_charge_kw, facts.max_discharge_kw, facts.taper,
-               facts.dtaper, facts.hard_floor_soc, facts.export_limit_kw, facts.ev_charger_kw,
-               round(self.profile.days, 1) if self.profile else None)
-        learned = self._v2_learned_sig is not None and sig != self._v2_learned_sig
-        self._v2_learned_sig = sig
+        sig = ((facts.capacity_kwh, facts.eta_charge, facts.max_charge_kw, facts.max_discharge_kw, facts.taper,
+                facts.dtaper, facts.hard_floor_soc, facts.export_limit_kw, facts.ev_charger_kw),
+               float(self.profile.days) if self.profile else None)
+        learned = v2_triggers.learned_moved(self._v2_learned_sig, sig)
+        if learned or self._v2_learned_sig is None:           # the reference moves only when something counted
+            self._v2_learned_sig = sig
         situation = Situation(active=send, mode_reason=reason, override=self._active_override(),
                               house_load_includes_ev=bool(self.cfg.system.get("house_load_includes_ev", True)),
                               control_method=method)

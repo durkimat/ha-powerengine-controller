@@ -104,6 +104,8 @@ class Executor:
         self.flip_flop_now = False                                   # the last step was an A to B to A change
         self._tz = None
         self._plan_target: float | None = None
+        self._plan_sell: float | None = None
+        self._urgent = False                                         # an urgent event is being handled this step
         self.last_decision: v1d.Decision | None = None
 
     # ---- the step -------------------------------------------------------------------------------
@@ -120,8 +122,9 @@ class Executor:
                 self.sun_spare = False
         if self.sun_spare is None:
             self.sun_spare = obs.net_load_kw is not None and obs.net_load_kw < 0
-        urgent = any(e.urgent for e in events)
-        self._plan_target = self._plan_charge_target(vr, now)
+        urgent = self._urgent = any(e.urgent for e in events)
+        self._plan_target = self._plan_leg_end(vr, now, CHARGE)
+        self._plan_sell = self._plan_leg_end(vr, now, EXPORT)
 
         pick = self._pick_now(now, obs, lim, ln, vr, level, facts)
         cur = self.mode
@@ -236,7 +239,12 @@ class Executor:
         if can_c and can_e:
             # Both pay (the value is between the buy and sell lines: a cycle). Charging first would stop every sale one
             # level band under the top and the two would alternate. The plan has priced the whole cycle, so it says
-            # which comes now; with no plan item, the mode already running goes on, else the sale.
+            # which comes now; with no plan item, the mode already running goes on, else the sale. A leg that is
+            # running goes on to the end of its plan step (a revaluation can't turn it round part-way: the lines
+            # compare one step at a time, and what is left of the cycle is priced in the plan); the exits and an
+            # urgent event still end it.
+            if cur in (CHARGE, EXPORT) and not self._urgent and self._leg_going(cur, level, now):
+                return cur
             planned = self._planned_mode(vr, now)
             if planned in (CHARGE, EXPORT):
                 return planned
@@ -255,6 +263,17 @@ class Executor:
         if ok:
             return SELF_USE
         return HOLD if HOLD in lim.allowed else SELF_USE
+
+    def _leg_going(self, mode: str, level: float, now: datetime | None) -> bool:
+        """The charge or sale running now has not reached the end of its plan step (the step covering now, merged with
+        the following steps of the same mode; the level where that merged step ends). With no such step the leg goes on
+        until the lines end it (`_must_exit`)."""
+        end = self._plan_target if mode == CHARGE else self._plan_sell
+        if level is None:
+            return False
+        if end is None:                      # no step of this mode covers now: nothing in the plan ends the leg early
+            return True
+        return level < end - LEVEL_EPS if mode == CHARGE else level > end + LEVEL_EPS
 
     @staticmethod
     def _planned_mode(vr: ValueResult | None, now: datetime | None) -> str | None:
@@ -288,7 +307,7 @@ class Executor:
         both. (`charge_now` is the plan's own run, and changes the rules or the levels force, safety events and forced
         modes never come here.) A charge or a sale moves the energy up to its own exit level; self-use and hold move
         what the house would draw or the sun supply in the next half-hour."""
-        cost = 2 * switch_cost(KIND[cur], KIND[pick.mode], self.s.switch_cost_p)
+        cost = 2 * switch_cost(KIND[cur], KIND[pick.mode], self.s.switch_cost_p, self.s.reversal_cost_p)
         if cost <= 0 or ln is None or level is None:
             return True
         cap = facts.capacity_kwh
@@ -305,16 +324,18 @@ class Executor:
             return (margin if pick.mode == SELF_USE else -margin) * kwh >= cost
         return True
 
-    def _plan_charge_target(self, vr: ValueResult | None, now: datetime) -> float | None:
-        """Where the expected timeline says the charge running now ends (consecutive charge items merged)."""
+    @staticmethod
+    def _plan_leg_end(vr: ValueResult | None, now: datetime, mode: str) -> float | None:
+        """Where the expected timeline says the charge (or sale) covering now ends: the level at the end of that item,
+        with the consecutive items of the same mode merged. None when no item of that mode covers now."""
         if vr is None:
             return None
         level = None
         end = None
         for it in vr.timeline:
-            if it.mode == CHARGE and it.start <= now < it.end and level is None:
+            if it.mode == mode and it.start <= now < it.end and level is None:
                 level, end = it.level_end, it.end
-            elif level is not None and it.mode == CHARGE and it.start <= end:
+            elif level is not None and it.mode == mode and it.start <= end:
                 level, end = it.level_end, it.end
         return level
 
@@ -340,8 +361,14 @@ class Executor:
             return False
         return level < (target - LEVEL_EPS if staying else target - self.s.level_band_pct)
 
-    def _sell_floor(self, lim: Limits, ln: Lines) -> float:
-        return max(ln.sell_floor_soc if ln.sell_floor_soc is not None else lim.floor_soc, lim.floor_soc)
+    def _sell_floor(self, lim: Limits, ln: Lines, staying: bool = False) -> float:
+        """Where a sale stops: where selling stops being worth it now (the lines), and while a sale is running also
+        where the expected timeline ends it (the lower of the two, as a charge takes the higher), never under the
+        floor."""
+        floor = ln.sell_floor_soc if ln.sell_floor_soc is not None else lim.floor_soc
+        if staying and self._plan_sell is not None:
+            floor = min(floor, self._plan_sell)
+        return max(floor, lim.floor_soc)
 
     def _can_export(self, lim, ln, level, staying: bool) -> bool:
         if EXPORT not in lim.allowed:
@@ -349,7 +376,7 @@ class Executor:
         band = self.s.price_band_p
         if not ln.value_p < ln.sell_line_p + (band if staying else -band):
             return False
-        floor = self._sell_floor(lim, ln)
+        floor = self._sell_floor(lim, ln, staying)
         return level > (floor + LEVEL_EPS if staying else floor + self.s.level_band_pct)
 
     def _must_exit(self, cur: str, lim: Limits, ln: Lines | None, level) -> bool:
@@ -376,7 +403,7 @@ class Executor:
                          f"while it is worth more than {ln.buy_line_p:.2f}p): charging to {target:.0f}%{cap}",
                          target_soc=target, power_w=_w(lim.charge_cap_kw))
         if mode == EXPORT:
-            floor = self._sell_floor(lim, ln)
+            floor = self._sell_floor(lim, ln, self.mode == EXPORT)
             return _Pick(EXPORT, "value", f"Export pays {exp:.2f}p and a stored kWh is worth {v:.1f}p (selling pays "
                          f"while it is worth less than {ln.sell_line_p:.2f}p): selling down to {floor:.0f}%",
                          target_soc=floor, power_w=_w(lim.discharge_cap_kw))
