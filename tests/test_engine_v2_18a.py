@@ -24,14 +24,14 @@ TOP = replace(NO_COMFORT, top_up_cost_p=2.0)             # 90% top, 2p per kWh c
 def test_the_settings_exist_in_the_catalogue_and_their_sections():
     cat = catalogue()
     rows = {r["key"]: r for r in cat["settings"]}
-    assert rows["top_up_cost_p"]["default"] == 2.0 and (rows["top_up_cost_p"]["min"], rows["top_up_cost_p"]["max"]) \
+    assert rows["top_up_cost_p"]["default"] == 5.0 and (rows["top_up_cost_p"]["min"], rows["top_up_cost_p"]["max"]) \
         == (0, 20)
     assert rows["top_up_cost_p"]["unit"] == "p/kWh" and rows["top_up_cost_p"]["label"] == \
         "Grid charging above the comfort band"
     assert rows["reversal_cost_p"]["default"] == 3.0 and rows["reversal_cost_p"]["max"] == 20
     sections = {s["key"]: s["keys"] for s in cat["sections"]}
     assert "top_up_cost_p" in sections["comfort"] and "reversal_cost_p" in sections["response"]
-    assert cat["values"]["top_up_cost_p"] == 2.0 and cat["values"]["reversal_cost_p"] == 3.0
+    assert cat["values"]["top_up_cost_p"] == 5.0 and cat["values"]["reversal_cost_p"] == 3.0
     listed = [k for _, _, keys in SECTIONS for k in keys]
     assert sorted(listed) == sorted(SETTINGS) and len(listed) == len(set(listed))     # every setting in one section
 

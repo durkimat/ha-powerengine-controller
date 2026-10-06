@@ -66,3 +66,15 @@ def test_the_plan_never_cycles_above_the_top_except_for_the_last_fill(run):
         items = [it for it in vr.timeline if it.mode == CHARGE]
         above = [it for it in items if it.level_end > 90.5]
         assert len(above) <= 1, [(it.start, it.level_end) for it in above]
+
+
+@pytest.mark.parametrize("soc0", [40.0, 66.0, 85.0])
+@pytest.mark.parametrize("event", [True, False])
+def test_every_variant_keeps_under_the_top_until_the_last_fill_and_ends_full(soc0, event):
+    # at the default top-up price (5p) a cycle above the top earns less than it costs (about 7p of spread between
+    # 6.66p in and 15p out after losses), so even the variant that topped a cycle at 96% at 2p stays under the top
+    r = w.simulate(NEW, soc0=soc0, event=event)
+    last = max(t for t, mode, _ in r["changes"] if mode == CHARGE and t < w.at(4, 0, 1))
+    assert max(lvl for t, _, lvl in r["log"] if t < last) <= 91.0
+    assert next(lvl for t, _, lvl in r["log"] if t >= w.at(4, 0, 1)) >= 97.0
+    assert w.reversals(r["changes"]) == []

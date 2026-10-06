@@ -57,7 +57,7 @@ SETTINGS: dict[str, tuple] = {
     "comfort_cost_p": ("number", 0.3, 0, 10, "p per kWh per hour", "Comfort cost",
                        "The price of each kWh held outside the band for an hour: a soft guide inside the plan, not a "
                        "limit. 0 switches the band off."),
-    "top_up_cost_p": ("number", 2.0, 0, 20, "p/kWh", "Grid charging above the comfort band",
+    "top_up_cost_p": ("number", 5.0, 0, 20, "p/kWh", "Grid charging above the comfort band",
                       "What each kWh charged from the grid above the band's top counts as costing in the plan. It "
                       "keeps cycling under the top, while a last fill before a dear stretch (the end of a cheap "
                       "slot, ahead of the morning) still happens, because it saves far more. Sun is not charged it. "
@@ -176,7 +176,7 @@ class V2Settings:
     comfort_low_soc: float = 20
     comfort_high_soc: float = 90
     comfort_cost_p: float = 0.3
-    top_up_cost_p: float = 2.0
+    top_up_cost_p: float = 5.0
     solar_low_pct: float = 25
     solar_mid_pct: float = 50
     solar_high_pct: float = 25
