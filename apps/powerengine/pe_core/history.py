@@ -28,9 +28,16 @@ def _exp(rec: dict):
     return v if v is not None else (rec.get("v") or {}).get("exp")
 
 
-def chosen_plan(start_of_day: dict | None, ran: dict | None) -> tuple[str | None, dict | None]:
+PASSIVE_LABEL = "Start of day (engine v1 was passive)"
+
+
+def chosen_plan(start_of_day: dict | None, ran: dict | None,
+                in_control: str | None = None) -> tuple[str | None, dict | None]:
     """(label of the plan shown, snapshot): the plan that actually ran, half-hour by half-hour. A day with no as-run
-    record (before it was kept) shows the plan made at the start of that day instead."""
+    record (before it was kept) shows the plan made at the start of that day instead. On a day engine v2 was in
+    control (`in_control` "v2") engine v1's plan did not run: its start-of-day plan is shown, labelled so."""
+    if in_control == "v2":
+        return (PASSIVE_LABEL, start_of_day) if start_of_day else (None, None)
     if ran and ran.get("slots"):
         return "As run", ran
     if start_of_day:

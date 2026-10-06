@@ -288,6 +288,39 @@ def engine_v2_of(app, tz):
     }
 
 
+def snapshots_of(app):
+    """Forecast snapshots (pe_core/fcsnap.py) and engine v2 history: days kept, entries and bytes."""
+    f, h = as_dict(app.get("forecast_snapshots")), as_dict(app.get("v2_history"))
+    if not f and not h:
+        return None
+    return {
+        "snapshots": {k: f.get(k) for k in ("days_kept", "entries", "bytes")} if f else None,
+        "v2_history": {
+            "days_kept": h.get("days_kept"),
+            "bytes": h.get("bytes"),
+            "last_day": (as_list(h.get("days")) or [{}])[-1],
+        } if h else None,
+    }
+def engine_compare_of(app):
+    """The nightly same-day engine comparison (the export's `engine_compare`): one row per day, newest first. None when
+    the export has no such section (an older app) or the feature is off."""
+    e = as_dict(app.get("engine_compare"))
+    if not e or e.get("feature") is False:
+        return None
+    rows = []
+    for r in sorted((as_dict(x) for x in as_list(e.get("results"))), key=lambda x: str(x.get("day")), reverse=True):
+        row = {"day": r.get("day"), "status": r.get("status"), "reason": r.get("reason") or "",
+               "took_s": r.get("took_s"), "in_control": r.get("in_control"), "live": r.get("live")}
+        for k in ("v1", "v2", "bound"):
+            row[k] = as_dict(r.get(k)).get("saving")
+        row["v1_flips"], row["v2_flips"] = as_dict(r.get("v1")).get("flips"), as_dict(r.get("v2")).get("flips")
+        row["calibration"] = r.get("calibration")
+        rows.append(row)
+    return {"state": e.get("state"), "running": e.get("running"), "queue": as_list(e.get("queue")),
+            "forecast_records": len(as_list(e.get("forecast_records"))), "totals": as_dict(e.get("totals")),
+            "calib": e.get("calib"), "days": rows}
+
+
 def summarise(export, since=None):
     export = as_dict(export)
     app = as_dict(export.get("app"))
@@ -350,6 +383,8 @@ def summarise(export, since=None):
         "writes": writes_of(app),
         "early_target": early_of(app),
         "engine_v2": engine_v2_of(app, tz),
+        "history_records": snapshots_of(app),
+        "engine_compare": engine_compare_of(app),
     }
     return out
 
@@ -492,6 +527,42 @@ def render(s):
                 f"{hhmm(parse_time(x['start']), tz)} {x['mode']} {x['level_start']}>{x['level_end']}%"
                 for x in v["timeline"]
             ))
+    hr = s.get("history_records")
+    if hr:
+        f, h = hr.get("snapshots"), hr.get("v2_history")
+        if f:
+            add(f"forecast snapshots: {f['days_kept']} days kept, {f['entries']} entries, {f['bytes']} bytes")
+        if h:
+            d = as_dict(h.get("last_day"))
+            add(
+                f"v2 history: {h['days_kept']} days kept, {h['bytes']} bytes"
+                + (
+                    f"; {d.get('day')}: {d.get('half_hours')} half-hours ({d.get('sent')} sent, "
+                    f"{d.get('preview')} preview), {d.get('changes')} mode changes"
+                    if d
+                    else ""
+                )
+            )
+    c = s.get("engine_compare")
+    if c:
+        t = c["totals"]
+        add(
+            f"engine comparison: {c['state']}, {len(c['days'])} day(s) compared, {c['forecast_records']} forecast "
+            f"record(s)" + (", running" if c.get("running") else "")
+            + (f"; 7-day savings v1 {t.get('v1'):+.2f} v2 {t.get('v2'):+.2f} bound {t.get('bound'):+.2f} GBP"
+               if t.get("days") else "")
+        )
+        for d in c["days"]:
+            if d["status"] != "ok":
+                add(f"  {d['day']} {d['status']}: {d['reason']}")
+                continue
+            cal = d.get("calibration") or {}
+            add(
+                f"  {d['day']} v1 {d['v1']:+.2f} (flips {d['v1_flips']}) v2 {d['v2']:+.2f} (flips {d['v2_flips']}) "
+                f"bound {d['bound']:+.2f} GBP, {d['took_s']} s; in control {d['in_control']}"
+                + (" (live)" if d["live"] else " (not live)")
+                + (f", replay {cal['diff']:+.2f} GBP ({cal['diff_pct']}%) off metered" if cal else "")
+            )
     w = s.get("writes")
     if w:
         add(

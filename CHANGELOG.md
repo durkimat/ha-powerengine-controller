@@ -2,6 +2,37 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.110 (beta)
+
+### Behaviour changes
+
+- **None to how either engine plans or controls the battery.**
+- **The Plan page is now "Engine v1"**, and both engine pages have their own icon (an engine with 1 or 2 on it) and a badge at the
+  top: **Active** (sending commands), **Paused**, or **Passive** (working out what it would do; nothing is sent).
+- **Plan history has moved** to the bottom of the Engine v1 page (the separate tab is gone). Its "As run" plan is now kept only while
+  engine v1 is in control; on a day engine v2 ran it shows v1's plan from the start of the day, labelled as passive.
+
+### New
+
+- **Engine v2 history** at the bottom of the Engine v2 page: for any of the last 30 days, the battery level as it ran against the level
+  expected at the start of the day, the modes as they ran, prices, the value of a stored kWh, and each mode change with its reason.
+  Recorded in preview too (shown dimmed).
+- **Engines compared, same day** on the Costs page. Each night at 03:20 PowerEngine replays yesterday through both engines in a
+  simulated battery, with what really happened (house, car, sun, prices, smart slots, grid events) and the forecasts as they were at
+  the time, and shows for the last 7 days what each engine would have saved against plain self-use, the best possible with perfect
+  hindsight, the difference, and which engine was really in control. A calibration line shows how close the replay of the engine
+  that ran came to your meter. It runs in the background (about 3 minutes a day on a fast machine, perhaps 15 on a Raspberry Pi)
+  and can be switched off ("Engine comparison" on the Config page).
+- **The first comparison appears the morning after the first full day on this version**: it needs a day of forecast records first.
+  PowerEngine now keeps those records (forecasts, the rates known at the time, smart slots and when they were announced, grid events,
+  the house profile) for 14 days, on your Home Assistant only.
+
+### Other changes
+
+- Each half-hour cost record notes which engine was in control and whether PowerEngine was live.
+- Diagnostics export: sections `forecast_snapshots`, `v2_history` and `engine_compare`; `tools/diag_summary.py` prints them.
+- The card needs to be 0.9.110 or newer (the dashboard uses its new cards and icons).
+
 ## 0.9.109 (beta)
 
 ### Behaviour changes

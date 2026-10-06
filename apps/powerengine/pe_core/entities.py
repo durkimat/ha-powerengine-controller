@@ -184,6 +184,7 @@ COST_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "cost_waterfall", "Savings waterfall", {**MONEY, "icon": "mdi:chart-waterfall"}),
     EntityDef("sensor", "cost_simulator", "Tariff simulator", {"icon": "mdi:scale-balance"}),
     EntityDef("sensor", "cost_simulator_year", "Tariff simulator (year, heat pump)", {"icon": "mdi:scale-balance"}),
+    EntityDef("sensor", "cost_engines", "Engines compared, same day", {"icon": "mdi:compare-horizontal"}),
     EntityDef("sensor", "event_last", "Last special event", {**MONEY, "icon": "mdi:star-outline"}),
     EntityDef("sensor", "event_months", "Special events this month", {**MONEY, "icon": "mdi:calendar-star"}),
 )
@@ -210,6 +211,7 @@ CONTROL_SWITCHES: tuple[EntityDef, ...] = (
 # Plan history tab: the day is picked with the card's date picker (event pe_history_day), so only the sensor is left.
 HISTORY_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "plan_history", "Plan history", {"icon": "mdi:history"}),
+    EntityDef("sensor", "v2_history", "Engine v2 history", {"icon": "mdi:history"}),
 )
 
 # Entities an earlier release published that no longer exist. The app retires them at every start (the retained
