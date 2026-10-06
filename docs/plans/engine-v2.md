@@ -915,6 +915,39 @@ Each stage is a PR; nothing changes behaviour for v1 (the replay passes unchange
 
 Nothing is open. The card suggestions are in section 12.
 
+## 18a. Change after the first live evening (6 Oct 2026, built for 0.9.113)
+
+What the owner saw on engine v2's first evening in control (diagnostics 6 Oct 19:33): when the car's smart slot opened at
+6.66p with a 15p export, buying and selling both paid, and v2 alternated charge and export every one to two minutes around
+70% (19:13 to 19:21); its plan for the night cycled between 85% and 100%. The owner's decisions: v1's overnight cycle is
+expected; v2 needs a **soft top of 90%** with one exception, the **last charge before the end of the cheap slot**; no
+hacks on the engine. The changes, all inside the model:
+
+1. **A price for grid charging above the comfort band's top** (`top_up_cost_p`, p per kWh, default 2, section Comfort
+   band). In `value._phys`, a Charge pays it on the grid energy that lands above `comfort_high_soc`. A cycle above the top
+   pays it every time, while the same cycle under the top earns the same without it, so cycling moves below the top; a
+   last fill before a dear stretch pays it once and saves far more (about 23p/kWh at the morning's rate), so it still
+   happens. Sun is not charged it (only grid energy into the battery), the same scope as v1's band. The exception is not
+   a rule: it applies before any dear stretch where it pays, which overnight is the end of the cheap slot. The existing
+   comfort holding cost stays as it was. `comfort_high_soc` is seeded from v1's `arbitrage_max_soc` (`SEED_FROM`), so an
+   owner who never saved v2's settings gets his v1 top.
+2. **Reversing direction has its own cost** (`reversal_cost_p`, default 3p, section Responsiveness): `switch_cost` returns
+   it for charge to export and export to charge (other changes keep `switch_cost_p`, hold to charge a fifth of it). The
+   programme's state already carries the mode kind before, so a near tie keeps the leg that is running; the executor's
+   "a change must pay for itself" check uses the same function. Urgent events and forced modes are not affected.
+3. **When buying and selling both pay, a leg runs to its plan step's end.** The running charge or sale ends at the
+   level or time where its timeline item ends (merged with following items of the same mode), not at the lines'
+   crossing level, and the executor does not reverse it before then unless the lines say it no longer pays at all
+   (`_must_exit`) or something urgent happens. A revaluation can't reverse a leg part-way.
+4. **A learned change revalues only when it matters.** The "learned" trigger fires when the battery facts or the house
+   profile move by more than a threshold (capacity or efficiency by 1%, the profile's days by 1), not on every rounding
+   change (17 of 45 revaluations on 6 Oct were "learned").
+
+Check: a closed-loop scenario built like 6 Oct evening (smart slot 19:12 to 04:00 at 6.66p, 15p export, a grid event
+19:30 to 20:30, morning at 28.84p) must show no reversal within 25 minutes of the last, the cycle under 90% until the last
+charge, the battery at or near 100% when the slot ends, and a cost no worse than before; on the four demo days the flip-flops
+fall and the adjusted saving stays within 2% of before (or improves). The replay (engine v1) does not change.
+
 ## 19. Sources
 
 * Event-triggered MPC for building energy management (77 to 88% fewer optimisations): [Building and Environment, 2023](https://www.sciencedirect.com/science/article/abs/pii/S0360132323001282)
