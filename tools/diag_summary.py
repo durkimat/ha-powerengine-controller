@@ -288,6 +288,21 @@ def engine_v2_of(app, tz):
     }
 
 
+def snapshots_of(app):
+    """Forecast snapshots (pe_core/fcsnap.py) and engine v2 history: days kept, entries and bytes."""
+    f, h = as_dict(app.get("forecast_snapshots")), as_dict(app.get("v2_history"))
+    if not f and not h:
+        return None
+    return {
+        "snapshots": {k: f.get(k) for k in ("days_kept", "entries", "bytes")} if f else None,
+        "v2_history": {
+            "days_kept": h.get("days_kept"),
+            "bytes": h.get("bytes"),
+            "last_day": (as_list(h.get("days")) or [{}])[-1],
+        } if h else None,
+    }
+
+
 def summarise(export, since=None):
     export = as_dict(export)
     app = as_dict(export.get("app"))
@@ -350,6 +365,7 @@ def summarise(export, since=None):
         "writes": writes_of(app),
         "early_target": early_of(app),
         "engine_v2": engine_v2_of(app, tz),
+        "history_records": snapshots_of(app),
     }
     return out
 
@@ -492,6 +508,22 @@ def render(s):
                 f"{hhmm(parse_time(x['start']), tz)} {x['mode']} {x['level_start']}>{x['level_end']}%"
                 for x in v["timeline"]
             ))
+    hr = s.get("history_records")
+    if hr:
+        f, h = hr.get("snapshots"), hr.get("v2_history")
+        if f:
+            add(f"forecast snapshots: {f['days_kept']} days kept, {f['entries']} entries, {f['bytes']} bytes")
+        if h:
+            d = as_dict(h.get("last_day"))
+            add(
+                f"v2 history: {h['days_kept']} days kept, {h['bytes']} bytes"
+                + (
+                    f"; {d.get('day')}: {d.get('half_hours')} half-hours ({d.get('sent')} sent, "
+                    f"{d.get('preview')} preview), {d.get('changes')} mode changes"
+                    if d
+                    else ""
+                )
+            )
     w = s.get("writes")
     if w:
         add(

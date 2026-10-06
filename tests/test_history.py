@@ -117,7 +117,7 @@ def _picker_app(monkeypatch, tmp_path):
     app._get_publisher = lambda: object()
     app._publish_state = lambda key, state, attrs=None: published.append((key, state, attrs))
     app.log = lambda *a, **k: None
-    for name in ("_publish_history", "_on_history_day"):
+    for name in ("_publish_history", "_on_history_day", "_day_engine"):
         setattr(app, name, types.MethodType(getattr(pe.PowerEngine, name), app))
     return app, pe
 

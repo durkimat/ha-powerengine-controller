@@ -210,6 +210,7 @@ CONTROL_SWITCHES: tuple[EntityDef, ...] = (
 # Plan history tab: the day is picked with the card's date picker (event pe_history_day), so only the sensor is left.
 HISTORY_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "plan_history", "Plan history", {"icon": "mdi:history"}),
+    EntityDef("sensor", "v2_history", "Engine v2 history", {"icon": "mdi:history"}),
 )
 
 # Entities an earlier release published that no longer exist. The app retires them at every start (the retained

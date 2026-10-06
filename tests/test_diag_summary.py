@@ -158,3 +158,18 @@ def test_command_line_text_and_json(tmp_path, capsys):
     assert ds.main([str(f), "--json", "--since", "2026-09-29T09:30:00Z"]) == 0
     assert json.loads(capsys.readouterr().out)["since"].startswith("2026-09-29T09:30")
     assert ds.main([str(tmp_path / "missing.json")]) == 2
+
+
+def test_summary_lines_for_forecast_snapshots_and_the_v2_history():
+    e = export()
+    e["app"]["forecast_snapshots"] = {"days_kept": 3, "entries": 140, "bytes": 640000, "days": []}
+    e["app"]["v2_history"] = {"days_kept": 2, "bytes": 21000,
+                              "days": [{"day": "2026-09-29", "half_hours": 30, "changes": 7, "sent": 30, "preview": 0}]}
+    s = ds.summarise(e)
+    assert s["history_records"]["snapshots"] == {"days_kept": 3, "entries": 140, "bytes": 640000}
+    text = ds.render(s)
+    assert "forecast snapshots: 3 days kept, 140 entries, 640000 bytes" in text
+    assert ("v2 history: 2 days kept, 21000 bytes; 2026-09-29: 30 half-hours (30 sent, 0 preview), "
+            "7 mode changes") in text
+    assert ds.summarise(export())["history_records"] is None            # an older export has neither
+    assert "snapshots" not in ds.render(ds.summarise(export()))

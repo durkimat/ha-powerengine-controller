@@ -28,12 +28,14 @@ from pe_core import (
     damping,
     diagnostics,
     earlytarget,
+    fcsnap,
     gridcheck,
     hapackage,
     ramcontrol,
     rctest,
     releases,
     testwrite,
+    v2history,
 )
 from pe_core import learn as learning
 from pe_core import override as manual
@@ -121,6 +123,8 @@ from pe_core.smartcharge import SmartCharger, ask_message, worth_asking
 from pe_core.status import entity_states
 from pe_core.store import coerce_flags, save_config, with_operation
 from pe_core.tariff import describe_window, fixed_window, overnight_window
+from pe_core.v2history import KEEP_DAYS as V2_HISTORY_KEEP_DAYS
+from pe_core.v2history import V2History
 from pe_core.verification import active_refusal
 from pe_core.version import MIN_CARD_VERSION, installed_version
 from pe_core.weather import Weather
@@ -150,6 +154,7 @@ RESULT_EVENT = "pe_config_result"
 DEMO_EVENT, DEMO_RESULT_EVENT = "pe_demo", "pe_demo_result"
 OVERRIDE_EVENT, OVERRIDE_RESULT_EVENT = "pe_override", "pe_override_result"
 HISTORY_DAY_EVENT = "pe_history_day"
+V2_HISTORY_DAY_EVENT = "pe_v2_history_day"
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
 PAUSE_ENTITY = "switch.pe_ctl_pause"
@@ -426,6 +431,14 @@ class PowerEngine(hass.Hass):
             self._refresh_months()
         except Exception as err:
             self.log(f"Could not open the cost book: {err!r}", level="WARNING")
+        self._fcsnap, self._v2hist, self._warned_days = None, None, {}
+        if self.costbook is not None:
+            try:                      # forecast snapshots (never in a demo) and engine v2's history, beside the costs
+                if not self._demo:
+                    self._fcsnap = fcsnap.SnapshotWriter(os.path.join(self.costbook.folder, "snapshots"), self.tz)
+                self._v2hist = V2History(os.path.join(self.costbook.folder, "v2history"), self.tz)
+            except Exception as err:
+                self.log(f"Could not set up the forecast snapshots or engine v2 history: {err!r}", level="WARNING")
         self._publish_v2_settings()
         self._evaluate()                                   # also publishes mode + config status
         self._package_sync("start")
@@ -468,6 +481,9 @@ class PowerEngine(hass.Hass):
         self.listen_event(self._on_override, OVERRIDE_EVENT)
         self._history_date = None                            # a day picked with the card's date picker (Plan history)
         self.listen_event(self._on_history_day, HISTORY_DAY_EVENT)
+        self._v2_history_date = None                         # a day picked on the Engine v2 page's history
+        self.listen_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
+        self.run_every(self._publish_v2_history, "now+65", 900)
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
@@ -663,6 +679,7 @@ class PowerEngine(hass.Hass):
                 self._record_costs(readings)
                 self._watch_events(readings)
                 self._track_slots(readings)
+                self._snapshot_forecast(readings)
                 self._smart_step(readings)
                 self._refresh_temps(readings.now)
                 self._expire_override(readings.now)
@@ -874,6 +891,7 @@ class PowerEngine(hass.Hass):
             tz = self.tz or timezone.utc
             for key, (state, attrs) in v2publish.entity_states(out, eng, eng.s, tz, preview).items():
                 self._publish_if_changed(key, state, attrs)
+            self._record_v2_history(r.now, out, send, preview)
             if not preview:
                 if send:
                     self._note_command(out.decision)
@@ -1059,7 +1077,8 @@ class PowerEngine(hass.Hass):
             hh.tb_c = measured if measured is not None else (getattr(self, "_tb", None) or {}).get(
                 learning.hour_of(hh.start))
         try:
-            rec = self.costbook.add(hh, r, **self._cost_params())
+            rec = self.costbook.add(hh, r, engine=self._engine_name(), live=self.mode.effective == "active",
+                                    **self._cost_params())
             if rec is None:
                 return
             if rec["v"].get("event"):
@@ -1384,6 +1403,9 @@ class PowerEngine(hass.Hass):
         try:
             if prune:
                 self.costbook.prune(self._today())
+                for keeper in (self.__dict__.get("_fcsnap"), self.__dict__.get("_v2hist")):
+                    if keeper is not None:
+                        keeper.prune(self._today())
             self._months = self.costbook.months(self._today())
             self._publish_costs()
             self._health()
@@ -1697,8 +1719,8 @@ class PowerEngine(hass.Hass):
     def _record_ran(self, now):
         """Keep the plan that actually ran (Plan history, "As run"): the plan's slot for the half-hour now running,
         written when it first appears and again if a replan changes it."""
-        if self.costbook is None or self.plan is None:
-            return
+        if self.costbook is None or self.plan is None or self._engine_name() != "v1":
+            return              # only while engine v1 is the chosen engine: otherwise its plan did not run
         try:
             tz = self.tz or timezone.utc
             local = now.astimezone(tz)
@@ -1740,14 +1762,97 @@ class PowerEngine(hass.Hass):
             now = datetime.now(timezone.utc)
             today = now.astimezone(tz).date()
             day = self._history_date or today - timedelta(days=1)
-            label, snap = chosen_plan(self.costbook.plan_snapshot(day), self.costbook.ran_plan(day))
+            info = self._day_engine(day, today)
+            label, snap = chosen_plan(self.costbook.plan_snapshot(day), self.costbook.ran_plan(day),
+                                      info["engine"] if info else None)
             view = day_view(day, self.costbook.day_records(day), snap, label, tz, now)
+            view["in_control"], view["live"] = (info["engine"], info["live"]) if info else (None, None)
             recorded = self.costbook.recorded_days()
             view["earliest"] = min(recorded[0], day.isoformat()) if recorded else day.isoformat()  # for the picker
             view["latest"] = today.isoformat()
             self._publish_state("plan_history", day.isoformat(), view)
         except Exception as err:
             self.log(f"Could not build the plan history: {err!r}", level="WARNING")
+
+    def _warn_daily(self, key, msg):
+        """One warning per kind a day (a failing recorder must not fill the log, nor stop the cycle)."""
+        today = datetime.now(timezone.utc).astimezone(self.tz or timezone.utc).date()
+        if self.__dict__.setdefault("_warned_days", {}).get(key) != today:
+            self._warned_days[key] = today
+            self.log(msg, level="WARNING")
+
+    def _snapshot_forecast(self, r):
+        """Forecast snapshots (pe_core/fcsnap.py): what changed in the forecast, rates, dispatches, free-power and
+        grid-event entities, the house profile and the smart slots' first-seen times. Never in a demo; a failure
+        warns once a day and the cycle goes on."""
+        w = self.__dict__.get("_fcsnap")
+        if w is None or self._demo or self.cfg is None:
+            return
+        try:
+            roles = fcsnap.snapshot_roles(self.cfg)
+            states = {}
+            for eid in dict.fromkeys(roles.values()):
+                st = self.get_state(eid, attribute="all")
+                if isinstance(st, dict):
+                    states[eid] = {"state": st.get("state"), "attributes": st.get("attributes") or {}}
+            local = r.now.astimezone(self.tz or timezone.utc)
+            seen = fcsnap.slot_first_seen(self.slots.slots, local.date(), self.tz or timezone.utc) \
+                if getattr(self, "slots", None) else None
+            w.observe(r.now, roles, states, self.profile, seen)
+        except Exception as err:
+            self._warn_daily("fcsnap", f"Could not save the forecast snapshot: {err!r}")
+
+    def _day_engine(self, day, today=None):
+        """{"engine": "v1"|"v2"|"mixed", "live": bool} for a day from its cost records; for today before there is a
+        record, the engine chosen now."""
+        info = self.costbook.day_engine_info(day) if self.costbook is not None else None
+        if info is None and (today is None or day == today):
+            info = {"engine": self._engine_name(), "live": self.mode.effective == "active"}
+        return info
+
+    def _record_v2_history(self, now, out, send, preview):
+        h = self.__dict__.get("_v2hist")
+        if h is None:
+            return
+        try:
+            ln, obs = out.mode.lines, out.observation
+            level = obs.level_reported if obs.level_reported is not None else obs.level_filtered
+            wrote = h.tick(now, mode=out.mode.mode, why=out.mode.why, level=level,
+                           import_p=ln.import_p if ln else None, export_p=ln.export_p if ln else None,
+                           value_p=ln.value_p if ln else None, sent=bool(send), preview=bool(preview),
+                           path=out.value.path if out.value is not None else None)
+            if wrote:
+                self._publish_v2_history()
+        except Exception as err:
+            self._warn_daily("v2history", f"Could not save engine v2's history: {err!r}")
+
+    def _on_v2_history_day(self, event_name, data, kwargs):
+        """The Engine v2 history's date picker (pe_v2_history_day {date}): show that day, if it is still kept."""
+        if event_name != V2_HISTORY_DAY_EVENT or self.__dict__.get("_v2hist") is None:
+            return
+        try:
+            day = date.fromisoformat(str((data or {}).get("date")))
+        except ValueError:
+            return
+        today = datetime.now(timezone.utc).astimezone(self.tz or timezone.utc).date()
+        if not today - timedelta(days=V2_HISTORY_KEEP_DAYS) <= day <= today:
+            return
+        self._v2_history_date = day
+        self._publish_v2_history()
+
+    def _publish_v2_history(self, *args, **kwargs):
+        """sensor.pe_v2_history: the chosen day (today by default) as engine v2 ran it."""
+        h = self.__dict__.get("_v2hist")
+        if h is None or self._get_publisher() is None:
+            return
+        try:
+            today = datetime.now(timezone.utc).astimezone(self.tz or timezone.utc).date()
+            day = self._v2_history_date or today
+            info = self._day_engine(day, today)
+            attrs = h.attributes(day, today, info["engine"] if info else None, info["live"] if info else None)
+            self._publish_state("v2_history", day.isoformat(), attrs)
+        except Exception as err:
+            self._warn_daily("v2history_pub", f"Could not build engine v2's history: {err!r}")
 
     # --- notifications (HA companion app) ------------------------------------------------
 
@@ -3636,6 +3741,10 @@ class PowerEngine(hass.Hass):
             "engine_v2": s(lambda: diagnostics.engine_v2_section(
                 self.__dict__.get("_v2"), self._engine_name(), now,
                 (self._published.get("v2_timeline") or (None, None))[1])),
+            "forecast_snapshots": s(lambda: fcsnap.summary(self._fcsnap.folder))
+            if self.__dict__.get("_fcsnap") else None,
+            "v2_history": s(lambda: v2history.summary(self._v2hist.folder, self.tz)) if self.__dict__.get("_v2hist")
+            else None,
             "early_target": s(lambda: {**self._early.summary(), "records": self._early.records[-60:]}),
             "attribute_sizes": s(lambda: diagnostics.largest_attrs(self.__dict__.get("_attr_sizes", {}))),
             "log": list(getattr(self.__dict__.get("_log_ring"), "lines", [])),
