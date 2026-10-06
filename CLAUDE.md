@@ -307,6 +307,7 @@ safety setting `battery_floor_soc` (12 %, the BMS's own limit; v2's hard floor, 
   `MIN_CARD_VERSION` 0.9.106. The existing pages don't switch with the engine yet (a later release).
 - **Comparison:** `tools/engine_compare.py` runs the whole app closed loop in the demo world on the pack's days, v1 against v2, with a
   perfect-foresight bound.
+- **Preview (0.9.107):** on engine v1 `_engine_tick` still steps v2 with `Situation.active=False` (reason "Preview: engine v1 is in control") and publishes the v2 sensors (`v2_mode.preview`, `state_engine` attribute `v2_preview`), but never reaches `_hand_over`, `_control`, `_note_command`, the activity log or `self._decision`; setting `preview_when_v1` (default on) turns it off. v1's `_cycle` decides as before.
 - **Not done / to watch:** not yet run on a live HA; `sample_s` changes need a restart; `band_exit` may revalue often on real data
   (watch the Health card's causes); the design's offset sign: the learned offset is reported minus true.
 

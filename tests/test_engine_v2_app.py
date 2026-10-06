@@ -16,7 +16,8 @@ V2_SENSORS = ("state_engine", "v2_mode", "v2_value", "v2_timeline", "v2_value_cu
 LIMIT = 15_000
 
 
-def simulate(tmp_path, monkeypatch, hours, engine="v1", control_method=None, mode=None, tick=True, folder=None):
+def simulate(tmp_path, monkeypatch, hours, engine="v1", control_method=None, mode=None, tick=True, folder=None,
+             preview=None):
     """The demo app on the car day from 00:10 for `hours` simulated hours: one cycle and (on v2) one engine tick a
     minute. `engine` and `control_method` go into the demo config's system block, `mode` replaces its operation mode."""
     folder = folder or (tmp_path / "powerengine")
@@ -29,6 +30,8 @@ def simulate(tmp_path, monkeypatch, hours, engine="v1", control_method=None, mod
             text = open(src, encoding="utf-8").read()
             text = text.replace("  publisher: direct\n", "  publisher: direct\n"
                                 + (f"  engine: {engine}\n" if engine != "v1" else ""))
+            if preview is not None:
+                text += f"\nengine_v2:\n  preview_when_v1: {'true' if preview else 'false'}\n"
             if control_method:
                 text = text.replace("control_method: ram_remote", f"control_method: {control_method}")
             if mode:
@@ -80,25 +83,50 @@ def mp():
 
 # --- engine v1 (the default) ---------------------------------------------------------------------------------------
 
-def test_engine_v1_is_the_default_and_publishes_only_the_engine_state(tmp_path, mp):
+def test_engine_v1_is_the_default_and_previews_v2_without_sending(tmp_path, mp):
     run = simulate(tmp_path, mp, 1)
     app = run["app"]
-    assert app._engine_name() == "v1" and app.cfg.system["engine"] == "v1"
-    assert app._published["state_engine"] == ("v1", {"v2_available": True})
+    assert app._engine_name() == "v1" and app.cfg.system["engine"] == "v1" and app.cfg.engine_v2.preview_when_v1
+    assert app._published["state_engine"] == ("v1", {"v2_available": True, "v2_preview": True})
     assert app._published["diag_v2_settings"][0].isdigit()           # the settings catalogue is always there
     for key in ("v2_mode", "v2_value", "v2_timeline", "v2_value_curve", "v2_triggers", "diag_v2"):
-        assert key not in app._published
-    assert app._v2 is None and not (run["folder"] / "demo" / "engine_v2_state.json").exists()
+        assert key in app._published and app._published[key][0] != "unknown"
+    attrs = app._published["v2_mode"][1]
+    assert attrs["preview"] is True and attrs["sending"] is False
+    assert attrs["not_sending_reason"] == "Preview: engine v1 is in control"
+    for key in ("v2_mode", "v2_timeline", "v2_triggers", "diag_v2"):
+        assert attr_bytes(app, key) < LIMIT
+    assert app._v2 is not None and app._v2.vr is not None
+    # v1 decided; v2 sent nothing and wrote nothing to the activity log
     assert run["decisions"] and not any(rule.startswith("v2_") for _, _, rule in run["decisions"])
+    assert not any(e["rule"].startswith("v2_") for e in app.activity.entries)
+    assert not app._decision.rule.startswith("v2_")
     assert app.real_calls == [] and app.real_events == []
 
 
-def test_the_v2_tick_does_nothing_on_v1(tmp_path, mp):
-    run = simulate(tmp_path, mp, 0.5, tick=False)
+def test_the_preview_never_sends_a_command_of_its_own(tmp_path, mp):
+    """Passive on v1 with the preview on: v2 would charge on the cheap night, but nothing reaches the inverter."""
+    run = simulate(tmp_path, mp, 4, mode="passive")
     app = run["app"]
-    before = (dict(app._published), app._decision)
-    app._engine_tick({})
-    assert (app._published, app._decision) == before and app._v2 is None
+    assert app._published["v2_mode"][1]["preview"] is True
+    assert not app._ram().changes and "Force charge" not in {o[1] for o in run["options"]}
+    assert not any(rule.startswith("v2_") for _, _, rule in run["decisions"])
+
+
+def test_preview_off_publishes_nothing_from_v2(tmp_path, mp):
+    run = simulate(tmp_path, mp, 1, preview=False)
+    app = run["app"]
+    assert app._published["state_engine"] == ("v1", {"v2_available": True})
+    for key in ("v2_mode", "v2_value", "v2_timeline", "v2_value_curve", "v2_triggers", "diag_v2"):
+        assert key not in app._published
+    assert app._v2 is None and not (run["folder"] / "demo" / "engine_v2_state.json").exists()
+
+
+def test_timed_windows_still_preview(tmp_path, mp):
+    run = simulate(tmp_path, mp, 0.5, control_method="timed_windows")
+    app = run["app"]
+    assert app._published["v2_mode"][1]["preview"] is True
+    assert not any(rule.startswith("v2_") for _, _, rule in run["decisions"])
 
 
 # --- engine v2, Active, RAM remote control ------------------------------------------------------------------------
@@ -234,3 +262,8 @@ def test_the_diagnostics_export_has_an_engine_v2_section(v2_run):
     assert e["in_use"] == "v2" and e["health"]["engine"] == "v2" and e["journal"] and len(e["journal"]) <= 300
     assert e["timeline"]["items"]
     json.dumps(bundle, default=str)
+
+
+def test_live_v2_says_it_is_not_a_preview(v2_run):
+    assert v2_run["app"]._published["v2_mode"][1]["preview"] is False
+    assert v2_run["app"]._published["state_engine"] == ("v2", {"v2_available": True})

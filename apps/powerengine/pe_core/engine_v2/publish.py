@@ -44,7 +44,7 @@ def _fit(attrs: dict, reducers) -> dict:
 
 
 # ---- the mode ----------------------------------------------------------------------------------
-def _mode(out: StepOutput, engine, tz) -> tuple[str, dict]:
+def _mode(out: StepOutput, engine, tz, preview: bool = False) -> tuple[str, dict]:
     m: ModeState = out.mode
     exits = [{"kind": e.kind, "text": e.text, "expected_at": _iso(e.expected_at, tz), "first": False}
              for e in m.exits]
@@ -59,7 +59,7 @@ def _mode(out: StepOutput, engine, tz) -> tuple[str, dict]:
              "chosen_by": m.chosen_by, "target_soc": _r(m.target_soc, 1), "power_w": None if m.power_w is None
              else int(round(m.power_w)), "exits": exits, "deadline": _iso(m.deadline, tz),
              "level_reported": _r(obs.level_reported, 1), "level_filtered": _r(obs.level_filtered, 1),
-             "sending": bool(engine.sending), "not_sending_reason": engine.not_sending_reason,
+             "sending": bool(engine.sending), "preview": bool(preview), "not_sending_reason": engine.not_sending_reason,
              "values_at": _iso(vr.made_at, tz) if vr else None, "values_because": vr.because if vr else None}
     return m.mode, attrs
 
@@ -185,13 +185,17 @@ def _diag(out: StepOutput, engine) -> tuple[str, dict]:
     return ("learning" if engine.learner.days < 3 else "ok"), attrs
 
 
-def entity_states(out: StepOutput, engine, settings: V2Settings, tz) -> dict[str, tuple[str, dict]]:
-    """Every engine v2 sensor for this tick: {publish key: (state, attributes)}."""
+def entity_states(out: StepOutput, engine, settings: V2Settings, tz,
+                  preview: bool = False) -> dict[str, tuple[str, dict]]:
+    """Every engine v2 sensor for this tick: {publish key: (state, attributes)}. In preview (engine v1 is in control)
+    `v2_mode` says so and `state_engine` is left out: the app's own cycle publishes it."""
     floor = engine.last_facts.hard_floor_soc if engine.last_facts is not None else 12.0
     res = {"state_engine": ("v2", {"v2_available": True}),
-           "v2_mode": _mode(out, engine, tz), "v2_value": _value(out),
+           "v2_mode": _mode(out, engine, tz, preview), "v2_value": _value(out),
            "v2_timeline": _timeline(out.value, settings, floor, tz), "v2_value_curve": _curve(out.value, tz),
            "v2_triggers": _triggers(out, engine), "diag_v2": _diag(out, engine)}
+    if preview:
+        res.pop("state_engine")
     return res
 
 

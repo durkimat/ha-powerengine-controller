@@ -122,7 +122,7 @@ def test_the_mode_sensor_has_the_contract_attributes(made):
     state, a = publish.entity_states(out, eng, eng.s, LOCAL)["v2_mode"]
     assert state == out.mode.mode
     assert set(a) == {"label", "since", "why", "rule", "chosen_by", "target_soc", "power_w", "exits", "deadline",
-                      "level_reported", "level_filtered", "sending", "not_sending_reason", "values_at",
+                      "level_reported", "level_filtered", "sending", "preview", "not_sending_reason", "values_at",
                       "values_because"}
     assert a["rule"].startswith("v2_") and a["sending"] is True and a["not_sending_reason"] is None
     assert a["values_because"] == "The car started charging"

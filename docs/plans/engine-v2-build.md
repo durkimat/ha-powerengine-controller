@@ -3,6 +3,9 @@
 > **Status (5 Oct 2026): built for 0.9.106.** Packages A to E built by sub-agents and reviewed; F (release) prepared. Additions
 > beyond this page: `Lines.charge_now`/`run_target_soc` and `value.run_target` (charge at the start of a cheap stretch),
 > `ValueResult.limits`, `StepInput.slots_whole_house`.
+> **Preview (0.9.107):** while engine v1 is in control the v2 tick still runs with `Situation.active=False` and publishes the
+> sensors above (`v2_mode` attribute `preview`, `state_engine` attribute `v2_preview`); its decision is never handed over. Setting
+> `preview_when_v1` (default on). The card shows a Preview line and "Would be ..." wording.
 > Design and decisions: [engine-v2.md](engine-v2.md). This page is how it is built: who owns which files, the
 > interfaces, the published sensors (the card's contract), the tests, and what "done" means.
 

@@ -126,6 +126,7 @@ from pe_core.wizard import wizard_info
 
 HEARTBEAT_SECONDS = 60
 V2_SAVE_SECONDS = 300             # engine v2's state file is saved this often (and on terminate)
+V2_PREVIEW_REASON = "Preview: engine v1 is in control"
 V2_CACHE_SECONDS = 60             # the certainty scores and the forecast points the v2 tick reuses
 DATA_GAP_GRACE_S = 180             # a reading missing this long or less keeps the last decision (_bridge_data_gap)
 LOWWRITE_START = "02:40:00"       # after the Simulator has had its hour
@@ -681,7 +682,7 @@ class PowerEngine(hass.Hass):
         shown = self._decision if readings is not None and self._engine_name() == "v2" else decision
         for key, (state, attrs) in entity_states(readings, self.mode, self.tz, shown, self._since).items():
             self._publish_if_changed(key, state, attrs)
-        self._publish_if_changed("state_engine", self._engine_name(), {"v2_available": True})
+        self._publish_if_changed("state_engine", self._engine_name(), self._engine_attrs())
         self._publish_override()
         if not self._dashboard_readings_synced and getattr(self, "_last_readings", None) is not None:
             self._dashboard_readings_synced = True     # now the real capacity, not the 18000 Wh fallback
@@ -708,6 +709,18 @@ class PowerEngine(hass.Hass):
     def _engine_name(self):
         """The engine the system setting chooses: "v1" (the half-hour plan) or "v2" (values and exit conditions)."""
         return "v2" if self.cfg is not None and self.cfg.system.get("engine") == "v2" else "v1"
+
+    def _v2_preview_on(self):
+        """True while engine v1 is in control and the preview setting is on: engine v2 then works out its decision
+        in its tick, publishes its sensors and sends nothing."""
+        return self.cfg is not None and self._engine_name() == "v1" and bool(self.cfg.engine_v2.preview_when_v1)
+
+    def _engine_attrs(self):
+        """Attributes of sensor.pe_state_engine: v2_preview only once the preview has really run (its engine exists)."""
+        attrs = {"v2_available": True}
+        if self._v2_preview_on() and self.__dict__.get("_v2") is not None:
+            attrs["v2_preview"] = True
+        return attrs
 
     def _v2_refusal(self):
         """Why engine v2 may not send commands (it only drives RAM remote control in this release), or None."""
@@ -812,10 +825,10 @@ class PowerEngine(hass.Hass):
             held = self._v2_cache[key] = (now, make())
         return held[1]
 
-    def _v2_input(self, r, send, method):
+    def _v2_input(self, r, send, method, preview=False):
         now = r.now
         facts = self._v2_facts(r)
-        reason = "" if send else (self._v2_refusal() or self.mode.reason)
+        reason = "" if send else (V2_PREVIEW_REASON if preview else (self._v2_refusal() or self.mode.reason))
         cert = self._v2_cached("cert", now, lambda: Certainty(self.slots.slots, self.tz, self._min_charge_min()))
         solar = self._v2_cached("solar", now, self._solar_forecast)
         sig = (facts.capacity_kwh, facts.eta_charge, facts.max_charge_kw, facts.max_discharge_kw, facts.taper,
@@ -834,8 +847,11 @@ class PowerEngine(hass.Hass):
 
     def _engine_tick(self, kwargs):
         """Engine v2's tick (every sample_s): read, step the engine, publish its sensors, and hand its decision to the
-        same control path v1 uses. Does nothing on engine v1. Skips a tick while the last one is still running."""
-        if self._engine_name() != "v2" or self.cfg_error or self.mode.effective == "unconfigured":
+        same control path v1 uses. On engine v1 it is a preview (setting preview_when_v1): the engine is stepped and its
+        sensors published, and its decision goes nowhere (not to _hand_over, the inverter, the activity log or
+        self._decision). Skips a tick while the last one is still running."""
+        preview = self._v2_preview_on()
+        if (self._engine_name() != "v2" and not preview) or self.cfg_error or self.mode.effective == "unconfigured":
             return
         if not self._v2_lock.acquire(blocking=False):
             return
@@ -846,16 +862,19 @@ class PowerEngine(hass.Hass):
             method = self._control_method()
             ram = method == "ram_remote"
             active = self.mode.effective == "active"
-            send = active and ram
-            out = eng.step(self._v2_input(r, send, method))
+            send = active and ram and not preview
+            out = eng.step(self._v2_input(r, send, method, preview))
             tz = self.tz or timezone.utc
-            for key, (state, attrs) in v2publish.entity_states(out, eng, eng.s, tz).items():
+            for key, (state, attrs) in v2publish.entity_states(out, eng, eng.s, tz, preview).items():
                 self._publish_if_changed(key, state, attrs)
-            if send:
-                self._note_command(out.decision)
+            if not preview:
+                if send:
+                    self._note_command(out.decision)
+                else:
+                    self.recorder.note(None, None)
+                self._hand_over(r, out.decision, send=ram)   # timed windows: logged, counted, nothing sent
             else:
-                self.recorder.note(None, None)
-            self._hand_over(r, out.decision, send=ram)       # timed windows: logged, counted, nothing sent
+                self._publish_if_changed("state_engine", "v1", self._engine_attrs())   # now says v2_preview
             if (r.now - self._v2_saved).total_seconds() >= V2_SAVE_SECONDS:
                 self._save_engine_state(r.now)
         except Exception as err:                   # never let one bad tick stop the app
