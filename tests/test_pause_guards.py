@@ -10,18 +10,26 @@ from pe_core import testwrite
 from pe_core.config import parse_config
 from pe_core.control import readback_mismatches, release, writes_needed
 from pe_core.entities import ENTITIES
-from pe_core.modes import effective_mode, guard_problems
+from pe_core.modes import CHOOSE_CONTROLLER, effective_mode, guard_problems
 
 GUARDED = {"operation": {"mode": "active"}, "inputs": {
     "guard_read_only": {"entity": "switch.predbat_set_read_only"},
-    "guard_off_1": {"entity": "automation.charge_house_battery_on"}}}
-SAFE = {"switch.predbat_set_read_only": "on", "automation.charge_house_battery_on": "off"}
+    "guard_off_1": {"entity": "automation.other_battery_control"}}}
+SAFE = {"switch.predbat_set_read_only": "on", "automation.other_battery_control": "off"}
 
 
 # --- guards and mode --------------------------------------------------------------------
 
-def test_no_guards_mapped_is_a_problem():
-    assert guard_problems(parse_config({}), lambda e: None) == ["no handover guards are mapped"]
+def test_no_guards_mapped_and_no_choice_asks_for_the_choice():
+    probs = guard_problems(parse_config({}), lambda e: None)
+    assert probs == [CHOOSE_CONTROLLER] and "Inverter control" in probs[0]
+    m = effective_mode(parse_config({"operation": {"mode": "active"}}), guards=probs)
+    assert (m.effective, m.reason) == ("passive", f"Active refused: {CHOOSE_CONTROLLER}.")
+
+
+def test_no_guards_mapped_with_another_controller_chosen_is_a_problem():
+    cfg = parse_config({"system": {"other_controller": "other"}})
+    assert guard_problems(cfg, lambda e: None) == ["no handover guards are mapped"]
 
 
 def test_guards_safe():
@@ -29,7 +37,7 @@ def test_guards_safe():
 
 
 def test_predbat_not_read_only_or_legacy_on_is_reported():
-    states = {"switch.predbat_set_read_only": "off", "automation.charge_house_battery_on": "on"}
+    states = {"switch.predbat_set_read_only": "off", "automation.other_battery_control": "on"}
     probs = guard_problems(parse_config(GUARDED), states.get)
     assert len(probs) == 2 and "must be on" in probs[0] and "must be off" in probs[1]
 

@@ -36,8 +36,9 @@ owner approves each run on GitHub. It can't run `tools/release.sh` itself (it ne
 - `docs/logic/`: the plan and decision logic as flowcharts and tables (inputs, rules planner, optimiser, priorities, control, settings,
   decision log, review findings). Start at `docs/logic/README.md`. A PR that changes planning or `decide` updates the matching page.
 - `docs/INSTALL.md`: the install guide. Keep it current: any release that changes setup updates it in the same PR.
-- `docs/ha/powerengine_handover.yaml`: the HA package (handover scripts, update script, watchdog automations).
-  The owner installs it into HA; see "HA config" below.
+- `docs/ha/powerengine_handover.yaml`: the HA package everyone needs (update script, AppDaemon restarts, watchdog); it names no
+  other controller. `docs/ha/powerengine_predbat_handover.yaml`: the optional Predbat handover (input_select, two scripts, restart
+  Predbat). The owner installs them into HA; see "HA config" below.
 - `tools/release.sh`: the release (below). `tools/diag_summary.py`: summarises a diagnostics export (below).
   `tools/build_demo_pack.py`: rebuilds the demo pack.
 - `tests/`: pytest. `tests/test_replay.py` with `tests/replay_harness.py` replays a recorded night through the
@@ -203,6 +204,18 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   the provider has no dispatches; (5) a new adapter needs a detect entry (`adapters/detect.py`: always available) and a card UI for the bands (card repo, so `MIN_CARD_VERSION`/`MIN_APP_VERSION`
   and a joint release). Open: effective-from dates for a rate change, and whether the fixed overnight window also needs a weekday/weekend variant and a second range (it has one range today).
   Plan doc to write first: `docs/plans/tariff-sources.md`. This is the "fixed-rate tariff adapter" in the setup wizard item below.
+- **Engine cost comparison on the Costs page (owner's idea, 6 Oct 2026; not built).** Totals only, a rolling week: one row per day with what engine v1, engine
+  v2 and the perfect-foresight bound would have cost, the cheapest engine marked, to show which engine is the better one day by day. **Predbat is out of scope**
+  (the owner's decision: it can't be replayed fairly without embedding its planner). How: each night (like the tariff simulator) replay yesterday from the cost
+  history (actual house, sun, prices, smart slots, grid events: the outside world, which no engine changes) through each engine closed loop, as
+  `tools/engine_compare.py` does on the demo days, with the battery and grid simulated; the bound is `engine_v2.value.solve` on the actual day. Things to get right:
+  (1) **forecasts as they were**: the cost history holds actuals only, so a replay would give both engines near-perfect foresight; first save daily forecast
+  snapshots (sun with bands, the house profile in use, smart slots with when they were announced) and compare only days that have one (a week after that ships);
+  (2) **calibration**: show the engine that really ran its simulated cost against its metered cost, so the owner can see how far to trust the other columns;
+  (3) **simulator fidelity**: the demo world has no taper, BMS or cold limits and lets surplus sun into the battery on Hold (the real inverter exports it), so
+  absolute figures are rough (perhaps 5 to 10%) while the ranking is sturdier; (4) **cost on the HA host**: whole-app replays took about 100 s (v1) and 300 s (v2)
+  per day here, slower on a Pi: run once a night, and prefer stepping the pure engines over the whole app; (5) card: a small table on the Costs page (card
+  repo, joint release).
 - **Zappi Eco+ and solar (monitor):** Eco+ is required for EDF/Octopus smart charging. The owner has only seen the car charge from the grid, not from solar, so some
   threshold (probably on the charger) decides. If the Zappi ever starts and stops with solar surplus, `car_charging` (an urgent rule, no damping) and the plan signature will flip with it:
   watch `ev_state` changes per day in the diagnostics export, and add a short debounce on stop only if it happens. Do nothing until it is seen.
@@ -244,6 +257,12 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   leftovers are done: see Phase 1 below.)
 
 ## Recent fixes
+
+- **Other battery controller is optional (0.9.108, `config.other_controller()`, `modes.guard_status`).** System setting `other_controller` (`none` / `predbat` / `other`;
+  default `""` = not chosen, derived at read time from the mapped guards: `guard_read_only` containing "predbat" gives `predbat`, any guard `other`, none `unset`; nothing is saved).
+  `none`: guards not required, not checked, not evaluated (`_evaluate` skips the handover roles), Active allowed as far as guards go. `unset` with no guard: Active refused with
+  `modes.CHOOSE_CONTROLLER`. Published as `other_controller` on `sensor.pe_diag_version`. The owner's personal automations are gone from code, roles and docs; user text names no
+  Predbat except where `predbat` is chosen. HA packages split (see Layout). The replay config maps guards, so it derives `predbat` and is unchanged.
 
 - **Overnight window: learned or fixed (built for 0.9.105, not released; `docs/logic/01-inputs.md` 1.10).** New system setting `overnight_window` (`learned` default / `fixed`) and safety settings
   `overnight_start_h` / `overnight_end_h` (hours since midnight in half-hour steps, 23.5 = 23:30; a start after the end runs over midnight). `PowerEngine._overnight()` is the one place the plan

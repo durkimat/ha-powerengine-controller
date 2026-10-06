@@ -129,6 +129,7 @@ fixed: 30, 60, 120, then 240 minutes (page 8).
 | Setting | Default | Acts in | What it does |
 |---|---|---|---|
 | `control_method` | `timed_windows` (this install: `ram_remote`) | Plan, Control | How decisions reach the inverter; RAM caps the powers and lowers the switch cost |
+| `other_controller` | not chosen (derived) | Mode | Whether another battery controller is installed: `none` (guards not needed or checked), `predbat` (switched over with the optional handover package) or `other` (the guard entities are checked). Not chosen: derived from the mapped guards. See page 4, 4.1 |
 | `overnight_window` | `learned` | Plan, Cost book | Where the overnight window comes from: `learned` from the rates, or `fixed` times (next section). See page 1, 1.10 |
 | `house_load_includes_ev` | true | Readings, Plan, Live | The car is part of the house load, so the battery must not feed it and the profile subtracts it |
 | `battery_location` | `garage` | Plan | How fast the battery follows the outside temperature |

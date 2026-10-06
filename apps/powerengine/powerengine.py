@@ -54,6 +54,7 @@ from pe_core.config import (
     ConfigError,
     Site,
     load_config,
+    other_controller,
     parse_config,
     required_roles,
     settings_catalogue,
@@ -566,7 +567,10 @@ class PowerEngine(hass.Hass):
         checks, required = {}, []
         if self.cfg is not None:
             required = required_roles(self.cfg)
+            no_other = other_controller(self.cfg) == "none"
             for role in ROLES:
+                if no_other and role.group == "handover":      # no other controller: the guards are not checked
+                    continue
                 spec = self.cfg.inputs.get(role.key)
                 state = None
                 if spec and "entity" in spec:
@@ -1775,8 +1779,8 @@ class PowerEngine(hass.Hass):
 
     def _guard_state(self, eid):
         """A guard's state. AppDaemon's copy of HA's states can miss an entity that was re-created after it started
-        (Predbat restarting does this), so when it has nothing, ask Home Assistant directly. If that can't be
-        checked either, the guard is "unverified", which never counts as safe."""
+        (the other controller restarting does this), so when it has nothing, ask Home Assistant directly. If that
+        can't be checked either, the guard is "unverified", which never counts as safe."""
         state = self.get_state(eid)
         if state is not None:
             return state
@@ -1789,8 +1793,8 @@ class PowerEngine(hass.Hass):
         return live or UNVERIFIED
 
     def _note_absent_guards(self, absent):
-        """Guard entities HA doesn't have (e.g. Predbat not connected) count as safe; say so once, and when they're
-        back."""
+        """Guard entities HA doesn't have (e.g. the other controller not connected) count as safe; say so once, and
+        when they're back."""
         before = set(getattr(self, "_absent_guards", ()))
         now = set(absent)
         if now - before:
@@ -1798,7 +1802,8 @@ class PowerEngine(hass.Hass):
             self.log(f"Handover guard not available ({names}); treated as safe: it can't be controlling anything",
                      level="WARNING")
             self._notify("health", ("guard:absent", "PowerEngine: handover guard not available",
-                                    f"{names} isn't in Home Assistant right now (e.g. Predbat not connected). "
+                                    f"{names} isn't in Home Assistant right now (e.g. the other controller isn't "
+                                    "connected). "
                                     "PowerEngine treats it as safe, since it can't be controlling the inverter, "
                                     "and carries on."))
         if before and not now:
@@ -1834,7 +1839,7 @@ class PowerEngine(hass.Hass):
                      "inverter_clock_sync")
 
     def _watch_controls(self):
-        """Count writes to the inverter's control entities by whatever controls it now (e.g. Predbat)."""
+        """Count writes to the inverter's control entities by whatever controls it now (e.g. another controller)."""
         for handle in self._write_listeners:
             try:
                 self.cancel_listen_state(handle)
@@ -1956,6 +1961,7 @@ class PowerEngine(hass.Hass):
         if attrs["setup"] == "unconfigured" and not self._demo:
             attrs["demo_days"] = self._demo_days_preview()
         attrs.update(self._site_attributes())
+        attrs["other_controller"] = other_controller(self.cfg)      # none / predbat / other / unset (derived)
         self._publish_state("diag_version", __version__, attrs)
 
     def _site_attributes(self):
@@ -3472,8 +3478,9 @@ class PowerEngine(hass.Hass):
             pub.preset(key, value)
 
     def _on_set_control(self, event_name, data, kwargs):
-        """The Battery controller switch: Active when handed to PowerEngine, Passive when handed to Predbat.
-        Saved like any config change (with a backup), so it survives restarts."""
+        """The handover scripts' event: Active when handed to PowerEngine, Passive when handed to the other controller.
+        Only the optional handover package fires it; with none installed nothing happens here. Saved like any config
+        change (with a backup), so it survives restarts."""
         mode = (data or {}).get("operation")
         try:
             if self.cfg is None:

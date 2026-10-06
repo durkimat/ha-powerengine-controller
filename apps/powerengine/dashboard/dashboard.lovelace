@@ -1245,7 +1245,7 @@ views:
               | **Last {{ w.days }} days** | **{{ gbp(sv(w.steps, 'No solar or battery')) }}** | **{{ gbp(sv(w.steps, 'Solar')) }}** | **{{ gbp(sv(w.steps, '<<tariff>>')) }}** | **{{ gbp(sv(w.steps, 'PowerEngine')) }}** | **{{ gbp(sv(w.steps, '<<event>> & free power')) }}** | **{{ gbp(w.steps[-1].value) }}** |
               {%- endif %}
 
-              The last row is the waterfall's "Last 7 days" figures; it can differ from the sum of the last 7 rows by a penny, because each day is rounded. {% if states('sensor.pe_state_operation_mode') != 'active' %}PowerEngine is in Passive mode, so the PowerEngine column shows what your current setup (for example Predbat or your automations) actually did, not PowerEngine.{% endif %}
+              The last row is the waterfall's "Last 7 days" figures; it can differ from the sum of the last 7 rows by a penny, because each day is rounded. {% if states('sensor.pe_state_operation_mode') != 'active' %}PowerEngine is in Passive mode, so the PowerEngine column shows what your current setup (for example another controller or your automations) actually did, not PowerEngine.{% endif %}
           - type: heading
             heading: Energy by day
           - type: markdown
@@ -1615,7 +1615,7 @@ views:
               | {{ r.kind }} {{ r.slot }} | {{ r.want }} | {{ r.now }}{{ ' ✱' if (r.want | string) != (r.now | string) and r.want != 'unchanged' else '' }} |
               {%- endfor %}
 
-              ✱ would be written (each changed window's update button is pressed once). While Predbat is in control the columns will differ; this is for checking the mapping and what PowerEngine would set.
+              ✱ would be written (each changed window's update button is pressed once). While another controller is in control the columns will differ; this is for checking the mapping and what PowerEngine would set.
               {%- endif %}
               {%- elif c and c.attributes.settings is defined %}
               {%- if c.state == 'not mapped' %}
@@ -1629,7 +1629,7 @@ views:
               | {{ k | replace('timed_', '') | replace('_', ' ') }} | {{ v.want }} | {{ v.now }}{{ ' ✱' if (v.want | string) != (v.now | string) and ((v.want | float(-1)) != (v.now | float(-2))) else '' }} |
               {%- endfor %}
 
-              ✱ would be written (then the update button pressed once if any window time changes). Strategy: {{ c.attributes.strategy }} windows. While your current setup (Predbat) is in control the two columns will often differ; this table is for checking the mapping and the logic.
+              ✱ would be written (then the update button pressed once if any window time changes). Strategy: {{ c.attributes.strategy }} windows. While your current setup is in control the two columns will often differ; this table is for checking the mapping and the logic.
               {%- endif %}
               {%- else %}
               The preview appears once PowerEngine has made a decision.
@@ -1804,7 +1804,7 @@ views:
           # itself when the app is too old to publish what it needs)
           - type: custom:powerengine-system-card
             grid_options: {columns: full}
-          # Predbat <-> PowerEngine switch (needs docs/ha/powerengine_handover.yaml installed as a package)
+          # handover switch to another controller (only with docs/ha/powerengine_predbat_handover.yaml installed; the card hides itself otherwise)
           - type: custom:powerengine-handover-card
             grid_options: {columns: full}
           - type: custom:powerengine-config-card

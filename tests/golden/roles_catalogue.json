@@ -740,7 +740,7 @@
    {
     "key": "guard_read_only",
     "label": "Other controller read-only",
-    "description": "Must be on (e.g. Predbat read-only).",
+    "description": "Must be on (e.g. a controller's read-only switch).",
     "kind": "binary",
     "required": "no",
     "domains": [
@@ -756,7 +756,7 @@
    {
     "key": "guard_off_1",
     "label": "Other control off (1)",
-    "description": "Must be off (e.g. a legacy battery automation).",
+    "description": "Must be off (another control, such as an automation).",
     "kind": "binary",
     "required": "no",
     "domains": [
@@ -764,9 +764,6 @@
      "input_boolean",
      "automation",
      "binary_sensor"
-    ],
-    "suggest": [
-     "^automation\\.charge_house_battery_on$"
     ]
    },
    {
@@ -780,9 +777,6 @@
      "input_boolean",
      "automation",
      "binary_sensor"
-    ],
-    "suggest": [
-     "^automation\\.house_battery_start_charging$"
     ]
    }
   ]
@@ -1251,16 +1245,12 @@
    null
   ],
   "guard_off_1": [
-   [
-    "^automation\\.charge_house_battery_on$"
-   ],
+   [],
    [],
    null
   ],
   "guard_off_2": [
-   [
-    "^automation\\.house_battery_start_charging$"
-   ],
+   [],
    [],
    null
   ]
