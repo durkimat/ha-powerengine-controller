@@ -15,12 +15,14 @@ from __future__ import annotations
 import json
 import pathlib
 from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 DEFAULT_PATH = pathlib.Path(__file__).resolve().parents[2] / "demo" / "pack.json"
 SLOTS = 48
 STEP = timedelta(minutes=30)
 COLUMNS = ("house", "car", "solar", "forecast", "act", "std", "ovn", "exp", "standing", "soc", "slot", "axle", "free")
 FLAGS = ("slot", "axle", "free")
+TZ = ZoneInfo("Europe/London")
 
 
 def load_pack(path=DEFAULT_PATH) -> dict:
@@ -110,3 +112,87 @@ def smart_slots(rows: list[dict]) -> list[tuple[datetime, datetime]]:
 def axle_events(rows: list[dict]) -> list[tuple[datetime, datetime]]:
     """Merged (start, end) windows of consecutive half-hours flagged as grid-services (Axle) events."""
     return _windows(rows, "axle")
+
+
+# --- a day from cost records (the pack builder and the engine comparison both use these) ---
+
+def _local(iso: str, tz=TZ) -> datetime:
+    dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).astimezone(tz)
+
+
+def day_stats(records: list[dict]) -> dict:
+    r2 = lambda x: round(x, 2)  # noqa: E731
+    return {
+        "solar": r2(sum(r["solar"] for r in records)),
+        "house": r2(sum(r["house"] for r in records)),
+        "car": r2(sum(r["car"] for r in records)),
+        "axle_kwh": r2(sum(r["v"].get("event_kwh") or 0.0 for r in records if r.get("axle"))),
+        "grid_import": r2(sum(r["grid_import"] for r in records)),
+        "grid_export": r2(sum(r["grid_export"] for r in records)),
+    }
+
+
+def day_complete(records: list[dict], tz=TZ) -> str | None:
+    """None if the day is complete, else why not: 48 records on consecutive half-hours from local midnight, at least
+    95 % of the day's seconds covered, no duplicate starts."""
+    if len(records) != 48:
+        return f"{len(records)} records, not 48"
+    if sum(r.get("seconds") or 0 for r in records) < 0.95 * 86400:
+        return "under 95% coverage"
+    starts = [_local(r["start"], tz) for r in records]
+    if len(set(starts)) != 48:
+        return "duplicate starts"
+    first = starts[0]
+    if first.hour or first.minute:
+        return "does not start at local midnight"
+    for i, s in enumerate(starts):
+        if (s.hour, s.minute) != (i // 2, i % 2 * 30) or s.date() != first.date():
+            return "half-hours are not consecutive from local midnight"
+    return None
+
+
+def forecast(solar: list[float], scale: float) -> list[float]:
+    """Derived forecast: the actual solar smoothed over 2 hours (a centred window of 4 half-hours), scaled so the day's
+    total is `scale` times the actual total."""
+    n = len(solar)
+    smooth = []
+    for i in range(n):
+        window = solar[max(0, i - 2):min(n, i + 2)]
+        smooth.append(sum(window) / 4.0)          # /4 even at the edges: no solar outside the day
+    total, actual = sum(smooth), sum(solar)
+    k = scale * actual / total if total else 0.0
+    return [round(x * k, 4) for x in smooth]
+
+
+def _levels(records: list[dict]) -> list[float]:
+    """The level at each half-hour's start; a record without one takes the previous level (the first, 50 %)."""
+    out, last = [], 50.0
+    for r in records:
+        v = r.get("soc_start")
+        last = float(v) if v is not None else last
+        out.append(last)
+    return out
+
+
+def day_from_records(records: list[dict], title: str = "", rule: str = "", scale: float = 1.0, tz=TZ) -> dict:
+    """One pack day from a complete local day's cost records (see `day_complete`)."""
+    solar = [max(0.0, float(r["solar"])) for r in records]
+    v = [r["v"] for r in records]
+    return {
+        "title": title, "rule": rule, "recorded": _local(records[0]["start"], tz).date().isoformat(),
+        "stats": day_stats(records),
+        "house": [round(float(r["house"]), 4) for r in records],
+        "car": [round(float(r["car"]), 4) for r in records],
+        "solar": [round(x, 4) for x in solar],
+        "forecast": forecast(solar, scale),
+        "act": [round(float(x["act"]), 5) for x in v], "std": [round(float(x["std"]), 5) for x in v],
+        "ovn": [round(float(x["ovn"]), 5) for x in v], "exp": [round(float(x["exp"]), 5) for x in v],
+        "standing": [round(float(r.get("standing") or 0.0), 4) for r in records],
+        "soc": [round(x, 1) for x in _levels(records)],
+        "slot": [int(bool(x["slot"])) for x in v],
+        "axle": [int(bool(r["axle"])) for r in records],
+        "free": [int(bool(r["free"])) for r in records],
+        "as_recorded": {k: [round(float(r.get(k) or 0.0), 3) for r in records]
+                        for k in ("grid_import", "grid_export", "battery_in", "battery_out")},
+    }

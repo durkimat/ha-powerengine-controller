@@ -50,7 +50,7 @@ FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisatio
             "free_power_days", "tariff_simulator", "optimised_plan", "learn_taper", "learn_reserve", "learn_export",
             "learn_car", "cold_caution", "cold_learning", "damp_restart", "damp_bursts", "deep_overnight",
             "use_check_meter", "axle_plus_export", "learn_conversion", "slots_whole_house", "smart_skip_full_car",
-            "learn_car_min")
+            "learn_car_min", "engine_compare")
 LEGACY_FEATURES = ("use_learned",)          # 0.8.0's single switch, replaced by one per figure: ignored if saved
 FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
                     "arbitrage": False, "axle": True,
@@ -59,7 +59,8 @@ FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smar
                     "cold_caution": True, "cold_learning": True, "damp_restart": True, "damp_bursts": False,
                     "deep_overnight": True, "use_check_meter": True,
                     "axle_plus_export": True, "learn_conversion": True, "slots_whole_house": True,
-                    "smart_skip_full_car": False, "learn_car_min": True}
+                    "smart_skip_full_car": False, "learn_car_min": True,
+                    "engine_compare": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 INT_SAFETY = ("smart_max_requests_per_day",)     # whole numbers: a fractional value is rounded
 SAFETY = {

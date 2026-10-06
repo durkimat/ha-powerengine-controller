@@ -194,3 +194,23 @@ v1's `_record_ran` writes only while engine v1 is the chosen engine; `sensor.pe_
   (subprocess start, timeout, one at a time, backfill order) with the subprocess faked; sensor contract and size.
 - A cross-check: the runner on a demo pack day (with a snapshot synthesised from the pack's derived forecast) gives the same savings
   as `tools/engine_compare.py` on that day within 1p.
+
+## 6. As built: work package B (the comparison)
+
+- `pe_core/compare/`: `harness.py` (fake AppDaemon, clock and `loaded_app`, moved from `tests/replay_harness.py` and
+  `tools/engine_compare.py`, which import it), `replay.py` (the whole-app closed-loop runs, costing and bound that
+  `tools/engine_compare.py` is now a thin front for), `snapfeed.py` (reader of the 2.2 snapshot: `Snapshot.states_at /
+  profile_at / first_seen_at`, `SnapshotFeed` for the world), `day.py`, `settings.py`, `results.py`, `run.py`,
+  `schedule.py` (the nightly bookkeeping, subprocess injected for tests), `sensor.py`.
+- The world takes `capacity_kwh`, `efficiency`, `charge_limit_w`, `discharge_limit_w`, `floor_pct` and a `feed`
+  (defaults are the demo's). `pe_core/demo/pack.py` gained `day_from_records`, `day_complete`, `day_stats`, `forecast`
+  (the pack builder uses them; its output is unchanged).
+- The replayed app learns no house profile from the world: its `_rebuild_profile` is replaced by the snapshot's profile as it
+  was at each time (none until the snapshot has one), the `_learn_load` and `_backfill` timers are skipped, and the smart
+  slots' first-seen times are put on its slot records. The owner's `engine_v2_state.json` and slot history (cut at the start
+  of the day) are copied in. Under v1 the v2 preview is switched off in the replay (it changes nothing v1 does).
+- Settings: the owner's config with the inputs remapped to the world's entities (fixed values such as the battery's size stay
+  the owner's), Active on RAM control, direct publishing, `house_load_includes_ev` true (the world's house load includes the
+  car), and smart-charge requests, the tariff simulator, cold caution and `engine_compare` off. The world's battery is the
+  owner's configured size, one-way efficiency, power limits (capped at the RAM ceiling) and `battery_floor_soc`.
+- Run time on the 4-core build container, one full day, both engines, self-use and bound: about 3 minutes (sunny pack day).
