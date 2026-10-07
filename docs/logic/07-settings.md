@@ -23,6 +23,7 @@ A setting marked **fallback only** is read just by the reactive rule stack that 
 | `deep_overnight` | on | Plan | Inside the overnight window arbitrage may sell below the band's bottom, at a higher switch cost |
 | `axle` | on | Plan, Live | Plan and act on grid events (force-discharge). Off: event slots are ordinary slots |
 | `axle_plus_export` | on | Plan, Live | The supplier's export rate is paid on top of the event's £1 |
+| `axle_stop_car` | on | Live (Active only) | While a grid event is in progress, set the car charger's mode (`ev_charge_mode`, a select) to Stopped, and put the mode it had back when the event ends (`pe_core/carstop.py`; kept in `car_stop.json` so a restart mid-event still restores it). It stops the battery's export being charged into the car (6 Oct 2026: a smart slot ran through an event and the event exported 0.12 kWh). A charger already Stopped is left alone; a mode you change during the event is not overwritten at the end; if something resets the mode it is stopped again up to 3 times, 2 minutes apart |
 | `free_power_days` | on | Plan, Live | Plan and act on free-electricity sessions (charge to 100%) |
 | `smart_charge_optimisation` | on | smart-charge step | Ask the supplier for extra car slots by changing the ready-by time |
 | `smart_skip_full_car` | off | smart-charge step | Do not ask for more slots when the car looks full (charger says complete, or the last slot drew nothing). Since 0.9.103 this is the only thing that uses those guesses; with it off, slots are asked for even when the car is full |

@@ -47,6 +47,7 @@ from pe_core.adapters.null import NULL as NULL_ADAPTERS
 from pe_core.adapters.options import site_options
 from pe_core.adapters.publish import ad_would_alter, select_publisher
 from pe_core.adapters.solcast import ROLES as FORECAST_ROLES
+from pe_core.carstop import CarStop
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
 from pe_core.commands import from_pe_command, from_service
@@ -702,6 +703,7 @@ class PowerEngine(hass.Hass):
                 self._grid_check(readings)
                 self._record_costs(readings)
                 self._watch_events(readings)
+                self._car_stop_step(readings)
                 self._track_slots(readings)
                 self._snapshot_forecast(readings)
                 self._smart_step(readings)
@@ -1962,6 +1964,56 @@ class PowerEngine(hass.Hass):
             self._notify("axle", axle_message(r.axle_start, r.axle_end, r.now, self.tz))
         if r.free_start and r.free_start > r.now:
             self._notify("free_power", free_message(r.free_start, r.free_end, r.now, self.tz))
+
+    # --- the car charger during a grid event (pe_core/carstop.py) -----------------------
+
+    def _car_stop_file(self):
+        return os.path.join(os.path.dirname(self._save_path()), "car_stop.json")
+
+    def _car_stop_state(self):
+        """What PowerEngine has stopped, kept on disk so a restart in the middle of an event still puts it back."""
+        stop = self.__dict__.get("_car_stop")
+        if stop is None:
+            try:
+                with open(self._car_stop_file(), encoding="utf-8") as fh:
+                    stop = CarStop.from_dict(json.load(fh))
+            except (OSError, ValueError, AttributeError):
+                stop = CarStop()
+            self._car_stop = stop
+        return stop
+
+    def _car_stop_step(self, r):
+        """While a grid event runs (and the setting is on, in Active mode) stop the car charger, so the battery's
+        export isn't charged into the car; when the event ends, put the charger's mode back."""
+        if self._demo or self.cfg is None:
+            return
+        stop = self._car_stop_state()
+        eid = self._role_entity("ev_charge_mode")
+        feats = self.cfg.features
+        want = bool(feats.get("axle") and feats.get("axle_stop_car", True) and r.axle_active
+                    and self.mode.effective == "active" and not self._test_running()
+                    and eid and eid.startswith("select."))
+        if not (want or stop.held) or not eid or not eid.startswith("select."):
+            return
+        try:
+            options = self.get_state(eid, attribute="options")
+        except Exception:
+            options = None
+        before = stop.to_dict()
+        action = stop.step(r.now, want, r.ev_mode, options if isinstance(options, list) else None)
+        if action is not None:
+            try:
+                self.call_service("select/select_option", entity_id=eid, option=action.option)
+                self.log(f"Car charger: {action.text}")
+                self._logbook(f"Car charger: {action.text}")
+            except Exception as err:
+                self.log(f"Car charger: could not set {eid} to {action.option}: {err!r}", level="WARNING")
+        if stop.to_dict() != before:
+            try:
+                with open(self._car_stop_file(), "w", encoding="utf-8") as fh:
+                    json.dump(stop.to_dict(), fh)
+            except OSError as err:
+                self.log(f"Could not save the car charger state: {err!r}", level="WARNING")
 
     # --- inverter writes (EEPROM wear) ---------------------------------------------------
 

@@ -513,10 +513,10 @@ def test_day_scenarios_carry_excludes_event_half_hours():
     from pe_core.costs import day_scenarios
     # an everyday half-hour with no real battery movement...
     r1 = rec(s_h=1.0, soc_start=50, soc_end=50)
-    # ...and an Axle event half-hour that drains the battery hard (50% -> 30% of a 10 kWh battery = 2 kWh).
-    # that drain must never land in the everyday carry-over: it's the event's own business, already priced
-    # in events_metered/axle_income.
-    r_axle = rec(b_e=2.0, soc_start=50, soc_end=30)
+    # ...and an Axle event half-hour that drains the battery hard: 2 kWh delivered to the grid is 2 / 0.95 kWh out
+    # of the battery (10 kWh). That drain must never land in the everyday carry-over: it's the event's own
+    # business, already priced in events_metered/axle_income.
+    r_axle = rec(b_e=2.0, soc_start=50, soc_end=50 - 2.0 / 0.95 / 10 * 100)
     r_axle["axle"] = True
     records = _scenario_records([(r1, RT1), (r_axle, RT1)])
     sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0)
@@ -685,3 +685,51 @@ def test_powerengine_figure_is_the_metered_cost_whatever_the_battery_did():
     sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=1.0)
     assert sc["carry"] != 0.0                                  # the battery really moved
     assert sc["actual_adj"] + sc["carry"] == pytest.approx(sc["actual"], abs=0.011)
+
+
+def test_axle_owns_only_the_energy_it_exported():
+    """6 Oct 2026: an Axle half-hour also held ordinary import, and all of it was charged to Axle."""
+    from pe_core.costs import day_scenarios
+    r1 = rec(s_h=1.0, soc_start=50, soc_end=50)
+    # an Axle half-hour: 1.2 kWh exported, and 1.0 kWh of ordinary house load bought from the grid in the same slot
+    r_axle = rec(g_h=1.0, b_e=1.2, soc_start=50, soc_end=50)
+    r_axle["axle"] = True
+    records = _scenario_records([(r1, RT1), (r_axle, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0)
+    # Axle's own step is its payment alone: the export revenue plus £1 per kWh, both money in
+    assert sc["events_metered"] == pytest.approx(-1.2 * 0.15, abs=0.001)
+    assert sc["axle_income"] == pytest.approx(1.2 * 1.0, abs=0.001)
+    # the ordinary import counts in the everyday scenarios (1 kWh house x standard / actual)
+    assert sc["none"] == pytest.approx(0.30 + 0.30, abs=0.001)
+    assert sc["tariff"] == pytest.approx(0.20, abs=0.001)
+    # what was really paid is unchanged: all metered import less all metered export, less Axle's payment
+    assert sc["paid"] == pytest.approx(1.0 * 0.20 - 1.2 * 0.15 - 1.2 * 1.0, abs=0.001)
+    assert sc["actual"] == pytest.approx(1.0 * 0.20, abs=0.001)          # the export left the everyday figure
+
+
+def test_axle_half_hour_layers_still_reconcile_and_keep_the_everyday_part():
+    axle = rec(g_h=0.5, b_h=0.2, b_e=2.0, s_e=0.5)
+    axle["axle"] = True
+    records, _ = run(CASES + [(axle, Rates(PEAK, PEAK, CHEAP, EXP, False))])
+    s = day_scenarios_free_summary(records)
+    assert s["unexplained"] == pytest.approx(0, abs=0.02)
+    ev = s["events"]["axle"]
+    assert ev["kwh"] == pytest.approx(2.5)
+    assert ev["metered"] == pytest.approx(-2.5 * EXP, abs=0.01)           # only its exported energy, at the export rate
+    base, _ = run(CASES)
+    assert s["s0"] > day_summary(base, complete=False)["s0"]              # the house load in that slot is everyday
+
+
+def day_scenarios_free_summary(records):
+    return day_summary(records, complete=False)
+
+
+def test_free_power_half_hour_is_still_owned_whole():
+    from pe_core.costs import day_scenarios
+    r1 = rec(s_h=1.0, soc_start=50, soc_end=50)
+    r_free = rec(g_h=1.0, soc_start=50, soc_end=50)
+    r_free["free"] = True
+    records = _scenario_records([(r1, RT1), (r_free, RT1)])
+    sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0)
+    assert sc["none"] == pytest.approx(0.30)
+    assert sc["events_metered"] == pytest.approx(1.0 * 0.20, abs=0.001)
