@@ -265,6 +265,22 @@ def test_inputs_failing_while_active_release_after_the_grace_period(app):
     assert app.states["number.timed_charge_end_hour"] == 0 and app._release_due is None
 
 
+def test_the_not_ready_warning_says_why_each_input_is_not_ready(app):
+    """A diagnostics export has to show why (unavailable, not found, stale), not only which (6 Oct 2026: 40 warnings
+    that named two inputs and nothing else)."""
+    logged = []
+    app.log = lambda msg, **kw: logged.append(msg)
+    active = effective_mode(parse_config(GUARDED), build_supports_active=True)
+    broken = effective_mode(parse_config(GUARDED), build_supports_active=True, missing_required=["battery_soc"])
+    app.cfg_error = None
+    app._missing_why = "battery_soc: Entity is unavailable (sensor.solis_battery_soc)"
+    app._leave_active(active, broken, [])
+    assert any("battery_soc: Entity is unavailable (sensor.solis_battery_soc)" in m for m in logged), logged
+    assert app._why_not_ready().startswith(" - battery_soc")
+    app._missing_why = ""
+    assert app._why_not_ready() == ""
+
+
 def test_inputs_back_within_the_grace_period_writes_nothing(app):
     active = effective_mode(parse_config(GUARDED), build_supports_active=True)
     broken = effective_mode(parse_config(GUARDED), build_supports_active=True, missing_required=["battery_soc"])

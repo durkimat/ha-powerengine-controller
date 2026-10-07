@@ -156,6 +156,9 @@ BACKFILL_DAYS = 14
 RECHECK_SECONDS = 300
 BUTTON_DELAY_S = 3                # apply the inverter's window times this long after writing them (see _press_buttons)
 INPUT_GRACE_SECONDS = 600         # inputs missing: keep the inverter's programmed windows this long before releasing
+RAM_INPUT_GRACE_SECONDS = 90      # inputs missing under RAM remote control: carry on this long before switching it Off
+# ...but the refresh interval plus that grace stays under this (the inverter's own failsafe is about 5 minutes)
+RAM_FAILSAFE_MARGIN_S = 240
 SAVE_EVENT = "pe_config_save"
 RESULT_EVENT = "pe_config_result"
 DEMO_EVENT, DEMO_RESULT_EVENT = "pe_demo", "pe_demo_result"
@@ -618,6 +621,9 @@ class PowerEngine(hass.Hass):
             if uses_battery_pair(self.cfg) and "battery_power" in self.cfg.inputs:
                 checks["battery_power"] = (OK, "Not used: the charging and discharging sensors are mapped")
         missing = blocking(checks, required)
+        self._missing_why = "; ".join(f"{k}: {checks[k][1]}" + (f" ({self.cfg.inputs[k]['entity']})"
+                                      if k in self.cfg.inputs and "entity" in self.cfg.inputs[k] else "")
+                                      for k in missing if k in checks) if self.cfg is not None else ""
         down = degraded(checks, required)
         if bool(down) != bool(getattr(self, "_degraded", [])):
             if down:
@@ -670,7 +676,8 @@ class PowerEngine(hass.Hass):
             "save_path": self._save_path(),
             "error": self.cfg_error,
         })
-        self.log(f"Inputs: {overall}; mode {mode.label} ({mode.reason})")
+        self.log(f"Inputs: {overall}; mode {mode.label} ({mode.reason}"
+                 f"{self._why_not_ready() if mode.effective == 'unconfigured' else ''})")
 
     # --- the monitoring cycle ------------------------------------------------------
 
@@ -2736,14 +2743,40 @@ class PowerEngine(hass.Hass):
         missing = sorted(role for role, eid in entities.items() if not eid)
         return entities, missing
 
+    def _ram_grace_s(self) -> int:
+        """Seconds remote control rides out missing inputs: RAM_INPUT_GRACE_SECONDS, less when the refresh interval is
+        long (refresh interval + grace stays under RAM_FAILSAFE_MARGIN_S), none at the 4 minute maximum."""
+        refresh_s = float(self.cfg.safety.get("ram_refresh_min", 1)) * 60 if self.cfg is not None else 60.0
+        return int(max(0.0, min(RAM_INPUT_GRACE_SECONDS, RAM_FAILSAFE_MARGIN_S - refresh_s)))
+
+    def _why_not_ready(self) -> str:
+        """' - battery_charge_power: Entity is unavailable (sensor.x)' for the inputs the last check found not ready, so
+        a diagnostics export says why (unavailable, not found, stale, wrong unit), not only which."""
+        why = getattr(self, "_missing_why", "")
+        return f" - {why}" if why else ""
+
     def _leave_active(self, old, new, guards=()):
         """Leaving Active hands the inverter back to Self-Use once (pause, choosing Passive, or inputs that stopped
         working), except when a handover guard tripped: then another controller has taken over and PowerEngine
         writes nothing to the timed windows. With RAM remote control, remote control is always switched Off (a
         temporary setting, so harmless even when something else has taken over)."""
+        if getattr(self, "_ram_off_due", None) is not None and new.effective not in ("active", "unconfigured"):
+            # paused, Passive or a guard tripped while remote control was riding out missing inputs: off now
+            self._ram_off_due = None
+            if getattr(self, "_ram_was_on", False):
+                self._ram_off(f"leaving Active ({new.label})")
         if old is None or old.effective != "active" or new.effective == "active":
             return
-        if getattr(self, "_ram_was_on", False):
+        inputs_gone = (new.effective == "unconfigured" and new.configured == "active" and not self.cfg_error
+                       and not guards)
+        ram_grace = self._ram_grace_s() if inputs_gone and getattr(self, "_ram_was_on", False) else 0
+        if ram_grace:
+            # Inputs missing, not a decision to stop: a blip of a power sensor (40 of them overnight on 7 Oct 2026, one
+            # every 5 minutes, each switching remote control Off and, 27 s later, on again). Carry on; if they are back
+            # within the grace nothing is written, if not remote control goes Off. The inverter's own failsafe returns
+            # it to Self-use if PowerEngine itself stopped refreshing.
+            self._ram_off_due = datetime.now(timezone.utc) + timedelta(seconds=ram_grace)
+        elif getattr(self, "_ram_was_on", False):
             self._ram_off(f"leaving Active ({new.label})")
         if guards and new.configured == "active":
             self.log(f"Leaving Active: {new.reason}", level="WARNING")
@@ -2753,8 +2786,10 @@ class PowerEngine(hass.Hass):
             # inputs gone (e.g. HA or the inverter integration restarting): leave the programmed windows running
             # for a while rather than rewriting them; hand back to Self-Use only if the inputs stay missing
             self._release_due = datetime.now(timezone.utc) + timedelta(seconds=INPUT_GRACE_SECONDS)
-            self.log(f"Inputs not ready ({new.reason}); the inverter keeps its programmed windows for "
-                     f"{INPUT_GRACE_SECONDS // 60} minutes while they come back", level="WARNING")
+            kept = (f"remote control carries on for {ram_grace} seconds while they come back" if ram_grace else
+                    f"the inverter keeps its programmed windows for {INPUT_GRACE_SECONDS // 60} minutes while they "
+                    "come back")
+            self.log(f"Inputs not ready ({new.reason}{self._why_not_ready()}); {kept}", level="WARNING")
             return
         self.log(f"Leaving Active ({new.label}: {new.reason}); returning the inverter to Self-Use",
                  level="INFO" if new.effective == "paused" or new.configured == "passive" else "WARNING")
@@ -2771,6 +2806,16 @@ class PowerEngine(hass.Hass):
 
     def _release_if_still_missing(self):
         """After the grace period, inputs still missing: hand the inverter back to Self-Use, once."""
+        ram_due = getattr(self, "_ram_off_due", None)
+        if ram_due is not None:
+            if self.mode.effective == "active":
+                self._ram_off_due = None             # back inside the grace: carried on, nothing written
+            elif datetime.now(timezone.utc) >= ram_due:
+                self._ram_off_due = None
+                if getattr(self, "_ram_was_on", False):
+                    self.log(f"Inputs still not ready after {self._ram_grace_s()} seconds ({self.mode.reason}"
+                             f"{self._why_not_ready()}); switching remote control Off", level="WARNING")
+                    self._ram_off("inputs still not ready")
         due = getattr(self, "_release_due", None)
         if due is None:
             return
