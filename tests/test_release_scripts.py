@@ -132,3 +132,39 @@ def test_verify_prepared_accepts_a_prepared_branch_and_rejects_others(repos):
     (work / "CHANGELOG.md").write_text("# Changelog\n")
     r = sh(work, "bash", "-c", call, check=False)
     assert r.returncode != 0 and "no '## 0.9.51 (beta)' section" in r.stderr
+
+
+def changes(work, base):
+    return sh(work, "bash", "tools/ci_changes.sh", base, "HEAD").stdout.strip()
+
+
+def commit_files(work, files):
+    for name in files:
+        path = work / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(path.read_text() + "x\n" if path.exists() else "x\n")
+    sh(work, "git", "add", "-A")
+    sh(work, "git", "commit", "-qm", "edit")
+
+
+def test_ci_skips_slow_steps_only_when_every_changed_file_is_notes_or_plans(repos):
+    work, _ = repos
+    base = sh(work, "git", "rev-parse", "HEAD").stdout.strip()
+    commit_files(work, ["CLAUDE.md", "release-notes/0.9.9.md", "docs/plans/a.md", "docs/history/b.md",
+                        "docs/RELEASING.md"])
+    assert changes(work, base) == "code=false"
+    # a code file, a logic doc (tests read it), a workflow or the install guide each force the full run
+    for name in ("apps/powerengine/pe_core/x.py", "docs/logic/01.md", "docs/INSTALL.md", ".github/workflows/ci.yml",
+                 "tools/release.sh", "tests/test_x.py", "README.md"):
+        commit_files(work, ["docs/plans/a.md", name])
+        assert changes(work, base) == "code=true", name
+        sh(work, "git", "reset", "-q", "--hard", "HEAD~1")
+
+
+def test_ci_runs_everything_when_in_doubt(repos):
+    work, _ = repos
+    head = sh(work, "git", "rev-parse", "HEAD").stdout.strip()
+    assert changes(work, head) == "code=true"                      # nothing changed
+    assert changes(work, "0" * 40) == "code=true"                  # a new branch's "before"
+    assert changes(work, "deadbeef" * 5) == "code=true"            # a commit this clone doesn't have
+    assert sh(work, "bash", "tools/ci_changes.sh", check=False).stdout.strip() == "code=true"   # no base at all
