@@ -202,7 +202,8 @@ def test_cheap_night_before_a_dear_evening_gives_a_charge_target_where_the_curve
     above = V.lines(vr, segs[19].start, expected + 3, 6.99, 15.0, FACTS, NO_COMFORT)
     assert above.charge_target_soc is None and above.value_p < 1.0
     # with the usual end-of-horizon value (a refill at the cheap price) the curve flattens at the buy line instead
-    refill = solve(segs, soc=12.0, settings=replace(NO_COMFORT, terminal_value="refill"))
+    no_sale = segs[:-1] + [replace(segs[-1], export_p=0.0)]                      # nothing to sell at the end of it
+    refill = solve(no_sale, soc=12.0, settings=replace(NO_COMFORT, terminal_value="refill"))
     flat = V.lines(refill, segs[19].start, expected + 3, 6.99, 15.0, FACTS, NO_COMFORT)
     assert flat.charge_target_soc is None and flat.value_p == pytest.approx(BUY, abs=0.1)
     # the timeline charges, and stops about there
@@ -497,6 +498,7 @@ def test_charge_in_a_flat_night_starts_with_the_night_and_ends_at_the_same_level
 def test_a_tie_never_charges_to_the_ceiling():
     # tomorrow needs little, and the end-of-horizon value equals the refill price: ties are not bought
     segs = night_and_day(n_cheap=12, n_dear=2)
+    segs[-1] = replace(segs[-1], export_p=0.0)                          # nothing to sell at the end of the look-ahead
     st = replace(NO_COMFORT, terminal_value="refill")
     vr = solve(segs, soc=12.0, settings=st)
     need = (0.12 * 18 + 2 * 0.5 / 0.95) / 18 * 100                      # 17.9%
@@ -594,3 +596,16 @@ def test_a_late_event_is_not_expected_in_the_next_half_hour_or_in_a_known_event(
 def test_the_value_curve_with_late_events_still_falls_with_the_level():
     vr = solve(_flat_day(48), 40.0, settings=LATE)
     assert mostly_falls(vr, share=0.05, worst=5.0)
+
+
+def test_a_look_ahead_ending_in_the_peak_does_not_dump_the_battery_at_its_end():
+    # 7 Oct 2026: the look-ahead ended 30 min into the 28.84p peak and the last step sold 25% down to the floor, because
+    # what was left was valued at the cheap refill price (6.66p / eta) though nothing could be refilled at its end.
+    st = replace(NO_COMFORT, terminal_value="refill")
+    segs = [seg(i, imp=6.99, load=0.3) for i in range(6)] + [seg(6, imp=28.84, load=0.3)]
+    vr = solve(segs, soc=60.0, settings=st)
+    assert vr.timeline[-1].mode != EXPORT and vr.timeline[-1].level_end > 50.0
+    # a look-ahead that ends inside the cheap price still values the energy left at the refill price
+    cheap_end = [seg(i, imp=28.84, load=0.3) for i in range(6)] + [seg(6, imp=6.99, load=0.3)]
+    assert V._terminal_p(fc_of(cheap_end), FACTS, st) == pytest.approx(6.99 / FACTS.eta_charge)
+    assert V._terminal_p(fc_of(segs), FACTS, st) == pytest.approx(15.0 * FACTS.eta_discharge)
