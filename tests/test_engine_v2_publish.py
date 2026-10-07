@@ -167,14 +167,40 @@ def test_the_timeline_sensor_has_the_contract_attributes(made):
     eng, out = made
     state, a = publish.entity_states(out, eng, eng.s, LOCAL)["v2_timeline"]
     assert datetime.fromisoformat(state) == out.value.made_at
-    assert set(a) == {"now", "because", "floor_soc", "reserve_soc", "items", "path", "prices", "cost_expected",
-                      "cost_selfuse", "comfort_given_up", "calc_s"}
+    assert set(a) == {"now", "because", "floor_soc", "reserve_soc", "items", "path", "prices", "sun",
+                      "cost_expected", "cost_selfuse", "comfort_given_up", "calc_s"}
     assert set(a["items"][0]) == {"mode", "start", "end", "level_start", "level_end", "until", "reason"}
     assert set(a["path"]) == {"start", "step_min", "mid", "low", "high"}
     assert set(a["prices"][0]) >= {"start", "end", "import_p", "export_p", "slot_prob", "event", "free", "estimated"}
     assert a["cost_expected"] == 1.23 and a["cost_selfuse"] == 2.35 and a["comfort_given_up"] == 0.06
     assert a["floor_soc"] == 12.0 and a["reserve_soc"] == 12.0 and a["calc_s"] == 1.83
     assert all(round(x, 1) == x for x in a["path"]["mid"])
+
+
+def test_the_sun_and_house_the_plan_used_are_published_in_half_hour_kw(made):
+    eng, out = made
+    a = publish.entity_states(out, eng, eng.s, LOCAL)["v2_timeline"][1]
+    sun = a["sun"]
+    assert set(sun) == {"start", "step_min", "low", "mid", "high", "house"} and sun["step_min"] == 30
+    assert len(sun["mid"]) == len(sun["low"]) == len(sun["high"]) == len(sun["house"]) == 97
+    t0 = datetime.fromisoformat(sun["start"]).astimezone(timezone.utc)
+    for i, (lo, mid, hi) in enumerate(zip(sun["low"], sun["mid"], sun["high"], strict=True)):
+        t = t0 + timedelta(minutes=30 * i)
+        assert lo <= mid <= hi
+        if 9 <= t.hour < 15:
+            assert mid == pytest.approx(1.0)                  # 0.5 kWh in a half hour is 1 kW
+        elif t.hour < 7 or t.hour >= 17:
+            assert mid == 0.0
+    assert sun["house"][0] == pytest.approx(0.6)               # 0.3 kWh in a half hour
+
+
+def test_sun_buckets_share_segments_that_do_not_line_up_with_the_half_hours():
+    now = T0.replace(minute=10)
+    segs = [segment(now, hours=1 / 3, solar=0.4, load=0.2),           # 00:10 to 00:30: all of it in the first bucket
+            segment(now + timedelta(minutes=20), hours=1 / 3, solar=0.0, load=0.2)]    # 00:30 to 00:50
+    sun = publish._sun(value_result(now, forecast(now, segs)), LOCAL)
+    assert datetime.fromisoformat(sun["start"]).minute == 0
+    assert sun["mid"] == [1.2, 0.0] and sun["house"] == [0.6, 0.6]       # kW over the time covered
 
 
 def test_prices_merge_consecutive_equal_segments_and_keep_the_slot_dashed(made):

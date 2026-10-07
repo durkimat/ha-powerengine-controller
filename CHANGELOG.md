@@ -2,6 +2,28 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.115 (beta)
+
+### Behaviour changes
+
+- **Engine v2 prefers Self-use to Hold by day (new setting, on by default: "Prefer Self-use to Hold by day").** Outside cheap-rate
+  times (the overnight window and smart slots) the battery runs the house and stores spare sun, instead of holding the battery and exporting
+  the sun at the export rate. Hold is kept for cheap-rate times, the car, the reserve and manual overrides. This gives up a small gain on sunny
+  days (selling spare sun at the export rate and refilling at the night rate) in return for a plan that matches how you expect the house to run,
+  and the overnight plan fills the battery to 100% more often. Switch it off on the Engine v2 settings to get the earlier behaviour. Engine v1 is unchanged.
+
+### New
+
+- **Engine v2 publishes the sun and the house load its plan was made with.** The expected-timeline sensor (`sensor.pe_v2_timeline`) gains a
+  `sun` attribute: average kW for each half hour, with the low, middle and high sun forecast and the expected house load. The Engine v2 page's
+  chart draws it (needs the matching card).
+- **The diagnostics export's `engine_v2` section now also holds** the mode, value, value curve and learning sensors' attributes.
+- **Engine v2 can plan for a grid event that is announced at short notice (new setting, on by default: "Be prepared for a late grid event").**
+  The plan allows a small chance, in every future half hour, that a grid event is running although none is announced yet (default: 1.5 a week,
+  each lasting an hour; both are settings). Energy in the battery is then worth a little more at those times, so the plan keeps more in the
+  battery and fills it nearer the end of the cheap rate. It is a plan assumption only: nothing is sold unless an event is really announced.
+  Needs grid events on. The calculation takes about twice as long.
+
 ## 0.9.114 (beta)
 
 ### Behaviour changes

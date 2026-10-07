@@ -1,11 +1,12 @@
 """Engine v2, layer 4: rules and limits (docs/plans/engine-v2.md section 7)."""
 
+from dataclasses import replace
 from datetime import timedelta
 
 from test_engine_v2_observe import SETTINGS, T0, readings, segment
 
 from pe_core.engine_v2 import rules
-from pe_core.engine_v2.settings import V2Settings
+from pe_core.engine_v2.settings import V2Settings, catalogue
 from pe_core.engine_v2.types import (
     CHARGE,
     EVENT,
@@ -132,7 +133,7 @@ def test_fuse_headroom_is_live_house_and_car_less_the_sun():
 def test_limits_for_matches_limits_now_for_the_same_situations():
     t = T0
     facts = BatteryFacts(hard_floor_soc=10.0)
-    s = V2Settings(reserve_soc=25.0, arbitrage=True)
+    s = V2Settings(reserve_soc=25.0, arbitrage=True, prefer_self_use=False)
     normal = rules.limits_for(segment(t), facts, s)
     assert normal.allowed == {SELF_USE, HOLD, CHARGE, EXPORT} and normal.floor_soc == 25.0
     ev = rules.limits_for(segment(t, event=True), facts, s)
@@ -166,3 +167,24 @@ def test_limits_for_cold_segment_caps_the_charge():
 def test_the_ceiling_is_the_setting():
     assert now_limits(settings=V2Settings(charge_ceiling_soc=88)).ceiling_soc == 88
     assert rules.limits_for(segment(T0), BatteryFacts(), V2Settings(charge_ceiling_soc=88)).ceiling_soc == 88
+
+
+def test_prefer_self_use_takes_hold_away_by_day_but_not_at_cheap_times_the_car_or_the_reserve():
+    facts = BatteryFacts()
+    by_day = segment(T0)
+    for seg, hold in ((by_day, False), (segment(T0, overnight=True), True),
+                      (segment(T0, slot_prob=0.8, slot_import_p=6.99), True), (None, True)):
+        lim = rules._core(SETTINGS, facts, event=False, manual=None, free=False, car=False, level=None,
+                          charge_factor=1.0, house_kw=None, solar_kw=None, car_kw=0.0, cheap=rules._cheap(seg))
+        assert (HOLD in lim.allowed) is hold and SELF_USE in lim.allowed
+    car = rules.limits_for(segment(T0, car_kw=7.0), facts, SETTINGS)
+    assert car.allowed == frozenset({HOLD, CHARGE})
+    assert HOLD in rules.limits_for(by_day, facts, replace(SETTINGS, prefer_self_use=False)).allowed
+    low = now_limits(level=12.0, seg=by_day)
+    assert HOLD in low.allowed                                   # the reserve still holds
+
+
+def test_prefer_self_use_is_a_setting_in_the_first_section():
+    cat = catalogue()
+    assert "prefer_self_use" in {s["key"]: s["keys"] for s in cat["sections"]}["allowed"]
+    assert cat["values"]["prefer_self_use"] is True

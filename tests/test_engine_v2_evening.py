@@ -11,7 +11,7 @@ import pytest
 from pe_core.engine_v2.settings import V2Settings
 from pe_core.engine_v2.types import CHARGE
 
-NEW = V2Settings(arbitrage=True)
+NEW = V2Settings(arbitrage=True, prefer_self_use=False, late_events=False)     # the 18a regime
 # The same evening on the code before 18a (commit dc56430, default settings, 30 s steps), recorded: 22 mode changes, 13
 # turns of a charge or sale that had run under 25 minutes, 7 A-B-A flips in 10 minutes, the battery at 100% long before
 # the last charge, and a cash result of -450.0p on the simulated meter.
@@ -33,6 +33,15 @@ def test_no_leg_is_turned_round_before_25_minutes_and_nothing_flip_flops(run):
     assert w.reversals(run["changes"]) == []                         # was 13
     assert _flip_flops(run["changes"]) == []                         # was 7
     assert len(run["changes"]) <= BEFORE["changes"] / 2 and len(run["changes"]) <= 10
+
+
+def test_with_the_defaults_the_same_evening_is_still_steady_and_full_at_04_00():
+    on = w.simulate(V2Settings(arbitrage=True))             # prefer Self-use and prepare for a late event, both on
+    assert w.reversals(on["changes"]) == [] and _flip_flops(on["changes"]) == []
+    assert len(on["changes"]) <= 12
+    at_four = next(lvl for t, _, lvl in on["log"] if t >= w.at(4, 0, 1))
+    assert at_four >= 97.0, at_four
+    assert on["cash_p"] - BEFORE["cash_p"] <= 15.0, on["cash_p"]
 
 
 def test_every_turn_within_25_minutes_of_a_change_follows_the_hold_that_ends_a_long_leg(run):

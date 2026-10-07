@@ -32,8 +32,8 @@ from pe_core.readings import Readings, Window
 UTC = timezone.utc
 T0 = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
 FACTS = BatteryFacts()                      # 18 kWh, 95% each way, 4.8 kW, floor 12%
-NO_COMFORT = V2Settings(comfort_cost_p=0.0, top_up_cost_p=0.0, reversal_cost_p=0.0, terminal_value="fixed",
-                        terminal_value_p=0.0, switch_cost_p=0.0)
+NO_COMFORT = V2Settings(late_events=False, comfort_cost_p=0.0, top_up_cost_p=0.0, reversal_cost_p=0.0,
+                        terminal_value="fixed", terminal_value_p=0.0, switch_cost_p=0.0)
 BUY = 6.99 / 0.95
 
 
@@ -559,3 +559,38 @@ def test_the_programmes_choice_now_is_the_first_timeline_mode_and_it_is_not_made
     assert V.choice_now(vr2, ev[0].start, 100.0, 6.99, FACTS, st, None) is None
     bare = replace(vr, vk=())
     assert V.choice_now(bare, segs[0].start, 100.0, 6.99, FACTS, st, None) is None
+
+
+# --- a grid event no one has announced yet (late_events) ---------------------------------------------------
+LATE = replace(NO_COMFORT, late_events=True, late_events_per_week=7.0, late_event_hours=2.0)
+
+
+def _flat_day(n=24):
+    return [seg(i, imp=30.28, load=0.4) for i in range(n)]
+
+
+def test_a_possible_late_event_makes_a_stored_kwh_worth_more():
+    plain = solve(_flat_day(), 60.0, settings=NO_COMFORT)
+    late = solve(_flat_day(), 60.0, settings=LATE)
+    row_p, row_l = plain.lam[0], late.lam[0]
+    assert sum(row_l[30:120]) > sum(row_p[30:120]) + 10                       # worth more across the working levels
+
+
+def test_late_events_off_changes_nothing():
+    for off in (replace(LATE, late_events=False), replace(LATE, late_events_per_week=0.0),
+                replace(LATE, events=False)):
+        a, b = solve(_flat_day(), 60.0, settings=NO_COMFORT), solve(_flat_day(), 60.0, settings=off)
+        assert a.lam == b.lam and a.cost_expected_p == b.cost_expected_p
+
+
+def test_a_late_event_is_not_expected_in_the_next_half_hour_or_in_a_known_event():
+    segs = _flat_day(4)
+    segs[2] = replace(segs[2], event=True, event_p=100.0)
+    core = V._backward(fc_of(segs), FACTS, LATE, limits_for, segs[0].start, 0.09, 0.09)
+    assert core.segs[0].late_p == 0.0 and core.segs[2].late_p == 0.0         # the first half hour; a known event
+    assert core.segs[1].late_p > 0.0 and core.segs[3].late_p > 0.0
+
+
+def test_the_value_curve_with_late_events_still_falls_with_the_level():
+    vr = solve(_flat_day(48), 40.0, settings=LATE)
+    assert mostly_falls(vr, share=0.05, worst=5.0)

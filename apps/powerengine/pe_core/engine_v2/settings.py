@@ -24,9 +24,25 @@ SETTINGS: dict[str, tuple] = {
                   "Export stored energy outside grid events when a kWh sold is worth more than keeping it."),
     "events": ("bool", True, None, None, "", "Grid events",
                "Act on grid events (<<event>>): export at full power while one runs."),
+    "late_events": ("bool", True, None, None, "", "Be prepared for a late grid event",
+                    "Plan as if a grid event (<<event>>) could be announced at short notice at any time, a few "
+                    "times a month. A battery that is full when one arrives sells at the event rate, so the plan "
+                    "values energy in the battery a little more and fills it at the end of the cheap rate. Needs "
+                    "grid events on."),
+    "late_events_per_week": ("number", 1.5, 0, 14, "per week", "Late grid events expected",
+                             "How many grid events a week you expect to arrive at short notice. 0 switches this off."),
+    "late_event_hours": ("number", 1.0, 0.5, 4, "h", "How long a late grid event lasts",
+                         "The length the plan allows for one. Longer means more energy sold, so more value in a "
+                         "full battery."),
     "event_plus_export": ("bool", True, None, None, "", "Export rate paid on top of a grid event",
                           "The supplier's export rate is paid on top of the grid event's own rate."),
     "free_power": ("bool", True, None, None, "", "Free-power sessions", "Charge to 100% during a free-power session."),
+    "prefer_self_use": ("bool", True, None, None, "", "Prefer Self-use to Hold by day",
+                        "Outside cheap-rate times the battery runs the house (Self-use) and stores spare sun, instead "
+                        "of holding to export the sun. Hold is kept for cheap-rate times (the overnight window and "
+                        "smart slots), the car, the reserve and manual overrides. Off: engine v2 may hold by day when "
+                        "selling spare sun at the export rate beats storing it (it works out cheaper on a sunny day, "
+                        "by the gap between the export rate and the night's rate, but the battery sits idle)."),
     "preview_when_v1": ("bool", True, None, None, "", "Preview while engine v1 is in control",
                         "Work out and show what engine v2 would do while engine v1 is in control. Nothing is sent."),
     "charge_ceiling_soc": ("number", 100, 10, 100, "%", "Highest grid charge",
@@ -126,8 +142,9 @@ SETTINGS: dict[str, tuple] = {
 # config-page sections, in display order: (key, label, settings)
 SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("allowed", "What engine v2 may do",
-     ("arbitrage", "events", "event_plus_export", "free_power", "charge_ceiling_soc",
-      "preview_when_v1")),
+     ("arbitrage", "events", "late_events", "late_events_per_week", "late_event_hours", "event_plus_export",
+      "free_power", "charge_ceiling_soc",
+      "prefer_self_use", "preview_when_v1")),
     ("floors", "Floors", ("reserve_soc", "hard_floor_margin_pct")),
     ("comfort", "Comfort band", ("comfort_low_soc", "comfort_high_soc", "comfort_cost_p", "top_up_cost_p")),
     ("value", "Value and costs",
@@ -162,8 +179,12 @@ class SettingsError(ValueError):
 class V2Settings:
     arbitrage: bool = False
     events: bool = True
+    late_events: bool = True
+    late_events_per_week: float = 1.5
+    late_event_hours: float = 1.0
     event_plus_export: bool = True
     free_power: bool = True
+    prefer_self_use: bool = True
     preview_when_v1: bool = True
     charge_ceiling_soc: float = 100
     reserve_soc: float = 12

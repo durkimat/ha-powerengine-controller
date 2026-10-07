@@ -128,6 +128,55 @@ def _cap_items(n: int):
     return f
 
 
+SUN_STEP_MIN = 30
+
+
+def _sun(vr: ValueResult, tz) -> dict | None:
+    """The sun and the house the plan was made with, as average kW in half-hour buckets from the first segment's half
+    hour: sun low / middle / high and the middle house load (the same spreads the value was worked out on, after any
+    learned bias). The segments are cut where the data changes, so each is spread over the buckets it overlaps."""
+    segs = vr.forecast.segments
+    if not segs:
+        return None
+    step = timedelta(minutes=SUN_STEP_MIN)
+    first = segs[0].start
+    t0 = first.replace(minute=first.minute // SUN_STEP_MIN * SUN_STEP_MIN, second=0, microsecond=0)
+    n = int(math.ceil((segs[-1].end - t0) / step))
+    keys = ("low", "mid", "high")
+    acc = {k: [0.0] * n for k in keys}
+    house = [0.0] * n
+    cover = [0.0] * n                                  # hours of each bucket the forecast covers
+    for sg in segs:
+        span = (sg.end - sg.start).total_seconds()
+        if span <= 0:
+            continue
+        i0 = max(0, int((sg.start - t0) / step))
+        i1 = min(n - 1, int(math.ceil((sg.end - t0) / step)) - 1)
+        for i in range(i0, i1 + 1):
+            b0, b1 = t0 + i * step, t0 + (i + 1) * step
+            share = (min(sg.end, b1) - max(sg.start, b0)).total_seconds() / span
+            if share <= 0:
+                continue
+            for k in keys:
+                acc[k][i] += getattr(sg.solar_kwh, k) * share
+            house[i] += sg.load_kwh.mid * share
+            cover[i] += share * span / 3600
+    def kw(xs):
+        return [_r(x / c, 2) if c > 1e-9 else 0.0 for x, c in zip(xs, cover, strict=True)]
+    out = {"start": _iso(t0, tz), "step_min": SUN_STEP_MIN, **{k: kw(acc[k]) for k in keys}, "house": kw(house)}
+    return out if any(acc["high"]) or any(house) else None
+
+
+def _thin_sun(a: dict) -> None:
+    sun = a.get("sun")
+    if not sun:
+        return
+    sun.pop("house", None)
+    for k in ("mid", "low", "high"):
+        sun[k] = sun[k][::2]
+    sun["step_min"] *= 2
+
+
 def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, tz) -> tuple[str, dict]:
     if vr is None:
         return "unknown", {}
@@ -139,11 +188,11 @@ def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, t
                         "reason": it.reason[:REASON_MAX]} for it in vr.timeline],
              "path": {"start": p.get("start"), "step_min": p.get("step_min", 15),
                       **{k: [_r(x, 1) for x in p.get(k, [])] for k in ("mid", "low", "high")}},
-             "prices": _prices(vr, tz),
+             "prices": _prices(vr, tz), "sun": _sun(vr, tz),
              "cost_expected": _r(vr.cost_expected_p / 100), "cost_selfuse": _r(vr.cost_selfuse_p / 100),
              "comfort_given_up": _r(vr.comfort_given_up_p / 100) if vr.comfort_given_up_p is not None else None,
              "calc_s": _r(vr.calc_s)}
-    _fit(attrs, [_short_reasons(120), _thin_path, _short_reasons(60), _short_reasons(0), _cap_items(40),
+    _fit(attrs, [_short_reasons(120), _thin_sun, _thin_path, _short_reasons(60), _short_reasons(0), _cap_items(40),
                  _cap_items(24)])
     return _iso(vr.made_at, tz), attrs
 
