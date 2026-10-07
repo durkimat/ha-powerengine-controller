@@ -56,6 +56,9 @@ tools/check.sh --card       # also node --check and node --test in ../ha-poweren
 ```
 
 Slow tests are marked `slow` in `tests/conftest.py` (`SLOW_MODULES`); a new whole-app test module goes in that list. CI runs everything.
+Main requires the "Lint and tests" check, so CI always starts that job: a change touching only `CLAUDE.md`, `release-notes/`, `docs/plans/`,
+`docs/history/` or `docs/RELEASING.md` skips its slow steps (`tools/ci_changes.sh`). Never add a workflow-level `paths-ignore`: the check would
+never report and the PR could not merge.
 
 ## Replay safety net
 
