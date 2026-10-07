@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.118 (beta)
+
+### Behaviour changes
+
+None. This release only changes the Engine v2 page in the card; PowerEngine's planning and control are exactly as in 0.9.117.
+
+### Other
+
+- The card has two changes on the Engine v2 page (see the card notes). No action is needed from you beyond updating the card.
+
 ## 0.9.117 (beta)
 
 ### Behaviour changes
