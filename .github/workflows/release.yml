@@ -48,7 +48,7 @@ on:
         type: boolean
         default: true
       prepared:
-        description: "Single-CI release (default): the branch already has the version bump (tools/prepare_release.sh) and green CI; nothing is re-tested or re-pushed, the workflow checks the bump, merges after your Approve and releases. App only: with card_notes it falls back to the full flow. Untick for the full flow (checks, bump and push here)."
+        description: "Single-CI release (default): the branch already has the version bump (tools/prepare_release.sh) and green CI; nothing is re-tested or re-pushed, the workflow checks the bump, merges after your Approve and releases. A card release is prepared too when card_branch is given (its branch holds the bump and has a green PR); with card_notes and no card_branch it falls back to the full flow. Untick for the full flow (checks, bump and push here)."
         required: true
         type: boolean
         default: true
@@ -94,11 +94,11 @@ jobs:
           PREPARED: ${{ inputs.prepared }}
           WAIT_MAIN_CI: ${{ inputs.wait_main_ci }}
         run: |
-          if [ "$PREPARED" = "true" ] && [ -n "$CARD_NOTES" ]; then
-            echo "::notice::card release: prepared releases are app only for now, so this run uses the full flow"
-            [ "$WAIT_MAIN_CI" != "true" ] || { echo "wait_main_ci goes with prepared releases only: untick it for a card release"; exit 1; }
+          if [ "$PREPARED" = "true" ] && [ -n "$CARD_NOTES" ] && [ -z "$CARD_BRANCH" ]; then
+            echo "::notice::card release without card_branch: this run uses the full flow (a prepared card release needs card_branch)"
+            PREPARED=false
           fi
-          [ "$PREPARED" = "true" ] || [ "$WAIT_MAIN_CI" != "true" ] || { echo "wait_main_ci needs prepared"; exit 1; }
+          [ "$PREPARED" = "true" ] || [ "$WAIT_MAIN_CI" != "true" ] || { echo "wait_main_ci needs a prepared release (untick it, or give card_branch for a card release)"; exit 1; }
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version must look like 0.9.87, got: $VERSION"; exit 1; }
           [ "$APP_BRANCH" != "main" ] || { echo "won't release main itself; give the branch that carries the change"; exit 1; }
           [ -n "$APP_NOTES" ] || { echo "app_notes is required"; exit 1; }
@@ -169,8 +169,10 @@ jobs:
           fi
           [ "$DRY_RUN" != "true" ] || args+=(--dry-run)
           [ "$SKIP_REPLAY" != "true" ] || args+=(--skip-replay)
-          [ "$PREPARED" != "true" ] || [ -n "$CARD_NOTES" ] || args+=(--prepared)
-          [ "$WAIT_MAIN_CI" != "true" ] || args+=(--wait-main-ci)
+          if [ "$PREPARED" = "true" ] && { [ -z "$CARD_NOTES" ] || [ -n "$CARD_BRANCH" ]; }; then
+            args+=(--prepared)
+            [ "$WAIT_MAIN_CI" != "true" ] || args+=(--wait-main-ci)
+          fi
           {
             echo "### Release $VERSION$([ "$DRY_RUN" = "true" ] && echo ' (dry run)')"
             echo '```'

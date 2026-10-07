@@ -5,7 +5,7 @@ Moved out of CLAUDE.md. The release procedure in full.
 ### Single-CI release (`prepared`): the default (first real use: 0.9.116, 7 Oct 2026, about 13 minutes with `wait_main_ci`)
 
 CI runs once, on the exact commit that is merged, and nothing is re-tested after the owner's Approve. Releases take about as
-long as one CI run (about 10 minutes) instead of about 27. App only for now (a card release uses the full flow below).
+long as one CI run (about 10 minutes) instead of about 27. A card release works the same way (below).
 
 1. Branch from `main`, change with tests, `tools/check.sh --full`, re-record the replay only if the change is meant to.
 2. Write `release-notes/<version>.md` (starts `### Behaviour changes`) and commit it. Merge `origin/main` into the branch.
@@ -19,6 +19,16 @@ long as one CI run (about 10 minutes) instead of about 27. App only for now (a c
 7. The owner presses **Approve and deploy**. The workflow then verifies the bump and that the branch is not behind main,
    checks the PR head is the commit it checked out, waits for CI on it (done already, so no wait), squash-merges pinned to
    that commit, optionally waits for main's CI, and creates the release.
+
+**With a card release** (the card repo, `../ha-powerengine-card`, also changes): do step 4 with
+`tools/prepare_release.sh <version> --notes release-notes/<version>.md --card-notes release-notes/<version>-card.md`, run with the
+card repo checked out on the card's change branch (it needs `MIN_CARD_VERSION` / `MIN_APP_VERSION` already raised where one side needs
+the other). It applies the same checks to the card (not behind its main, version newer) before it edits anything, then bumps
+`CARD_VERSION` and the card's CHANGELOG, commits and pushes both repos. Open both PRs and let both CIs pass, then start the workflow with
+`prepared: true`, `card_branch` (the card's change branch) and `card_notes` (the card notes file in the app branch). Before anything is
+merged the workflow verifies both branches, finds the card's PR and waits for its CI, so a card that cannot be released never follows a
+released app; then it merges and releases the app, then the card. With `card_notes` and no `card_branch` it uses the full flow below.
+First card use of this path: treat it like the first app one (dry run, then you watching).
 
 Safety: the Approve click is still the only gate; a push after CI makes the PR head differ and the run stops; no CI run on
 the merge commit (docs-only paths) is not waited for; the full flow stays available (untick `prepared`) and is used automatically for a card release.
