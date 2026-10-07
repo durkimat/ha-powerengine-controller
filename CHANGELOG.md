@@ -2,6 +2,33 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.113 (beta)
+
+### Behaviour changes
+
+- **Engine v1: none.**
+- **Engine v2 keeps its overnight cycling under your top (90%), and still fills before the morning.** A kWh charged from
+  the grid above the comfort band's top now counts as costing 5p in its plan (new setting "Grid charging above the
+  comfort band", in the Comfort band group). Cycling above the top pays that every time while the same cycle below it
+  earns the same, so the cycle stays under 90%; the last charge before the cheap slot ends saves far more than 5p (about
+  23p a kWh against the morning rate), so it still fills to 100%. Sun is not charged it. The comfort band's upper edge
+  starts from your v1 arbitrage top until you save engine v2's settings.
+- **Engine v2 no longer flips between charging and selling every minute or two.** Reversing direction (charge to sale
+  or back) now has its own cost, 3p (new setting "Cost of reversing", in Responsiveness), and when buying and selling
+  both pay, a charge or sale runs to the end of its planned step instead of turning round at the next recalculation.
+  On a replay of 6 October's evening: 8 mode changes instead of 22, no charge or sale turned round in under 25 minutes
+  (was 13), at most 90% until the last charge, 100% when the slot ended, about 7p dearer on the night (the price of the
+  soft top).
+- **Engine v2 recalculates less often after learning:** only when what it learned moved by 1% or more (or a whole day
+  of house profile), not on every small change.
+- On the four recorded demo days engine v2's adjusted saving went from £25.52 to £26.44 (v1 £24.04, best possible
+  £27.23), with no charge/sale reversals left. Brief self-use/hold toggles on spare sun and sales pausing at the sell
+  line remain (to look at next).
+
+### Fixes
+
+- The Active / Passive badge no longer slides under the card below it on a phone (card).
+
 ## 0.9.112 (beta)
 
 ### Behaviour changes

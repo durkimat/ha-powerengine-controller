@@ -57,6 +57,11 @@ SETTINGS: dict[str, tuple] = {
     "comfort_cost_p": ("number", 0.3, 0, 10, "p per kWh per hour", "Comfort cost",
                        "The price of each kWh held outside the band for an hour: a soft guide inside the plan, not a "
                        "limit. 0 switches the band off."),
+    "top_up_cost_p": ("number", 5.0, 0, 20, "p/kWh", "Grid charging above the comfort band",
+                      "What each kWh charged from the grid above the band's top counts as costing in the plan. It "
+                      "keeps cycling under the top, while a last fill before a dear stretch (the end of a cheap "
+                      "slot, ahead of the morning) still happens, because it saves far more. Sun is not charged it. "
+                      "0 switches it off."),
     # --- forecast caution and learning -------------------------------------------------------------------------
     "solar_low_pct": ("number", 25, 0, 100, "%", "Solar: weight of the low forecast", W0),
     "solar_mid_pct": ("number", 50, 0, 100, "%", "Solar: weight of the middle forecast", W0),
@@ -83,6 +88,10 @@ SETTINGS: dict[str, tuple] = {
                       "What each change of mode is counted as costing, in the plan and when deciding to change. A "
                       "change between holding and charging counts a fifth of it. It stops cycles too small to be "
                       "worth the commands."),
+    "reversal_cost_p": ("number", 3.0, 0, 20, "p", "Cost of reversing (charge to sale or back)",
+                        "What turning a charge into a sale, or a sale into a charge, is counted as costing, in the "
+                        "plan and when deciding to change. It keeps a cycle from flipping direction on a small "
+                        "difference. Other changes use the cost of a mode change."),
     "min_dwell_s": ("int", 120, 0, 3600, "s", "Shortest time in a mode",
                     "No change of mode sooner than this after the last one, except for safety events."),
     "deadline_grace_min": ("number", 10, 1, 60, "min", "Deadline grace",
@@ -120,7 +129,7 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
      ("arbitrage", "events", "event_plus_export", "free_power", "charge_ceiling_soc",
       "preview_when_v1")),
     ("floors", "Floors", ("reserve_soc", "hard_floor_margin_pct")),
-    ("comfort", "Comfort band", ("comfort_low_soc", "comfort_high_soc", "comfort_cost_p")),
+    ("comfort", "Comfort band", ("comfort_low_soc", "comfort_high_soc", "comfort_cost_p", "top_up_cost_p")),
     ("value", "Value and costs",
      ("wear_house_p", "wear_sale_p", "event_value_p", "terminal_value", "terminal_value_p")),
     ("forecast", "Forecast caution and learning",
@@ -128,8 +137,8 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
       "learn_scenario_weights", "scenario_half_life_days", "scenario_prior_days", "learn_solar_bias",
       "learn_soc_offset")),
     ("response", "Responsiveness",
-     ("price_band_p", "level_band_pct", "switch_cost_p", "min_dwell_s", "deadline_grace_min", "debounce_s",
-      "car_start_debounce_s", "car_stop_debounce_s", "stale_after_s", "soc_filter_gain", "drift_kwh",
+     ("price_band_p", "level_band_pct", "switch_cost_p", "reversal_cost_p", "min_dwell_s", "deadline_grace_min",
+      "debounce_s", "car_start_debounce_s", "car_stop_debounce_s", "stale_after_s", "soc_filter_gain", "drift_kwh",
       "band_exit_min", "forecast_change_pct", "revalue_coalesce_s", "max_value_age_min", "sample_s")),
     ("model", "Model", ("level_step_kwh", "max_segment_min")),
 )
@@ -141,6 +150,7 @@ SEED_FROM = {
     "event_plus_export": ("features", "axle_plus_export"),
     "free_power": ("features", "free_power_days"),
     "reserve_soc": ("safety", "min_reserve_soc"),
+    "comfort_high_soc": ("safety", "arbitrage_max_soc"),
 }
 
 
@@ -166,6 +176,7 @@ class V2Settings:
     comfort_low_soc: float = 20
     comfort_high_soc: float = 90
     comfort_cost_p: float = 0.3
+    top_up_cost_p: float = 5.0
     solar_low_pct: float = 25
     solar_mid_pct: float = 50
     solar_high_pct: float = 25
@@ -180,6 +191,7 @@ class V2Settings:
     price_band_p: float = 0.5
     level_band_pct: float = 1.0
     switch_cost_p: float = 0.5
+    reversal_cost_p: float = 3.0
     min_dwell_s: int = 120
     deadline_grace_min: float = 10
     debounce_s: int = 20
