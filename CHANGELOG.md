@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.116 (beta)
+
+### Behaviour changes
+
+None. This release changes only how releases are built; PowerEngine's planning and control are exactly as in 0.9.115.
+
+### Other
+
+- The project's release process now tests once and then releases (before, the same tests ran several times), so releases are quicker. No action is needed from you.
+
 ## 0.9.115 (beta)
 
 ### Behaviour changes
