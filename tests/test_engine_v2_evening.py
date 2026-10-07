@@ -11,7 +11,7 @@ import pytest
 from pe_core.engine_v2.settings import V2Settings
 from pe_core.engine_v2.types import CHARGE
 
-NEW = V2Settings(arbitrage=True, prefer_self_use=False, late_events=False)     # the 18a regime (no Hold limit, no late event)
+NEW = V2Settings(arbitrage=True, prefer_self_use=False, late_events=False)     # the 18a regime
 # The same evening on the code before 18a (commit dc56430, default settings, 30 s steps), recorded: 22 mode changes, 13
 # turns of a charge or sale that had run under 25 minutes, 7 A-B-A flips in 10 minutes, the battery at 100% long before
 # the last charge, and a cash result of -450.0p on the simulated meter.
