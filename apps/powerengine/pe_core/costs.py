@@ -16,7 +16,8 @@ actual  metered import x actual rate - metered export x export rate (+ standing 
 S0 - solar - smart - battery - arbitrage + stored = actual, apart from what the meters don't account for
 (losses, sensor mismatch), which is shown as 'unexplained'.
 
-Axle and free-power half-hours are kept out of the everyday layers and recorded as events instead.
+Free-power half-hours are kept out of the everyday layers and recorded as events instead; for an Axle half-hour only
+the energy it exported is (the rest of the half-hour stays everyday).
 """
 
 from __future__ import annotations
@@ -28,12 +29,14 @@ from .ledger import Ledger
 from .names import N
 from .tariff import Rates
 
-METHOD_VERSION = 7        # 3: export rate falls back to your current one when history had none
+METHOD_VERSION = 8        # 3: export rate falls back to your current one when history had none
                           # 4: Axle exports also earn the export rate (EDF pays it on top of Axle's £1)
                           # 5: not used (day_scenarios() is computed live from the records, no re-value needed)
                           # 6: an Axle event's energy is costed at the overnight rate (battery, with losses) and the
                           #    export rate (solar), not the ledger's basis, which values grid charging at the peak rate
                           # 7: no change to the values; re-valued so the last special event is rebuilt whole
+                          # 8: Axle owns only the energy it exported; the rest of an Axle half-hour (house load, car,
+                          #    battery charging) stays in the everyday layers instead of being charged to Axle
 # daily energy totals (kWh) shown for checking against the inverter's own counters
 ENERGY_KEYS = ("grid_import", "grid_export", "solar", "house", "car", "battery_in", "battery_out", "b_e",
                "unallocated_src", "unallocated_sink", "correction_kwh")
@@ -136,10 +139,21 @@ def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: 
         # round-trip loss), solar at the export rate it would have earned anyway
         out["event_energy"] = k["b_e"] / rte * ovn + k["s_e"] * exp
         out["event_net"] = out["event_gross"] - out["event_energy"]
+        # Axle owns only what it exported. Take that energy back out of the everyday layers (its export revenue, and
+        # the battery energy it used up), so the rest of the half-hour stays everyday: they still add up as before
+        ev_battery = k["b_e"] * (1 - e_grid_share) * exp - _basis(e_solar_lots)
+        ev_arbitrage = k["b_e"] * e_grid_share * exp - _basis(e_grid_lots)
+        out["solar"] -= k["s_e"] * exp
+        out["battery"] -= ev_battery
+        out["arbitrage"] -= ev_arbitrage
+        out["stored"] += _basis(used_e)
+        out["actual"] += exported * exp
+        out["event_metered"] = -exported * exp
     elif event == "free_power":
         out["event_kwh"] = rec.get("grid_import") or 0.0
         out["event_gross"] = out["event_net"] = out["event_kwh"] * std
         out["event_energy"] = 0.0
+        out["event_metered"] = out["actual"]
     return out
 
 
@@ -157,12 +171,13 @@ def day_scenarios(records: list[dict], *, capacity: float, eff: float, floor_soc
 
     self_use and actual are then adjusted for the day's change in stored battery energy, valued at the day's
     median overnight rate: charging tonight for tomorrow doesn't make today look artificially dear. The real
-    change used for 'actual_adj' is summed from each non-event half-hour's own soc move, so an event half-hour
-    that drains or fills the battery (Axle, say) never lands in the everyday carry-over. 'carry' is what that
-    adjustment moved for actual; 'events_metered' is the metered cost of Axle/free-power half-hours (excluded
-    from the scenarios above, same as day_summary's layers); 'axle_income' is Axle's own off-meter payment
-    (its £/kWh rate on the exported kWh of axle half-hours, on top of the metered export rate); 'paid' adds
-    events_metered back to actual and takes off axle_income. Every field is rounded to 2dp.
+    change used for 'actual_adj' is summed from each half-hour's own soc move, except that a free-power half-hour
+    is left out and the battery energy an Axle event took is added back, so an event never lands in the everyday
+    carry-over. 'carry' is what that adjustment moved for actual; 'events_metered' is the metered cost of the
+    free-power half-hours plus Axle's exported energy at the export rate (a negative number: money in); both are
+    excluded from the scenarios above, and the rest of an Axle half-hour stays in them; 'axle_income' is Axle's own
+    off-meter payment (its £/kWh rate on the exported kWh of axle half-hours, on top of the metered export rate);
+    'paid' adds events_metered back to actual and takes off axle_income. Every field is rounded to 2dp.
     """
     floor_kwh = floor_soc / 100 * capacity
     none = solar_s = tariff_s = actual_raw = events_metered = self_use = axle_income = 0.0
@@ -176,21 +191,31 @@ def day_scenarios(records: list[dict], *, capacity: float, eff: float, floor_soc
     for r in records:
         v = r.get("v") or {}
         act, std, ovn, exp = v.get("act", 0.0), v.get("std", 0.0), v.get("ovn", 0.0), v.get("exp", 0.0)
-        if v.get("event"):
-            events_metered += (r.get("grid_import") or 0.0) * act - (r.get("grid_export") or 0.0) * exp
-            if v.get("event") == "axle":
-                axle_income += v.get("event_kwh", 0.0) * axle_value
+        k = {f: r.get(f, 0.0) or 0.0 for f in ("s_h", "s_c", "s_b", "s_e", "b_h", "b_c", "b_e", "g_h", "g_c", "g_b")}
+        grid_export = r.get("grid_export") or 0.0
+        if v.get("event") == "free_power":
+            events_metered += (r.get("grid_import") or 0.0) * act - grid_export * exp
             continue
+        battery_event_kwh = 0.0
+        if v.get("event") == "axle":
+            # Axle owns only the energy it exported (its metered export and its payment); the rest of the
+            # half-hour (house, car, battery charging) is everyday, so it stays in every scenario below
+            ev_kwh = v.get("event_kwh", 0.0)
+            events_metered -= ev_kwh * exp
+            axle_income += ev_kwh * axle_value
+            grid_export = max(0.0, grid_export - ev_kwh)
+            battery_event_kwh = k["b_e"]
+            k["s_e"] = 0.0
         ovn_rates.append(ovn)
         soc_start, soc_end = r.get("soc_start"), r.get("soc_end")
         if soc_start is not None and soc_end is not None:
-            real_delta += (soc_end - soc_start) / 100 * capacity
-        k = {f: r.get(f, 0.0) or 0.0 for f in ("s_h", "s_c", "s_b", "s_e", "b_h", "b_c", "b_e", "g_h", "g_c", "g_b")}
+            # what the battery gave to an Axle event isn't an everyday carry-over: add it back
+            real_delta += (soc_end - soc_start) / 100 * capacity + battery_event_kwh / eff
         house = k["s_h"] + k["b_h"] + k["g_h"]
         car = k["s_c"] + k["b_c"] + k["g_c"]
         solar = k["s_h"] + k["s_c"] + k["s_b"] + k["s_e"]
         hours = max(r.get("seconds") or 0.0, 1.0) / 3600
-        actual_raw += (r.get("grid_import") or 0.0) * act - (r.get("grid_export") or 0.0) * exp
+        actual_raw += (r.get("grid_import") or 0.0) * act - grid_export * exp
 
         # car left out of load: it's not part of what the battery/solar what-ifs manage (hold_for_car is off), so
         # it's costed the same, flat, in every scenario instead of being optimised against solar/the battery
@@ -234,7 +259,8 @@ def day_scenarios(records: list[dict], *, capacity: float, eff: float, floor_soc
 def day_summary(records: list[dict], standing_per_day: float | None = None, complete: bool = True, *,
                 capacity: float | None = None, eff: float | None = None, floor_soc: float | None = None,
                 max_kw: float = 5.0, includes_ev: bool | None = None, axle_value: float = 1.0) -> dict:
-    """Sum a day's valued half-hours into layers (GBP). Event half-hours are left out of the layers."""
+    """Sum a day's valued half-hours into layers (GBP). Free-power half-hours are left out of the layers; an Axle
+    half-hour counts in them except for the energy Axle exported (see process)."""
     tot = dict.fromkeys(("s0", "solar", "smart", "battery", "s3a", "arbitrage", "stored", "actual"), 0.0)
     energy = dict.fromkeys(ENERGY_KEYS, 0.0)
     standing = 0.0
@@ -251,8 +277,9 @@ def day_summary(records: list[dict], standing_per_day: float | None = None, comp
             e["gross"] += v.get("event_gross", 0.0)
             e["net"] += v.get("event_net", 0.0)
             e["energy"] += v.get("event_energy", 0.0)
-            e["metered"] += v.get("actual", 0.0)
-            continue
+            e["metered"] += v.get("event_metered", v.get("actual", 0.0))
+            if v["event"] != "axle":
+                continue                       # free power keeps the whole half-hour; Axle only its exported energy
         for key in tot:
             tot[key] += v.get(key, 0.0)
     if complete and standing_per_day is not None:

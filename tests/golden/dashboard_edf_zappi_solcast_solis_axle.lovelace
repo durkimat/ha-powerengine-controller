@@ -1089,7 +1089,7 @@ views:
               - **No solar or battery:** what the period would have cost buying every kWh from the grid (including the standing charge).
               - **Solar, Tariff:** what your solar and your EDF tariff's cheap rates would each have saved.
               - **PowerEngine:** what the battery and PowerEngine saved on top of that, by choosing when to charge, discharge and export. It is the real metered cost of your normal half-hours, set against the line before it. Energy bought for later or used from earlier counts on the day it was bought or used, so a single day can look dearer or cheaper than the battery really made it; it evens out over a week.
-              - **Axle & free power:** the Axle and free-power half-hours, which are kept out of the everyday figures. Negative means money in: Axle's £1/kWh plus EDF's export payment.
+              - **Axle & free power:** the energy Axle exported, and the free-power half-hours, which are kept out of the everyday figures (the rest of an Axle half-hour, such as house load and car charging, stays in the everyday steps). Negative means money in: Axle's £1/kWh plus EDF's export payment.
               - **You paid:** the real total for the period, after Axle's payments.
       - type: grid
         column_span: 3
@@ -1196,8 +1196,8 @@ views:
               | No solar or battery | Every kWh from the grid: the house at the standard rate, the car at the overnight rate; plus the standing charge. |
               | Solar | Your solar covers the house first, the surplus is exported; no battery. |
               | + EDF tariff | The same, but grid energy is priced at the real half-hourly rates (smart slots, overnight, peak). |
-              | PowerEngine | What your normal half-hours really cost, from the meters, with your battery and PowerEngine's control. Energy bought for later or used from earlier counts on the day it was bought or used. Axle and free-power half-hours are not in this bar. |
-              | You paid | The PowerEngine bar plus the Axle and free-power half-hours: their metered cost, less Axle's own £/kWh payment. This is the savings chart's "You paid" figure. On a day with no events it is the same as the PowerEngine bar. Below zero means the day paid you. |
+              | PowerEngine | What your normal half-hours really cost, from the meters, with your battery and PowerEngine's control. Energy bought for later or used from earlier counts on the day it was bought or used. The energy Axle exported and the free-power half-hours are not in this bar. |
+              | You paid | The PowerEngine bar plus the energy Axle exported and the free-power half-hours: their metered cost, less Axle's own £/kWh payment. This is the savings chart's "You paid" figure. On a day with no events it is the same as the PowerEngine bar. Below zero means the day paid you. |
 
               These are the same lines as the savings chart above, day by day, for the same last 7 complete days (today is left out until it is over), and the last bar is its final figure, so the two always agree. All use the same measured house, car and solar. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated.
       - type: grid
