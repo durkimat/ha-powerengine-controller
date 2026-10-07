@@ -495,8 +495,10 @@ later is the same one step.
 - **Pause:** returns the inverter to Self-Use once, then no changes until you resume.
 - **Inputs failing:** if a required input stops working (e.g. while HA or the inverter integration restarts),
   PowerEngine stops making changes and leaves the inverter's programmed windows running. If the inputs are still
-  missing after 10 minutes, it returns the inverter to Self-Use and notifies you. Either way it takes control again
-  by itself within 30 seconds of the inputs recovering.
+  missing after 10 minutes, it returns the inverter to Self-Use and notifies you. With RAM remote control the wait is
+  90 seconds (a blip of a sensor no longer switches remote control Off); the inverter's own failsafe returns it to
+  Self-Use within about 5 minutes if PowerEngine stops refreshing. Either way it takes control again by itself within
+  30 seconds of the inputs recovering.
 - **Stopped app:** windows set ahead keep running as planned. The watchdog automation in the handover package closes
   every window (Self-Use) if PowerEngine's heartbeat stops for 15 minutes while it's the battery controller.
 - **Read-back:** every write is read back after 6 seconds and retried once; if it still doesn't match, control

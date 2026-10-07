@@ -21,7 +21,7 @@ flowchart TD
     A -- no --> B{"No config at all?"}
     B -- yes --> A1
     B -- no --> C{"Required inputs not ready?"}
-    C -- yes --> C1["UNCONFIGURED (waiting).<br/>The inverter keeps its programmed windows for 10 min,<br/>then is returned to Self-Use"]
+    C -- yes --> C1["UNCONFIGURED (waiting).<br/>Timed windows: the inverter keeps its programmed windows for 10 min,<br/>then is returned to Self-Use.<br/>RAM remote control: carries on for up to 90 s, then is switched Off"]
     C -- no --> D{"Configured mode is Passive?"}
     D -- yes --> D1["PASSIVE: monitor and simulate only"]
     D -- no --> E{"This build supports Active?"}

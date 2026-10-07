@@ -179,15 +179,85 @@ def test_the_summary_says_waiting_for_inputs():
     assert summary(None, effective_mode(None)).startswith("UNCONFIGURED.")
 
 
-def test_leaving_active_for_missing_inputs_logs_waiting(ramapp):  # noqa: F811
+def _broken(a, why="battery_soc"):
+    return effective_mode(a.cfg, build_supports_active=True, missing_required=[why])
+
+
+def test_remote_control_rides_out_a_short_input_gap(ramapp):  # noqa: F811
+    """7 Oct 2026: two power sensors read 'not ready' at every 5 minute check for three hours; each time remote control
+    was switched Off, and on again 27 s later. Now it carries on for a short grace and writes nothing if they return."""
     a, logs = ramapp, []
     a.log = lambda msg, *args, **kw: logs.append(msg)
+    sel = "select.solis_inverter_battery_control_override"
     a._ram_was_on = True
+    a.states[sel] = "Force charge"
     a.cfg_error = None
-    broken = effective_mode(a.cfg, build_supports_active=True, missing_required=["battery_soc"])
+    a._missing_why = "battery_charge_power: Entity is unavailable (sensor.x)"
+    a._leave_active(a.mode, _broken(a))
+    assert a.states[sel] == "Force charge" and a._ram_was_on                  # still on: nothing was written
+    assert a._ram_off_due is not None
+    assert not any("RAM remote control Off" in m for m in logs)
+    assert any("remote control carries on for 90 seconds" in m and "battery_charge_power: Entity is unavailable" in m
+               for m in logs), logs
+    waiting = a.mode = _broken(a)
+    a.mode = effective_mode(a.cfg, build_supports_active=True)               # the next check: inputs are back
+    a._release_if_still_missing()
+    assert a._ram_off_due is None and a.states[sel] == "Force charge" and a._ram_was_on
+    assert waiting.effective == "unconfigured"
+
+
+def test_remote_control_goes_off_when_the_inputs_stay_missing_past_the_grace(ramapp):  # noqa: F811
+    a, logs = ramapp, []
+    a.log = lambda msg, *args, **kw: logs.append(msg)
+    sel = "select.solis_inverter_battery_control_override"
+    a._ram_was_on = True
+    a.states[sel] = "Force discharge"
+    a.cfg_error = None
+    broken = _broken(a)
     a._leave_active(a.mode, broken)
-    assert "RAM remote control Off (leaving Active (waiting for inputs))" in logs
-    assert not any("unconfigured" in m for m in logs)
+    a.mode = broken
+    a._release_if_still_missing()                                            # inside the grace: still on
+    assert a.states[sel] == "Force discharge" and a._ram_was_on
+    a._ram_off_due = datetime.now(timezone.utc) - timedelta(seconds=1)       # the grace has run out
+    a._release_if_still_missing()
+    assert a.states[sel] == "Off" and not a._ram_was_on and a._ram_off_due is None
+    assert any("switching remote control Off" in m for m in logs), logs
+
+
+def test_pausing_while_remote_control_rides_out_missing_inputs_switches_it_off_at_once(ramapp):  # noqa: F811
+    a = ramapp
+    sel = "select.solis_inverter_battery_control_override"
+    a._ram_was_on = True
+    a.states[sel] = "Force charge"
+    a.cfg_error = None
+    broken = _broken(a)
+    a._leave_active(a.mode, broken)
+    a.mode = broken
+    paused = effective_mode(a.cfg, build_supports_active=True, paused=True)
+    a._leave_active(a.mode, paused)
+    assert a.states[sel] == "Off" and not a._ram_was_on and a._ram_off_due is None
+
+
+def test_a_guard_trip_or_a_config_error_switches_remote_control_off_at_once(ramapp):  # noqa: F811
+    a = ramapp
+    sel = "select.solis_inverter_battery_control_override"
+    for guards, cfg_error in ((["x"], None), ([], "bad config")):
+        a._ram_was_on, a.states[sel], a.cfg_error, a._ram_off_due = True, "Force charge", cfg_error, None
+        tripped = effective_mode(a.cfg, build_supports_active=True, missing_required=["battery_soc"], guards=guards)
+        a._leave_active(effective_mode(a.cfg, build_supports_active=True), tripped, guards)
+        assert a.states[sel] == "Off" and a._ram_off_due is None, (guards, cfg_error)
+
+
+def test_the_grace_is_shorter_when_the_refresh_interval_is_long(ramapp):  # noqa: F811
+    """The refresh interval plus the grace stays under the inverter's own ~5 minute failsafe."""
+    a = ramapp
+    for refresh, want in ((0.5, 90), (1.0, 90), (2.0, 90), (3.0, 60), (4.0, 0)):
+        a.cfg = parse_config(dict(a.cfg.raw, safety=dict(a.cfg.raw.get("safety") or {}, ram_refresh_min=refresh)))
+        assert a._ram_grace_s() == want, (refresh, a._ram_grace_s())
+    sel = "select.solis_inverter_battery_control_override"
+    a._ram_was_on, a.states[sel], a.cfg_error, a._ram_off_due = True, "Force charge", None, None
+    a._leave_active(effective_mode(a.cfg, build_supports_active=True), _broken(a))
+    assert a.states[sel] == "Off" and a._ram_off_due is None                  # no grace left: as before
 
 
 # --- 4. smart-slot energy -------------------------------------------------------------------------------

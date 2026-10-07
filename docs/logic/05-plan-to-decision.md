@@ -109,7 +109,9 @@ for nothing.
 * A `no_data` decision within **180 seconds** (`DATA_GAP_GRACE_S`) of the last real one keeps that decision.
 * No earlier real decision, or a longer gap: `no_data` is used as before.
 * Separate from this: if **required inputs** stay missing 10 minutes (`INPUT_GRACE_SECONDS`), the inverter is returned to
-  Self-Use ([04](04-priorities.md), 4.1).
+  Self-Use ([04](04-priorities.md), 4.1). Under **RAM remote control** the grace is 90 seconds (`RAM_INPUT_GRACE_SECONDS`, less
+  when `ram_refresh_min` is long: refresh interval plus grace stays under 4 minutes, so none at 4), then remote control goes
+  Off; inputs back inside it write nothing. Pause, Passive, a tripped guard or a config error still switch it Off at once.
 
 ## 5.7 How a decision is worded
 
