@@ -5,7 +5,13 @@
 #   tools/release.sh <version> --app-notes <file> [--card-notes <file>]
 #                    [--app-branch <branch>] [--card-branch <branch>]
 #                    [--app-dir <dir>] [--card-dir <dir>] [--title <text>]
-#                    [--skip-checks] [--skip-replay] [--dry-run]
+#                    [--skip-checks] [--skip-replay] [--dry-run] [--prepared [--wait-main-ci]]
+#
+# --prepared: the branch already carries the version bump, the changelog and green CI (tools/prepare_release.sh made the
+#   commit, the PR's CI ran on it). Nothing is re-checked or re-pushed: the script verifies the bump, waits for the PR's CI
+#   on the branch head, squash-merges (pinned to that commit) and creates the release. App only (no --card-notes yet).
+# --wait-main-ci: with --prepared, after the merge wait for CI on the merge commit before creating the release (if it fails,
+#   main stays merged and no release is made). No CI run on the merge commit (docs-only paths) is not waited for.
 #
 # The notes files are the release notes as Markdown. App notes start with "### Behaviour changes" (the update card shows
 # them to the owner). They become the CHANGELOG section, the PR body and the GitHub release body.
@@ -45,7 +51,7 @@ api() {
 
 # --- arguments ---------------------------------------------------------------------------------------------------
 VERSION="" APP_NOTES="" CARD_NOTES="" APP_BRANCH="" CARD_BRANCH="" APP_DIR="" CARD_DIR="" TITLE=""
-SKIP_CHECKS=0 SKIP_REPLAY=0 DRY=0
+SKIP_CHECKS=0 SKIP_REPLAY=0 DRY=0 PREPARED=0 WAIT_MAIN_CI=0
 
 parse_args() {
   [ $# -gt 0 ] || { usage; exit 2; }
@@ -62,6 +68,8 @@ parse_args() {
       --skip-checks) SKIP_CHECKS=1; shift ;;
       --skip-replay) SKIP_REPLAY=1; shift ;;
       --dry-run) DRY=1; shift ;;
+      --prepared) PREPARED=1; shift ;;
+      --wait-main-ci) WAIT_MAIN_CI=1; shift ;;
       -*) die "unknown option: $1 (see --help)" ;;
       *) [ -z "$VERSION" ] || die "more than one version given: $VERSION and $1"; VERSION="$1"; shift ;;
     esac
@@ -75,6 +83,8 @@ parse_args() {
   if [ -z "$CARD_NOTES" ] && { [ -n "$CARD_BRANCH" ] || [ -n "$CARD_DIR" ]; }; then
     die "--card-branch/--card-dir given without --card-notes: the card is only released when you give card notes"
   fi
+  [ "$PREPARED" = 0 ] && [ "$WAIT_MAIN_CI" = 1 ] && die "--wait-main-ci only goes with --prepared"
+  [ "$PREPARED" = 1 ] && [ -n "$CARD_NOTES" ] && die "--prepared does not release the card yet: use the full release for a card release"
   APP_NOTES="$(cd "$(dirname "$APP_NOTES")" && pwd)/$(basename "$APP_NOTES")"
   if [ -n "$CARD_NOTES" ]; then CARD_NOTES="$(cd "$(dirname "$CARD_NOTES")" && pwd)/$(basename "$CARD_NOTES")"; fi
 }
@@ -191,16 +201,16 @@ pr_body() {              # pr_body NOTES_FILE -> file
   echo "$f"
 }
 
-wait_for_ci() {          # wait_for_ci SLUG SHA PR_URL
-  local slug="$1" sha="$2" pr_url="$3" waited=0 stable=0 last="" body total bad pending
-  step "Waiting for CI on $sha (every ${POLL_SECONDS}s, up to $((POLL_MAX_SECONDS / 60)) minutes)"
+wait_for_ci() {          # wait_for_ci SLUG SHA PR_URL [MAX_SECONDS] [CONSEQUENCE]
+  local slug="$1" sha="$2" pr_url="$3" max="${4:-$POLL_MAX_SECONDS}" outcome="${5:-Not merging}" waited=0 stable=0 last="" body total bad pending
+  step "Waiting for CI on $sha (every ${POLL_SECONDS}s, up to $((max / 60)) minutes)"
   while :; do
     sleep "$POLL_SECONDS"; waited=$((waited + POLL_SECONDS))
     body="$(api GET "/repos/$slug/commits/$sha/check-runs?per_page=100")"
     total="$(jq '.check_runs | length' <<<"$body")"
     bad="$(jq -r '[.check_runs[] | select(.status == "completed" and (.conclusion | IN("success","skipped","neutral") | not)) | "\(.name) (\(.conclusion))"] | join(", ")' <<<"$body")"
     pending="$(jq '[.check_runs[] | select(.status != "completed")] | length' <<<"$body")"
-    if [ -n "$bad" ]; then die "CI failed: $bad. Not merging. PR: $pr_url"; fi
+    if [ -n "$bad" ]; then die "CI failed: $bad. $outcome. PR: $pr_url"; fi
     note "$(printf '%3ss: %s checks, %s still running' "$waited" "$total" "$pending")"
     # all done, and the same number of runs twice in a row (a run that hasn't registered yet would be missed otherwise)
     if [ "$total" -gt 0 ] && [ "$pending" -eq 0 ]; then
@@ -210,8 +220,22 @@ wait_for_ci() {          # wait_for_ci SLUG SHA PR_URL
     else
       last=""
     fi
-    [ "$waited" -lt "$POLL_MAX_SECONDS" ] || die "CI did not finish within $((POLL_MAX_SECONDS / 60)) minutes. Not merging. PR: $pr_url"
+    [ "$waited" -lt "$max" ] || die "CI did not finish within $((max / 60)) minutes. $outcome. PR: $pr_url"
   done
+}
+
+# wait_main_ci SLUG SHA PR_URL: after the merge, wait for CI on the merge commit. No run appearing within two minutes
+# (a push that only touched paths CI ignores) is not waited for. A failure stops the release; main stays merged.
+wait_main_ci() {
+  local slug="$1" sha="$2" pr_url="$3" waited=0 total
+  step "Waiting for CI on main ($sha) before the release"
+  while :; do
+    total="$(api GET "/repos/$slug/commits/$sha/check-runs?per_page=100" | jq '.check_runs | length')"
+    [ "$total" -gt 0 ] && break
+    [ "$waited" -lt 120 ] || { note "no CI run on the merge commit within 2 minutes: not waiting"; return 0; }
+    sleep "$POLL_SECONDS"; waited=$((waited + POLL_SECONDS))
+  done
+  wait_for_ci "$slug" "$sha" "$pr_url" 1500 "Not releasing: main is merged but v$VERSION has no release, fix forward in a new PR"
 }
 
 # open_pr_for SLUG BRANCH: the number of an open PR whose head is BRANCH (empty if none). Read-only.
@@ -225,25 +249,33 @@ release_repo() {
   local label="$1" slug="$2" work="$3" branch="$4" version="$5" notes="$6" title="$7"; shift 7
   local msg body req pr pr_url pr_num head merged merge_sha rel existing
   msg="$(commit_message "$title")"; body="$(pr_body "$notes")"
-  step "$label: commit, push, PR"
+  step "$label: $([ "$PREPARED" = 1 ] && echo 'PR' || echo 'commit, push, PR')"
   if [ "$DRY" = 1 ]; then
-    dry "git add $*  (in $work)"
-    dry "git commit, with message:"; sed 's/^/        | /' "$msg"
-    dry "git push -u origin $branch  (credentials from git)"
+    if [ "$PREPARED" = 1 ]; then dry "use the branch head as it is (--prepared: the bump is already committed and pushed)"
+    else
+      dry "git add $*  (in $work)"
+      dry "git commit, with message:"; sed 's/^/        | /' "$msg"
+      dry "git push -u origin $branch  (credentials from git)"
+    fi
     existing="$(open_pr_for "$slug" "$branch" 2>/dev/null || true)"
     if [ -n "$existing" ]; then dry "PATCH /repos/$slug/pulls/$existing (PR #$existing is already open on $branch: reused, not a new PR)  title: \"$title\""
     else dry "POST /repos/$slug/pulls  title: \"$title\"  head: $branch  base: main"; fi
     dry "  body:"; sed 's/^/        | /' "$body" | head -n 14
     dry "poll GET /repos/$slug/commits/<sha>/check-runs every ${POLL_SECONDS}s for up to $((POLL_MAX_SECONDS / 60)) minutes; stop on any failure"
-    dry "PUT /repos/$slug/pulls/<n>/merge  merge_method: squash"
+    dry "PUT /repos/$slug/pulls/<n>/merge  merge_method: squash  (pinned to the branch head)"
+    [ "$WAIT_MAIN_CI" = 1 ] && dry "wait for CI on the merge commit before the release (--wait-main-ci)"
     dry "POST /repos/$slug/releases  tag v$version  prerelease false  make_latest \"true\"  body: the notes"
     REL_PR="(dry run)"; REL_URL="(dry run) https://github.com/$slug/releases/tag/v$version"; REL_SHA="(dry run)"
     return 0
   fi
-  git -C "$work" add -- "$@"
-  git -C "$work" commit -q -F "$msg"
-  head="$(git -C "$work" rev-parse HEAD)"
-  gitn -C "$work" push -u origin "$branch" 2>&1 | sed 's/^/    /'
+  if [ "$PREPARED" = 1 ]; then
+    head="$(git -C "$work" rev-parse HEAD)"
+  else
+    git -C "$work" add -- "$@"
+    git -C "$work" commit -q -F "$msg"
+    head="$(git -C "$work" rev-parse HEAD)"
+    gitn -C "$work" push -u origin "$branch" 2>&1 | sed 's/^/    /'
+  fi
   req="$(mktemp "$TMP/req.XXXXXX")"
   jq -n --arg t "$title" --arg h "$branch" --rawfile b "$body" '{title: $t, head: $h, base: "main", body: $b}' > "$req"
   existing="$(open_pr_for "$slug" "$branch")"
@@ -255,14 +287,18 @@ release_repo() {
   fi
   pr_num="$(jq -r .number <<<"$pr")"; pr_url="$(jq -r .html_url <<<"$pr")"
   note "PR #$pr_num: $pr_url"
+  if [ "$PREPARED" = 1 ]; then          # the PR must be at exactly the commit that was checked out and verified
+    [ "$(jq -r .head.sha <<<"$pr")" = "$head" ] || die "the PR head is not $head (the branch moved after it was checked out). Not merging. PR: $pr_url"
+  fi
 
-  wait_for_ci "$slug" "$head" "$pr_url"
+  wait_for_ci "$slug" "$head" "$pr_url" "$([ "$PREPARED" = 1 ] && echo 1500 || echo "$POLL_MAX_SECONDS")"
 
   step "$label: squash-merge PR #$pr_num"
   jq -n --arg t "$title (#$pr_num)" --arg s "$head" '{merge_method: "squash", commit_title: $t, sha: $s}' > "$req"
   merged="$(api PUT "/repos/$slug/pulls/$pr_num/merge" "$req")" || die "merge failed; PR: $pr_url"
   merge_sha="$(jq -r .sha <<<"$merged")"
   note "merged as $merge_sha"
+  if [ "$WAIT_MAIN_CI" = 1 ]; then wait_main_ci "$slug" "$merge_sha" "$pr_url"; fi
 
   step "$label: release v$version"
   jq -n --arg tag "v$version" --arg sha "$merge_sha" --rawfile b "$notes" \
@@ -288,6 +324,25 @@ cleanup() {
   gitn pull -q --ff-only 2>&1 | sed 's/^/    /'
   git branch -D "$branch" >/dev/null && note "deleted local branch $branch"
   note "$main is on main at $(git rev-parse --short HEAD)"
+}
+
+# verify_prepared DIR BRANCH: --prepared: the branch must already hold exactly what prepare_release.sh makes.
+verify_prepared() {
+  local dir="$1" branch="$2" now behind
+  step "Prepared branch: verify the bump (nothing is re-tested here; CI on the branch head is what is waited for)"
+  now="$(current_version app "$dir/apps/powerengine/pe_core/__init__.py")"
+  [ "$now" = "$VERSION" ] || die "the branch's __version__ is '$now', not $VERSION"
+  grep -q "^## $VERSION (beta)\$" "$dir/CHANGELOG.md" || die "CHANGELOG.md has no '## $VERSION (beta)' section on the branch"
+  grep -q "$VERSION" "$dir/docs/INSTALL.md" || die "docs/INSTALL.md does not mention $VERSION on the branch"
+  if [ "$DRY" = 0 ]; then
+    gitn -C "$dir" fetch -q origin main
+    behind="$(git -C "$dir" rev-list --count HEAD..origin/main)"
+    [ "$behind" = 0 ] || die "the branch is $behind commit(s) behind main: merge main, re-run prepare_release.sh and let CI pass again"
+    note "branch is up to date with main"
+  else
+    dry "check the branch is not behind origin/main"
+  fi
+  note "version $VERSION, changelog section and INSTALL.md are in the branch"
 }
 
 # --- which directory and branch each repo releases ---------------------------------------------------------------------
@@ -382,8 +437,13 @@ main() {
     app_now="$(git -C "$APP_WORK" show "$APP_BR:apps/powerengine/pe_core/__init__.py" | sed -n 's/^__version__ *= *"\([^"]*\)".*/\1/p')"
   else app_now="$(current_version app "$APP_WORK/apps/powerengine/pe_core/__init__.py")"; fi
   [ -n "$app_now" ] || die "could not read the app's current __version__"
-  newer_than "$VERSION" "$app_now" || die "version $VERSION is not newer than the app's current $app_now"
-  note "app version: $app_now -> $VERSION"
+  if [ "$PREPARED" = 1 ]; then
+    [ "$app_now" = "$VERSION" ] || die "--prepared: the branch has version $app_now, not $VERSION (run tools/prepare_release.sh first)"
+    note "app version: $VERSION (already in the branch)"
+  else
+    newer_than "$VERSION" "$app_now" || die "version $VERSION is not newer than the app's current $app_now"
+    note "app version: $app_now -> $VERSION"
+  fi
   if [ -n "$CARD_NOTES" ]; then
     card_ref="$CARD_BR"; [ "$CARD_CREATE" = 1 ] && card_ref="main"
     card_now="$(git -C "$CARD_MAIN" show "$card_ref:ha-powerengine-card.js" 2>/dev/null | sed -n 's/^const CARD_VERSION = "\([^"]*\)".*/\1/p' | head -n 1)"
@@ -397,7 +457,7 @@ main() {
     if [ "$DRY" = 1 ]; then dry "git -C $APP_MAIN checkout $APP_BR (it is not checked out anywhere)"
     else git -C "$APP_MAIN" checkout -q "$APP_BR"; fi
   fi
-  run_app_checks "$APP_WORK"
+  if [ "$PREPARED" = 1 ]; then verify_prepared "$APP_WORK" "$APP_BR"; else run_app_checks "$APP_WORK"; fi
   if [ -n "$CARD_NOTES" ]; then
     if [ "$CARD_CREATE" = 1 ]; then
       if [ "$DRY" = 1 ]; then dry "git -C $CARD_MAIN fetch origin main; git checkout -b $CARD_BR origin/main"
@@ -410,10 +470,12 @@ main() {
 
   # 2. bump versions and changelogs (files only; the commit comes with the PR)
   WORK="$APP_WORK"
-  step "App: version and changelog"
-  change_file app_version "$APP_WORK/apps/powerengine/pe_core/__init__.py" "$VERSION"
-  change_file install "$APP_WORK/docs/INSTALL.md" "$VERSION"
-  change_file app_changelog "$APP_WORK/CHANGELOG.md" "$VERSION" "$APP_NOTES"
+  if [ "$PREPARED" = 0 ]; then
+    step "App: version and changelog"
+    change_file app_version "$APP_WORK/apps/powerengine/pe_core/__init__.py" "$VERSION"
+    change_file install "$APP_WORK/docs/INSTALL.md" "$VERSION"
+    change_file app_changelog "$APP_WORK/CHANGELOG.md" "$VERSION" "$APP_NOTES"
+  fi
   if [ -n "$CARD_NOTES" ]; then
     WORK="$CARD_WORK"
     step "Card: version and changelog"
@@ -447,5 +509,4 @@ main() {
   printf '    %s\n' "${SUMMARY[@]}"
 }
 
-main "$@"
-exit
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then main "$@"; fi

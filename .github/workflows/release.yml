@@ -47,6 +47,16 @@ on:
         required: true
         type: boolean
         default: true
+      prepared:
+        description: "Single-CI release: the branch already has the version bump (tools/prepare_release.sh) and green CI. Nothing is re-tested or re-pushed; the workflow checks the bump, merges after your Approve and releases. App only."
+        required: true
+        type: boolean
+        default: false
+      wait_main_ci:
+        description: "Prepared only: after the merge, wait for CI on main before creating the release (a failure leaves main merged and no release)"
+        required: true
+        type: boolean
+        default: false
       skip_replay:
         description: "Skip the replay in the pre-release checks (CI still runs it on the PR)"
         required: true
@@ -81,7 +91,11 @@ jobs:
           APP_NOTES: ${{ inputs.app_notes }}
           CARD_NOTES: ${{ inputs.card_notes }}
           CARD_BRANCH: ${{ inputs.card_branch }}
+          PREPARED: ${{ inputs.prepared }}
+          WAIT_MAIN_CI: ${{ inputs.wait_main_ci }}
         run: |
+          [ "$PREPARED" != "true" ] || [ -z "$CARD_NOTES" ] || { echo "prepared releases are app only for now: leave card_notes empty, or untick prepared"; exit 1; }
+          [ "$PREPARED" = "true" ] || [ "$WAIT_MAIN_CI" != "true" ] || { echo "wait_main_ci needs prepared"; exit 1; }
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version must look like 0.9.87, got: $VERSION"; exit 1; }
           [ "$APP_BRANCH" != "main" ] || { echo "won't release main itself; give the branch that carries the change"; exit 1; }
           [ -n "$APP_NOTES" ] || { echo "app_notes is required"; exit 1; }
@@ -137,6 +151,8 @@ jobs:
           CARD_NOTES: ${{ inputs.card_notes }}
           DRY_RUN: ${{ inputs.dry_run }}
           SKIP_REPLAY: ${{ inputs.skip_replay }}
+          PREPARED: ${{ inputs.prepared }}
+          WAIT_MAIN_CI: ${{ inputs.wait_main_ci }}
           CLAUDE_MODEL_NAME: ${{ inputs.model_name }}
           CLAUDE_SESSION_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -150,6 +166,8 @@ jobs:
           fi
           [ "$DRY_RUN" != "true" ] || args+=(--dry-run)
           [ "$SKIP_REPLAY" != "true" ] || args+=(--skip-replay)
+          [ "$PREPARED" != "true" ] || args+=(--prepared)
+          [ "$WAIT_MAIN_CI" != "true" ] || args+=(--wait-main-ci)
           {
             echo "### Release $VERSION$([ "$DRY_RUN" = "true" ] && echo ' (dry run)')"
             echo '```'
