@@ -163,9 +163,9 @@ run_app_checks() {
     cd "$dir"
     export PATH="$HOME/.local/bin:$PATH"
     note "ruff check ."; ruff check . || die "ruff found problems; nothing was changed"
-    note "pytest (without the replay)"; python3 -m pytest -q --ignore=tests/test_replay.py || die "tests failed; nothing was changed"
-    if [ "$SKIP_REPLAY" = 1 ]; then note "replay skipped (--skip-replay)"
-    else note "pytest tests/test_replay.py"; python3 -m pytest -q tests/test_replay.py || die "the replay failed; nothing was changed"; fi
+    local sel=(); [ "$SKIP_REPLAY" = 1 ] && sel=(--ignore=tests/test_replay.py)
+    note "pytest, in parallel${sel:+ (replay skipped: --skip-replay)}"
+    python3 -m pytest -q -n auto --dist loadscope "${sel[@]}" || die "tests failed; nothing was changed"
   )
 }
 run_card_checks() {
