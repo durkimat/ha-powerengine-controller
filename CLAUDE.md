@@ -77,8 +77,9 @@ timed windows, and compares every plan, decision, service call and warning with 
 
 Full procedure: `docs/RELEASING.md` (read it when you release). **The single-CI release is the default** (used for 0.9.116): `tools/prepare_release.sh
 <version> --notes <file>` puts the version bump on the branch, CI passes on that commit, then `release.yml` (`prepared` on by default; optional
-`wait_main_ci`) merges after the owner's Approve and releases, in about a minute plus the wait. App only: a card release uses the full flow
-(automatic when `card_notes` is given). In short (the steps below describe the full flow):
+`wait_main_ci`) merges after the owner's Approve and releases, in about a minute plus the wait. A card release is prepared too
+(`prepare_release.sh --card-notes`, workflow `card_branch` + `card_notes`; not yet used for real, dry-run first); `card_notes` without `card_branch`
+uses the full flow. In short (the steps below describe the full flow):
 
 1. Branch from `main`, change with tests, run the checks, re-record the replay only if the change is meant to alter behaviour.
 2. Commit the notes as `release-notes/<version>.md` (starts `### Behaviour changes`, plain words; card notes in a second file if the
@@ -151,4 +152,5 @@ Don't read these unless the task needs them; grep rather than read whole.
 - `docs/history/demo-mode.md`: demo world, pack, gate, direct publishing, commands.
 - `docs/plans/` (index `README.md`): designs. `engine-v2.md` is 75 KB: read its status box and the section you need only.
 - **Never read whole:** `CHANGELOG.md` (160 KB), `apps/powerengine/powerengine.py` (4,300 lines), the card's one JS file (7,000 lines).
-  Use Grep, then read a range. Run checks with `tools/check.sh` (one line on success).
+  Start with `tools/outline.sh` (app) or `tools/outline.sh card` (card): each labelled section with its line range (`--defs` adds the classes and
+  methods inside), then read just that range, or Grep. Run checks with `tools/check.sh` (one line on success).

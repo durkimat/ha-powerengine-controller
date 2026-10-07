@@ -49,6 +49,30 @@ def repos(tmp_path):
     return work, tmp_path / "notes.md"
 
 
+CARD_NOTES = "- Card: a thing.\n"
+
+
+def card_repo(tmp_path, version="0.9.50", name="card"):
+    origin = tmp_path / f"{name}-origin.git"
+    sh(tmp_path, "git", "init", "-q", "--bare", "-b", "main", str(origin))
+    card = tmp_path / name
+    card.mkdir()
+    for c in (["git", "init", "-q", "-b", "main"], ["git", "config", "user.email", "t@example.com"],
+              ["git", "config", "user.name", "T"], ["git", "remote", "add", "origin", str(origin)]):
+        sh(card, *c)
+    (card / "ha-powerengine-card.js").write_text(f'const CARD_VERSION = "{version}";\n')
+    (card / "CHANGELOG.md").write_text(f"# Changelog\n\n## {version}\n\n- old\n")
+    sh(card, "git", "add", "-A")
+    sh(card, "git", "commit", "-qm", "base")
+    sh(card, "git", "push", "-q", "-u", "origin", "main")
+    sh(card, "git", "checkout", "-q", "-b", "card-change")
+    (card / "feature.txt").write_text("x\n")
+    sh(card, "git", "add", "-A")
+    sh(card, "git", "commit", "-qm", "card change")
+    (tmp_path / "card-notes.md").write_text(CARD_NOTES)
+    return card, tmp_path / "card-notes.md"
+
+
 def prepare(work, notes, version="0.9.51", *extra):
     return sh(work, "bash", "tools/prepare_release.sh", version, "--notes", str(notes), *extra, check=False)
 
@@ -117,8 +141,6 @@ def test_release_flags_are_checked_before_anything_happens(repos):
     work, notes = repos
     r = release(work, "0.9.51", "--app-notes", str(notes), "--wait-main-ci")
     assert r.returncode != 0 and "only goes with --prepared" in r.stderr
-    r = release(work, "0.9.51", "--app-notes", str(notes), "--prepared", "--card-notes", str(notes))
-    assert r.returncode != 0 and "does not release the card yet" in r.stderr
 
 
 def test_verify_prepared_accepts_a_prepared_branch_and_rejects_others(repos):
@@ -168,3 +190,71 @@ def test_ci_runs_everything_when_in_doubt(repos):
     assert changes(work, "0" * 40) == "code=true"                  # a new branch's "before"
     assert changes(work, "deadbeef" * 5) == "code=true"            # a commit this clone doesn't have
     assert sh(work, "bash", "tools/ci_changes.sh", check=False).stdout.strip() == "code=true"   # no base at all
+
+
+def test_prepare_with_card_bumps_and_pushes_both(repos, tmp_path):
+    work, notes = repos
+    card, cnotes = card_repo(tmp_path)
+    r = prepare(work, notes, "0.9.51", "--card-notes", str(cnotes), "--card-dir", str(card), "--title", "A thing")
+    assert r.returncode == 0, r.stderr
+    assert 'CARD_VERSION = "0.9.51"' in (card / "ha-powerengine-card.js").read_text()
+    log = (card / "CHANGELOG.md").read_text()
+    assert log.index("## 0.9.51") < log.index("## 0.9.50")
+    assert sh(card, "git", "log", "-1", "--format=%s").stdout.strip() == "0.9.51 (card): A thing"
+    assert sh(card, "git", "rev-parse", "HEAD").stdout == sh(card, "git", "rev-parse", "origin/card-change").stdout
+    assert '__version__ = "0.9.51"' in (work / "apps/powerengine/pe_core/__init__.py").read_text()
+
+
+def test_prepare_with_card_stops_before_touching_the_app_when_the_card_is_not_ready(repos, tmp_path):
+    work, notes = repos
+    card, cnotes = card_repo(tmp_path)
+    args = ("--card-notes", str(cnotes), "--card-dir", str(card))
+    sh(card, "git", "checkout", "-q", "main")
+    assert "check out the card's change branch" in prepare(work, notes, "0.9.51", *args).stderr
+    sh(card, "git", "checkout", "-q", "card-change")
+    (card / "feature.txt").write_text("dirty\n")
+    assert "uncommitted" in prepare(work, notes, "0.9.51", *args).stderr
+    sh(card, "git", "checkout", "-q", "--", "feature.txt")
+    newer, _ = card_repo(tmp_path, version="0.9.60", name="card-newer")
+    r = prepare(work, notes, "0.9.55", "--card-notes", str(cnotes), "--card-dir", str(newer))
+    assert "not newer than the card's 0.9.60" in r.stderr
+    assert "card repo not found" in prepare(work, notes, "0.9.51", "--card-notes", str(cnotes), "--card-dir",
+                                            str(tmp_path / "nope")).stderr
+    assert '__version__ = "0.9.50"' in (work / "apps/powerengine/pe_core/__init__.py").read_text()
+    assert sh(work, "git", "status", "--porcelain").stdout == ""
+
+
+def test_prepare_card_refuses_a_card_branch_behind_main(repos, tmp_path):
+    work, notes = repos
+    card, cnotes = card_repo(tmp_path)
+    other = tmp_path / "card-other"
+    sh(tmp_path, "git", "clone", "-q", str(tmp_path / "card-origin.git"), str(other))
+    sh(other, "git", "config", "user.email", "t@example.com")
+    sh(other, "git", "config", "user.name", "T")
+    (other / "more.txt").write_text("y\n")
+    sh(other, "git", "add", "-A")
+    sh(other, "git", "commit", "-qm", "card main moved")
+    sh(other, "git", "push", "-q", "origin", "main")
+    r = prepare(work, notes, "0.9.51", "--card-notes", str(cnotes), "--card-dir", str(card))
+    assert r.returncode != 0 and "behind main" in r.stderr
+    assert '__version__ = "0.9.50"' in (work / "apps/powerengine/pe_core/__init__.py").read_text()
+
+
+def test_prepared_release_with_a_card_needs_the_card_branch(repos):
+    work, notes = repos
+    r = release(work, "0.9.51", "--app-notes", str(notes), "--prepared", "--card-notes", str(notes))
+    assert r.returncode != 0 and "needs --card-branch" in r.stderr
+
+
+def test_verify_prepared_card_accepts_a_prepared_card_and_rejects_others(repos, tmp_path):
+    work, notes = repos
+    card, cnotes = card_repo(tmp_path)
+    call = f'source tools/release.sh; DRY=1; VERSION=0.9.51; verify_prepared_card "{card}"'
+    r = sh(work, "bash", "-c", call, check=False)
+    assert r.returncode != 0 and "CARD_VERSION is '0.9.50'" in r.stderr
+    assert prepare(work, notes, "0.9.51", "--card-notes", str(cnotes), "--card-dir", str(card)).returncode == 0
+    r = sh(work, "bash", "-c", call, check=False)
+    assert r.returncode == 0, r.stderr
+    (card / "CHANGELOG.md").write_text("# Changelog\n")
+    r = sh(work, "bash", "-c", call, check=False)
+    assert r.returncode != 0 and "no '## 0.9.51' section" in r.stderr

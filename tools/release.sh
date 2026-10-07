@@ -9,7 +9,9 @@
 #
 # --prepared: the branch already carries the version bump, the changelog and green CI (tools/prepare_release.sh made the
 #   commit, the PR's CI ran on it). Nothing is re-checked or re-pushed: the script verifies the bump, waits for the PR's CI
-#   on the branch head, squash-merges (pinned to that commit) and creates the release. App only (no --card-notes yet).
+#   on the branch head, squash-merges (pinned to that commit) and creates the release. With --card-notes the card works the
+#   same way (its branch, given with --card-branch, already holds the bump from prepare_release.sh --card-notes and has an open
+#   PR); both are verified and the card's CI is awaited BEFORE anything is merged, so a failing card cannot leave a released app.
 # --wait-main-ci: with --prepared, after the merge wait for CI on the merge commit before creating the release (if it fails,
 #   main stays merged and no release is made). No CI run on the merge commit (docs-only paths) is not waited for.
 #
@@ -84,7 +86,7 @@ parse_args() {
     die "--card-branch/--card-dir given without --card-notes: the card is only released when you give card notes"
   fi
   [ "$PREPARED" = 0 ] && [ "$WAIT_MAIN_CI" = 1 ] && die "--wait-main-ci only goes with --prepared"
-  [ "$PREPARED" = 1 ] && [ -n "$CARD_NOTES" ] && die "--prepared does not release the card yet: use the full release for a card release"
+  [ "$PREPARED" = 1 ] && [ -n "$CARD_NOTES" ] && [ -z "$CARD_BRANCH" ] && die "--prepared with --card-notes needs --card-branch (the branch that already holds the card's bump)"
   APP_NOTES="$(cd "$(dirname "$APP_NOTES")" && pwd)/$(basename "$APP_NOTES")"
   if [ -n "$CARD_NOTES" ]; then CARD_NOTES="$(cd "$(dirname "$CARD_NOTES")" && pwd)/$(basename "$CARD_NOTES")"; fi
 }
@@ -345,6 +347,39 @@ verify_prepared() {
   note "version $VERSION, changelog section and INSTALL.md are in the branch"
 }
 
+# verify_prepared_card DIR: the card branch holds the bump (CARD_VERSION, its changelog section) and is not behind main.
+verify_prepared_card() {
+  local dir="$1" now behind
+  step "Prepared card branch: verify the bump"
+  now="$(current_version card "$dir/ha-powerengine-card.js")"
+  [ "$now" = "$VERSION" ] || die "the card branch's CARD_VERSION is '$now', not $VERSION"
+  grep -q "^## $VERSION\$" "$dir/CHANGELOG.md" || die "the card's CHANGELOG.md has no '## $VERSION' section on the branch"
+  if [ "$DRY" = 0 ]; then
+    gitn -C "$dir" fetch -q origin main
+    behind="$(git -C "$dir" rev-list --count HEAD..origin/main)"
+    [ "$behind" = 0 ] || die "the card branch is $behind commit(s) behind main: merge main, re-run prepare_release.sh --card-notes and let CI pass again"
+    note "card branch is up to date with main"
+  else
+    dry "check the card branch is not behind origin/main"
+  fi
+  note "card version $VERSION and its changelog section are in the branch"
+}
+
+# preflight_card_prepared SLUG DIR BRANCH: before anything is merged, the card's PR must exist and its CI be green on the
+# branch head, so that a card that cannot be released never follows a released app.
+preflight_card_prepared() {
+  local slug="$1" dir="$2" branch="$3" head num
+  step "Card: PR and CI must be green before the app is merged"
+  if [ "$DRY" = 1 ]; then
+    dry "find the open card PR on $branch (stop if none) and wait for its CI on the branch head (stop on a failure)"
+    return 0
+  fi
+  head="$(git -C "$dir" rev-parse HEAD)"
+  num="$(open_pr_for "$slug" "$branch")"
+  [ -n "$num" ] || die "no open PR on $slug for branch $branch: open the card's PR first so CI runs. Nothing was merged"
+  wait_for_ci "$slug" "$head" "https://github.com/$slug/pull/$num" 1500 "Nothing was merged (the card must be green before the app is released)"
+}
+
 # --- which directory and branch each repo releases ---------------------------------------------------------------------
 # resolve_app: sets APP_MAIN, APP_WORK, APP_BR, APP_WT (1 if APP_WORK is a worktree to remove afterwards)
 resolve_app() {
@@ -448,8 +483,13 @@ main() {
     card_ref="$CARD_BR"; [ "$CARD_CREATE" = 1 ] && card_ref="main"
     card_now="$(git -C "$CARD_MAIN" show "$card_ref:ha-powerengine-card.js" 2>/dev/null | sed -n 's/^const CARD_VERSION = "\([^"]*\)".*/\1/p' | head -n 1)"
     [ -n "$card_now" ] || die "could not read the card's current CARD_VERSION"
-    newer_than "$VERSION" "$card_now" || die "version $VERSION is not newer than the card's current $card_now"
-    note "card version: $card_now -> $VERSION (card versions may skip numbers)"
+    if [ "$PREPARED" = 1 ]; then
+      [ "$card_now" = "$VERSION" ] || die "--prepared: the card branch has version $card_now, not $VERSION (run tools/prepare_release.sh --card-notes first)"
+      note "card version: $VERSION (already in the branch)"
+    else
+      newer_than "$VERSION" "$card_now" || die "version $VERSION is not newer than the card's current $card_now"
+      note "card version: $card_now -> $VERSION (card versions may skip numbers)"
+    fi
   fi
 
   # 1. check everything before anything is pushed (a failing card must not leave a released app behind)
@@ -465,7 +505,7 @@ main() {
     elif [ "$CARD_NEEDS_CHECKOUT" = 1 ]; then
       if [ "$DRY" = 1 ]; then dry "git -C $CARD_MAIN checkout $CARD_BR"; else git -C "$CARD_MAIN" checkout -q "$CARD_BR"; fi
     fi
-    run_card_checks "$CARD_WORK"
+    if [ "$PREPARED" = 1 ]; then verify_prepared_card "$CARD_WORK"; else run_card_checks "$CARD_WORK"; fi
   fi
 
   # 2. bump versions and changelogs (files only; the commit comes with the PR)
@@ -476,7 +516,7 @@ main() {
     change_file install "$APP_WORK/docs/INSTALL.md" "$VERSION"
     change_file app_changelog "$APP_WORK/CHANGELOG.md" "$VERSION" "$APP_NOTES"
   fi
-  if [ -n "$CARD_NOTES" ]; then
+  if [ -n "$CARD_NOTES" ] && [ "$PREPARED" = 0 ]; then
     WORK="$CARD_WORK"
     step "Card: version and changelog"
     change_file card_version "$CARD_WORK/ha-powerengine-card.js" "$VERSION"
@@ -484,6 +524,7 @@ main() {
   fi
 
   # 3. app: PR, CI, merge, release, then the card
+  if [ "$PREPARED" = 1 ] && [ -n "$CARD_NOTES" ]; then preflight_card_prepared "$CARD_REPO_SLUG" "$CARD_WORK" "$CARD_BR"; fi
   local title app_title card_title
   title="${TITLE:-$(first_line "$APP_NOTES")}"
   app_title="$VERSION${title:+: $title}"
