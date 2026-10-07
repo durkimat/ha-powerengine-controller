@@ -218,6 +218,17 @@ both and restarts AppDaemon. PowerEngine also checks GitHub for new versions eve
   absolute figures are rough (perhaps 5 to 10%) while the ranking is sturdier; (4) **cost on the HA host**: whole-app replays took about 100 s (v1) and 300 s (v2)
   per day here, slower on a Pi: run once a night, and prefer stepping the pure engines over the whole app; (5) card: a small table on the Costs page (card
   repo, joint release).
+- **Late grid events driven by sun and wind outlook (owner's idea, 7 Oct 2026; not built).** Axle events are run when the grid is short, and the grid
+  depends on solar and wind, so a poor-sun, low-wind day makes a late event more likely (and the house is shortest of reserve then). Today's `late_events`
+  (0.9.115, `value._late_events`) uses one flat rate (`late_events_per_week` x `late_event_hours`) for every future half hour. Idea: make that probability
+  depend on an outlook for solar and wind (low generation, high demand hours, evening peaks), so a dull, still, cold day carries a higher chance and the plan fills
+  the battery nearer 100% by itself, while a bright, windy day carries a lower one. Things to settle: (1) **the evidence**: count Axle events in the cost records
+  (`v.event == "axle"`) against that day's solar (the Solcast actuals already kept), and find what predicts them; (2) **external data**: national wind and solar
+  generation forecasts and grid carbon intensity or demand-flexibility signals (for example the National Energy System Operator's and the Carbon Intensity API's
+  public forecasts) as inputs, subject to "don't hammer an external API" (one fetch a few times a day, cached) and the no-admin-token rule; (3) **shape**: a multiplier on
+  the per-half-hour probability, learned like the scenario weights, with the flat rate as the fallback when there is no data; (4) **hours of day**: events weighted
+  to the evening peak, not uniform; (5) the settings stay: `late_events` switches it all off. Plan doc first: `docs/plans/late-grid-events.md`. The owner also plans to
+  try more cautious `late_events_per_week` and `late_event_hours` values and watch the plan.
 - **Zappi Eco+ and solar (monitor):** Eco+ is required for EDF/Octopus smart charging. The owner has only seen the car charge from the grid, not from solar, so some
   threshold (probably on the charger) decides. If the Zappi ever starts and stops with solar surplus, `car_charging` (an urgent rule, no damping) and the plan signature will flip with it:
   watch `ev_state` changes per day in the diagnostics export, and add a short debounce on stop only if it happens. Do nothing until it is seen.
