@@ -445,7 +445,16 @@ def _terminal_p(fc: Forecast, facts: BatteryFacts, settings: V2Settings) -> floa
     cut = segs[-1].end.timestamp() - 24 * 3600
     prices = [s.import_p for s in segs if not s.free and s.end.timestamp() > cut]
     prices = prices or [s.import_p for s in segs if not s.free]
-    return min(prices) / facts.eta_charge if prices else settings.terminal_value_p
+    if not prices:
+        return settings.terminal_value_p
+    refill = min(prices) / facts.eta_charge
+    # A look-ahead that ends outside the cheap price (e.g. 30 min into the peak) leaves no cheap refill at its end:
+    # the energy left is used at the peak or sold later, so it is worth at least what a sale brings. Without this the
+    # last steps dump the battery to the floor (7 Oct 2026: 25% to 12% at 06:00, as the 28.84p peak began).
+    last = segs[-1]
+    if not last.free and last.import_p > refill + EPS:
+        refill = max(refill, last.export_p * facts.eta_discharge - settings.wear_sale_p)
+    return refill
 
 
 # An event may start or end part-way through a segment, so it sells at a quarter, a half, three quarters or all of the

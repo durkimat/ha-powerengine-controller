@@ -61,8 +61,8 @@ SETTINGS: dict[str, tuple] = {
     "event_value_p": ("number", 100.0, 0, 500, "p/kWh", "Grid event pays",
                       "What a grid event pays per kWh exported, before any export rate on top."),
     "terminal_value": ("choice", "refill", ("refill", "fixed"), None, "", "Energy left at the end of the look-ahead",
-                       "Refill: worth the cheapest import price expected near the end, after losses. Fixed: the figure "
-                       "below."),
+                       "Refill: worth the cheapest import price expected near the end, after losses (never less than "
+                       "a sale brings, when the look-ahead ends outside the cheap price). Fixed: the figure below."),
     "terminal_value_p": ("number", 10.0, 0, 100, "p/kWh", "Fixed value of energy left",
                          "Used when the energy left at the end is set to Fixed."),
     # --- comfort band ------------------------------------------------------------------------------------------
