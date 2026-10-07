@@ -2,6 +2,28 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.114 (beta)
+
+### Behaviour changes
+
+- **A blip of a sensor no longer switches the inverter's remote control off.** If a required input (on 7 October, your
+  battery charging and discharging power sensors, at every 5-minute check overnight) reads "not ready", remote control
+  now carries on for up to 90 seconds instead of being switched Off at once and back on 27 seconds later. If the inputs
+  return inside that time nothing is written. If they don't, remote control goes Off as before. Pause, Passive, a
+  tripped guard and a configuration error still switch it Off straight away. The wait is shorter when the RAM refresh
+  interval is long (the refresh interval plus the wait stays under 4 minutes, so there is none at the 4-minute maximum),
+  and the inverter's own failsafe (about 5 minutes) still returns it to Self-use if PowerEngine itself stopped.
+- Engine v1 and engine v2 decisions are unchanged.
+
+### Fixes
+
+- **The forecast records that the nightly engine comparison depends on now fit a real day.** The first build capped a
+  day's record at 1 MB, but a real day is 1 to 1.5 MB (the supplier's smart-slot list alone is 13 KB and changes about 40
+  times a day), so the recording would have stopped in the evening and lost late smart slots and the next day's rates.
+  The limits are now 3 MB (slower recording past it) and 5 MB (stop).
+- **"Inputs not ready" now says why**, for example "battery_charge_power: Entity is unavailable (sensor.x)", so a
+  diagnostics export shows the cause, not only the names.
+
 ## 0.9.113 (beta)
 
 ### Behaviour changes
