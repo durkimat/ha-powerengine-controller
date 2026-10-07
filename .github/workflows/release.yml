@@ -48,10 +48,10 @@ on:
         type: boolean
         default: true
       prepared:
-        description: "Single-CI release: the branch already has the version bump (tools/prepare_release.sh) and green CI. Nothing is re-tested or re-pushed; the workflow checks the bump, merges after your Approve and releases. App only."
+        description: "Single-CI release (default): the branch already has the version bump (tools/prepare_release.sh) and green CI; nothing is re-tested or re-pushed, the workflow checks the bump, merges after your Approve and releases. App only: with card_notes it falls back to the full flow. Untick for the full flow (checks, bump and push here)."
         required: true
         type: boolean
-        default: false
+        default: true
       wait_main_ci:
         description: "Prepared only: after the merge, wait for CI on main before creating the release (a failure leaves main merged and no release)"
         required: true
@@ -94,7 +94,10 @@ jobs:
           PREPARED: ${{ inputs.prepared }}
           WAIT_MAIN_CI: ${{ inputs.wait_main_ci }}
         run: |
-          [ "$PREPARED" != "true" ] || [ -z "$CARD_NOTES" ] || { echo "prepared releases are app only for now: leave card_notes empty, or untick prepared"; exit 1; }
+          if [ "$PREPARED" = "true" ] && [ -n "$CARD_NOTES" ]; then
+            echo "::notice::card release: prepared releases are app only for now, so this run uses the full flow"
+            [ "$WAIT_MAIN_CI" != "true" ] || { echo "wait_main_ci goes with prepared releases only: untick it for a card release"; exit 1; }
+          fi
           [ "$PREPARED" = "true" ] || [ "$WAIT_MAIN_CI" != "true" ] || { echo "wait_main_ci needs prepared"; exit 1; }
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version must look like 0.9.87, got: $VERSION"; exit 1; }
           [ "$APP_BRANCH" != "main" ] || { echo "won't release main itself; give the branch that carries the change"; exit 1; }
@@ -166,7 +169,7 @@ jobs:
           fi
           [ "$DRY_RUN" != "true" ] || args+=(--dry-run)
           [ "$SKIP_REPLAY" != "true" ] || args+=(--skip-replay)
-          [ "$PREPARED" != "true" ] || args+=(--prepared)
+          [ "$PREPARED" != "true" ] || [ -n "$CARD_NOTES" ] || args+=(--prepared)
           [ "$WAIT_MAIN_CI" != "true" ] || args+=(--wait-main-ci)
           {
             echo "### Release $VERSION$([ "$DRY_RUN" = "true" ] && echo ' (dry run)')"

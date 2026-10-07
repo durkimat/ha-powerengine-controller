@@ -2,7 +2,7 @@
 
 Moved out of CLAUDE.md. The release procedure in full.
 
-### Single-CI release (`prepared`): new, dry-run first, not yet used for a real release
+### Single-CI release (`prepared`): the default (first real use: 0.9.116, 7 Oct 2026, about 13 minutes with `wait_main_ci`)
 
 CI runs once, on the exact commit that is merged, and nothing is re-tested after the owner's Approve. Releases take about as
 long as one CI run (about 10 minutes) instead of about 27. App only for now (a card release uses the full flow below).
@@ -13,18 +13,17 @@ long as one CI run (about 10 minutes) instead of about 27. App only for now (a c
 4. `tools/prepare_release.sh <version> --notes release-notes/<version>.md --title "..."` (git only, no token): it refuses a
    branch behind main or a version that is not newer, bumps `__version__`, `INSTALL.md` and the CHANGELOG, commits and pushes.
 5. Open the PR (or let the push do it) and let CI pass **on that commit**. Don't push to the branch after this.
-6. Start `release.yml` (ref `main`) with the same inputs as below plus `prepared: true` and, when you want main's own CI to
-   pass before the release exists, `wait_main_ci: true` (off by default; a failure leaves main merged and no release, fix
-   forward in a new PR). Use `dry_run: true` the first time.
+6. Start `release.yml` (ref `main`) with the inputs below (`prepared` is on by default) and, when you want main's own CI to
+   pass before the release exists, `wait_main_ci: true` (off by default; it costs about 5 to 11 minutes; a failure leaves main
+   merged and no release, fix forward in a new PR). Use `dry_run: true` the first time anything about the workflow changes.
 7. The owner presses **Approve and deploy**. The workflow then verifies the bump and that the branch is not behind main,
    checks the PR head is the commit it checked out, waits for CI on it (done already, so no wait), squash-merges pinned to
    that commit, optionally waits for main's CI, and creates the release.
 
 Safety: the Approve click is still the only gate; a push after CI makes the PR head differ and the run stops; no CI run on
-the merge commit (docs-only paths) is not waited for; the old flow stays available (`prepared: false`, the default).
+the merge commit (docs-only paths) is not waited for; the full flow stays available (untick `prepared`) and is used automatically for a card release.
 Re-run after a failure: if the merge happened but the release did not, create the release by re-running with the same
-inputs only if the script says so; otherwise fix forward. After the first real prepared release succeeds, make `prepared`
-the default.
+inputs only if the script says so; otherwise fix forward.
 
 ### The full release (also the only one for a card release)
 

@@ -75,10 +75,10 @@ timed windows, and compares every plan, decision, service call and warning with 
 
 ## Releases (every user-visible change)
 
-Full procedure: `docs/RELEASING.md` (read it when you release). **New (dry-run first, not yet used for real): the single-CI release.**
-`tools/prepare_release.sh <version> --notes <file>` puts the version bump on the branch before CI, then `release.yml` with
-`prepared: true` (optional `wait_main_ci`) merges after the owner's Approve and releases. App only; the card still uses the flow below.
-The flow below stays the default (`prepared: false`) until the first real prepared release succeeds. In short:
+Full procedure: `docs/RELEASING.md` (read it when you release). **The single-CI release is the default** (used for 0.9.116): `tools/prepare_release.sh
+<version> --notes <file>` puts the version bump on the branch, CI passes on that commit, then `release.yml` (`prepared` on by default; optional
+`wait_main_ci`) merges after the owner's Approve and releases, in about a minute plus the wait. App only: a card release uses the full flow
+(automatic when `card_notes` is given). In short (the steps below describe the full flow):
 
 1. Branch from `main`, change with tests, run the checks, re-record the replay only if the change is meant to alter behaviour.
 2. Commit the notes as `release-notes/<version>.md` (starts `### Behaviour changes`, plain words; card notes in a second file if the
