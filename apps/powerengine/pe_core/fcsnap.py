@@ -28,8 +28,10 @@ from datetime import date, datetime, timedelta, timezone
 VERSION = 1
 KEEP_DAYS = 14
 MIN_GAP_S = 300                  # one entry per entity per 5 minutes
-SOFT_BYTES = 800_000             # past this an entity is written at most every 30 minutes
-HARD_BYTES = 1_000_000           # past this nothing more is written that day
+# A real day is about 1 to 1.5 MB (6 Oct, from the owner's export: 470 KB by 06:46, the EDF dispatch list is 13 KB and
+# changes ~40 times a day, each Solcast entity 12 KB). 800 KB / 1 MB (the first build) would have cut the evening off.
+SOFT_BYTES = 3_000_000           # past this an entity is written at most every 30 minutes
+HARD_BYTES = 5_000_000           # past this nothing more is written that day
 SLOW_GAP_S = 1800
 FIRST_SEEN_BEFORE = timedelta(days=1)       # smart slots near the day: from a day before ...
 FIRST_SEEN_AFTER = timedelta(days=3)        # ... to three days after its start

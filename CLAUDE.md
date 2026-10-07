@@ -315,6 +315,7 @@ is at its bottom, and the Engine v2 page ends with its own history; both carry `
 the card's icons `pe:engine-v1` / `pe:engine-v2` (`window.customIcons`).
 - **Forecast snapshots** (`pe_core/fcsnap.py`, `<costs>/snapshots/YYYY-MM-DD.json`, 14 days): deltas of the raw states of the roles that
   carry future information, the house profile and smart slots' first-seen times; a full entry at the first cycle of each day. Never in a demo.
+- **Snapshot size:** a real day is 1 to 1.5 MB (the EDF dispatch list is 13 KB and changes ~40 times a day, each Solcast entity 12 KB); `fcsnap.SOFT_BYTES` 3 MB / `HARD_BYTES` 5 MB (0.9.114; the first build's 800 KB / 1 MB cut a real day off in the evening).
 - **Cost records** carry `engine` and `live`; `costbook.day_engine(_info)`. v1's "As run" (`_record_ran`) is written only on engine v1.
 - **Engine v2 history** (`pe_core/v2history.py`, `<costs>/v2history/`, 30 days; `sensor.pe_v2_history`, event `pe_v2_history_day`).
 - **Same-day comparison** (`pe_core/compare/`): nightly at 03:20 the app starts `python -m pe_core.compare.run` as a **subprocess**

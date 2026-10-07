@@ -78,7 +78,7 @@ trust the other column. Days with mixed control (switched during the day) are co
                 "first_seen": {"2026-10-07T01:30:00+01:00": "2026-10-06T19:02:00+01:00"}}]}
   ```
   `profile` and `first_seen` appear in an entry only when they changed. Write with the costbook's atomic write. A failure warns once
-  per day and never stops the cycle. Never in a demo. Size check: the file for a day must stay under 1 MB (test with synthetic
+  per day and never stops the cycle. Never in a demo. Size check: the file for a day stays under 3 MB (a real day is 1 to 1.5 MB; the first build capped it at 1 MB and would have cut the evening off; test with synthetic
   Solcast/Kraken payloads of realistic size and 24 forecast updates).
 - **Scrub:** these files hold entity ids (they never leave the HA host; they are not in the diagnostics export, which carries only
   a summary: days kept, entries, bytes).

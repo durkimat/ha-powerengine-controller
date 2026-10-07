@@ -169,9 +169,11 @@ def _rates(day):
             "friendly_name": "Electricity Current Day Rates"}
 
 
-def test_a_day_with_realistic_payloads_and_24_forecast_updates_stays_under_1mb(tmp_path):
+def test_a_day_with_realistic_payloads_and_24_forecast_updates_stays_inside_the_limits(tmp_path):
     """Three Solcast entities (each rewritten 24 times a day as the forecast is revised), two Kraken rate events, the
-    dispatch list, free power and grid events: the day's file stays under 1 MB (the plan's bound)."""
+    EDF dispatch list (13 KB on the owner's install, changing about 40 times a day), free power and grid events: the
+    day's file stays under the soft limit and nothing is left out (the first build's 1 MB cap, tested with a 250 byte
+    dispatch list, would have cut a real day off in the evening: 6 Oct 2026, 470 KB by 06:46)."""
     rng = random.Random(7)
     w = fcsnap.SnapshotWriter(str(tmp_path), LON)
     roles = {"solar_forecast_today": "sensor.solcast_today", "solar_forecast_tomorrow": "sensor.solcast_tomorrow",
@@ -200,14 +202,16 @@ def test_a_day_with_realistic_payloads_and_24_forecast_updates_stays_under_1mb(t
             "sensor.rate_now": st("0.0699" if now.hour < 5 else "0.3028", unit_of_measurement="GBP/kWh"),
             "sensor.export": st("0.15"), "sensor.standing": st("0.4597"),
             "binary.dispatch": st("on" if hour in (2, 3) else "off", planned_dispatches=[
-                {"start": "2026-10-07T01:30:00+01:00", "end": "2026-10-07T03:30:00+01:00", "charge_in_kwh": -4.2}] * 3,
-                completed_dispatches=[]),
+                {"start": f"2026-10-07T{(i % 24):02d}:{(step // 7) % 60:02d}:00+01:00",
+                 "end": f"2026-10-07T{(i % 24):02d}:30:00+01:00", "charge_in_kwh": -4.2, "source": "smart-charge"}
+                for i in range(60)], completed_dispatches=[]),
             "sensor.free_start": st("unknown"), "sensor.axle_start": st("unknown"),
         }
         wrote += bool(w.observe(now, roles, states, prof, {}))
     path = tmp_path / "2026-10-07.json"
     size = os.path.getsize(path)
-    assert size < 1_000_000, size
+    assert size < fcsnap.SOFT_BYTES, size
+    assert size > 600_000, size                                         # a real-sized day, not a toy one
     assert w.skipped == 0                                              # nothing had to be left out
     snap = read(path)
     assert len(snap["entries"]) >= 24                                  # the updates are all there

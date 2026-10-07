@@ -618,6 +618,9 @@ class PowerEngine(hass.Hass):
             if uses_battery_pair(self.cfg) and "battery_power" in self.cfg.inputs:
                 checks["battery_power"] = (OK, "Not used: the charging and discharging sensors are mapped")
         missing = blocking(checks, required)
+        self._missing_why = "; ".join(f"{k}: {checks[k][1]}" + (f" ({self.cfg.inputs[k]['entity']})"
+                                      if k in self.cfg.inputs and "entity" in self.cfg.inputs[k] else "")
+                                      for k in missing if k in checks) if self.cfg is not None else ""
         down = degraded(checks, required)
         if bool(down) != bool(getattr(self, "_degraded", [])):
             if down:
@@ -670,7 +673,8 @@ class PowerEngine(hass.Hass):
             "save_path": self._save_path(),
             "error": self.cfg_error,
         })
-        self.log(f"Inputs: {overall}; mode {mode.label} ({mode.reason})")
+        self.log(f"Inputs: {overall}; mode {mode.label} ({mode.reason}"
+                 f"{self._why_not_ready() if mode.effective == 'unconfigured' else ''})")
 
     # --- the monitoring cycle ------------------------------------------------------
 
@@ -2736,6 +2740,12 @@ class PowerEngine(hass.Hass):
         missing = sorted(role for role, eid in entities.items() if not eid)
         return entities, missing
 
+    def _why_not_ready(self) -> str:
+        """' - battery_charge_power: Entity is unavailable (sensor.x)' for the inputs the last check found not ready, so
+        a diagnostics export says why (unavailable, not found, stale, wrong unit), not only which."""
+        why = getattr(self, "_missing_why", "")
+        return f" - {why}" if why else ""
+
     def _leave_active(self, old, new, guards=()):
         """Leaving Active hands the inverter back to Self-Use once (pause, choosing Passive, or inputs that stopped
         working), except when a handover guard tripped: then another controller has taken over and PowerEngine
@@ -2753,8 +2763,8 @@ class PowerEngine(hass.Hass):
             # inputs gone (e.g. HA or the inverter integration restarting): leave the programmed windows running
             # for a while rather than rewriting them; hand back to Self-Use only if the inputs stay missing
             self._release_due = datetime.now(timezone.utc) + timedelta(seconds=INPUT_GRACE_SECONDS)
-            self.log(f"Inputs not ready ({new.reason}); the inverter keeps its programmed windows for "
-                     f"{INPUT_GRACE_SECONDS // 60} minutes while they come back", level="WARNING")
+            self.log(f"Inputs not ready ({new.reason}{self._why_not_ready()}); the inverter keeps its programmed "
+                     f"windows for {INPUT_GRACE_SECONDS // 60} minutes while they come back", level="WARNING")
             return
         self.log(f"Leaving Active ({new.label}: {new.reason}); returning the inverter to Self-Use",
                  level="INFO" if new.effective == "paused" or new.configured == "passive" else "WARNING")
