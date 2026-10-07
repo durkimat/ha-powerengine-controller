@@ -1019,6 +1019,29 @@ as the value brushes the sale line by under the 0.5p price band (axle 5, car 3, 
 `hold>discharge>hold`), which 18a does not touch. So the total did **not** fall (17 to 18, all on the axle day, +5); the
 reversals did. The dull day is 4% down (0.17), the other three are up; engine v1's rows are identical before and after.
 
+## 18b. Prefer Self-use by day, and a late grid event (7 Oct 2026, built for 0.9.115 / proposed)
+
+**Seen on the owner's Engine v2 page:** the expected timeline held the battery for most of the next day, and the overnight charge
+stopped short of 100%. Reproduced with a synthetic day (`prefer_self_use` off): with a sunny day ahead the plan sells the spare sun at 15p and
+refills at the night's 7p (about 8p/kWh), so it holds by day and the extra kWh above about 85% is worth only the refill price; with a heavier
+house load, or no sun, it charges to 100% before the cheap slot ends, as 18a says. The live executor only holds while there is spare sun
+(otherwise the battery covers the house), so the plan and what runs agree on a sunny forecast and differ only in what the plan thinks a
+shortfall costs.
+
+**Built (0.9.115): `prefer_self_use`** (system setting, default on, section "What engine v2 may do"). `rules._core` takes Hold away from
+every segment that is not a cheap-rate time (`rules._cheap`: the overnight window or a smart slot, or no segment at all), unless the car,
+the reserve or an override has already set the rule. The plan and the live decision both read the same limits, so spare sun is stored by
+Self-use. It costs the sun-sale arbitrage: on the synthetic sunny day the expected cost goes from -36.8p to -8.7p over 36 hours, and the plan
+then fills to 100% by 05:30. Off restores the earlier behaviour. The diagnostics export's `engine_v2` section also carries `mode`, `value`,
+`value_curve` and `learning` (the other v2 sensors), and the timeline now has the `sun` series.
+
+**Proposed, not built: plan for a short-notice grid event.** The engine treats a grid event as known only once it is published, so it never
+values an empty-handed battery against one arriving after the overnight charge. Sketch: learn from the cost records how often grid events
+start at short notice, at what hours, what they pay and how long they last; give each future segment an event probability and price as a
+second outcome (as a smart slot already has two price outcomes), where the outcome forces Export at `event_p`. Stored energy then carries
+an option value in the evening and overnight, which would lift the charge target without a rule. To settle first: the data (how many events
+a month, how much notice, typical hours and pay), and whether the value should be capped so a rare event does not keep the battery full.
+
 ## 19. Sources
 
 * Event-triggered MPC for building energy management (77 to 88% fewer optimisations): [Building and Environment, 2023](https://www.sciencedirect.com/science/article/abs/pii/S0360132323001282)

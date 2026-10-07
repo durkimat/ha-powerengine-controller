@@ -27,6 +27,12 @@ SETTINGS: dict[str, tuple] = {
     "event_plus_export": ("bool", True, None, None, "", "Export rate paid on top of a grid event",
                           "The supplier's export rate is paid on top of the grid event's own rate."),
     "free_power": ("bool", True, None, None, "", "Free-power sessions", "Charge to 100% during a free-power session."),
+    "prefer_self_use": ("bool", True, None, None, "", "Prefer Self-use to Hold by day",
+                        "Outside cheap-rate times the battery runs the house (Self-use) and stores spare sun, instead "
+                        "of holding to export the sun. Hold is kept for cheap-rate times (the overnight window and "
+                        "smart slots), the car, the reserve and manual overrides. Off: engine v2 may hold by day when "
+                        "selling spare sun at the export rate beats storing it (it works out cheaper on a sunny day, "
+                        "by the gap between the export rate and the night's rate, but the battery sits idle)."),
     "preview_when_v1": ("bool", True, None, None, "", "Preview while engine v1 is in control",
                         "Work out and show what engine v2 would do while engine v1 is in control. Nothing is sent."),
     "charge_ceiling_soc": ("number", 100, 10, 100, "%", "Highest grid charge",
@@ -127,7 +133,7 @@ SETTINGS: dict[str, tuple] = {
 SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("allowed", "What engine v2 may do",
      ("arbitrage", "events", "event_plus_export", "free_power", "charge_ceiling_soc",
-      "preview_when_v1")),
+      "prefer_self_use", "preview_when_v1")),
     ("floors", "Floors", ("reserve_soc", "hard_floor_margin_pct")),
     ("comfort", "Comfort band", ("comfort_low_soc", "comfort_high_soc", "comfort_cost_p", "top_up_cost_p")),
     ("value", "Value and costs",
@@ -164,6 +170,7 @@ class V2Settings:
     events: bool = True
     event_plus_export: bool = True
     free_power: bool = True
+    prefer_self_use: bool = True
     preview_when_v1: bool = True
     charge_ceiling_soc: float = 100
     reserve_soc: float = 12

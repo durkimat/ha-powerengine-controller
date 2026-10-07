@@ -3898,7 +3898,10 @@ class PowerEngine(hass.Hass):
             "bms": s(self._bms_bundle),
             "engine_v2": s(lambda: diagnostics.engine_v2_section(
                 self.__dict__.get("_v2"), self._engine_name(), now,
-                (self._published.get("v2_timeline") or (None, None))[1])),
+                (self._published.get("v2_timeline") or (None, None))[1],
+                {name: (self._published.get(key) or (None, None))[1] for name, key in (
+                    ("mode", "v2_mode"), ("value", "v2_value"), ("value_curve", "v2_value_curve"),
+                    ("learning", "diag_v2"))})),
             "forecast_snapshots": s(lambda: fcsnap.summary(self._fcsnap.folder))
             if self.__dict__.get("_fcsnap") else None,
             "v2_history": s(lambda: v2history.summary(self._v2hist.folder, self.tz)) if self.__dict__.get("_v2hist")

@@ -74,13 +74,17 @@ def recent_journal(entries: list[dict], now: datetime, hours: int = JOURNAL_HOUR
 V2_JOURNAL_ROWS = 300
 
 
-def engine_v2_section(engine, in_use: str, now: datetime, timeline: dict | None = None) -> dict:
+def engine_v2_section(engine, in_use: str, now: datetime, timeline: dict | None = None,
+                      extra: dict | None = None) -> dict:
     """The export's `engine_v2` part: which engine runs, the engine's health, the last 300 journal rows and the latest
-    timeline (what was last published on sensor.pe_v2_timeline). `engine` is None when v2 never ran this start."""
+    timeline (what was last published on sensor.pe_v2_timeline, with the sun and house forecast it used). `extra` is
+    the other published v2 sensors' attributes (`mode`, `value`, `value_curve`, `learning`). `engine` is None when v2
+    never ran this start."""
+    extra = extra or {}
     if engine is None:
-        return {"in_use": in_use, "health": None, "journal": [], "timeline": timeline}
+        return {"in_use": in_use, "health": None, "journal": [], "timeline": timeline, **extra}
     return {"in_use": in_use, "health": engine.health(now), "journal": engine.journal()[-V2_JOURNAL_ROWS:],
-            "timeline": timeline}
+            "timeline": timeline, **extra}
 
 
 def safe(fn, *args, **kwargs):

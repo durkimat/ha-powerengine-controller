@@ -9,7 +9,8 @@ forecast), so the plan (layer 3) and the live decision (layer 5) can never disag
   free power               forced FREE (charge to 100%)
   car charging             only Hold and Charge: the battery never feeds the car
   level at the reserve     no discharge mode (every one of them, except a grid event)
-  otherwise                Self-use, Hold, Charge, and Export when arbitrage is on
+  otherwise                Self-use, Hold, Charge, and Export when arbitrage is on; with `prefer_self_use` Hold only at
+                         cheap-rate times (the overnight window, a smart slot)
 
 Active, Passive and Pause are not rules here: v2 always decides, and `Situation.active` says whether it is sent.
 """
@@ -63,7 +64,7 @@ def caps(facts: BatteryFacts, charge_factor: float = 1.0, house_kw: float | None
 
 def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str | None, free: bool, car: bool,
           level: float | None, charge_factor: float, house_kw: float | None, solar_kw: float | None, car_kw: float,
-          reserve_latched: bool = False, override_text: str = "") -> Limits:
+          reserve_latched: bool = False, override_text: str = "", cheap: bool = True) -> Limits:
     s = settings
     floor = normal_floor(facts, s)
     ceiling = float(s.charge_ceiling_soc)
@@ -90,6 +91,8 @@ def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str
     if car:
         allowed &= {HOLD, CHARGE}
         rule, reason = "car", "The car is charging: the battery holds so it never feeds the car"
+    if s.prefer_self_use and not cheap and rule == "normal":
+        allowed.discard(HOLD)                       # by day the battery runs the house and stores spare sun
     held_below = floor + (s.level_band_pct if reserve_latched else 0.0)
     if level is not None and level <= held_below:
         allowed -= {SELF_USE, EXPORT}
@@ -100,6 +103,12 @@ def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str
                                                             else "hard floor") + ": nothing may discharge it")
     return Limits(allowed=frozenset(allowed), forced=None, floor_soc=floor, ceiling_soc=ceiling, rule=rule,
                   reason=reason, **common)
+
+
+def _cheap(seg: Segment | None) -> bool:
+    """A cheap-rate time: the overnight window or a smart slot (which may or may not come). With no segment, treated
+    as cheap, so a missing forecast never takes Hold away."""
+    return seg is None or seg.overnight or seg.slot_prob is not None
 
 
 def limits_now(situation: Situation, obs: Observation, seg: Segment | None, facts: BatteryFacts,
@@ -122,7 +131,7 @@ def limits_now(situation: Situation, obs: Observation, seg: Segment | None, fact
                  charge_factor=seg.charge_factor if seg is not None else 1.0,
                  house_kw=(r.house_power or 0.0) / 1000.0 if r.house_power is not None else None,
                  solar_kw=(r.solar_power or 0.0) / 1000.0, car_kw=car_kw,
-                 reserve_latched=reserve_latched, override_text=text)
+                 reserve_latched=reserve_latched, override_text=text, cheap=_cheap(seg))
 
 
 def limits_for(seg: Segment, facts: BatteryFacts, settings: V2Settings, *,
@@ -131,4 +140,5 @@ def limits_for(seg: Segment, facts: BatteryFacts, settings: V2Settings, *,
     hours = seg.hours or 1e-9
     return _core(settings, facts, event=seg.event, manual=seg.manual, free=seg.free,
                  car=seg.car_kw > 0 and house_load_includes_ev, level=None, charge_factor=seg.charge_factor,
-                 house_kw=seg.load_kwh.mid / hours, solar_kw=seg.solar_kwh.mid / hours, car_kw=seg.car_kw)
+                 house_kw=seg.load_kwh.mid / hours, solar_kw=seg.solar_kwh.mid / hours, car_kw=seg.car_kw,
+                 cheap=_cheap(seg))
