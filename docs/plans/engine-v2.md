@@ -1035,12 +1035,18 @@ Self-use. It costs the sun-sale arbitrage: on the synthetic sunny day the expect
 then fills to 100% by 05:30. Off restores the earlier behaviour. The diagnostics export's `engine_v2` section also carries `mode`, `value`,
 `value_curve` and `learning` (the other v2 sensors), and the timeline now has the `sun` series.
 
-**Proposed, not built: plan for a short-notice grid event.** The engine treats a grid event as known only once it is published, so it never
-values an empty-handed battery against one arriving after the overnight charge. Sketch: learn from the cost records how often grid events
-start at short notice, at what hours, what they pay and how long they last; give each future segment an event probability and price as a
-second outcome (as a smart slot already has two price outcomes), where the outcome forces Export at `event_p`. Stored energy then carries
-an option value in the evening and overnight, which would lift the charge target without a rule. To settle first: the data (how many events
-a month, how much notice, typical hours and pay), and whether the value should be capped so a rare event does not keep the battery full.
+**Built (0.9.115): `late_events`** (default on; `late_events_per_week` 1.5, `late_event_hours` 1.0). The owner's decision: no overrides, the plan itself
+assumes an event could arrive. In `value._backward` every future, unforced segment starting at least 30 minutes ahead (`LATE_NOTICE_S`) gets a
+probability `late_p` = per week / 7 x hours / 24 (scaled up for the sales' average size) of being inside an event no one has announced. In that
+outcome the mode is forced to EVENT at the known-event price (`event_value_p`, plus the export rate when paid on top) with no choice and no
+change cost. The sale comes in four sizes (a quarter, half, three quarters and all of the full power, `LATE_SHARES`), because one size puts the
+sale's limit at the same level in every segment and the value curve fills with dips. The value curve is also averaged over half a kWh either
+side when this is on (`_smoothed`): the programme's choices snap to the level grid and show up as dips of several pence per kWh otherwise. Stored
+energy is therefore worth a little more at times an event could come, and a charge target follows without any rule. The expected path and cost
+(timeline) stay the no-event path. Costs about twice the calculation time (0.5 to 1 s here). **Limits seen:** an event sells at most about 2.4
+kWh a half hour, so the option only values energy the battery would not have anyway; with a light load and a sunny day the fill moves a few
+points, with a heavy winter load or a 2 hour event it reaches 100% at 06:00. The lever is `late_event_hours` and `late_events_per_week`. Not
+done: learning the rate and the hours of day from the cost records, events weighted to the evening.
 
 ## 19. Sources
 
