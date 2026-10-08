@@ -615,7 +615,7 @@ mode on its own; it only makes the engine look again.
 | `level_band_pct` | 1 | As above, for levels |
 | `min_dwell_s` | 120 (RAM) / 900 (timed) | Larger: fewer writes, slower to follow |
 | `deadline_grace_min` | 10 | How late a mode may run past its expected end before the engine looks again |
-| `switch_cost_p` | 2 p | Cost of any change of mode, in the plan and in "a change must pay for itself" (0.9.126; before it was 0.5 p, with a separate `reversal_cost_p` of 3 p, retired) |
+| `switch_cost_p` | 2 p | Cost of any change of mode, in the plan and in "a change must pay for itself" (0.9.127; before it was 0.5 p, with a separate `reversal_cost_p` of 3 p, retired) |
 
 ---
 
@@ -1019,7 +1019,7 @@ as the value brushes the sale line by under the 0.5p price band (axle 5, car 3, 
 `hold>discharge>hold`), which 18a does not touch. So the total did **not** fall (17 to 18, all on the axle day, +5); the
 reversals did. The dull day is 4% down (0.17), the other three are up; engine v1's rows are identical before and after.
 
-**Superseded in 0.9.126: one cost for every change.** `reversal_cost_p` (3p for charge to sale, 0.5p other changes, a fifth of that between hold and
+**Superseded in 0.9.127: one cost for every change.** `reversal_cost_p` (3p for charge to sale, 0.5p other changes, a fifth of that between hold and
 charge) was inconsistent: charge, hold, sale cost 0.6p against 3p for charge, sale, so wherever a half-hour's gain was marginal the plan rested in Hold
 for a whole step to avoid the reversal cost (seen 8 Oct 2026). Now `switch_cost(prev, new, cost_p)` is `cost_p` (2p) for any change and 0 for none, so a
 detour through a third mode always costs more than the direct change (the triangle inequality). Tested before building on the closed-loop evening

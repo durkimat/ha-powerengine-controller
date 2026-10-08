@@ -261,7 +261,7 @@ def _check(key: str, value: Any) -> Any:
 
 
 # Settings an earlier release had and a saved config may still hold: dropped quietly, never an error.
-RETIRED = frozenset({"reversal_cost_p"})   # 0.9.126: one cost for every change (switch_cost_p)
+RETIRED = frozenset({"reversal_cost_p"})   # 0.9.127: one cost for every change (switch_cost_p)
 
 
 def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None) -> V2Settings:
