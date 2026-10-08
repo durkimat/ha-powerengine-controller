@@ -35,7 +35,7 @@ import math
 import time
 from bisect import bisect_right
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..names import N
 from .settings import V2Settings
@@ -435,10 +435,12 @@ def _pick(cands: list, prev: str, cost_p: float, reversal_p: float | None = None
 
 # --- the solve -----------------------------------------------------------------------------------------------------
 class _Core:
-    __slots__ = ("segs", "V", "VK", "tv", "cap", "step", "fine_step")
+    __slots__ = ("segs", "V", "VK", "tv", "tail", "cap", "step", "fine_step")
 
 
 def _terminal_p(fc: Forecast, facts: BatteryFacts, settings: V2Settings) -> float:
+    """The flat price of a kWh left at the end of the look-ahead: what refilling it costs, from the cheapest import
+    price in the last 24 hours (or the fixed figure)."""
     if settings.terminal_value == "fixed":
         return settings.terminal_value_p
     segs = fc.segments
@@ -447,14 +449,62 @@ def _terminal_p(fc: Forecast, facts: BatteryFacts, settings: V2Settings) -> floa
     prices = prices or [s.import_p for s in segs if not s.free]
     if not prices:
         return settings.terminal_value_p
-    refill = min(prices) / facts.eta_charge
-    # A look-ahead that ends outside the cheap price (e.g. 30 min into the peak) leaves no cheap refill at its end:
-    # the energy left is used at the peak or sold later, so it is worth at least what a sale brings. Without this the
-    # last steps dump the battery to the floor (7 Oct 2026: 25% to 12% at 06:00, as the 28.84p peak began).
-    last = segs[-1]
-    if not last.free and last.import_p > refill + EPS:
-        refill = max(refill, last.export_p * facts.eta_discharge - settings.wear_sale_p)
-    return refill
+    return min(prices) / facts.eta_charge
+
+
+CHEAP_BAND_P = 1.0       # a segment within this of the cheapest price in the last 24 h counts as cheap
+
+
+def _terminal_curve(fc: Forecast, facts: BatteryFacts, settings: V2Settings, step: float, n: int) -> tuple[float, list]:
+    """What energy left at the end of the look-ahead is worth, by level: (the price above the knee, the values at
+    levels 0, step, .. n * step in pence, negative: a credit).
+
+    The look-ahead ends part-way through a day, so the plan cannot see what the battery will need next. The last 24
+    hours of it stand for what happens after the end (the same times of day tomorrow) and are read for two things: how
+    much stored energy could still be bought back at the cheap price before the dear stretch begins (R: the rest of
+    the cheap window, if the end is inside one, at the charge rate), and how much the house takes from the battery in
+    that dear stretch (D). Below the level that leaves just enough to reach D with R refilled, a kWh is worth what it
+    saves in the dear stretch; above it, a kWh can be bought back (or, with no refill to come, sold), so it is worth
+    no more than the refill price or what a sale brings. Without this the end of the plan sold the battery down to
+    the floor in the last hours of a cheap window (8 Oct 2026), or just after the dear rate began (7 Oct, the 0.9.119
+    case), though the energy was needed in the dear stretch that followed."""
+    refill = _terminal_p(fc, facts, settings)
+    flat = [-refill * i * step for i in range(n + 1)]
+    segs = fc.segments
+    if settings.terminal_value == "fixed" or not segs:
+        return refill, flat
+    cut = segs[-1].end - timedelta(hours=24)
+    ghost = [g for g in segs if g.end > cut and not g.free]
+    prices = [g.import_p for g in ghost]
+    if not prices:
+        return refill, flat
+    cheap_p = min(prices) + CHEAP_BAND_P
+    sale = segs[-1].export_p * facts.eta_discharge - settings.wear_sale_p
+    charge_kw = facts.max_charge_kw * facts.charge_factor
+
+    def part(g: Segment) -> float:                  # the share of the segment after the cut (the first may be cut)
+        return min(1.0, (g.end - max(g.start, cut)).total_seconds() / max(g.hours * 3600, 1e-9))
+
+    i, refillable = 0, 0.0
+    while i < len(ghost) and ghost[i].import_p <= cheap_p:           # the cheap window the end may be inside
+        refillable += charge_kw * ghost[i].hours * part(ghost[i]) * facts.eta_charge
+        i += 1
+    need = weighted = 0.0
+    while i < len(ghost) and ghost[i].import_p > cheap_p:            # the dear stretch after it
+        g = ghost[i]
+        net = max(0.0, g.load_kwh.mid - g.solar_kwh.mid) * part(g)
+        need += net
+        weighted += net * g.import_p
+        i += 1
+    above = refill if refillable > 0.0 else max(refill, sale)
+    if need < 0.05:
+        return above, [-above * k * step for k in range(n + 1)]
+    below = weighted / need * facts.eta_discharge        # a stored kWh used in the dear stretch saves this
+    if below <= above + EPS:
+        return above, [-above * k * step for k in range(n + 1)]
+    cap = facts.capacity_kwh
+    knee = min(cap, max(0.0, settings.reserve_soc / 100 * cap + need / facts.eta_discharge - refillable))
+    return above, [-(below * min(k * step, knee) + above * max(0.0, k * step - knee)) for k in range(n + 1)]
 
 
 # An event may start or end part-way through a segment, so it sells at a quarter, a half, three quarters or all of the
@@ -488,11 +538,11 @@ def _backward(fc: Forecast, facts: BatteryFacts, settings: V2Settings, limits_fo
     core.cap = cap
     core.segs = [_make(s, facts, settings, limits_for(s)) for s in fc.segments]
     _late_events(core.segs, settings, now)
-    core.tv = _terminal_p(fc, facts, settings)
     nf, sf = _grid(cap, fine)
     nc, sc = _grid(cap, max(coarse, fine))
     core.step, core.fine_step = sf, sf
-    tail = _Arr([-core.tv * i * sc for i in range(nc + 1)], sc)
+    core.tv, tail_values = _terminal_curve(fc, facts, settings, sc, nc)
+    core.tail = tail = _Arr(tail_values, sc)
     VK: list[dict] = [{k: tail for k in KINDS}] * (len(core.segs) + 1)
     horizon = FINE_HOURS * 3600
     cost_p, rev_p = settings.switch_cost_p, settings.reversal_cost_p
@@ -722,7 +772,7 @@ def _forward(core: _Core, lam: tuple, step: float, e0: float, kind: str, band: f
     """`_walk` over the whole forecast. Returns (records, cost including the credit for the energy left at the end)."""
     rows = [_end_row(lam, k) for k in range(len(core.segs))]
     recs = _walk(core.segs, rows, step, e0, kind, band, vks=[core.VK[k + 1] for k in range(len(core.segs))])
-    return recs, sum(r["cost"] for r in recs) - core.tv * recs[-1]["e1"]
+    return recs, sum(r["cost"] for r in recs) + _val(core.tail, recs[-1]["e1"])
 
 
 def _level_at(rec: dict, x: float) -> float:

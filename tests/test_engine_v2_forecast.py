@@ -132,12 +132,14 @@ def test_prices_beyond_the_published_ones_are_estimated():
     assert any("estimated" in n for n in fc.notes)
 
 
-def test_horizon_is_between_36_and_48_hours():
+def test_horizon_is_always_48_hours_even_when_fewer_prices_are_published():
+    """0.9.122: solved 48 h so the end of the look-ahead sits beyond what the timeline shows (36 h)."""
     fc = F.build(make(at(8, 0), days=3), ST)
     span = fc.segments[-1].end - fc.segments[0].start
     assert timedelta(hours=47) < span <= timedelta(hours=48, minutes=30)
-    fc = F.build(make(at(8, 0), days=1), ST)
-    assert fc.segments[-1].end - at(8, 0) >= timedelta(hours=36)
+    fc = F.build(make(at(8, 0), days=1), ST)                    # prices end at midnight, 16 h on
+    assert fc.segments[-1].end - at(8, 0) == timedelta(hours=48)
+    assert F.DISPLAY_H == 36 and F.HORIZON_H == 48
 
 
 def test_first_segment_starts_now_and_is_pro_rata():

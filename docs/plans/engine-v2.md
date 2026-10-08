@@ -202,7 +202,7 @@ level_est ← level_est + K × (reported_level + offset[mode] − level_est)    
 
 ## 5. Layer 2: Forecast
 
-**Job.** Describe the next 36 to 48 hours as **segments**: stretches of time in which prices, events and the car state
+**Job.** Describe the next 48 hours (0.9.122: always 48; the timeline shows the first 36) as **segments**: stretches of time in which prices, events and the car state
 are constant and sun and house load change little. Give each segment a central estimate and a spread.
 
 ### Segments, not half-hours
@@ -324,7 +324,7 @@ worth, in pence. From it, derive the price thresholds layer 5 uses, and an **exp
 | `wear_sale_p` | 0 p/kWh | Wear per kWh the battery sells (Export, grid events) |
 | `event_value_p` | 100 p/kWh | What a grid event pays per kWh, before the export rate (v1's constant, F7) |
 | `event_plus_export` | on | The export rate is paid on top |
-| `terminal_value` | `refill` | Value of energy left at the end of the horizon: `refill` = the cheapest non-free import price expected in the last 24 h of the horizon, divided by the charge efficiency (fixes F11); or a fixed figure |
+| `terminal_value` | `refill` | Value of energy left at the end of the horizon: `refill` = the cheapest non-free import price expected in the last 24 h of the horizon, divided by the charge efficiency (fixes F11), but a curve rather than one price (0.9.122, see `docs/history/engine-v2-and-comparison.md`: energy the house will need in the dear stretch after the end is worth that stretch's price, energy that could still be bought back is worth the refill price); or a fixed figure |
 | `comfort_low_soc`, `comfort_high_soc` | 20 / 90 % | The comfort band (6.1): a soft guide, priced inside the model |
 | `comfort_cost_p` | 0.3 p per kWh per hour | The price of each kWh held outside the band for an hour (6.1) |
 
