@@ -307,7 +307,7 @@ class Executor:
         both. (`charge_now` is the plan's own run, and changes the rules or the levels force, safety events and forced
         modes never come here.) A charge or a sale moves the energy up to its own exit level; self-use and hold move
         what the house would draw or the sun supply in the next half-hour."""
-        cost = 2 * switch_cost(KIND[cur], KIND[pick.mode], self.s.switch_cost_p, self.s.reversal_cost_p)
+        cost = 2 * switch_cost(KIND[cur], KIND[pick.mode], self.s.switch_cost_p)
         if cost <= 0 or ln is None or level is None:
             return True
         cap = facts.capacity_kwh

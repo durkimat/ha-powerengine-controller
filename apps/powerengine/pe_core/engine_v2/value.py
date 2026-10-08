@@ -108,7 +108,7 @@ def _slope(a: _Arr, e: float) -> float:
 class _Seg:
     __slots__ = ("seg", "lim", "dt", "cap", "eta_c", "eta_d", "taper", "dtaper", "max_chg", "max_dis", "chg_f",
                  "chg_cap", "dis_cap", "export_limit", "fuse", "floor", "ceil", "car", "export_p", "event_p",
-                 "wear_h", "wear_s", "ccost", "topup", "sw", "rev", "lo", "hi", "allowed", "forced", "outcomes", "scen",
+                 "wear_h", "wear_s", "ccost", "topup", "sw", "lo", "hi", "allowed", "forced", "outcomes", "scen",
                  "mid", "late_p")
 
 
@@ -177,7 +177,6 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     S.ccost = settings.comfort_cost_p
     S.topup = settings.top_up_cost_p
     S.sw = settings.switch_cost_p
-    S.rev = settings.reversal_cost_p
     S.lo, S.hi = settings.comfort_low_soc / 100 * S.cap, settings.comfort_high_soc / 100 * S.cap
     S.forced = lim.forced or (EVENT if seg.event else FREE if seg.free else seg.manual)
     S.allowed = tuple(m for m in _ORDER if m in lim.allowed) or (SELF_USE,)
@@ -373,18 +372,11 @@ KINDS = (NONE_K, HOLD_K, CHARGE_K, DISCHARGE_K)
 KIND = {SELF_USE: NONE_K, HOLD: HOLD_K, CHARGE: CHARGE_K, FREE: CHARGE_K, EXPORT: DISCHARGE_K, EVENT: DISCHARGE_K}
 
 
-def switch_cost(prev: str, new: str, cost_p: float, reversal_p: float | None = None) -> float:
-    """Pence for changing from the kind of mode `prev` to `new`: `reversal_p` for turning a charge into a sale or a sale
-    into a charge (it defaults to `cost_p`), the setting for any other full change, a fifth of it between holding and
-    charging (on the inverter only the charge current changes)."""
-    if prev == new:
-        return 0.0
-    pair = {prev, new}
-    if pair == {CHARGE_K, DISCHARGE_K}:
-        return cost_p if reversal_p is None else reversal_p
-    if not cost_p:
-        return 0.0
-    return cost_p / 5 if pair == {HOLD_K, CHARGE_K} else cost_p
+def switch_cost(prev: str, new: str, cost_p: float) -> float:
+    """Pence for changing from the kind of mode `prev` to `new`: the one setting for any change, nothing for staying.
+    Every change costs the same, so a detour through a third mode (a hold between a charge and a sale) always costs
+    more than the direct change and is never taken to save the cost."""
+    return 0.0 if prev == new else cost_p
 
 
 def _candidates(S: _Seg, e: float, scen: list, imp_p: float, Vk: dict,
@@ -422,12 +414,12 @@ def _candidates(S: _Seg, e: float, scen: list, imp_p: float, Vk: dict,
     return out
 
 
-def _pick(cands: list, prev: str, cost_p: float, reversal_p: float | None = None) -> float:
+def _pick(cands: list, prev: str, cost_p: float) -> float:
     """The cheapest candidate once the cost of changing from kind `prev` is added. Ties keep the earlier one in the
     modes' order (a change must beat the one before it by more than EPS)."""
     best = math.inf
     for g, mode, _f in cands:
-        g += switch_cost(prev, KIND[mode], cost_p, reversal_p)
+        g += switch_cost(prev, KIND[mode], cost_p)
         if g < best - EPS:
             best = g
     return best
@@ -545,7 +537,7 @@ def _backward(fc: Forecast, facts: BatteryFacts, settings: V2Settings, limits_fo
     core.tail = tail = _Arr(tail_values, sc)
     VK: list[dict] = [{k: tail for k in KINDS}] * (len(core.segs) + 1)
     horizon = FINE_HOURS * 3600
-    cost_p, rev_p = settings.switch_cost_p, settings.reversal_cost_p
+    cost_p = settings.switch_cost_p
     for k in range(len(core.segs) - 1, -1, -1):
         S = core.segs[k]
         fine_here = (S.seg.start - now).total_seconds() < horizon
@@ -559,7 +551,7 @@ def _backward(fc: Forecast, facts: BatteryFacts, settings: V2Settings, limits_fo
             for pw, ip in outcomes:
                 cands = _candidates(S, e, scen, ip, Vk)
                 for kind in KINDS:
-                    tot[kind] += pw * (1.0 - q) * _pick(cands, kind, cost_p, rev_p)
+                    tot[kind] += pw * (1.0 - q) * _pick(cands, kind, cost_p)
             if q:                                   # a late grid event: a forced sale, no choice, no change cost
                 g = sum(_candidates(S, e, scen, _outcome_price(S), Vk, force=EVENT, dscale=f)[0][0]
                         for f in LATE_SHARES) * q / len(LATE_SHARES)
@@ -698,7 +690,7 @@ def _dp_choice(S: _Seg, e: float, imp_p: float, vk_next: dict, prev: str | None)
     prev_kind = KIND[prev] if prev else NONE_K
     best, pick = math.inf, (SELF_USE, 1.0)
     for g, mode, f in _candidates(S, e, S.scen, imp_p, vk_next):
-        g += switch_cost(prev_kind, KIND[mode], S.sw, S.rev)
+        g += switch_cost(prev_kind, KIND[mode], S.sw)
         if g < best - EPS:
             best, pick = g, (mode, f)
     return pick
@@ -759,7 +751,7 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
             f = min(1.0, max(0.0, (stop - hold[0]) / span)) if abs(span) > 1e-9 else 1.0
             if f < 1.0:
                 res, e_hold = _mix(full, hold, f, S), hold[0]
-        change = switch_cost(KIND[prev_mode], KIND[mode], S.sw, S.rev) if prev_mode is not None else 0.0
+        change = switch_cost(KIND[prev_mode], KIND[mode], S.sw) if prev_mode is not None else 0.0
         prev_mode = HOLD if f < 1.0 else mode
         recs.append({"k": first + i, "mode": mode, "f": f, "e0": e, "e1": res[0], "e_full": full[0], "e_hold": e_hold,
                      "cost": res[1] + change, "comfort": res[2], "imp": res[3], "exp": res[4], "evx": res[5],
