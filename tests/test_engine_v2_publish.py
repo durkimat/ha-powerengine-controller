@@ -105,7 +105,11 @@ def test_timeline_sizes_for_48_hours_with_long_reasons_still_fit(monkeypatch):
         out = eng.step(inp(T0, import_rate=0.07))
         state, attrs = publish.entity_states(out, eng, eng.s, LOCAL)["v2_timeline"]
         assert size(attrs) < LIMIT, (reason_len, size(attrs))
-        assert len(attrs["items"]) == 24 and attrs["path"]["mid"]
+        # solved over 48 h, shown over the first 36 (two-hour items: 18 of them), the path and the prices to match
+        assert len(attrs["items"]) == 18 and attrs["path"]["mid"]
+        assert len(attrs["path"]["mid"]) == 36 * 60 // attrs["path"]["step_min"] + 1
+        assert datetime.fromisoformat(attrs["items"][-1]["end"]) - T0 == timedelta(hours=36)
+        assert datetime.fromisoformat(attrs["prices"][-1]["end"]) - T0 <= timedelta(hours=36)
 
 
 def test_the_timeline_with_extreme_input_is_cut_down_to_fit(monkeypatch):
@@ -182,7 +186,7 @@ def test_the_sun_and_house_the_plan_used_are_published_in_half_hour_kw(made):
     a = publish.entity_states(out, eng, eng.s, LOCAL)["v2_timeline"][1]
     sun = a["sun"]
     assert set(sun) == {"start", "step_min", "low", "mid", "high", "house"} and sun["step_min"] == 30
-    assert len(sun["mid"]) == len(sun["low"]) == len(sun["high"]) == len(sun["house"]) == 97
+    assert len(sun["mid"]) == len(sun["low"]) == len(sun["high"]) == len(sun["house"]) == 73      # the first 36 h
     t0 = datetime.fromisoformat(sun["start"]).astimezone(timezone.utc)
     for i, (lo, mid, hi) in enumerate(zip(sun["low"], sun["mid"], sun["high"], strict=True)):
         t = t0 + timedelta(minutes=30 * i)

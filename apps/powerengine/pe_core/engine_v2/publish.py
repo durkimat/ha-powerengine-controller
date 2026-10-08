@@ -11,6 +11,7 @@ import json
 import math
 from datetime import datetime, timedelta
 
+from .forecast import DISPLAY_H
 from .settings import SETTINGS, V2Settings, catalogue
 from .types import MODE_LABEL, ModeState, StepOutput, ValueResult
 
@@ -85,10 +86,18 @@ def _value(out: StepOutput) -> tuple[str, dict]:
 
 
 # ---- the timeline ------------------------------------------------------------------------------
+def _cutoff(vr: ValueResult) -> datetime:
+    """The end of what the timeline shows: the plan is solved further than this (see forecast.DISPLAY_H)."""
+    return vr.made_at + timedelta(hours=DISPLAY_H)
+
+
 def _prices(vr: ValueResult, tz) -> list[dict]:
     rows: list[dict] = []
+    cut = _cutoff(vr)
     for seg in vr.forecast.segments:
-        row = {"start": seg.start, "end": seg.end, "import_p": _r(seg.import_p), "export_p": _r(seg.export_p),
+        if seg.start >= cut:
+            break
+        row = {"start": seg.start, "end": min(seg.end, cut), "import_p": _r(seg.import_p), "export_p": _r(seg.export_p),
                "slot_prob": _r(seg.slot_prob), "slot_import_p": _r(seg.slot_import_p) if seg.slot_prob is not None
                else None, "event": bool(seg.event), "free": bool(seg.free), "estimated": bool(seg.price_estimated)}
         last = rows[-1] if rows else None
@@ -141,7 +150,7 @@ def _sun(vr: ValueResult, tz) -> dict | None:
     step = timedelta(minutes=SUN_STEP_MIN)
     first = segs[0].start
     t0 = first.replace(minute=first.minute // SUN_STEP_MIN * SUN_STEP_MIN, second=0, microsecond=0)
-    n = int(math.ceil((segs[-1].end - t0) / step))
+    n = int(math.ceil((min(segs[-1].end, _cutoff(vr)) - t0) / step))
     keys = ("low", "mid", "high")
     acc = {k: [0.0] * n for k in keys}
     house = [0.0] * n
@@ -181,13 +190,26 @@ def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, t
     if vr is None:
         return "unknown", {}
     p = vr.path or {}
+    cut = _cutoff(vr)
+    step_min = p.get("step_min", 15)
+    keep = int(DISPLAY_H * 60 // step_min) + 1                    # path points up to the end of what is shown
+    path = {k: [_r(x, 1) for x in p.get(k, [])][:keep] for k in ("mid", "low", "high")}
+    items = []
+    for it in vr.timeline:
+        if it.start >= cut:
+            break
+        end, level_end = it.end, it.level_end
+        if end > cut:                                             # runs past what is shown: stop it at the edge
+            end = cut
+            if len(path["mid"]) == keep:
+                level_end = path["mid"][-1]
+        items.append({"mode": it.mode, "start": _iso(it.start, tz), "end": _iso(end, tz),
+                      "level_start": _r(it.level_start, 1), "level_end": _r(level_end, 1), "until": it.until,
+                      "reason": it.reason[:REASON_MAX]})
     attrs = {"now": _iso(vr.made_at, tz), "because": vr.because, "floor_soc": _r(hard_floor, 1),
              "reserve_soc": _r(settings.reserve_soc, 1),
-             "items": [{"mode": it.mode, "start": _iso(it.start, tz), "end": _iso(it.end, tz),
-                        "level_start": _r(it.level_start, 1), "level_end": _r(it.level_end, 1), "until": it.until,
-                        "reason": it.reason[:REASON_MAX]} for it in vr.timeline],
-             "path": {"start": p.get("start"), "step_min": p.get("step_min", 15),
-                      **{k: [_r(x, 1) for x in p.get(k, [])] for k in ("mid", "low", "high")}},
+             "items": items,
+             "path": {"start": p.get("start"), "step_min": step_min, **path},
              "prices": _prices(vr, tz), "sun": _sun(vr, tz),
              "cost_expected": _r(vr.cost_expected_p / 100), "cost_selfuse": _r(vr.cost_selfuse_p / 100),
              "comfort_given_up": _r(vr.comfort_given_up_p / 100) if vr.comfort_given_up_p is not None else None,

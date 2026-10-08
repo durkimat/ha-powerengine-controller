@@ -1,6 +1,6 @@
 """Engine v2, layer 2: the forecast (docs/plans/engine-v2.md section 5, build plan "A: forecast and value").
 
-`build` describes the next 36 to 48 hours as segments: stretches of time in which prices, events and the car are
+`build` describes the next 48 hours as segments: stretches of time in which prices, events and the car are
 constant and the sun and the house change little. Each segment carries a low / middle / high figure for the sun and the
 house, and a smart slot is kept as two outcomes (the slot happens at its price, or does not and the standard price
 applies) with a probability: it is never blended into one price.
@@ -37,7 +37,9 @@ LOW_FACTOR, HIGH_FACTOR = 0.7, 1.2          # sun band when the forecast gives n
 LOAD_LOW_FACTOR, LOAD_HIGH_FACTOR = 0.8, 1.3  # house band when nothing is learned (of the profile)
 FALLBACK_IMPORT_P = 30.0                    # no price at all: assume dear, never cheap
 BIAS_RANGE = (0.5, 1.5)
-HORIZON_MIN_H, HORIZON_MAX_H = 36, 48
+HORIZON_H = 48          # always solved this far (prices past the last published ones are estimated)
+DISPLAY_H = 36          # what the timeline shows: the last hours before the end of the look-ahead are where the
+                        # value of the energy left over bends the plan, so they are solved but not shown (0.9.122)
 _OVERRIDE_MODE = {v1d.SELF_USE: SELF_USE, v1d.HOLD: HOLD, v1d.GRID_CHARGE: CHARGE, v1d.EXPORT: EXPORT}
 
 
@@ -131,7 +133,7 @@ def build(inp: StepInput, settings: V2Settings, learned: dict | None = None) -> 
     r, tz, now = inp.readings, inp.tz, inp.now
     facts = inp.facts
     tz_ = tz or timezone.utc
-    slots = build_slots(r, inp.solar_points, inp.load_profile, tz, horizon_h=HORIZON_MAX_H, min_h=HORIZON_MIN_H,
+    slots = build_slots(r, inp.solar_points, inp.load_profile, tz, horizon_h=HORIZON_H, min_h=HORIZON_H,
                         certainty=None, first_seen=None, overnight=inp.overnight, whole_house=True)
     if not slots:
         return Forecast(made_at=now, segments=(), notes=("No prices are known yet.",))
