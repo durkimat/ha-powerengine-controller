@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.125 (beta)
+
+### Behaviour changes
+
+- **While the car is charging and the battery is held, the status now says "until the car stops charging".** It used to say "until the price changes to 6.66p at 23:00", although the battery is held because the car is charging and stays held past 23:00 if the car is still going. "The car stops charging" is now the first line under "This ends when" and in the subtitle; the price change stays in the list below it, since a worthwhile charge can still start then.
+- Display only: when the battery is held, and for how long, is decided exactly as before.
+
 ## 0.9.124 (beta)
 
 ### Behaviour changes
