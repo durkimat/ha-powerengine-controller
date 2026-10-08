@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.122 (beta)
+
+### Behaviour changes
+
+- **The end of the expected timeline no longer shows a heavy discharge.** Engine v2 plans over a look-ahead, and what was left in the battery at its end was valued as if it could always be bought back at the cheap rate. When the look-ahead ended inside the cheap window (8 Oct: 03:45, with the window running to 06:00), the last steps sold the battery from 63% to 25%, although there was not time left to refill it and the house needs that energy in the dear stretch that follows. 0.9.119 fixed only the case where the look-ahead ends just after the dear rate begins. This is the same fault at its root, fixed in two parts:
+  - **The plan is always worked out over 48 hours, and the timeline shows the first 36.** The last hours, where an end effect is most likely, are worked out but not shown, and they have little pull on what happens now. A plan takes about 30% longer to work out (about 1.7 s to about 2.3 s on your system).
+  - **Energy left at the end is now valued by what happens next, not at one price.** The engine reads how much could still be bought back before the dear stretch begins and how much the house takes from the battery in it. Below the level that keeps that much, a kWh is worth the dear stretch's price; above it, it is worth the cheap refill price (or a sale, if nothing can be refilled). This replaces the 0.9.119 rule, which is now just one case of it. A flat tariff, or an end value set to Fixed, behaves as before.
+- What the engine does right now changes little: the end of the plan was already being re-planned as the look-ahead rolled forward. The replay of a recorded night is unchanged.
+- The setting's help text for "Energy left at the end of the look-ahead" says the same.
+
 ## 0.9.121 (beta)
 
 ### Behaviour changes

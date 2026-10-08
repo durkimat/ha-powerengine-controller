@@ -57,3 +57,20 @@ safety setting `battery_floor_soc` (12 %, the BMS's own limit; v2's hard floor, 
 - **Not done / to watch:** not yet run on a live HA; `sample_s` changes need a restart; `band_exit` may revalue often on real data
   (watch the Health card's causes); the design's offset sign: the learned offset is reported minus true.
 
+## 0.9.122: the end of the look-ahead (8 Oct 2026)
+
+The plan's last hours were unreliable twice: 7 Oct (look-ahead ended 30 min into the 28.84p peak: 25% sold to the floor) and 8 Oct
+(ended inside the cheap window: 63% sold to 25% in the last two hours). The cause is one thing: energy left at the end was
+valued at one flat price (the cheapest import price after losses), with no idea how much could still be bought back or what
+the house would need next. 0.9.119 patched the first case with a sale-price floor; the second case was the same fault.
+Fixed at the root, in two parts:
+
+- **Solve 48 h always, show 36** (`forecast.HORIZON_H`, `DISPLAY_H`; `publish._timeline` trims items, path, prices and sun). The end
+  effect now sits in hours 36 to 48 where nothing is shown and it hardly moves the near plan.
+- **The end value is a curve** (`value._terminal_curve`). The last 24 h of the plan stand for what follows the end (the same times
+  of day tomorrow). R = what the rest of a cheap window could still refill (charge rate, with losses); D = the house's net load in
+  the dear stretch after it. Below the knee `reserve + D/eta - R` a stored kWh is worth the dear stretch's price (load-weighted);
+  above it, the refill price (or, with no refill to come, the sale price: the 0.9.119 rule, now a special case). A flat tariff or a
+  fixed value gives the old flat figure. Tests: `test_engine_v2_value.py` (the cheap-window end, the peak end, the control that
+  shows the old value dumping).
+

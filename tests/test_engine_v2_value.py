@@ -598,14 +598,69 @@ def test_the_value_curve_with_late_events_still_falls_with_the_level():
     assert mostly_falls(vr, share=0.05, worst=5.0)
 
 
+def daily(end_hh, load=0.3, cheap_hh=(range(0, 12), range(44, 48))):
+    """`end_hh` half-hours from midnight: cheap 22:00 to 06:00 (6.99p), dear 06:00 to 22:00 (28.84p), no sun."""
+    cheap = {i for r in cheap_hh for i in r}
+    return [seg(i, imp=6.99 if i % 48 in cheap else 28.84, load=load) for i in range(end_hh)]
+
+
+def _end_levels(vr, last=4):
+    return [it.level_end for it in vr.timeline[-last:]]
+
+
+def test_a_look_ahead_ending_in_the_cheap_window_keeps_what_the_dear_stretch_needs():
+    # 8 Oct 2026: the look-ahead ended inside the cheap window and the last steps sold the battery to the floor, because
+    # what was left was valued at the cheap refill price though only an hour of the window was left to refill in.
+    # The 48 h look-ahead below ends at 05:00: one cheap hour is left (4.6 kWh refillable) and the 06:00 to 22:00
+    # house load (9.6 kWh, 10.1 stored) must be there at 06:00, so about 12.8 - 4.6 = 8.2 kWh (45%) is kept.
+    st = replace(NO_COMFORT, terminal_value="refill", reserve_soc=15.0)
+    ar = lambda sg: limits_for(sg, arbitrage=True)                                    # noqa: E731
+    vr = solve(daily(96 + 10), soc=70.0, settings=st, lim=ar)
+    assert min(_end_levels(vr)) > 40.0
+    tv, curve = V._terminal_curve(fc_of(daily(96 + 10)), FACTS, st, 0.18, 100)
+    knee = next(k for k in range(1, 101) if curve[k - 1] - curve[k] < curve[0] - curve[1] - 1e-9)
+    assert knee * 0.18 / 18 * 100 == pytest.approx(45.0, abs=2.0)
+    assert tv == pytest.approx(6.99 / FACTS.eta_charge)              # above the knee: bought back at the cheap price
+    # control: without the knee (the flat refill value) the same plan does dump to the floor
+    flat = lambda fc, facts, settings, step, n: (6.99 / facts.eta_charge,        # noqa: E731
+                                                [-6.99 / facts.eta_charge * i * step for i in range(n + 1)])
+    orig, V._terminal_curve = V._terminal_curve, flat
+    try:
+        dumped = solve(daily(96 + 10), soc=70.0, settings=st, lim=ar)
+    finally:
+        V._terminal_curve = orig
+    assert min(_end_levels(dumped)) < 20.0
+
+
+def test_a_look_ahead_ending_in_the_cheap_window_with_time_to_refill_may_sell_down():
+    # three hours of the window left refill 13.7 kWh, more than the dear stretch needs: selling down is right
+    st = replace(NO_COMFORT, terminal_value="refill", reserve_soc=15.0)
+    tv, curve = V._terminal_curve(fc_of(daily(96 + 6)), FACTS, st, 0.18, 100)
+    refill_step = -6.99 / FACTS.eta_charge * 0.18
+    assert curve[1] - curve[0] == pytest.approx(curve[100] - curve[99]) == pytest.approx(refill_step)
+
+
 def test_a_look_ahead_ending_in_the_peak_does_not_dump_the_battery_at_its_end():
-    # 7 Oct 2026: the look-ahead ended 30 min into the 28.84p peak and the last step sold 25% down to the floor, because
-    # what was left was valued at the cheap refill price (6.66p / eta) though nothing could be refilled at its end.
-    st = replace(NO_COMFORT, terminal_value="refill")
-    segs = [seg(i, imp=6.99, load=0.3) for i in range(6)] + [seg(6, imp=28.84, load=0.3)]
-    vr = solve(segs, soc=60.0, settings=st)
-    assert vr.timeline[-1].mode != EXPORT and vr.timeline[-1].level_end > 50.0
-    # a look-ahead that ends inside the cheap price still values the energy left at the refill price
-    cheap_end = [seg(i, imp=28.84, load=0.3) for i in range(6)] + [seg(6, imp=6.99, load=0.3)]
-    assert V._terminal_p(fc_of(cheap_end), FACTS, st) == pytest.approx(6.99 / FACTS.eta_charge)
-    assert V._terminal_p(fc_of(segs), FACTS, st) == pytest.approx(15.0 * FACTS.eta_discharge)
+    # 7 Oct 2026 (0.9.119): the look-ahead ended 30 min into the 28.84p peak and the last step sold 25% down to the
+    # floor. Nothing is refillable until 22:00, so the day's remaining house load (31 half hours, 9.3 kWh, 9.8 stored)
+    # plus the reserve, about 12.5 kWh (69%), is worth the peak price and the plan keeps it.
+    st = replace(NO_COMFORT, terminal_value="refill", reserve_soc=15.0)
+    ar = lambda sg: limits_for(sg, arbitrage=True)                                    # noqa: E731
+    vr = solve(daily(96 + 13), soc=70.0, settings=st, lim=ar)                         # ends 06:30
+    assert min(_end_levels(vr)) > 60.0
+    tv, curve = V._terminal_curve(fc_of(daily(96 + 13)), FACTS, st, 0.18, 100)
+    assert tv == pytest.approx(max(6.99 / FACTS.eta_charge, 15.0 * FACTS.eta_discharge))   # the surplus can be sold
+
+
+def test_the_value_of_energy_left_never_rises_with_the_level_and_a_flat_tariff_keeps_the_refill_price():
+    st = replace(NO_COMFORT, terminal_value="refill", reserve_soc=15.0)
+    for end in (96 + 5, 96 + 13, 96 + 30):
+        tv, curve = V._terminal_curve(fc_of(daily(end)), FACTS, st, 0.18, 100)
+        slopes = [curve[k] - curve[k + 1] for k in range(100)]
+        assert all(a >= b - 1e-9 for a, b in zip(slopes, slopes[1:], strict=False)), end
+    flat_tariff = [seg(i, imp=28.84, load=0.3) for i in range(96)]
+    tv, curve = V._terminal_curve(fc_of(flat_tariff), FACTS, st, 0.18, 100)
+    assert tv == pytest.approx(28.84 / FACTS.eta_charge) and curve[50] == pytest.approx(-tv * 50 * 0.18)
+    fixed = replace(NO_COMFORT, terminal_value="fixed", terminal_value_p=12.0)
+    got = V._terminal_curve(fc_of(daily(96 + 5)), FACTS, fixed, 0.18, 10)
+    assert got == (12.0, [-12.0 * i * 0.18 for i in range(11)])
