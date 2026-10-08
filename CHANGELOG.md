@@ -8,6 +8,7 @@ Every release lists **Behaviour changes** (anything that changes what PowerEngin
 
 - **The plan's import price line now shows the smart-charge slot price while a slot is running.** When a slot had started (for example the car plugged in and the house on 6.66p), the dotted import line on the expected timeline still showed the standard rate (28.84p), with the slot price only held in the detail, so the "now" line crossed the high price. A slot that has started is now drawn at its own price. A slot that has not started yet is unchanged: it stays at the standard rate with the chance and slot price beside it.
 - Display only: the plan and the decisions use the same prices as before.
+- **The "Charging at" box on the Engine v2 page now shows a power.** It read the power the mode asks for, which was only filled in when something limited it (the battery's own limit or the cold caution), so with no limit the box always showed "–". It now shows the full rate that is being asked for (and "Exporting at" the full export rate). Display only: what is sent to the inverter is unchanged.
 
 ## 0.9.123 (beta)
 
