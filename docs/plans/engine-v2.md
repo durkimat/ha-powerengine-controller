@@ -615,7 +615,7 @@ mode on its own; it only makes the engine look again.
 | `level_band_pct` | 1 | As above, for levels |
 | `min_dwell_s` | 120 (RAM) / 900 (timed) | Larger: fewer writes, slower to follow |
 | `deadline_grace_min` | 10 | How late a mode may run past its expected end before the engine looks again |
-| `reversal_cost_p` | 3 p | Cost of turning a charge into a sale or back (0.9.113): in the plan and in "a change must pay for itself"; other changes use `switch_cost_p` |
+| `switch_cost_p` | 2 p | Cost of any change of mode, in the plan and in "a change must pay for itself" (0.9.127; before it was 0.5 p, with a separate `reversal_cost_p` of 3 p, retired) |
 
 ---
 
@@ -1018,6 +1018,16 @@ The 18 left are not reversals: Self-use and Hold changing on spare sun (axle 8, 
 as the value brushes the sale line by under the 0.5p price band (axle 5, car 3, sunny 2: `discharge>self>discharge`,
 `hold>discharge>hold`), which 18a does not touch. So the total did **not** fall (17 to 18, all on the axle day, +5); the
 reversals did. The dull day is 4% down (0.17), the other three are up; engine v1's rows are identical before and after.
+
+**Superseded in 0.9.127: one cost for every change.** `reversal_cost_p` (3p for charge to sale, 0.5p other changes, a fifth of that between hold and
+charge) was inconsistent: charge, hold, sale cost 0.6p against 3p for charge, sale, so wherever a half-hour's gain was marginal the plan rested in Hold
+for a whole step to avoid the reversal cost (seen 8 Oct 2026). Now `switch_cost(prev, new, cost_p)` is `cost_p` (2p) for any change and 0 for none, so a
+detour through a third mode always costs more than the direct change (the triangle inequality). Tested before building on the closed-loop evening
+(`tests/evening_world.py`; 18a settings: changes 10 to 6, holds 4 to 1, no reversals or flip-flops, cash 2.4p worse; default settings: changes 10 to 7,
+holds 3 to 1, cash the same) and the four demo days (adjusted saving 26.63 to 26.64, flips 3 to 3, changes 67 to 64). A change cost of 1p let reversals
+through in the default evening (3), so 2p is the lowest that holds; a separate hold penalty of 0 to 2p made no difference at 2p or more, so there is none.
+A saved `reversal_cost_p` is ignored (`settings.RETIRED`).
+
 
 ## 18b. Prefer Self-use by day, and a late grid event (7 Oct 2026, built for 0.9.115 / proposed)
 
