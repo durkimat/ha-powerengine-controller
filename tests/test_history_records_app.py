@@ -87,6 +87,17 @@ def test_engine_v2_records_its_history_and_publishes_it(v2_run):
     assert [m for m in app.warnings if "history" in str(m).lower() and "Could not" in str(m)] == []
 
 
+def test_engine_v2_publishes_its_recent_hours_whatever_day_the_picker_shows(v2_run):
+    app = v2_run["app"]
+    app._v2_history_date = today_of(app) - timedelta(days=3)               # the picker is on another day
+    state, attrs = published(app, app._publish_v2_recent, "v2_recent")
+    assert state == str(len(attrs["series"])) and attrs["hours"] == 18 and attrs["step_min"] == 30
+    starts = [r["t"] for r in attrs["series"]]
+    assert all(r["sent"] for r in attrs["series"]) and starts == sorted(starts)
+    assert len(json.dumps(attrs, separators=(",", ":"), ensure_ascii=False).encode("utf-8")) < 6_000
+    app._v2_history_date = None
+
+
 def test_cost_records_are_tagged_with_the_engine_that_was_chosen(v2_run, v1_run):
     for run, engine in ((v2_run, "v2"), (v1_run, "v1")):
         app = run["app"]

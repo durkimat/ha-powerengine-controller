@@ -11,7 +11,8 @@
 The expected points are the engine's expected level at each half-hour boundary of the day (00:00 to 24:00, the ones
 the timeline covers). A series row for the half-hour starting at t compares the level at its end with the expected
 level at t + 30 minutes. Recorded whenever engine v2 is stepped, in control or preview (`sent` / `preview` say which).
-`attributes` builds the sensor.pe_v2_history attributes (under 12 KB).
+`attributes` builds the sensor.pe_v2_history attributes (under 12 KB). `recent` builds sensor.pe_v2_recent: the last
+RECENT_HOURS of the same half-hours whatever day the picker shows, for the plan chart's scrollback.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ REASON_MAX = 90
 ATTR_TARGET = 12_000
 MAX_GAP_S = 120.0            # a longer gap between ticks counts as this much in a half-hour's mix
 HALF = timedelta(minutes=30)
+RECENT_HOURS = 18            # how far back sensor.pe_v2_recent reaches (the plan chart's scrollback)
 
 NOTE = ("What engine v2 did, half-hour by half-hour, against the level it expected at the start of the day. "
         "Half-hours marked preview were worked out but nothing was sent.")
@@ -224,6 +226,12 @@ class V2History:
         return True
 
     # --- the sensor ----------------------------------------
+    def recent_attributes(self, now: datetime, hours: int = RECENT_HOURS) -> dict:
+        """sensor.pe_v2_recent: the last `hours` hours as run, from today's file and the day before's."""
+        local = now.astimezone(self.tz)
+        days = {d: self.load(d) for d in ((local - timedelta(hours=hours)).date(), local.date())}
+        return recent({d.isoformat(): v for d, v in days.items()}, now, self.tz, hours)
+
     def attributes(self, day: date, today: date, in_control: str | None, live: bool | None = None) -> dict:
         data = self.load(day)
         days = self.days()
@@ -261,6 +269,31 @@ def attributes(data: dict, day: date, today: date, tz, in_control: str | None, l
             break
         attrs["changes"] = [{**c, "reason": c["reason"][:width]} for c in attrs["changes"][-keep:]]
     return attrs
+
+
+def recent(rows_by_day: dict[str, dict], now: datetime, tz, hours: int = RECENT_HOURS) -> dict:
+    """The attributes of sensor.pe_v2_recent: the half-hours that ended in the last `hours` hours, oldest first, across
+    midnight. Only the fields the plan chart draws (the as-run mode, battery level at the half-hour's end, the two
+    prices and whether it was sent). `rows_by_day` is {day: that day's file}. Small by construction: 36 rows at
+    most."""
+    stop = half_start(now.astimezone(tz))                # the half-hour running now is written when it ends
+    since = stop - timedelta(hours=hours)
+    out = []
+    for data in rows_by_day.values():
+        for x in (data or {}).get("ran", []):
+            try:
+                t = datetime.fromisoformat(x["start"])
+            except (KeyError, ValueError):
+                continue
+            if since <= t < stop:
+                row = {"t": x["start"], "mode": x.get("mode"), "level": x.get("level_end"),
+                       "import_p": x.get("import_p"), "export_p": x.get("export_p"), "sent": bool(x.get("sent"))}
+                if x.get("preview"):
+                    row["preview"] = True
+                out.append(row)
+    out.sort(key=lambda r: datetime.fromisoformat(r["t"]))
+    return {"hours": hours, "step_min": 30, "since": since.isoformat(timespec="seconds"),
+            "until": stop.isoformat(timespec="seconds"), "series": out}
 
 
 def _size(attrs: dict) -> int:
