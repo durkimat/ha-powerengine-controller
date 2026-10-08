@@ -259,3 +259,34 @@ def test_plan_actions_table_renders_when_a_window_has_no_optional_key():
     env.globals["states"] = lambda _e: "3"
     out = env.from_string(card["content"]).render()
     assert "**self-use** |" in out and "**self-use** (manual) |" in out
+
+
+def test_savings_breakdown_folds_and_adds_up_to_the_powerengine_step():
+    """The fold-out under 'Where the savings came from' splits the PowerEngine step into carried-in energy, the
+    battery itself and PowerEngine's timing; the three add up to the waterfall's step, and it is collapsed."""
+    import jinja2
+
+    from pe_core.costs import waterfall
+    d = yaml.safe_load(open(SOURCE))
+    cards = [c for v in d["views"] for s in v.get("sections", []) for c in s.get("cards", [])]
+    card = next(c for c in cards if c.get("type") == "markdown" and "How yesterday's" in c["content"])
+    assert "<details>" in card["content"] and "<details open" not in card["content"]
+    # 7 Oct 2026: the waterfall said PowerEngine saved 2.98
+    day = {"date": "2026-10-07", "complete": True, "energy": {"battery_in": 13.2, "battery_out": 23.2},
+           "scenarios": {"none": 4.23, "solar": 3.76, "tariff": 3.52, "self_use_adj": 1.56, "actual_adj": 1.24,
+                         "carry": -0.7, "events_metered": 0.0, "axle_income": 0.0}}
+    step = next(s["value"] for s in waterfall([day], "yesterday")["steps"] if s["label"] == "PowerEngine")
+    assert step == -2.98
+    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    env.globals["state_attr"] = lambda _e, k: [day] if k == "days" else None
+    env.globals["is_state"] = lambda _e, _v: True
+    env.filters["timestamp_custom"] = lambda ts, fmt: "Wed 07 Oct"
+    env.globals["as_timestamp"] = lambda _s: 0
+    text = " ".join(env.from_string(card["content"]).render().split())
+    assert "How yesterday's £2.98 was made: £0.70 from energy carried in, £1.96 from the battery itself, " \
+           "£0.32 from PowerEngine's timing" in text
+    assert "| Wed 07 Oct | **£2.98** | £0.70 | £1.96 | £0.32 | 13.2 / 23.2 |" in text
+    # an old day without self_use_adj is skipped, and with no days at all nothing renders
+    env.globals["state_attr"] = lambda _e, k: [{"date": "x", "complete": True, "scenarios": {"none": 1}}] \
+        if k == "days" else None
+    assert "details" not in env.from_string(card["content"]).render()

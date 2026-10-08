@@ -1088,9 +1088,54 @@ views:
               **Reading the chart, left to right**
               - **No solar or battery:** what the period would have cost buying every kWh from the grid (including the standing charge).
               - **Solar, Tariff:** what your solar and your EDF tariff's cheap rates would each have saved.
-              - **PowerEngine:** what the battery and PowerEngine saved on top of that, by choosing when to charge, discharge and export. It is the real metered cost of your normal half-hours, set against the line before it. Energy bought for later or used from earlier counts on the day it was bought or used, so a single day can look dearer or cheaper than the battery really made it; it evens out over a week.
+              - **PowerEngine:** what the battery and PowerEngine saved on top of that, by choosing when to charge, discharge and export. It is the real metered cost of your normal half-hours, set against the line before it. The fold-out below splits it into the battery's own part and PowerEngine's. Energy bought for later or used from earlier counts on the day it was bought or used, so a single day can look dearer or cheaper than the battery really made it; it evens out over a week.
               - **Axle & free power:** the energy Axle exported, and the free-power half-hours, which are kept out of the everyday figures (the rest of an Axle half-hour, such as house load and car charging, stays in the everyday steps). Negative means money in: Axle's £1/kWh plus EDF's export payment.
               - **You paid:** the real total for the period, after Axle's payments.
+          # how the PowerEngine step was made: folded by default so the page stays short (the summary line carries the headline numbers)
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
+              {%- macro kwh(v) -%}{{ '%.1f' | format(v | float(0)) }}{%- endmacro %}
+              {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
+              {%- set ns = namespace(n=0, tot=0.0, carried=0.0, plain=0.0, pe=0.0, cin=0.0, cout=0.0, y=none) %}
+              {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse if d.complete and d.scenarios and d.scenarios.self_use_adj is defined %}{% if ns.n < 7 %}
+              {%- set sc = d.scenarios %}{% set e = d.energy or {} %}
+              {%- set carried = 0 - (sc.carry | float(0)) %}
+              {%- set plain = (sc.tariff | float(0)) - (sc.self_use_adj | float(0)) %}
+              {%- set pe = (sc.self_use_adj | float(0)) - (sc.actual_adj | float(0)) %}
+              {%- if ns.n == 0 %}{% set ns.y = {'date': d.date, 'tot': carried + plain + pe, 'carried': carried, 'plain': plain, 'pe': pe} %}{% endif %}
+              {%- set ns.tot = ns.tot + carried + plain + pe %}{% set ns.carried = ns.carried + carried %}{% set ns.plain = ns.plain + plain %}{% set ns.pe = ns.pe + pe %}
+              {%- set ns.cin = ns.cin + (e.battery_in | float(0)) %}{% set ns.cout = ns.cout + (e.battery_out | float(0)) %}
+              {%- set ns.n = ns.n + 1 %}
+              {%- endif %}{% endfor %}
+              {%- if ns.y %}
+              <details><summary><b>How yesterday's {{ gbp(ns.y.tot) }} was made: {{ gbp(ns.y.carried) }} from energy carried in, {{ gbp(ns.y.plain) }} from the battery itself, {{ gbp(ns.y.pe) }} from PowerEngine's timing</b></summary>
+
+              The "PowerEngine" step on the chart is everything the battery and PowerEngine did together. Here it is split into three parts that add up to it (negative means that part cost money):
+
+              - **Energy carried in:** battery energy bought on an earlier day (usually overnight at the cheap rate) and used in this one. Its cost was counted on the day it was bought, so it flatters the day it is used and evens out over a week. Negative means the day topped the battery up for tomorrow.
+              - **The battery itself:** what a plain self-use battery of the same size would have saved from the same starting charge (solar charges it, it covers the house, no grid charging), allowing for how full each ends.
+              - **PowerEngine's timing:** what PowerEngine's choices added on top of that plain battery: charging at the cheapest rates, holding energy for the dear half-hours, exporting at the best price. Negative means it did worse than plain self-use that day, for example when the sun or the load was not as forecast.
+
+              | Day | PowerEngine step | Energy carried in | The battery itself | PowerEngine's timing | Battery in / out (kWh) |
+              |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
+              {%- set ns.n = 0 %}
+              {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse if d.complete and d.scenarios and d.scenarios.self_use_adj is defined %}{% if ns.n < 7 %}
+              {%- set sc = d.scenarios %}{% set e = d.energy or {} %}
+              {%- set carried = 0 - (sc.carry | float(0)) %}
+              {%- set plain = (sc.tariff | float(0)) - (sc.self_use_adj | float(0)) %}
+              {%- set pe = (sc.self_use_adj | float(0)) - (sc.actual_adj | float(0)) %}
+              | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }} | **{{ gbp(carried + plain + pe) }}** | {{ gbp(carried) }} | {{ gbp(plain) }} | {{ gbp(pe) }} | {{ kwh(e.battery_in) }} / {{ kwh(e.battery_out) }} |
+              {%- set ns.n = ns.n + 1 %}
+              {%- endif %}{% endfor %}
+              | **Last {{ ns.n }} days** | **{{ gbp(ns.tot) }}** | **{{ gbp(ns.carried) }}** | **{{ gbp(ns.plain) }}** | **{{ gbp(ns.pe) }}** | **{{ kwh(ns.cin) }} / {{ kwh(ns.cout) }}** |
+
+              Each part is rounded, so a row can differ from its total by a penny. These figures come from your meters and the battery's own charge, not a re-run: PowerEngine's timing is measured against a simulated plain battery, so it also picks up luck (a better or worse day than forecast) as well as skill.
+
+              "Engines compared, same day" below is a different measure. It replays the day from the morning's forecast with a simulated battery that has no taper or BMS limits, so its savings for the same day will not match this table. Use it to compare engines with each other, and this table for what your meters saw.
+              </details>
+              {%- endif %}
       - type: grid
         column_span: 3
         cards:
