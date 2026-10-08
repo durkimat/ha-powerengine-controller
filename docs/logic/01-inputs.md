@@ -183,7 +183,7 @@ the car is full).
 | Capacity (kWh) | Role `battery_capacity` (default 18) | Measured capacity | `use_measured` |
 | Round-trip efficiency | Role `battery_round_trip` (90.25% = 95% each way); one-way = square root | Measured efficiency; then x the inverter's AC/DC conversion, grid-to-grid (`learn_conversion`) | Result must be 0.7 to 1.0 |
 | Max charge / discharge (kW) | Roles `battery_max_*_power` (default 4.8), capped by `ram_max_power_w` (5 kW) under RAM control | Median power actually reached when full rate was asked | 50% to 120% of configured; `use_measured` |
-| Charge taper | none | Fraction of the rate reached from 90% and 95% SoC | `learn_taper` |
+| Charge taper | none | Fraction of the rate the battery allows from 85/90/93/95/97/99% SoC: read from the battery's own charge limit (the BMS sensor, recorded each cycle from 80%); without that sensor, from full-power charges starting at 90% and 95% | `learn_taper` |
 | Discharge taper | none | Fraction of the rate as the battery runs low (below 40/30/20%) | `learn_taper` |
 | Reserve | `min_reserve_soc` (12%) | The SoC where the battery really stops supplying the house | `learn_reserve`; **only ever raises** the floor, by up to 15 points |
 | Export limit | `export_limit_kw` (6) | Ceiling actually hit when selling | `learn_export`; only lowers |

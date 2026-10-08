@@ -2468,9 +2468,13 @@ class PowerEngine(hass.Hass):
             eid = self._role_entity(role)
             return self.get_state(eid) if eid else None
         try:
-            return bms.read_limits(raw("battery_bms_charge_limit"), raw("battery_bms_discharge_limit"),
-                                   None, BATTERY_VOLTS, r.battery_power,
-                                   self._cold_charge_w(r.now, rated_charge_w))
+            lim = bms.read_limits(raw("battery_bms_charge_limit"), raw("battery_bms_discharge_limit"),
+                                  None, BATTERY_VOLTS, r.battery_power,
+                                  self._cold_charge_w(r.now, rated_charge_w))
+            rec = getattr(self, "recorder", None)
+            if lim.charge_source == "bms" and rec is not None:   # kept per half-hour to learn the charge taper
+                rec.note_limit(r.battery_soc, lim.charge_w)
+            return lim
         except Exception as err:
             self.log(f"BMS limits not read: {err!r}", level="WARNING")
             return bms.Limits()

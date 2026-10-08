@@ -296,3 +296,35 @@ def test_conversion_efficiency_each_way():
     lr = learn(hs)
     assert lr.charge_conv == 0.9 and lr.discharge_conv == 0.93 and lr.conv_samples == 12
     assert learn(hs[:6]).charge_conv is None                # needs both directions
+
+
+def _lim(i, table):
+    """A half-hour that only recorded the battery's charge limit (W) at some levels; no charging asked for."""
+    return half(i, bms_lim={str(k): v for k, v in table.items()})
+
+
+def test_taper_read_from_the_battery_charge_limit_without_any_charging():
+    # the charge rate is learned as 4.8 kW; the battery says 2.4 kW at 96% and 1.2 kW at 99%, and PowerEngine only
+    # ever asked for part power, so the half-hour method sees nothing
+    hs = [charge(4.8, tb=15, i=i) for i in range(8)]
+    hs += [_lim(20 + i, {85: 5200, 86: 5200, 87: 5200, 96: 2400, 97: 2400, 98: 1800, 99: 1200}) for i in range(3)]
+    lr = learn(hs)
+    assert dict(lr.taper) == {95.0: 0.5, 97.0: 0.44, 99.0: 0.25}
+    assert lr.taper_samples >= 9
+
+
+def test_bms_taper_needs_a_few_readings_and_ignores_no_slowing():
+    lr = learn([charge(4.8, tb=15, i=0), _lim(1, {96: 2400, 97: 2400})])      # two readings: not enough
+    assert lr.taper == ()
+    lr = learn([_lim(i, {90: 4800, 91: 4800, 92: 4800}) for i in range(2)])   # full rate all the way: no taper
+    assert lr.taper == ()
+
+
+def test_bms_limit_is_kept_per_half_hour_from_80_percent():
+    h = HalfHour(T0)
+    h.note_limit(70.0, 5000)
+    h.note_limit(96.4, 2400)
+    h.note_limit(96.9, 2200)
+    h.note_limit(96.2, None)
+    assert h.as_dict()["bms_lim"] == {"96": 2200}
+    assert "bms_lim" not in HalfHour(T0).as_dict()
