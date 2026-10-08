@@ -303,3 +303,27 @@ def _walk(x):
     else:
         yield x
 
+
+
+def test_a_started_smart_slot_is_shown_at_its_own_price():
+    """Once the slot is certain (its window has begun) the import line is the slot price, not the standard rate;
+    a slot that is only a chance keeps the standard rate with the slot price beside it."""
+    now = datetime(2026, 10, 8, 18, 1, tzinfo=timezone.utc)
+    segs = [segment(now + timedelta(minutes=30 * i), import_p=28.84, export_p=15.0, solar=0.0, load=0.3,
+                    slot_prob=p, slot_import_p=6.66) for i, p in enumerate((1.0, 0.24))]
+    prices = publish._prices(value_result(now, forecast(now, segs)), LOCAL)
+    assert [(p["import_p"], p["slot_prob"], p["slot_import_p"]) for p in prices] == [(6.66, 1.0, 6.66),
+                                                                                    (28.84, 0.24, 6.66)]
+
+
+def test_the_mode_power_is_the_full_rate_when_nothing_caps_it(made):
+    """The card's "Charging at" box reads power_w; with no cap on the mode it used to be empty."""
+    from types import SimpleNamespace
+
+    eng, out = made
+    eng.last_facts = SimpleNamespace(max_charge_kw=4.8, max_discharge_kw=3.6)
+    mode = SimpleNamespace(mode="charge", power_w=None)
+    assert publish._shown_power_w(mode, eng) == 4800
+    assert publish._shown_power_w(SimpleNamespace(mode="export", power_w=None), eng) == 3600
+    assert publish._shown_power_w(SimpleNamespace(mode="charge", power_w=2000.4), eng) == 2000   # a cap wins
+    assert publish._shown_power_w(SimpleNamespace(mode="self_use", power_w=None), eng) is None

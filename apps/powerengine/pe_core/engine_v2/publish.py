@@ -44,6 +44,21 @@ def _fit(attrs: dict, reducers) -> dict:
     return attrs
 
 
+def _shown_power_w(m, engine) -> int | None:
+    """The power the mode asks for, for the card's "Charging at" / "Exporting at" box. The mode itself carries a power
+    only when something caps it (the battery's limit, the cold caution); with no cap the command is the full rate, so
+    that is shown (display only: the decision sent to the inverter is unchanged)."""
+    if m.power_w is not None:
+        return int(round(m.power_w))
+    f = getattr(engine, "last_facts", None)
+    kw = None
+    if f is not None and m.mode in ("charge", "free"):
+        kw = getattr(f, "max_charge_kw", None)
+    elif f is not None and m.mode in ("export", "event"):
+        kw = getattr(f, "max_discharge_kw", None)
+    return int(round(kw * 1000)) if kw else None
+
+
 # ---- the mode ----------------------------------------------------------------------------------
 def _mode(out: StepOutput, engine, tz, preview: bool = False) -> tuple[str, dict]:
     m: ModeState = out.mode
@@ -57,8 +72,8 @@ def _mode(out: StepOutput, engine, tz, preview: bool = False) -> tuple[str, dict
     vr = engine.vr
     obs = out.observation
     attrs = {"label": MODE_LABEL.get(m.mode, m.mode), "since": _iso(m.since, tz), "why": m.why, "rule": m.rule,
-             "chosen_by": m.chosen_by, "target_soc": _r(m.target_soc, 1), "power_w": None if m.power_w is None
-             else int(round(m.power_w)), "exits": exits, "deadline": _iso(m.deadline, tz),
+             "chosen_by": m.chosen_by, "target_soc": _r(m.target_soc, 1), "power_w": _shown_power_w(m, engine),
+             "exits": exits, "deadline": _iso(m.deadline, tz),
              "level_reported": _r(obs.level_reported, 1), "level_filtered": _r(obs.level_filtered, 1),
              "sending": bool(engine.sending), "preview": bool(preview), "not_sending_reason": engine.not_sending_reason,
              "values_at": _iso(vr.made_at, tz) if vr else None, "values_because": vr.because if vr else None}
@@ -97,7 +112,10 @@ def _prices(vr: ValueResult, tz) -> list[dict]:
     for seg in vr.forecast.segments:
         if seg.start >= cut:
             break
-        row = {"start": seg.start, "end": min(seg.end, cut), "import_p": _r(seg.import_p), "export_p": _r(seg.export_p),
+        # a smart slot that is certain (started) is the price now: show it, not the standard rate it replaces
+        sure = seg.slot_prob is not None and seg.slot_prob >= 1 and seg.slot_import_p is not None
+        row = {"start": seg.start, "end": min(seg.end, cut),
+               "import_p": _r(seg.slot_import_p if sure else seg.import_p), "export_p": _r(seg.export_p),
                "slot_prob": _r(seg.slot_prob), "slot_import_p": _r(seg.slot_import_p) if seg.slot_prob is not None
                else None, "event": bool(seg.event), "free": bool(seg.free), "estimated": bool(seg.price_estimated)}
         last = rows[-1] if rows else None
