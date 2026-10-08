@@ -12,7 +12,8 @@ the card's icons `pe:engine-v1` / `pe:engine-v2` (`window.customIcons`).
 - **Snapshot size:** a real day is 1 to 1.5 MB (the EDF dispatch list is 13 KB and changes ~40 times a day, each Solcast entity 12 KB); `fcsnap.SOFT_BYTES` 3 MB / `HARD_BYTES` 5 MB (0.9.114; the first build's 800 KB / 1 MB cut a real day off in the evening).
 - **Inputs missing under RAM remote control (0.9.114, `_leave_active`, `_ram_off_due`, `_ram_grace_s`):** a power sensor blipping "not ready" used to switch remote control Off at once (7 Oct 2026: 40 times overnight, one per 5 minute check, each 27 s). Now remote control carries on for `RAM_INPUT_GRACE_SECONDS` (90 s; less when `ram_refresh_min` is long, none at 4) and writes nothing if the inputs return; still Off at once for Pause, Passive, a guard or a config error. The warning now names why each input is not ready (`_why_not_ready`).
 - **Cost records** carry `engine` and `live`; `costbook.day_engine(_info)`. v1's "As run" (`_record_ran`) is written only on engine v1.
-- **Engine v2 history** (`pe_core/v2history.py`, `<costs>/v2history/`, 30 days; `sensor.pe_v2_history`, event `pe_v2_history_day`).
+- **Engine v2 history** (`pe_core/v2history.py`, `<costs>/v2history/`, 30 days; `sensor.pe_v2_history`, event `pe_v2_history_day`). `sensor.pe_v2_recent` (state: number of half-hours) is the last 18 hours of the same records, across midnight and
+  whatever day the picker shows; the plan chart reads it for its scrollback (a card with the scrollback on an older app simply has no history to show).
 - **Same-day comparison** (`pe_core/compare/`): nightly at 03:20 the app starts `python -m pe_core.compare.run` as a **subprocess**
   (90-minute limit, one at a time, yesterday plus one missing day of the last week) that replays the whole app in the demo world on
   yesterday's records and snapshot, v1 and v2, self-use and the bound, plus calibration against the meter; results in `<costs>/compare/`,
