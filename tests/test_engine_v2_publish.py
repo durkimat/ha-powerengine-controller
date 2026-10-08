@@ -46,7 +46,7 @@ class BigStubValue:
     def __init__(self, reason_len=220):
         self.reason_len = reason_len
 
-    def solve(self, fc, start_soc, facts, settings, limits_for, now, because, tz=None):
+    def solve(self, fc, start_soc, facts, settings, limits_for, now, because, tz=None, running=None):
         return _with(big_value_result(now, self.reason_len), because=because)
 
     def lines(self, vr, t, soc, import_p, export_p, facts, settings):
