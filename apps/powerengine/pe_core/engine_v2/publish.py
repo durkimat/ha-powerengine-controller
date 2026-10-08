@@ -65,7 +65,10 @@ def _mode(out: StepOutput, engine, tz, preview: bool = False) -> tuple[str, dict
     exits = [{"kind": e.kind, "text": e.text, "expected_at": _iso(e.expected_at, tz), "first": False}
              for e in m.exits]
     timed = [(e.expected_at, i) for i, e in enumerate(m.exits) if e.expected_at is not None]
-    if timed:
+    car_end = next((i for i, e in enumerate(m.exits) if e.kind == "car" and m.mode == "hold"), None)
+    if car_end is not None:                     # held for the car: it is the headline, whatever the clock says
+        exits[car_end]["first"] = True
+    elif timed:
         exits[min(timed)[1]]["first"] = True
     elif exits:
         exits[0]["first"] = True

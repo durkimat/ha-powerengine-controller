@@ -487,6 +487,8 @@ class Executor:
         if mode is None:
             return out
         end, until = self._expected_end(vr, now, mode)
+        if mode == HOLD and self._car_on():                # the car is what holds the battery, so its end is the exit
+            out.append(Exit("car", "The car stops charging", None))
         if mode == CHARGE and self.target_soc is not None:
             out.append(Exit("level", f"The battery reaches {self.target_soc:.0f}%", end))
         elif mode == EXPORT and self.target_soc is not None:

@@ -327,3 +327,17 @@ def test_the_mode_power_is_the_full_rate_when_nothing_caps_it(made):
     assert publish._shown_power_w(SimpleNamespace(mode="export", power_w=None), eng) == 3600
     assert publish._shown_power_w(SimpleNamespace(mode="charge", power_w=2000.4), eng) == 2000   # a cap wins
     assert publish._shown_power_w(SimpleNamespace(mode="self_use", power_w=None), eng) is None
+
+
+def test_a_hold_for_the_car_leads_with_the_car_stopping_even_when_a_price_change_is_timed():
+    from types import SimpleNamespace as NS
+
+    from pe_core.engine_v2.types import Exit
+    eng = NS(vr=None, sending=True, not_sending_reason=None)
+    ms = NS(mode="hold", since=T0, why="x", rule="v2_car", chosen_by="price", target_soc=None, power_w=None,
+            deadline=None, exits=(Exit("car", "The car stops charging", None),
+                                  Exit("price", "The price changes to 6.66p at 23:00", T0 + timedelta(hours=4))))
+    out = NS(mode=ms, observation=NS(level_reported=90.0, level_filtered=90.0))
+    _, a = publish._mode(out, eng, LOCAL)
+    assert [(e["text"], e["first"]) for e in a["exits"]] == [("The car stops charging", True),
+                                                             ("The price changes to 6.66p at 23:00", False)]
