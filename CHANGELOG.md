@@ -2,6 +2,14 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.127 (beta)
+
+### Behaviour changes
+
+- **The plan now follows a sale that is already running.** When the battery was selling and the plan would carry on selling, the plan could still open with "charge now" (and the status text said "Grid-charge to 81%") while the battery kept exporting. The plan is now worked out knowing which mode is running, so its first step matches what the battery is doing, then it recharges and sells again as before.
+- **Fewer recalculations of the plan.** The "battery had been outside its expected range for 10 minutes" recalculation fired every ten minutes during such a sale, because the plan expected the level to rise while it fell. With the plan and the battery agreeing, those should stop.
+- Nothing else about planning changes: from charge, hold or self-use, or with nothing running, the plan is made exactly as before. No change to control, inverter writes or the card.
+
 ## 0.9.126 (beta)
 
 ### Behaviour changes
