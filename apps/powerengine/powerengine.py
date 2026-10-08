@@ -1880,6 +1880,19 @@ class PowerEngine(hass.Hass):
             self._publish_state("v2_history", day.isoformat(), attrs)
         except Exception as err:
             self._warn_daily("v2history_pub", f"Could not build engine v2's history: {err!r}")
+        self._publish_v2_recent()
+
+    def _publish_v2_recent(self):
+        """sensor.pe_v2_recent: the last 18 hours as engine v2 ran them, for the plan chart's scrollback. Independent of
+        the day the history's picker shows."""
+        h = self.__dict__.get("_v2hist")
+        if h is None or self._get_publisher() is None:
+            return
+        try:
+            attrs = h.recent_attributes(datetime.now(timezone.utc))
+            self._publish_state("v2_recent", str(len(attrs["series"])), attrs)
+        except Exception as err:
+            self._warn_daily("v2recent_pub", f"Could not build engine v2's recent hours: {err!r}")
 
     # --- notifications (HA companion app) ------------------------------------------------
 

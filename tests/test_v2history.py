@@ -236,3 +236,38 @@ def test_day_engine(tmp_path):
     d = date(2026, 10, 7)                                                  # a backfill from history is untagged
     put(book, d, [{"engine": "v2", "live": True}] * 3 + [{"source": "history"}] * 2)
     assert book.day_engine(d) == "v2"
+
+
+# --- the last hours as run (sensor.pe_v2_recent) -----------------------------------------------------------------
+
+def _ran(start, mode="self_use", level=50.0, **extra):
+    row = {"start": start.isoformat(timespec="seconds"), "mode": mode, "level_end": level, "import_p": 7.0,
+           "export_p": 15.0, "value_p": 9.0, "sent": True, "preview": False}
+    row.update(extra)
+    return row
+
+
+def test_recent_crosses_midnight_and_leaves_out_the_half_hour_now(tmp_path):
+    h = V2History(str(tmp_path), LON)
+    yesterday = h.load(date(2026, 10, 6))
+    today = h.load(date(2026, 10, 7))
+    yesterday["ran"] = [_ran(t(h_, m, day=6), level=40.0 + h_) for h_ in range(0, 24) for m in (0, 30)]
+    today["ran"] = [_ran(t(h_, m), level=60.0 + h_) for h_ in range(0, 9) for m in (0, 30)]
+    now = t(8, 20)                                               # the 08:00 half-hour is still running
+    got = h.recent_attributes(now, 18)
+    starts = [r["t"] for r in got["series"]]
+    assert starts[0] == t(14, 0, day=6).isoformat() and starts[-1] == t(7, 30).isoformat()
+    assert len(starts) == 36 and starts == sorted(starts)
+    assert got["hours"] == 18 and got["step_min"] == 30 and got["until"] == t(8, 0).isoformat()
+    row = got["series"][-1]
+    assert row == {"t": t(7, 30).isoformat(), "mode": "self_use", "level": 67.0, "import_p": 7.0, "export_p": 15.0,
+                   "sent": True}
+    assert len(json.dumps(got, separators=(",", ":")).encode("utf-8")) < 6_000
+
+
+def test_recent_marks_previews_and_is_empty_without_records(tmp_path):
+    h = V2History(str(tmp_path), LON)
+    assert h.recent_attributes(t(12), 18)["series"] == []
+    h.load(date(2026, 10, 7))["ran"] = [_ran(t(10), sent=False, preview=True), _ran(t(10, 30))]
+    got = h.recent_attributes(t(12), 18)["series"]
+    assert got[0]["preview"] is True and got[0]["sent"] is False and "preview" not in got[1]

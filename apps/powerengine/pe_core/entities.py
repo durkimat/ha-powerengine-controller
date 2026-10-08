@@ -212,6 +212,8 @@ CONTROL_SWITCHES: tuple[EntityDef, ...] = (
 HISTORY_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "plan_history", "Plan history", {"icon": "mdi:history"}),
     EntityDef("sensor", "v2_history", "Engine v2 history", {"icon": "mdi:history"}),
+    # The last 18 hours as run, whatever day the picker shows: the plan chart's scrollback.
+    EntityDef("sensor", "v2_recent", "Engine v2 recent", {"icon": "mdi:history"}),
 )
 
 # Entities an earlier release published that no longer exist. The app retires them at every start (the retained
