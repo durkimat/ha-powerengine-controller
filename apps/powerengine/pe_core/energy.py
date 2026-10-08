@@ -58,6 +58,9 @@ def allocate(solar_w: float, grid_w: float, battery_w: float, house_w: float, ca
     return out
 
 
+BMS_LIM_FROM_SOC = 80.0
+
+
 @dataclass
 class HalfHour:
     """Energy (kWh) and context for one half-hour, built from readings as they arrive."""
@@ -85,6 +88,14 @@ class HalfHour:
     temp_c: float | None = None        # outside temperature (Open-Meteo), for learning
     tb_c: float | None = None          # estimated battery temperature
     noted: bool = False
+    bms_lim: dict = field(default_factory=dict)   # whole SoC % (80+) -> lowest BMS charge limit seen there, W
+
+    def note_limit(self, soc: float | None, charge_w: float | None) -> None:
+        """The battery's own charge limit at this level (kept from 80%, where it starts to taper), for learning."""
+        if soc is None or charge_w is None or soc < BMS_LIM_FROM_SOC:
+            return
+        k = int(soc)
+        self.bms_lim[k] = min(self.bms_lim.get(k, charge_w), float(charge_w))
 
     def note(self, action: str | None, kw: float | None) -> None:
         """What PowerEngine asked the inverter to do during this half-hour (None: not in control)."""
@@ -136,6 +147,8 @@ class HalfHour:
             "soc_end": self.soc_end, "axle": self.axle, "free": self.free, "import_rate": self.import_rate,
             "export_rate": self.export_rate, "standing": self.standing, "cmd": self.cmd, "cmd_kw": self.cmd_kw,
             "temp_c": self.temp_c, "tb_c": self.tb_c}.items()})
+        if self.bms_lim:
+            d["bms_lim"] = {str(k): v for k, v in sorted(self.bms_lim.items())}
         d["fv"] = str(FLOW_VERSION)            # replaced by the cost book's full flow id
         return d
 
@@ -169,3 +182,7 @@ class Recorder:
     def note(self, action: str | None, kw: float | None) -> None:
         if self.current is not None:
             self.current.note(action, kw)
+
+    def note_limit(self, soc: float | None, charge_w: float | None) -> None:
+        if self.current is not None:
+            self.current.note_limit(soc, charge_w)

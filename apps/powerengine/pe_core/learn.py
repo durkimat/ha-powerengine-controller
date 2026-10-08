@@ -6,7 +6,9 @@ temperature (``tb_c``). From those:
 
 - **Charge / discharge rate:** the median power actually reached when the full rate was asked for (below 90% charge,
   and not while the battery was cold). Before any such half-hours exist, the 98th percentile of all half-hours.
-- **Charge taper:** how much of that rate is reached from 90% and from 95% charge.
+- **Charge taper:** how much of that rate the battery allows as it fills. Read from the battery's own charge limit
+  (``bms_lim``, recorded per half-hour from 80%) in bands from 85% to 99%; where no limit sensor is mapped, from
+  how much of the rate was reached from 90% and from 95% charge when the full rate was asked for.
 - **Discharge taper:** how much of the discharge rate is reached as the battery runs low (below 40%, 30%, 20%):
   many batteries limit their current there, so a deep sale is slower than a shallow one.
 - **Conversion efficiency:** how much of the grid energy used for charging reaches the battery, and how much of what
@@ -37,6 +39,8 @@ MIN_COLD_SAMPLES = 3
 SLOW_RATIO = 0.8            # a charge half-hour at under 80% of the normal rate counts as slowed
 FULL_ASK = 0.9              # "the full rate was asked for": at least 90% of the configured rate
 TAPER_BANDS = (90.0, 95.0)
+BMS_TAPER_BANDS = (85.0, 90.0, 93.0, 95.0, 97.0, 99.0)   # from the battery's own charge limit (see _bms_taper)
+NO_TAPER = 0.97             # a band whose limit is within 3% of the normal one is not a taper
 DISCHARGE_BANDS = (40.0, 30.0, 20.0)   # (below this SoC, fraction of the rate): half-hours whose midpoint is below
 MIN_CONV_SAMPLES = 6
 
@@ -52,6 +56,34 @@ def _full(h: dict) -> bool:
 def _p(values: list[float], q: float) -> float:
     v = sorted(values)
     return v[min(len(v) - 1, int(q * len(v)))]
+
+
+def _bms_taper(halves: list[dict], base_kw: float) -> tuple[tuple[tuple[float, float], ...], int]:
+    """The charge taper read straight from the battery's reported charge limit against its level. Unlike the
+    half-hour method this needs no full-power charge: the limit is there whatever PowerEngine asked for. Each band is
+    the median limit seen at those levels as a fraction of the normal rate; bands with too few readings or no
+    slowing are left out. Returns (bands, readings used)."""
+    if base_kw <= 0:
+        return (), 0
+    seen: dict[float, list[float]] = {lo: [] for lo in BMS_TAPER_BANDS}
+    for h in halves:
+        for soc_text, w in (h.get("bms_lim") or {}).items():
+            try:
+                soc, kw = float(soc_text), float(w) / 1000
+            except (TypeError, ValueError):
+                continue
+            lo = max((b for b in BMS_TAPER_BANDS if b <= soc), default=None)
+            if lo is not None:
+                seen[lo].append(kw / base_kw)
+    bands, used = [], 0
+    for lo in BMS_TAPER_BANDS:
+        v = seen[lo]
+        if len(v) >= MIN_TAPER_SAMPLES:
+            frac = round(min(1.0, max(0.05, median(v))), 2)
+            used += len(v)
+            if frac < NO_TAPER:
+                bands.append((lo, frac))
+    return tuple(bands), used
 
 
 def _asked_full(h: dict, action: str, rated_kw: float) -> bool:
@@ -146,6 +178,11 @@ def learn(halves: list[dict], rated_charge_kw: float, rated_discharge_kw: float,
         if len(v) >= MIN_TAPER_SAMPLES:
             bands.append((lo, round(min(1.0, max(0.1, median(v))), 2)))
             out.taper_samples += len(v)
+    bms_bands, bms_n = _bms_taper(halves, base)
+    if bms_bands:                                         # the battery's own word beats an inference from charging
+        keep = [b for b in bands if not any(abs(b[0] - nb[0]) < 5 for nb in bms_bands)]
+        bands = sorted(keep + list(bms_bands))
+        out.taper_samples += bms_n
     out.taper = tuple(bands)
 
     # --- discharge taper: fraction of the discharge rate reached in half-hours whose midpoint is in each low band
