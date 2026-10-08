@@ -331,6 +331,8 @@ def test_with_the_car_charging_the_battery_holds_and_never_feeds_it():          
     ex = Executor(V2Settings())
     ms, dec, *_ = step(ex, 0, ln=lines(3.0), lim=lim, car=True)          # the battery would cover the house
     assert ms.mode == HOLD and dec.rule == "v2_car" and "car is charging" in ms.why
+    car = [e for e in ms.exits if e.kind == "car"]                       # what ends the hold is the car stopping
+    assert [e.text for e in car] == ["The car stops charging"]
 
 
 def test_with_the_car_charging_a_worthwhile_charge_still_goes_ahead():
