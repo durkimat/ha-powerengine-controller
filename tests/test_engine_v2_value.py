@@ -664,3 +664,35 @@ def test_the_value_of_energy_left_never_rises_with_the_level_and_a_flat_tariff_k
     fixed = replace(NO_COMFORT, terminal_value="fixed", terminal_value_p=12.0)
     got = V._terminal_curve(fc_of(daily(96 + 5)), FACTS, fixed, 0.18, 10)
     assert got == (12.0, [-12.0 * i * 0.18 for i in range(11)])
+
+
+# --- the plan's first step follows a sale that is running (8 Oct 2026) ------------------------------------
+RUNNING_SETTINGS = V2Settings(top_up_cost_p=4.0, reserve_soc=15.0)          # the owner's: reversal 3p, comfort band
+
+
+def _cheap_night_then_dear():
+    return [seg(i, imp=6.66 if i < 13 else 28.84, exp=15.0, load=0.3) for i in range(40)]
+
+
+def _solve_running(segs, running):
+    lim = lambda s: limits_for(s, arbitrage=True)                       # noqa: E731
+    return V.solve(fc_of(segs), 63.0, FACTS, RUNNING_SETTINGS, lim, segs[0].start, "test", UTC, running=running)
+
+
+def test_a_sale_that_is_running_is_not_turned_round_by_the_stretch_front_charge():
+    # 8 Oct 2026, 21:30: selling from the battery at 15p, import 6.66p all night, 63%. The plan's first step was "charge
+    # now": the stretch's charge is moved to its start, but the programme itself, coming from the sale, goes on selling
+    # (choice_now), so the executor never followed the plan and every revaluation opened with the other direction.
+    segs = _cheap_night_then_dear()
+    assert _solve_running(segs, None).timeline[0].mode == CHARGE         # nothing running: the front charge stands
+    vr = _solve_running(segs, EXPORT)
+    assert vr.timeline[0].mode == EXPORT                                 # the sale goes on, as the executor will
+    assert V.choice_now(vr, segs[0].start, 63.0, 6.66, FACTS, RUNNING_SETTINGS, EXPORT)[0] == vr.timeline[0].mode
+    assert any(it.mode == CHARGE for it in vr.timeline)                  # and the night is still refilled
+
+
+def test_only_a_running_sale_changes_the_plan_other_modes_keep_the_front_charge():
+    segs = _cheap_night_then_dear()
+    base = [(i.mode, i.level_end) for i in _solve_running(segs, None).timeline]
+    for run in (CHARGE, HOLD, SELF_USE):
+        assert [(i.mode, i.level_end) for i in _solve_running(segs, run).timeline] == base

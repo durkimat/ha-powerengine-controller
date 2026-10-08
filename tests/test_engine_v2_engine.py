@@ -32,9 +32,10 @@ class StubValue:
         self.value_p, self.target, self.floor = 30.0, 88.0, None
         self.solves, self.fail_solve, self.fail_lines, self.because = 0, False, False, []
 
-    def solve(self, fc, start_soc, facts, settings, limits_for, now, because, tz=None):
+    def solve(self, fc, start_soc, facts, settings, limits_for, now, because, tz=None, running=None):
         self.solves += 1
         self.because.append(because)
+        self.running = getattr(self, "running", []) + [running]
         if self.fail_solve:
             raise RuntimeError("the solver broke")
         for seg in fc.segments:
@@ -411,3 +412,15 @@ def test_smoke_with_the_real_forecast_and_value_layers():
     assert not [r for o in outs for r in o.journal if r["kind"] == "error"], [r for o in outs for r in o.journal]
     assert outs[0].value.calc_s < 6.0
     assert sum(o.mode_changed for o in outs) <= 4
+
+
+def test_the_values_are_worked_out_knowing_the_mode_running(stubs):
+    # 8 Oct 2026: a plan made without it opened with "charge now" under a sale that was running and never ended
+    f, v = stubs
+    eng = EngineV2(V2Settings())
+    tick(eng, 0, battery_soc=50.0)
+    assert v.running == [None]                                  # first solve: nothing has run yet
+    eng.executor.mode = "export"
+    eng._forced_reason = "test"
+    tick(eng, 30, battery_soc=50.0)
+    assert v.running[-1] == "export"

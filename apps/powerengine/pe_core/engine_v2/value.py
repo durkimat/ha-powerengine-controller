@@ -717,7 +717,11 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
     have reached by the stretch's end, then the policy's own choice. Only up to the comfort band's top: above it a
     kWh held costs per hour and a kWh charged costs the top-up, so early and late are no longer the same cost and
     the programme's own timing (late) stands: the early charge takes whole steps up to the top, and the step that
-    would cross it is the programme's own choice."""
+    would cross it is the programme's own choice.
+
+    `prev` is the mode running now. A sale running at the start (`prev` is Export and the programme itself goes on
+    selling) is not turned round by the stretch's early charge: the executor goes on with the sale (`choice_now`), so a
+    plan that opened with "charge now" was one nothing followed, and every revaluation opened with it again."""
     ends = _stretch_ends(segs)
     recs, e, prev_mode = [], e0, prev
     target, target_to, capped = None, -1, False
@@ -732,10 +736,12 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
             sub = _walk(segs[i:ends[i] + 1], rows[i:ends[i] + 1], step, e, kind, band, False, prev_mode,
                         vks=None if vks is None else vks[i:ends[i] + 1])
             reach = sub[-1]["e1"]
+            sale_goes_on = i == 0 and prev == EXPORT and sub[0]["mode"] == EXPORT
             capped = bool((S.ccost or S.topup) and reach > S.hi)
             if capped:                              # early is free only inside the band: above its top the hours cost
                 reach = S.hi
-            target = reach if any(r["mode"] == CHARGE for r in sub) and reach > e + 1e-9 else None
+            target = reach if (any(r["mode"] == CHARGE for r in sub) and reach > e + 1e-9
+                               and not sale_goes_on) else None
             target_to = ends[i]
         if kind == "self":
             mode, stop = S.forced or SELF_USE, None
@@ -768,10 +774,11 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
     return recs
 
 
-def _forward(core: _Core, lam: tuple, step: float, e0: float, kind: str, band: float) -> tuple[list[dict], float]:
+def _forward(core: _Core, lam: tuple, step: float, e0: float, kind: str, band: float,
+             prev: str | None = None) -> tuple[list[dict], float]:
     """`_walk` over the whole forecast. Returns (records, cost including the credit for the energy left at the end)."""
     rows = [_end_row(lam, k) for k in range(len(core.segs))]
-    recs = _walk(core.segs, rows, step, e0, kind, band, vks=[core.VK[k + 1] for k in range(len(core.segs))])
+    recs = _walk(core.segs, rows, step, e0, kind, band, prev=prev, vks=[core.VK[k + 1] for k in range(len(core.segs))])
     return recs, sum(r["cost"] for r in recs) + _val(core.tail, recs[-1]["e1"])
 
 
@@ -927,9 +934,10 @@ def _timeline(core: _Core, recs: list[dict], lam: tuple, step: float, now: datet
 
 # --- public --------------------------------------------------------------------------------------------------------
 def solve(forecast: Forecast, start_soc: float, facts: BatteryFacts, settings: V2Settings, limits_for,
-          now: datetime, because: str, tz=None) -> ValueResult:
+          now: datetime, because: str, tz=None, running: str | None = None) -> ValueResult:
     """Work out the value curve for the forecast, then the expected timeline from `start_soc` (percent). `limits_for`
-    gives each segment's allowed modes, floors and caps (layer 4)."""
+    gives each segment's allowed modes, floors and caps (layer 4). `running` is the mode now (layer 5's): the expected
+    timeline starts from it, so its first step is the programme's own choice from there, as `choice_now` gives."""
     t_start = time.perf_counter()
     if not forecast.segments:
         return ValueResult(made_at=now, because=because, forecast=forecast, step_kwh=facts.capacity_kwh, lam=(),
@@ -943,9 +951,9 @@ def solve(forecast: Forecast, start_soc: float, facts: BatteryFacts, settings: V
     late = bool(settings.late_events and settings.events and settings.late_events_per_week > 0)
     lam = tuple(_fine_lam(core.V[k], n_fine, step, late) for k in range(len(core.segs)))
     e0 = min(cap, max(0.0, start_soc / 100 * cap))
-    mid, cost_mid = _forward(core, lam, step, e0, "mid", settings.price_band_p)
-    low, _ = _forward(core, lam, step, e0, "low", settings.price_band_p)
-    high, _ = _forward(core, lam, step, e0, "high", settings.price_band_p)
+    mid, cost_mid = _forward(core, lam, step, e0, "mid", settings.price_band_p, running)
+    low, _ = _forward(core, lam, step, e0, "low", settings.price_band_p, running)
+    high, _ = _forward(core, lam, step, e0, "high", settings.price_band_p, running)
     _, cost_self = _forward(core, lam, step, e0, "self", settings.price_band_p)
     given_up = None
     if settings.comfort_cost_p > 0 or settings.top_up_cost_p > 0:      # the top-up is part of the comfort figure

@@ -972,9 +972,10 @@ fall and the adjusted saving stays within 2% of before (or improves). The replay
   charge or sale goes on until it reaches the end level of its plan step (consecutive steps of the same mode merged) or,
   with no step of its mode covering now, until the lines end it (`_must_exit`). An urgent event, a forced mode or a mode that
   must exit still act at once. A sale in progress also goes down to the plan step's end level when that is lower than the
-  lines' floor, as a charge goes up to the higher of the two. Not done: the plan's first item is still made without knowing
-  the mode running (`_walk` starts with no previous mode), so a revaluation can start with the other direction; the leg rule
-  is what stops the executor following it.
+  lines' floor, as a charge goes up to the higher of the two. Done for a running sale (8 Oct 2026): `solve(..., running=)` starts the expected timeline from the mode running, and `_walk` does not
+  move the stretch's early charge ahead of a sale that is running when the programme itself goes on selling (`prev` is Export and the
+  first record is Export), so the plan's first item is `choice_now`'s and a revaluation no longer opens with "charge now" under a sale. Not
+  done: a sale the programme would *start* from Hold or Self-use, and any other mode, still get the stretch's early charge first.
 * **Learned** (`triggers.learned_moved`, `learned_sig`-style tuple in `_v2_input`): facts at 1% relative, the profile's days at
   1 day; the reference signature moves only when something counted, so a slow drift adds up instead of slipping by.
 
