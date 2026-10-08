@@ -97,7 +97,10 @@ def _prices(vr: ValueResult, tz) -> list[dict]:
     for seg in vr.forecast.segments:
         if seg.start >= cut:
             break
-        row = {"start": seg.start, "end": min(seg.end, cut), "import_p": _r(seg.import_p), "export_p": _r(seg.export_p),
+        # a smart slot that is certain (started) is the price now: show it, not the standard rate it replaces
+        sure = seg.slot_prob is not None and seg.slot_prob >= 1 and seg.slot_import_p is not None
+        row = {"start": seg.start, "end": min(seg.end, cut),
+               "import_p": _r(seg.slot_import_p if sure else seg.import_p), "export_p": _r(seg.export_p),
                "slot_prob": _r(seg.slot_prob), "slot_import_p": _r(seg.slot_import_p) if seg.slot_prob is not None
                else None, "event": bool(seg.event), "free": bool(seg.free), "estimated": bool(seg.price_estimated)}
         last = rows[-1] if rows else None

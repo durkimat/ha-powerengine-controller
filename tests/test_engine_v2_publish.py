@@ -303,3 +303,14 @@ def _walk(x):
     else:
         yield x
 
+
+
+def test_a_started_smart_slot_is_shown_at_its_own_price():
+    """Once the slot is certain (its window has begun) the import line is the slot price, not the standard rate;
+    a slot that is only a chance keeps the standard rate with the slot price beside it."""
+    now = datetime(2026, 10, 8, 18, 1, tzinfo=timezone.utc)
+    segs = [segment(now + timedelta(minutes=30 * i), import_p=28.84, export_p=15.0, solar=0.0, load=0.3,
+                    slot_prob=p, slot_import_p=6.66) for i, p in enumerate((1.0, 0.24))]
+    prices = publish._prices(value_result(now, forecast(now, segs)), LOCAL)
+    assert [(p["import_p"], p["slot_prob"], p["slot_import_p"]) for p in prices] == [(6.66, 1.0, 6.66),
+                                                                                    (28.84, 0.24, 6.66)]
