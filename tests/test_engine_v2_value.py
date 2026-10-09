@@ -32,7 +32,7 @@ from pe_core.readings import Readings, Window
 UTC = timezone.utc
 T0 = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
 FACTS = BatteryFacts()                      # 18 kWh, 95% each way, 4.8 kW, floor 12%
-NO_COMFORT = V2Settings(late_events=False, comfort_cost_p=0.0, top_up_cost_p=0.0, reversal_cost_p=0.0,
+NO_COMFORT = V2Settings(late_events=False, comfort_cost_p=0.0, top_up_cost_p=0.0,
                         terminal_value="fixed", terminal_value_p=0.0, switch_cost_p=0.0)
 BUY = 6.99 / 0.95
 
@@ -518,11 +518,11 @@ def test_run_target_is_cheap_and_does_not_resolve():
 
 
 # --- the cost of changing mode ---------------------------------------------------------------------------------------
-def test_switch_cost_is_the_setting_a_fifth_between_holding_and_charging_and_nothing_for_no_change():
+def test_switch_cost_is_the_setting_for_any_change_and_nothing_for_no_change():
     sc = V.switch_cost
     assert sc("none", "none", 0.5) == 0 and sc("charge", "charge", 0.5) == 0
     assert sc("none", "charge", 0.5) == 0.5 and sc("charge", "discharge", 0.5) == 0.5
-    assert sc("hold", "charge", 0.5) == pytest.approx(0.1) and sc("charge", "hold", 0.5) == pytest.approx(0.1)
+    assert sc("hold", "charge", 0.5) == 0.5 and sc("charge", "hold", 0.5) == 0.5
     assert sc("none", "discharge", 0.0) == 0
 
 
@@ -696,3 +696,19 @@ def test_only_a_running_sale_changes_the_plan_other_modes_keep_the_front_charge(
     base = [(i.mode, i.level_end) for i in _solve_running(segs, None).timeline]
     for run in (CHARGE, HOLD, SELF_USE):
         assert [(i.mode, i.level_end) for i in _solve_running(segs, run).timeline] == base
+
+
+def test_a_long_cheap_window_with_arbitrage_is_not_broken_up_by_holds():
+    """Charge and sale both pay all night (6.66p in, 15p out). Resting in Hold between a charge and a sale used to
+    cost less than turning round directly (0.6p against 3p), so the plan rested for a whole half-hour wherever the
+    gain was marginal (8 Oct 2026). Every change now costs the same, so a hold is never a way round the cost."""
+    facts = BatteryFacts(capacity_kwh=18, eta_charge=0.895, eta_discharge=0.943, max_charge_kw=4.78,
+                         max_discharge_kw=4.95)
+    segs = [seg(i, imp=6.66, exp=15.0, load=0.4) for i in range(23)] + [seg(23 + i, imp=28.84, load=0.5)
+                                                                         for i in range(26)]
+    lim = lambda s: limits_for(s, arbitrage=True)                       # noqa: E731
+    vr = solve(segs, 50.0, settings=V2Settings(), facts=facts, lim=lim)
+    window_end = segs[22].end
+    long_holds = [it for it in vr.timeline if it.mode == HOLD and it.start < window_end
+                  and (it.end - it.start) >= timedelta(minutes=15)]
+    assert long_holds == []

@@ -28,10 +28,10 @@ def test_the_settings_exist_in_the_catalogue_and_their_sections():
         == (0, 20)
     assert rows["top_up_cost_p"]["unit"] == "p/kWh" and rows["top_up_cost_p"]["label"] == \
         "Grid charging above the comfort band"
-    assert rows["reversal_cost_p"]["default"] == 3.0 and rows["reversal_cost_p"]["max"] == 20
+    assert "reversal_cost_p" not in rows and rows["switch_cost_p"]["default"] == 2.0
     sections = {s["key"]: s["keys"] for s in cat["sections"]}
-    assert "top_up_cost_p" in sections["comfort"] and "reversal_cost_p" in sections["response"]
-    assert cat["values"]["top_up_cost_p"] == 5.0 and cat["values"]["reversal_cost_p"] == 3.0
+    assert "top_up_cost_p" in sections["comfort"] and "switch_cost_p" in sections["response"]
+    assert cat["values"]["top_up_cost_p"] == 5.0 and cat["values"]["switch_cost_p"] == 2.0
     listed = [k for _, _, keys in SECTIONS for k in keys]
     assert sorted(listed) == sorted(SETTINGS) and len(listed) == len(set(listed))     # every setting in one section
 
@@ -113,43 +113,48 @@ def test_a_buy_line_above_the_top_includes_the_top_up():
     assert high.buy_line_p == pytest.approx((6.99 + 2.0) / 0.95)
 
 
-# ---- 2. the cost of reversing -------------------------------------------------------------------
-def test_reversing_costs_its_own_figure_and_other_changes_keep_theirs():
-    assert switch_cost(CHARGE_K, DISCHARGE_K, 0.5, 3.0) == 3.0 and switch_cost(DISCHARGE_K, CHARGE_K, 0.5, 3.0) == 3.0
-    assert switch_cost(NONE_K, CHARGE_K, 0.5, 3.0) == 0.5 and switch_cost(HOLD_K, DISCHARGE_K, 0.5, 3.0) == 0.5
-    assert switch_cost(HOLD_K, CHARGE_K, 0.5, 3.0) == pytest.approx(0.1)
-    assert switch_cost(CHARGE_K, CHARGE_K, 0.5, 3.0) == 0.0
-    assert switch_cost(CHARGE_K, DISCHARGE_K, 0.0, 3.0) == 3.0          # the reversal has a price whatever the other is
-
-
-def test_without_a_reversal_figure_it_is_the_ordinary_cost():
-    assert switch_cost(CHARGE_K, DISCHARGE_K, 0.5) == 0.5
-    assert switch_cost(CHARGE_K, DISCHARGE_K, 0.5, None) == 0.5
-    assert switch_cost(HOLD_K, CHARGE_K, 0.5) == pytest.approx(0.1)
+# ---- 2. the cost of changing mode -----------------------------------------------------------------------------------
+def test_every_change_costs_the_same_and_staying_costs_nothing():
+    for a in (NONE_K, HOLD_K, CHARGE_K, DISCHARGE_K):
+        for b in (NONE_K, HOLD_K, CHARGE_K, DISCHARGE_K):
+            assert switch_cost(a, b, 2.0) == (0.0 if a == b else 2.0)
     assert switch_cost(CHARGE_K, DISCHARGE_K, 0.0) == 0.0
 
 
-def test_the_executor_counts_a_reversal_at_its_own_price():
+def test_a_detour_through_hold_never_costs_less_than_the_direct_change():
+    kinds = (NONE_K, HOLD_K, CHARGE_K, DISCHARGE_K)
+    for a in kinds:
+        for b in kinds:
+            for c in kinds:
+                assert switch_cost(a, c, 1.5) <= switch_cost(a, b, 1.5) + switch_cost(b, c, 1.5)
+
+
+def test_a_saved_reversal_setting_from_an_earlier_release_is_ignored_not_an_error():
+    from pe_core.engine_v2.settings import parse_v2
+    s = parse_v2({"reversal_cost_p": 0.6, "top_up_cost_p": 4})
+    assert s.switch_cost_p == 2.0 and s.top_up_cost_p == 4
+
+
+def test_the_executor_counts_a_change_at_its_own_price():
     obs = type("Obs", (), {"net_load_kw": 0.5})()
     ln = lines(11.0, floor=0.0)                                         # 3.25p under the sale line
     near = lines(14.2, floor=68.0)                                      # 0.05p under it, and only 2 points to sell
     lim, lim_near = limits(EXPORTING), limits(EXPORTING, floor=68.0)
-    ex = Executor(V2Settings(min_dwell_s=0, switch_cost_p=0.5, reversal_cost_p=3.0))
+    ex = Executor(V2Settings(min_dwell_s=0, switch_cost_p=2.0))
     big = ex._pick_for(EXPORT, lim, ln, 70.0, FACTS, None)
     small = ex._pick_for(EXPORT, lim_near, near, 70.0, FACTS, None)
-    assert ex._worth_the_change(CHARGE, big, lim, ln, 70.0, FACTS, obs)             # 41p against 2 x 3p
+    assert ex._worth_the_change(CHARGE, big, lim, ln, 70.0, FACTS, obs)             # 41p against 2 x 2p
     assert not ex._worth_the_change(CHARGE, small, lim_near, near, 70.0, FACTS, obs)
-    assert ex._worth_the_change(HOLD, small, lim_near, near, 70.0, FACTS, obs) is False     # 2 x 0.5p still too dear
-    cheap = Executor(V2Settings(min_dwell_s=0, switch_cost_p=0.0, reversal_cost_p=0.0))
+    assert ex._worth_the_change(HOLD, small, lim_near, near, 70.0, FACTS, obs) is False     # 2 x 2p still too dear
+    cheap = Executor(V2Settings(min_dwell_s=0, switch_cost_p=0.0))
     assert cheap._worth_the_change(CHARGE, small, lim_near, near, 70.0, FACTS, obs)
 
 
-def test_the_programme_adds_the_reversal_to_a_turn_from_a_charge_to_a_sale():
+def test_the_programme_adds_the_change_cost_to_a_turn_from_a_charge_to_a_sale():
     cands = [(10.0, CHARGE, 1.0), (9.0, EXPORT, 1.0)]
-    assert value._pick(cands, CHARGE_K, 0.5, 3.0) == pytest.approx(10.0)           # 9 + 3 loses to staying at 10
-    assert value._pick(cands, CHARGE_K, 0.5, 0.5) == pytest.approx(9.5)            # a plain change cost lets it turn
-    assert value._pick(cands, DISCHARGE_K, 0.5, 3.0) == pytest.approx(9.0)         # from a sale it just goes on
-    assert value._pick(cands, NONE_K, 0.5, 3.0) == pytest.approx(9.5)              # from idle: the ordinary cost
+    assert value._pick(cands, CHARGE_K, 2.0) == pytest.approx(10.0)                # 9 + 2 loses to staying at 10
+    assert value._pick(cands, CHARGE_K, 0.5) == pytest.approx(9.5)                 # a small cost lets it turn
+
 
 
 # ---- 3. a leg runs to its step's end --------------------------------------------------------------
