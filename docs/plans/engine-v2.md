@@ -253,7 +253,7 @@ high; whether the car is charging (only the running segment, as in v1 0.9.103: t
 * **House:** the shared profile (weekday/weekend, half-life 7 days) as the centre; low and high from the learned spread of
   the actual load around it (the 20th and 80th percentiles of the residual for that time of day). Three scenarios, weighted
   by the learned load weights (5.1).
-* **Smart slots:** two outcomes, the slot happens (its price) or does not (the standard price), with the learned certainty
+* **Smart slots (0.9.133: first segment only):** two outcomes, the slot happens (its price) or does not (the standard price), with the learned certainty, for the first segment of a run of uncertain slot segments; every later segment of the run is priced at its expected price, because a window holds or it does not (`value._correlate`)
   as the probability. Unlike v1, the slot is **not** averaged into one expected price (section 6 explains why).
 * **Estimated prices** beyond the published ones: the same time yesterday, except that yesterday's smart-slot price is
   not carried over (v1's rule, kept).
