@@ -255,6 +255,7 @@ class StepInput:
     solar_points: list = field(default_factory=list)     # adapters.base.ForecastPoint (with low/high bands)
     load_profile: Any = None              # forecast.LoadProfile (shared with v1)
     slot_certainty: Callable[[datetime, datetime | None], float] | None = None   # Certainty.score(start, first_seen)
+    slot_hold: Callable[[], float] | None = None    # Certainty.hold(): a later half-hour of a started window stands
     slot_first_seen: dict = field(default_factory=dict)  # dispatch start iso -> first seen iso
     overnight: set = field(default_factory=set)          # half-hours of the day in the overnight window
     settings_changed: bool = False        # the v2 settings were saved since the last tick

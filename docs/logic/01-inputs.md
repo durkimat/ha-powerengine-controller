@@ -105,7 +105,7 @@ flowchart TD
     B -- "no" --> C["Plan it at the day's standard (highest) rate,<br/>unweighted, unless it is in the overnight window"]
     B -- "yes" --> D{"Weigh it?"}
     D -- "inside the overnight window" --> E["No: price is the same with or without the slot"]
-    D -- "already running now" --> F["No: it is happening. If it ends early<br/>the plan is remade at once"]
+    D -- "already running now" --> F["The half-hour in progress: no, it is happening.<br/>Engine 2: the later half-hours of that window<br/>are weighted by the hold chance (below)"]
     D -- "first slot (now)" --> G["No"]
     D -- "future slot" --> H["Expected price =<br/>certainty x slot price + (1 - certainty) x standard price"]
 ```
@@ -137,6 +137,16 @@ score is then worked out per group, pulled towards the overall figure until the 
 
 * time of day: **overnight** (23:00 to 06:00 local) or **daytime**;
 * notice: **announced 2 h or more ahead**, or **short notice**.
+
+**A window that has started (engine 2, 0.9.132).** The half-hour in progress is certain, because its price is on the tariff
+now. The half-hours still to come in the same window are not: the supplier re-lists, shortens or drops a running dispatch, and
+before 0.9.132 they were all counted as certain, so the plan sold the battery down hard on the strength of a window it could
+not rely on (9 Oct 2026: 89% down to 31% in an afternoon window). `Certainty.hold()` is the chance that such a later
+half-hour stands: over every window that began, the later half-hours it kept, divided by the later half-hours it had (a window
+that ran to its end, or was cut short but carried on, kept all of them; one cut short kept those begun before the cut),
+pulled towards the overall figure with the same weight as a group. It enters as a price like any other certainty
+(`slot_prob` on the segment: the slot price with that chance, the standard price otherwise), so the plan is cautious by itself and
+there is no separate rule. It is shown as `running` in the certainty summary on `sensor.pe_plan` and the Health export.
 
 The plan shows each upcoming smart slot with its certainty and the price used (`slot_certainty` on `sensor.pe_plan`).
 

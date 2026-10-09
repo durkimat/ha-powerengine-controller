@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.132 (beta)
+
+### Behaviour changes
+
+- **The plan no longer treats the rest of a running smart slot as certain.** Once an EDF smart-charge window had started, every half-hour still to come in it was counted as certain, so the plan sold the battery down hard on the strength of a window that can be cut short or re-listed (9 Oct: 89% down to 31% in an afternoon window). The half-hour in progress is still certain, because its price is on the tariff now. The later ones now carry a chance: the share of later half-hours that past windows really kept. The plan prices them like any other uncertain slot (the slot price with that chance, the normal price otherwise), so it sells less deeply when windows often shrink, and goes as deep as before when they rarely do. No new setting, no new rule.
+- The figure is shown as `running` in the smart-slot certainty summary (plan sensor and diagnostics export), so you can see what the plan used.
+
+### Behind the scenes
+
+- `Certainty.hold()` and a new `slot_hold` input to the engine 2 forecast; the "started window is certain" shortcut in `forecast.py` is gone. Added to the grid-events backlog: a weather and wind outlook could feed both late-event and smart-slot certainty.
+
 ## 0.9.131 (beta)
 
 ### Behaviour changes
