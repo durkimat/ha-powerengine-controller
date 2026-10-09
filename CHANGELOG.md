@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.134 (beta)
+
+### Behaviour changes
+
+- **The forecast price for a smart slot is the rate EDF offers.** A smart slot that was only a chance (not yet started) was published at the normal price (28.84p) with the offered price beside it, so the dotted forecast price showed the high rate through a window EDF had offered at 6.66p. Every offered slot is now published at its offered price, whether or not the plan counts on it; the plan itself is unchanged (it still prices the chance as one expected price). The normal rate it replaces is published beside it as `standard_p`.
+
+### Behind the scenes
+
+- `publish._prices`: `import_p` is the slot price for any offered slot; new additive field `standard_p`. No shape change to the sensors, so no card version change.
+
 ## 0.9.133 (beta)
 
 ### Behaviour changes
