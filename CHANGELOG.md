@@ -2,6 +2,12 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.131 (beta)
+
+### Behaviour changes
+
+None. This release is for the card only: nothing about planning, control or the app's sensors changes.
+
 ## 0.9.130 (beta)
 
 ### Behaviour changes
