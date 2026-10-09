@@ -163,7 +163,7 @@ class Executor:
         self.lines = ln
 
         self._deadline(now, ts, vr, facts, level, new_events)
-        self.exits = [self._exit_dict(e) for e in self._exits(now, lim, ln, vr, level)]
+        self.exits = [self._exit_dict(e) for e in self._exits(now, lim, ln, vr, level, facts)]
 
         decision = self._decision(pick, level, ln)
         self.last_decision = decision
@@ -460,6 +460,24 @@ class Executor:
                 end, until = it.end, it.until
         return end, until
 
+    def _finish(self, vr, now: datetime, level, facts) -> datetime | None:
+        """When the charge or sale now running is expected to end: the end of the plan's step for it, or when the power
+        in use gets the battery from its level to the target, whichever is later. The plan's step can end well before
+        the target (it alternates charge and sale half-hour by half-hour while the live decision runs to the line), and
+        a 'reaches 32% at 18:00' that the power cannot do by then is not an expectation."""
+        end, _ = self._expected_end(vr, now, self.mode)
+        if level is None or self.target_soc is None or self.mode not in (CHARGE, EXPORT):
+            return end
+        cap = facts.capacity_kwh
+        gap = abs(self.target_soc - level) / 100 * cap
+        kw = (self.power_w / 1000 if self.power_w else (facts.max_charge_kw if self.mode == CHARGE
+                                                         else facts.max_discharge_kw))
+        if kw <= 0:
+            return end
+        hours = gap / (kw * facts.eta_charge) if self.mode == CHARGE else gap * facts.eta_discharge / kw
+        by_power = now + timedelta(hours=hours)
+        return by_power if end is None or by_power > end else end
+
     def _deadline(self, now, ts, vr, facts, level, new_events) -> None:
         if self.mode not in (CHARGE, EXPORT):
             self.deadline = None
@@ -482,11 +500,13 @@ class Executor:
             new_events.append(Event(now, "deadline", f"The {word} has run past its expected end: the plan is looked "
                                                      "at again (it carries on while it still pays)"))
 
-    def _exits(self, now: datetime, lim: Limits, ln: Lines | None, vr, level) -> list[Exit]:
+    def _exits(self, now: datetime, lim: Limits, ln: Lines | None, vr, level, facts=None) -> list[Exit]:
         mode, out = self.mode, []
         if mode is None:
             return out
         end, until = self._expected_end(vr, now, mode)
+        if facts is not None and mode in (CHARGE, EXPORT):
+            end = self._finish(vr, now, level, facts)
         if mode == HOLD and self._car_on():                # the car is what holds the battery, so its end is the exit
             out.append(Exit("car", "The car stops charging", None))
         if mode == CHARGE and self.target_soc is not None:

@@ -146,7 +146,9 @@ half-hour stands: over every window that began, the later half-hours it kept, di
 that ran to its end, or was cut short but carried on, kept all of them; one cut short kept those begun before the cut),
 pulled towards the overall figure with the same weight as a group. It enters as a price like any other certainty
 (`slot_prob` on the segment: the slot price with that chance, the standard price otherwise), so the plan is cautious by itself and
-there is no separate rule. It is shown as `running` in the certainty summary on `sensor.pe_plan` and the Health export.
+there is no separate rule. From 0.9.133 only the first segment of a run of uncertain slot segments is two outcomes (whether the slot starts is seen
+before it); every later segment of the run is priced at its expected price, because a window holds or it does not. Treating each half-hour as
+an independent chance made a long window at 51% a near-certain cheap half-hour, and on 9 Oct the plan cycled on it. It is shown as `running` in the certainty summary on `sensor.pe_plan` and the Health export.
 
 The plan shows each upcoming smart slot with its certainty and the price used (`slot_certainty` on `sensor.pe_plan`).
 

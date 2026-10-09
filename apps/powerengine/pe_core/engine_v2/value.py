@@ -8,7 +8,9 @@ Model, in short (all prices in pence per kWh, energy in kWh stored in the batter
 
 * `V_k(e)` is the expected cost from segment k on, starting at level e. `V_end(e) = -terminal_value * e`.
 * A smart slot is two price outcomes, known before the choice, so the minimum is taken inside each outcome and the
-  outcomes are weighted by `slot_prob`. A forced mode (grid event, free power, an override) is the only choice.
+  outcomes are weighted by `slot_prob`. That holds for the first segment of a run of uncertain slot segments only: a
+  window holds or it does not, so each later segment of the run is priced at its expected price (`_correlate`). A
+  forced mode (grid event, free power, an override) is the only choice.
 * The sun and the house are not known in advance: the mode is chosen against the expected cost over three net-load
   scenarios (low, middle, high), each the probability-weighted mean of a third of the nine sun x house combinations.
 * Modes: Self-use, Hold, Charge, Export (Event and Free when forced). Self-use and Hold run the whole segment.
@@ -194,6 +196,28 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     else:
         S.outcomes = [(1.0, seg.import_p)]
     return S
+
+
+def _chance(S: _Seg) -> bool:
+    """A smart-slot segment that may or may not get the slot price, and is free to choose."""
+    sg = S.seg
+    return sg.slot_prob is not None and sg.slot_import_p is not None and 0 < sg.slot_prob < 1 and not S.forced
+
+
+def _correlate(segs: list[_Seg]) -> list[_Seg]:
+    """A window holds or it does not, so its half-hours are not independent chances. Two prices with the minimum taken
+    inside each (the first segment of a run of uncertain slot segments: whether the slot starts is seen before that
+    segment) is right for that segment only. Every later segment of the same run is priced at its expected price, one
+    price, so the plan cannot sell now and buy back in whichever later half-hour comes out cheap (on 9 Oct, with every
+    half-hour of a ten-hour window at 51%, that was a near-certain cheap half-hour and the plan cycled on it)."""
+    prev = False
+    for S in segs:
+        here = _chance(S)
+        if here and prev:
+            sg = S.seg
+            S.outcomes = [(1.0, sg.slot_prob * sg.slot_import_p + (1 - sg.slot_prob) * sg.import_p)]
+        prev = here
+    return segs
 
 
 def _chg_kw(S: _Seg, e: float) -> float:
@@ -528,7 +552,7 @@ def _backward(fc: Forecast, facts: BatteryFacts, settings: V2Settings, limits_fo
     cap = facts.capacity_kwh
     core = _Core()
     core.cap = cap
-    core.segs = [_make(s, facts, settings, limits_for(s)) for s in fc.segments]
+    core.segs = _correlate([_make(s, facts, settings, limits_for(s)) for s in fc.segments])
     _late_events(core.segs, settings, now)
     nf, sf = _grid(cap, fine)
     nc, sc = _grid(cap, max(coarse, fine))
@@ -1010,6 +1034,8 @@ def run_target(vr: ValueResult, t: datetime, soc: float, import_p: float, facts:
             frac = (sg.end - t).total_seconds() / (sg.end - sg.start).total_seconds()
             sg = replace(sg, start=t, solar_kwh=_scaled(sg.solar_kwh, frac), load_kwh=_scaled(sg.load_kwh, frac))
         cut.append(_make(sg, facts, settings, vr.limits[k]))
+    if k0 > 0:                                         # the same run rule as the backward pass saw
+        cut = _correlate([_make(segs[k0 - 1], facts, settings, vr.limits[k0 - 1])] + cut)[1:]
     rows = [_end_row(vr.lam, k) for k in range(k0, k1 + 1)]
     cap = vr.step_kwh * (len(vr.lam[0]) - 1)
     vks = [vr.vk[k] for k in range(k0, k1 + 1)] if len(vr.vk) == len(segs) else None
