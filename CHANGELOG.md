@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.129 (beta)
+
+### Behaviour changes
+
+- **The plan no longer rests in Hold between a charge and a sale.** In a cheap overnight window where buying at 6.66p and selling at 15p both pay, the plan sometimes held the battery for a whole half-hour between a charge and a sale, losing that half-hour's profit. The cause was how changes were priced: turning a charge straight into a sale cost 3p, but going charge, hold, sale cost only 0.6p, so the plan took the cheaper route through Hold wherever the gain was small.
+  - **One cost for every change.** Every change of mode now costs the same, so going through Hold is never cheaper than turning round directly. The separate "Cost of reversing" setting is gone, and "Cost of a mode change" now defaults to 2p (it was 0.5p). A saved reversal setting is ignored.
+  - **Tested before release** on the closed-loop evening simulation (fewer mode changes, fewer holds, no reversals or flip-flops; cash within 2.4p of before) and on the four demo days (same saving, same flip-flops). A cost of 1p let charge-to-sale turns through, so 2p is the lowest that holds.
+  - **Charge and sale cycling is unchanged.** Short rests of a few minutes remain where a charge or sale reaches its level part-way through a half-hour, which costs almost nothing.
+  - **The "does this change pay for itself" check is stricter** (it uses the same cost), so changes the plan did not ask for, such as spare-sun toggles between Self-use and Hold, need a bigger gain. Watch for any case where a change comes late.
+  - **One small difference:** in the evening simulation the battery tops out at 91.7% before the last charge, against 91.2% before (the comfort top is 90%, and 100% before the 0.9.113 top-up cost). That is a few tenths of a kWh above the top, costing about 1p.
+
 ## 0.9.128 (beta)
 
 ### Behaviour changes
