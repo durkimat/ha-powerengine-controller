@@ -115,15 +115,17 @@ def _prices(vr: ValueResult, tz) -> list[dict]:
     for seg in vr.forecast.segments:
         if seg.start >= cut:
             break
-        # a smart slot that is certain (started) is the price now: show it, not the standard rate it replaces
-        sure = seg.slot_prob is not None and seg.slot_prob >= 1 and seg.slot_import_p is not None
+        # a smart slot EDF is offering is shown at its offered price, certain or not: the known rate, never the
+        # expected price the plan works with. The standard rate it replaces rides beside it as `standard_p`.
+        offered = seg.slot_prob is not None and seg.slot_prob > 0 and seg.slot_import_p is not None
         row = {"start": seg.start, "end": min(seg.end, cut),
-               "import_p": _r(seg.slot_import_p if sure else seg.import_p), "export_p": _r(seg.export_p),
+               "import_p": _r(seg.slot_import_p if offered else seg.import_p), "export_p": _r(seg.export_p),
+               "standard_p": _r(seg.import_p) if offered else None,
                "slot_prob": _r(seg.slot_prob), "slot_import_p": _r(seg.slot_import_p) if seg.slot_prob is not None
                else None, "event": bool(seg.event), "free": bool(seg.free), "estimated": bool(seg.price_estimated)}
         last = rows[-1] if rows else None
         if last and all(last[k] == row[k] for k in ("import_p", "export_p", "slot_prob", "slot_import_p", "event",
-                                                    "free", "estimated")) and last["end"] == row["start"]:
+                                                    "free", "estimated", "standard_p")) and last["end"] == row["start"]:
             last["end"] = row["end"]
         else:
             rows.append(row)
@@ -134,6 +136,8 @@ def _prices(vr: ValueResult, tz) -> list[dict]:
              "estimated": r["estimated"]}
         if r["slot_prob"] is not None:
             d["slot_import_p"] = r["slot_import_p"]
+        if r["standard_p"] is not None:
+            d["standard_p"] = r["standard_p"]
         out.append(d)
     return out
 

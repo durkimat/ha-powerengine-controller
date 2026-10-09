@@ -305,15 +305,16 @@ def _walk(x):
 
 
 
-def test_a_started_smart_slot_is_shown_at_its_own_price():
-    """Once the slot is certain (its window has begun) the import line is the slot price, not the standard rate;
-    a slot that is only a chance keeps the standard rate with the slot price beside it."""
+def test_an_offered_smart_slot_is_shown_at_its_offered_price_certain_or_not():
+    """The price shown is the known rate EDF offers, never the expected price the plan works with; the standard
+    rate it replaces rides beside it."""
     now = datetime(2026, 10, 8, 18, 1, tzinfo=timezone.utc)
     segs = [segment(now + timedelta(minutes=30 * i), import_p=28.84, export_p=15.0, solar=0.0, load=0.3,
-                    slot_prob=p, slot_import_p=6.66) for i, p in enumerate((1.0, 0.24))]
+                    slot_prob=p, slot_import_p=6.66) for i, p in enumerate((1.0, 0.6))]
+    segs.append(segment(now + timedelta(minutes=60), import_p=28.84, export_p=15.0, solar=0.0, load=0.3))
     prices = publish._prices(value_result(now, forecast(now, segs)), LOCAL)
-    assert [(p["import_p"], p["slot_prob"], p["slot_import_p"]) for p in prices] == [(6.66, 1.0, 6.66),
-                                                                                    (28.84, 0.24, 6.66)]
+    assert [(p["import_p"], p["slot_prob"], p.get("slot_import_p"), p.get("standard_p")) for p in prices] == [
+        (6.66, 1.0, 6.66, 28.84), (6.66, 0.6, 6.66, 28.84), (28.84, None, None, None)]
 
 
 def test_the_mode_power_is_the_full_rate_when_nothing_caps_it(made):
