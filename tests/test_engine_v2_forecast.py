@@ -84,6 +84,20 @@ def test_slot_is_two_outcomes_not_a_blend():
     assert seg.overnight is False
 
 
+def test_a_running_window_is_certain_now_and_a_chance_for_the_half_hours_still_to_come():
+    now = at(23, 20)
+    inp = make(now)
+    inp.readings.rates = rate_windows(2, cheap={46, 47, 48, 49})
+    inp.readings.dispatches = [Window(at(23, 0), at(1, 0, day=1), 0.0)]
+    inp.slot_certainty = lambda start, seen: 0.2
+    inp.slot_hold = lambda: 0.8
+    fc = F.build(inp, ST)
+    inside = [s for s in fc.segments if s.slot_prob is not None]
+    assert inside[0].start == now and inside[0].slot_prob == 1.0          # the half-hour in progress
+    assert all(s.slot_prob == pytest.approx(0.8) for s in inside[1:])      # the rest of the window
+    assert all(s.slot_import_p == pytest.approx(6.99) and s.import_p == pytest.approx(30.28) for s in inside[1:])
+
+
 def test_running_slot_is_certain_and_no_certainty_means_certain():
     now = at(23, 20)
     inp = make(now)

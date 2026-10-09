@@ -38,6 +38,11 @@ Moved out of CLAUDE.md (Oct 2026) to keep every session's context small. Read th
   the per-half-hour probability, learned like the scenario weights, with the flat rate as the fallback when there is no data; (4) **hours of day**: events weighted
   to the evening peak, not uniform; (5) the settings stay: `late_events` switches it all off. Plan doc first: `docs/plans/late-grid-events.md`. The owner also plans to
   try more cautious `late_events_per_week` and `late_event_hours` values and watch the plan.
+  **Same outlook, smart-slot certainty (owner's idea, 9 Oct 2026; not built).** How likely an EDF smart slot is to be withdrawn or cut short probably depends
+  on the same things as a late event (a short grid, so a poor-sun, low-wind or cold day), more than on the slot history alone. If the outlook above is built, feed
+  it into `Certainty` too: a multiplier on the history-based figures (`score` for slots not yet started, `hold` for the later half-hours of a running window,
+  added 0.9.132), with the history as the fallback when there is no outlook. Check first whether cancelled and cut-short slots in `SlotTracker` records line up
+  with the day's solar and wind. Keep it a chance in the price (`slot_prob`), not a rule.
 - **Zappi Eco+ and solar (monitor):** Eco+ is required for EDF/Octopus smart charging. The owner has only seen the car charge from the grid, not from solar, so some
   threshold (probably on the charger) decides. If the Zappi ever starts and stops with solar surplus, `car_charging` (an urgent rule, no damping) and the plan signature will flip with it:
   watch `ev_state` changes per day in the diagnostics export, and add a short debounce on stop only if it happens. Do nothing until it is seen.

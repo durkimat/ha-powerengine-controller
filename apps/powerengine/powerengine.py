@@ -891,7 +891,7 @@ class PowerEngine(hass.Hass):
                               house_load_includes_ev=bool(self.cfg.system.get("house_load_includes_ev", True)),
                               control_method=method)
         return StepInput(now=now, readings=r, facts=facts, situation=situation, tz=self.tz or timezone.utc,
-                         solar_points=solar, load_profile=self.profile, slot_certainty=cert.score,
+                         solar_points=solar, load_profile=self.profile, slot_certainty=cert.score, slot_hold=cert.hold,
                          slot_first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
                          overnight=self._overnight(), learned_changed=learned,
                          slots_whole_house=bool(self.cfg.features.get("slots_whole_house", True)))

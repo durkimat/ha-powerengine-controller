@@ -112,3 +112,36 @@ def test_plan_shows_the_tariff_price_not_the_weighted_one():
     assert attrs["series"]["price_p"][:2] == [6.99, 6.99]
     text = " ".join(w["price"] + " " + w["reason"] for w in attrs["windows"])
     assert "9.7p" not in text
+
+
+def run_rec(start, halves, status="done", ran=None, **kw):
+    """A window of `halves` half-hours; a cut-short one stopped after `ran` half-hours."""
+    r = {**rec(start, status, **kw), "end": (start + timedelta(minutes=30 * halves)).isoformat()}
+    if ran is not None:
+        r["ended"] = (start + timedelta(minutes=30 * ran - 5)).isoformat()
+    return r
+
+
+def test_the_hold_chance_counts_the_later_half_hours_a_started_window_kept():
+    c = Certainty({})
+    assert c.hold() == PRIOR                                    # nothing known: the prior, like any other group
+    hist = {"a": run_rec(T, 7),                                # ran its full 3.5 h: 6 later half-hours held of 6
+            "b": run_rec(T + timedelta(days=1), 7, "cut_short", ran=3),     # three begun: 2 of 6 later held
+            "c": run_rec(T + timedelta(days=2), 1),                         # one half-hour: no later ones
+            "d": run_rec(T + timedelta(days=3), 5, "cancelled")}            # never started: not counted
+    c = Certainty(hist)
+    assert (c.held, c.later) == (8, 12)
+    assert c.hold() == pytest.approx((8 + c.overall * 4) / (12 + 4), abs=1e-3)
+    assert c.summary()["running"] == {"later_half_hours": 12, "certainty": c.hold()}
+
+
+def test_a_window_that_was_re_listed_and_carried_on_held():
+    a = run_rec(T, 4, "cut_short", ran=2)
+    b = run_rec(T + timedelta(minutes=55), 4)                   # EDF listed it again from the current half-hour
+    c = Certainty({"a": a, "b": b})
+    assert c.held == 3 + 3 and c.later == 3 + 3                 # the cut one carried on, so it held in full
+
+
+def test_many_windows_that_all_held_make_a_later_half_hour_near_certain():
+    hist = {str(i): run_rec(T + timedelta(days=i), 6) for i in range(30)}
+    assert Certainty(hist).hold() > 0.95
