@@ -879,7 +879,6 @@ class PowerEngine(hass.Hass):
         now = r.now
         facts = self._v2_facts(r)
         reason = "" if send else (V2_PREVIEW_REASON if preview else (self._v2_refusal() or self.mode.reason))
-        cert = self._v2_cached("cert", now, lambda: Certainty(self.slots.slots, self.tz, self._min_charge_min()))
         solar = self._v2_cached("solar", now, self._solar_forecast)
         sig = ((facts.capacity_kwh, facts.eta_charge, facts.max_charge_kw, facts.max_discharge_kw, facts.taper,
                 facts.dtaper, facts.hard_floor_soc, facts.export_limit_kw, facts.ev_charger_kw),
@@ -890,8 +889,10 @@ class PowerEngine(hass.Hass):
         situation = Situation(active=send, mode_reason=reason, override=self._active_override(),
                               house_load_includes_ev=bool(self.cfg.system.get("house_load_includes_ev", True)),
                               control_method=method)
+        slot_c = float(self.cfg.safety.get("smart_slot_certainty_pct", 60)) / 100     # a fixed setting, not learned
         return StepInput(now=now, readings=r, facts=facts, situation=situation, tz=self.tz or timezone.utc,
-                         solar_points=solar, load_profile=self.profile, slot_certainty=cert.score, slot_hold=cert.hold,
+                         solar_points=solar, load_profile=self.profile,
+                         slot_certainty=lambda _s, _f: slot_c, slot_hold=lambda: slot_c,
                          slot_first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
                          overnight=self._overnight(), learned_changed=learned,
                          slots_whole_house=bool(self.cfg.features.get("slots_whole_house", True)))

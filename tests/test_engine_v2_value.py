@@ -304,27 +304,32 @@ def test_lam_with_spreads_and_slots_falls_almost_everywhere():
     assert all(v == v and abs(v) < 500 for row in vr.lam for v in row)
 
 
-def test_two_price_outcomes_are_not_a_blended_price():
-    # the slot (7p instead of 30p) fills a gap the battery cannot cover: it is certain, uncertain or absent
+def test_an_uncertain_slot_is_one_expected_price():
+    # the certainty sits in the price: p x slot price + (1 - p) x normal price, so the plan is cautious by itself
+    segs = [seg(0, imp=30.28), seg(1, imp=30.28, slot_prob=0.6, slot_import_p=6.99),
+            seg(2, imp=30.28, slot_prob=1.0, slot_import_p=6.99), seg(3, imp=30.28, load=0.5)]
+    core = V._backward(fc_of(segs), FACTS, NO_COMFORT, limits_for, segs[0].start, 0.1, 0.5)
+    assert core.segs[0].outcomes == [(1.0, 30.28)]
+    assert core.segs[1].outcomes == [(1.0, pytest.approx(0.6 * 6.99 + 0.4 * 30.28))]
+    assert core.segs[2].outcomes == [(1.0, 6.99)]
+
+
+def test_a_long_uncertain_window_does_not_pay_for_selling_down_to_refill():
+    # 9 Oct 2026: every half-hour of a ten-hour window at 51% was two prices with the minimum taken inside each, so
+    # some later half-hour was all but sure to be cheap and the plan sold now to buy it back. A window holds or not.
     def build(p):
-        segs = [seg(i, imp=30.28, load=0.0) for i in range(5)]
-        kw = {"slot_prob": p, "slot_import_p": 6.99} if p is not None else {}
-        segs.append(seg(5, imp=30.28, load=0.0, **kw))
-        segs += [seg(6 + i, imp=30.28, load=0.5) for i in range(6)]
+        segs = [seg(i, imp=30.28, load=0.3) for i in range(2)]
+        segs += [seg(2 + i, imp=30.28, load=0.3, slot_prob=p, slot_import_p=6.99) for i in range(20)]
+        segs += [seg(22 + i, imp=30.28, load=0.5) for i in range(6)]
         return segs
 
-    now = t(0)
-    soc = (0.12 * 18 + 1.5) / 18 * 100                                               # 1.5 kWh above the floor
-    lam = {}
-    for p in (None, 0.7, 1.0):
-        vr = solve(build(p), soc)
-        lam[p] = V.value_at(vr, now, soc)
-    assert lam[None] == pytest.approx(30.28 * 0.95, abs=0.1)
-    assert lam[1.0] == pytest.approx(BUY, abs=0.1)
-    two = 0.7 * lam[1.0] + 0.3 * lam[None]
-    assert lam[0.7] == pytest.approx(two, abs=0.3)
-    blended = 0.7 * 6.99 + 0.3 * 30.28                                               # what v1 would plan for
-    assert lam[0.7] < blended / 0.95 - 0.4
+    soc = 85.0
+    arb = lambda sg: limits_for(sg, arbitrage=True)                    # noqa: E731
+    sure, half = solve(build(1.0), soc, lim=arb), solve(build(0.5), soc, lim=arb)
+    assert sure.timeline[0].mode == EXPORT                              # if it is certain, sell and buy back
+    first_sale = next((it for it in half.timeline if it.mode == EXPORT), None)
+    assert first_sale is None or first_sale.start >= t(22)              # at 50% it waits for the dear stretch
+    assert V.value_at(half, t(0), soc) >= 15.0 * 0.95 - 0.05           # worth what a sale brings, or more
 
 
 def test_comfort_cost_lowers_the_value_near_the_top_and_raises_it_near_the_bottom():

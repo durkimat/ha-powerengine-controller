@@ -7,8 +7,10 @@ every level, what one more stored kWh is worth (`lam`, pence per kWh). From that
 Model, in short (all prices in pence per kWh, energy in kWh stored in the battery):
 
 * `V_k(e)` is the expected cost from segment k on, starting at level e. `V_end(e) = -terminal_value * e`.
-* A smart slot is two price outcomes, known before the choice, so the minimum is taken inside each outcome and the
-  outcomes are weighted by `slot_prob`. A forced mode (grid event, free power, an override) is the only choice.
+* A smart slot that is not certain is one price, the expected one: `slot_prob` x the slot price + (1 - `slot_prob`) x
+  the normal price. The certainty sits in the price, so the plan is cautious by itself and cannot count on the slot to
+  refill what it sells. A certain slot (`slot_prob` 1) is the slot price. A forced mode (grid event, free power, an
+  override) is the only choice.
 * The sun and the house are not known in advance: the mode is chosen against the expected cost over three net-load
   scenarios (low, middle, high), each the probability-weighted mean of a third of the nine sun x house combinations.
 * Modes: Self-use, Hold, Charge, Export (Event and Free when forced). Self-use and Hold run the whole segment.
@@ -185,11 +187,11 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
         scen.append((p, so, ho, ho + S.car - so))
     S.scen = scen
     S.mid = (seg.solar_kwh.mid, seg.load_kwh.mid)
-    if seg.slot_prob is not None and seg.slot_import_p is not None and 0 < seg.slot_prob < 1 and not S.forced:
-        S.outcomes = [(seg.slot_prob, seg.slot_import_p), (1 - seg.slot_prob, seg.import_p)]
-    elif seg.slot_prob is not None and seg.slot_import_p is not None and seg.slot_prob >= 1:
+    if seg.slot_prob is not None and seg.slot_import_p is not None and seg.slot_prob >= 1:
         S.outcomes = [(1.0, seg.slot_import_p)]
-    elif seg.slot_prob is not None and seg.slot_import_p is not None and seg.slot_prob > 0:   # forced: one price
+    elif seg.slot_prob is not None and seg.slot_import_p is not None and seg.slot_prob > 0:
+        # an uncertain smart slot is one price, the expected one: the certainty sits in the price, so the plan is
+        # cautious by itself (it cannot count on the slot to refill what it sells)
         S.outcomes = [(1.0, seg.slot_prob * seg.slot_import_p + (1 - seg.slot_prob) * seg.import_p)]
     else:
         S.outcomes = [(1.0, seg.import_p)]

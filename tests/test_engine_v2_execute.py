@@ -247,14 +247,27 @@ def test_a_new_value_result_with_a_later_end_moves_the_deadline_and_arms_it_agai
 
 
 def test_the_exits_of_a_charge_are_listed_with_expected_times():
-    item = TimelineItem(CHARGE, T0, T0 + timedelta(hours=1), 40.0, 88.0, "until 88%", "reason")
+    item = TimelineItem(CHARGE, T0, T0 + timedelta(hours=2), 40.0, 88.0, "until 88%", "reason")
     segs = [segment(T0 + timedelta(minutes=30 * i), import_p=7.0 if i < 2 else 30.0) for i in range(-2, 12)]
     vr = value_result(T0, forecast(T0, segs), timeline=[item])
     ex = Executor(V2Settings())
     ms, *_ = step(ex, 0, level=40, ln=lines(30.0, target=88.0), vr=vr)
     kinds = {e.kind: e for e in ms.exits}
-    assert kinds["level"].text == "The battery reaches 88%" and kinds["level"].expected_at == T0 + timedelta(hours=1)
+    assert kinds["level"].text == "The battery reaches 88%" and kinds["level"].expected_at == T0 + timedelta(hours=2)
     assert "price" in kinds and "car" in kinds and "deadline" in kinds
+
+
+def test_the_expected_time_of_a_level_exit_is_never_earlier_than_the_power_allows():
+    # 9 Oct 2026: "reaches 32% at 18:00" shown at 81% and 4.95 kW, because the plan's step for the sale ended at 18:00
+    # (it alternates sale and charge) while the live sale runs to the line. 49 points of 18 kWh is nearly two hours.
+    item = TimelineItem(EXPORT, T0, T0 + timedelta(minutes=18), 81.0, 73.0, "until 73%", "reason")
+    segs = [segment(T0 + timedelta(minutes=30 * i), import_p=7.0) for i in range(-2, 12)]
+    vr = value_result(T0, forecast(T0, segs), timeline=[item])
+    ex = Executor(V2Settings())
+    ms, *_ = step(ex, 0, level=81, ln=lines(10.0, floor=32.0), vr=vr, lim=limits(allowed=NORMAL | {EXPORT}))
+    level = next(e for e in ms.exits if e.kind == "level")
+    hours = (level.expected_at - T0).total_seconds() / 3600
+    assert ms.mode == EXPORT and 1.5 < hours < 2.2
 
 
 # ---- forced modes ------------------------------------------------------------------------------

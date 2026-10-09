@@ -150,7 +150,7 @@ def test_smart_request_settings_defaults_ranges_and_rounding():
     for key in ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h"):
         assert key in SETTING_TEXT
     sec = next(s for s in settings_catalogue()["sections"] if s["key"] == "smart")
-    assert sec["label"] == "Smart-charge requests" and len(sec["keys"]) == 4
+    assert sec["label"] == "Smart-charge requests" and len(sec["keys"]) == 5
     assert parse_config({"safety": {"smart_max_requests_per_day": 10}}).safety["smart_max_requests_per_day"] == 10
     got = parse_config({"safety": {"smart_max_requests_per_day": 7.6}}).safety["smart_max_requests_per_day"]
     assert got == 8 and isinstance(got, int)
@@ -182,3 +182,9 @@ def test_smart_request_features_defaults():
     assert cfg.features["slots_whole_house"] is True and cfg.features["smart_skip_full_car"] is False
     cfg = parse_config({"features": {"slots_whole_house": False, "smart_skip_full_car": True}})
     assert cfg.features["slots_whole_house"] is False and cfg.features["smart_skip_full_car"] is True
+
+
+def test_smart_slot_certainty_is_a_setting_with_a_default_of_sixty():
+    from pe_core.config import SAFETY, SETTING_TEXT
+    assert SAFETY["smart_slot_certainty_pct"] == (60, 0, 100) and "smart_slot_certainty_pct" in SETTING_TEXT
+    assert parse_config({}).safety["smart_slot_certainty_pct"] == 60
