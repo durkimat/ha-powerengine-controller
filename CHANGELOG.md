@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.133 (beta)
+
+### Behaviour changes
+
+- **Fixed the plan cycling on a smart-slot window it could not rely on.** From 0.9.132 the later half-hours of a running smart-slot window carry a chance (51% this evening). The plan treated each half-hour of that chance as independent, so over a ten-hour window some half-hour was all but sure to be cheap, and it planned to sell now and buy back at the slot price every half-hour, showing "charge at 6.66p" in the 28.84p evening. A window holds or it does not, so only the first half-hour of an uncertain run is now two prices (whether it starts is seen first); every later half-hour of the run is priced at its expected price. At 51% the plan now charges before the evening peak, runs the house on the battery and sells later, instead of cycling. This also applies to announced windows that have not started.
+- **"This ends when" no longer promises a level the power cannot reach.** A sale to 32% from 81% showed "reaches 32% at 18:00" because the plan's step for it ended then. The time is now never earlier than the power allows (nearly two hours for that sale).
+
+### Behind the scenes
+
+- `value._correlate` and `Executor._finish`. The "re-look at the plan" deadline is unchanged.
+
 ## 0.9.132 (beta)
 
 ### Behaviour changes
