@@ -67,6 +67,7 @@ SAFETY = {
     "smart_max_requests_per_day": (6, 4, 10),  # smart-charge ready-by changes a day
     "smart_min_gap_min": (20, 10, 120),        # minutes between ready-by changes
     "smart_lookahead_h": (3, 1, 8),            # no request if a slot is planned within this many hours
+    "smart_slot_certainty_pct": (60, 0, 100),  # engine v2: how likely a smart slot outside the overnight window is (%)
     "car_min_charge_min": (2.0, 0.5, 10.0),    # the car must charge this long, unbroken, for a smart slot to count
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
     "battery_floor_soc": (12, 0, 50),         # the battery's own lowest level (BMS cut-off); engine v2's hard floor (%)
@@ -163,6 +164,7 @@ SETTING_TEXT = {
                           "minutes."),
     "smart_lookahead_h": ("Skip if a slot is due within", "h",
                           "Don't ask when a slot is already planned to start within this time."),
+    "smart_slot_certainty_pct": ("Smart slot odds", "%", "How likely a smart slot is outside the overnight window."),
     "car_min_charge_min": ("Shortest real charge", "min",
                            "How long the car's charger must report charging without a break inside a smart-charge "
                            "slot for the slot to count as used. Shorter bursts (the car waking up) are ignored. "
@@ -296,7 +298,7 @@ SETTING_SECTIONS = (
     ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
     ("axle", "Grid events", ("pre_axle_lookahead_h", "axle_margin_soc")),
     ("smart", "Smart-charge requests", ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h",
-                                                  "car_min_charge_min")),
+                                                  "car_min_charge_min", "smart_slot_certainty_pct")),
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p", "overnight_switch_cost_p")),
     ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p", "ram_refresh_min",

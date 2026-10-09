@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.133 (beta)
+
+### Behaviour changes
+
+- **Smart-slot certainty is now a setting, 60% by default, and the plan prices an uncertain slot as one expected price.** Engine v2 no longer learns how likely a smart slot is. Outside the overnight window a slot counts as 60% likely (new setting "Smart slot certainty"); inside the overnight window, and for the half-hour already running, it is certain. The plan prices the slot at that chance of the slot price plus the rest at the normal price, so it is cautious by itself: at 60% that is about 16p instead of 7p, so it still charges when the battery is low before the evening peak but no longer sells the battery down to refill in a slot it cannot rely on.
+- **Fixed the plan cycling on a smart-slot window (from 0.9.132).** The later half-hours of a window were each an independent chance, so a long window at 51% looked like a near-certain cheap half-hour and the plan sold and bought back through the evening, showing "charge at 6.66p" in the 28.84p evening. That is gone: no per-half-hour chances at all.
+- **"This ends when" no longer promises a level the power cannot reach.** A sale to 32% from 81% showed "reaches 32% at 18:00" because the plan's step for it ended then. The time is now never earlier than the power allows (nearly two hours for that sale).
+
+### Behind the scenes
+
+- `value._make` prices an uncertain slot at its expected price; `Executor._finish`. The learned certainty still feeds the v1 planner and the statistics. The new setting needs adding to the card's config page (until then it keeps its default).
+
 ## 0.9.132 (beta)
 
 ### Behaviour changes
