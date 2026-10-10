@@ -82,6 +82,14 @@ LEVEL_BOT_ANCHOR_SOC = 15.0
 LEVEL_BOT_DOUBLING_PTS = 5.0
 PEN_RES = 100                 # table entries per kWh
 
+# The bottom curve can be made sharper inside a smart slot (a cheap stretch that may be cut short): its rate is
+# multiplied by LEVEL_BOT_SLOT_FACTOR, and where they are above 0, its start level and its doubling distance are
+# replaced. The plan then keeps the battery higher through a slot, relying less on the slot to refill what it has sold.
+# 1, 0 and 0 change nothing.
+LEVEL_BOT_SLOT_FACTOR = 1.0
+LEVEL_BOT_SLOT_START_SOC = 0.0
+LEVEL_BOT_SLOT_DOUBLING_PTS = 0.0
+
 # A tiny cost, in pence per hour, of the battery sitting in Hold. It is not a rule against holding: a hold that saves
 # more than this (keeping a kWh worth 12p instead of covering the house at 6p, say) still wins. It breaks ties: when
 # selling or charging costs the same now or later (a flat price stretch), the plan acts now rather than waiting in Hold.
@@ -106,20 +114,26 @@ def _layer(x: float, a: float, d: float) -> tuple[float, float]:
     return a * grow, a * (grow / k - x)
 
 
-def _level_penalty(cap: float) -> _Pen | None:
+def _level_penalty(cap: float, slot: bool = False) -> _Pen | None:
+    """The tables for a battery of `cap` kWh; `slot` asks for the version used inside a smart slot."""
+    bot_start, bot_rate, bot_d = LEVEL_BOT_START_SOC, LEVEL_BOT_RATE_AT_FLOOR_P, LEVEL_BOT_DOUBLING_PTS
+    if slot:
+        bot_rate *= LEVEL_BOT_SLOT_FACTOR
+        bot_start = LEVEL_BOT_SLOT_START_SOC or bot_start
+        bot_d = LEVEL_BOT_SLOT_DOUBLING_PTS or bot_d
     top_on = LEVEL_TOP_RATE_AT_FULL_P > 0.0 and LEVEL_TOP_START_SOC < 100.0
-    bot_on = LEVEL_BOT_RATE_AT_FLOOR_P > 0.0 and LEVEL_BOT_START_SOC > LEVEL_BOT_ANCHOR_SOC
+    bot_on = bot_rate > 0.0 and bot_start > LEVEL_BOT_ANCHOR_SOC
     if not (top_on or bot_on):
         return None
-    key = (cap, LEVEL_TOP_START_SOC, LEVEL_TOP_RATE_AT_FULL_P, LEVEL_TOP_DOUBLING_PTS, LEVEL_BOT_START_SOC,
-           LEVEL_BOT_RATE_AT_FLOOR_P, LEVEL_BOT_ANCHOR_SOC, LEVEL_BOT_DOUBLING_PTS)
+    key = (cap, LEVEL_TOP_START_SOC, LEVEL_TOP_RATE_AT_FULL_P, LEVEL_TOP_DOUBLING_PTS, bot_start, bot_rate,
+           LEVEL_BOT_ANCHOR_SOC, bot_d)
     hit = _pen_cache.get(key)
     if hit is not None:
         return hit
     span_top = (100.0 - LEVEL_TOP_START_SOC) / LEVEL_TOP_DOUBLING_PTS
-    span_bot = (LEVEL_BOT_START_SOC - LEVEL_BOT_ANCHOR_SOC) / LEVEL_BOT_DOUBLING_PTS
+    span_bot = (bot_start - LEVEL_BOT_ANCHOR_SOC) / bot_d
     a_top = LEVEL_TOP_RATE_AT_FULL_P / (2.0**span_top - 1.0) if top_on else 0.0
-    a_bot = LEVEL_BOT_RATE_AT_FLOOR_P / (2.0**span_bot - 1.0) if bot_on else 0.0
+    a_bot = bot_rate / (2.0**span_bot - 1.0) if bot_on else 0.0
     n = int(round(cap * PEN_RES))
     phi, rate = [], []
     per_point = cap / 100.0
@@ -129,8 +143,8 @@ def _level_penalty(cap: float) -> _Pen | None:
         if top_on and pct > LEVEL_TOP_START_SOC:
             r1, c1 = _layer(pct - LEVEL_TOP_START_SOC, a_top, LEVEL_TOP_DOUBLING_PTS)
             r, c = r + r1, c + c1
-        if bot_on and pct < LEVEL_BOT_START_SOC:
-            r1, c1 = _layer(LEVEL_BOT_START_SOC - pct, a_bot, LEVEL_BOT_DOUBLING_PTS)
+        if bot_on and pct < bot_start:
+            r1, c1 = _layer(bot_start - pct, a_bot, bot_d)
             r, c = r - r1, c + c1                              # more energy lowers the bottom penalty: a negative slope
         rate.append(r)
         phi.append(c * per_point)
@@ -284,7 +298,7 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     S.sw = settings.switch_cost_p
     S.lo, S.hi = settings.comfort_low_soc / 100 * S.cap, settings.comfort_high_soc / 100 * S.cap
     S.hold_p = HOLD_COST_P_PER_H
-    S.pen = _level_penalty(S.cap)
+    S.pen = _level_penalty(S.cap, seg.slot_prob is not None)
     S.fcap = S.hi if (S.ccost or S.topup) else S.cap          # where charging early stops being free (see `_walk`)
     if S.pen is not None:
         S.fcap = min(S.fcap, S.pen.top_start_kwh)

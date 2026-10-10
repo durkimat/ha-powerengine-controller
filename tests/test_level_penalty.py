@@ -162,3 +162,19 @@ def test_hold_has_a_tiny_cost_only_when_asked_and_only_in_hold(monkeypatch):
     assert value._phys(S1, kwh(60), "hold", 0.3, 10.0)[1] == pytest.approx(base_hold[1] + 0.2 * 0.5)
     assert value._phys(S1, kwh(60), "self_use", 0.3, 10.0)[1] == pytest.approx(base_self[1])
     assert value._phys(S1, kwh(60), "hold", 0.3, 10.0)[2] == base_hold[2]  # it is cash, not comfort
+
+
+def test_the_bottom_curve_is_sharper_only_inside_a_smart_slot(on, monkeypatch):
+    plain = value._level_penalty(CAP, False)
+    assert value._level_penalty(CAP, True) is plain  # the same tables with the dials at rest
+    monkeypatch.setattr(value, "LEVEL_BOT_SLOT_FACTOR", 10.0)
+    value._pen_cache.clear()
+    plain, slot = value._level_penalty(CAP, False), value._level_penalty(CAP, True)
+    assert abs(value._dphi(slot, kwh(15))) == pytest.approx(10 * abs(value._dphi(plain, kwh(15))), rel=0.02)
+    assert value._dphi(slot, kwh(95)) == value._dphi(plain, kwh(95))  # the top curve is the same in both
+    monkeypatch.setattr(value, "LEVEL_BOT_SLOT_START_SOC", 80.0)
+    monkeypatch.setattr(value, "LEVEL_BOT_SLOT_DOUBLING_PTS", 3.0)
+    value._pen_cache.clear()
+    slot2 = value._level_penalty(CAP, True)
+    assert value._dphi(slot2, kwh(75)) < 0.0 == value._dphi(plain, kwh(75))  # reaches higher up: costs at 75% now
+    assert abs(value._dphi(slot2, kwh(15))) == pytest.approx(20.0, rel=0.02)  # anchored: 2p x 10 at the reserve

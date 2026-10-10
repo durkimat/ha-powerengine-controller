@@ -110,8 +110,42 @@ value moves them (8.8 to 7.3 h). The cost effect points the opposite way with an
 without, £0.42 cheaper with), which is noise-level. The overnight holds are short ties (2 to 20 minutes each); the bulk of the hold
 time is the daytime sun export, which this does not touch. **Not recommended as it stands**; the constant is left off.
 
+## Results 3: a sharper bottom curve inside smart slots
+
+Smart slots are cheap but may be cut short, so the plan should not sell the battery down in them counting on the slot to refill it.
+Inside a smart-slot segment the bottom curve's rate is multiplied by `LEVEL_BOT_SLOT_FACTOR`, and `LEVEL_BOT_SLOT_START_SOC` (if
+above 0) replaces its start level (`LEVEL_BOT_SLOT_DOUBLING_PTS` can replace its doubling distance, but with the rate anchored at
+the 15% reserve a steeper doubling makes the 60 to 70% rates smaller, so it was not swept). All three are off at 1, 0, 0.
+
+Base for the sweep: the follow-the-plan variant with the top curve (3 points per doubling, 200p) and the bottom curve (5 points,
+10p at the reserve). The measure is the battery level inside the recorded slot windows (19.0 h on 7 to 9 Oct, 6.0 h on the synthetic
+day):
+
+| Slot factor | Real days: lowest, mean | h below 60% | h below 70% | Adj £ | Synthetic: lowest, mean | h below 60% | h below 70% | Adj £ |
+|---|---|---|---|---|---|---|---|---|
+| none | 21.9%, 67.8% | 6.9 | 9.0 | -5.77 | 15.9%, 57.3% | 3.1 | 4.2 | -3.13 |
+| 10 | 38.5%, 75.7% | 2.8 | 5.6 | -5.96 | 45.1%, 69.1% | 1.5 | 3.0 | -3.01 |
+| 30 | 38.5%, 79.1% | 2.2 | 3.8 | -5.86 | 39.4%, 68.8% | 1.1 | 3.2 | -2.94 |
+| 100 | 44.5%, 79.8% | 1.7 | 3.2 | -5.68 | 42.4%, 71.9% | 0.8 | 2.5 | -3.00 |
+| 100, start 80% | 38.4%, 78.4% | 2.6 | 4.1 | -5.86 | 55.7%, 74.2% | 0.4 | 2.2 | -2.76 |
+| 300 | 38.5%, 79.8% | 1.8 | 2.8 | -5.83 | 51.1%, 77.7% | 0.4 | 1.3 | -2.77 |
+| **300, start 80%** | **38.6%, 81.3%** | **1.6** | **2.6** | **-5.82** | **64.9%, 78.2%** | **0.0** | **0.8** | **-2.74** |
+
+- Strongest setting (factor 300, start 80%): the mean level inside slots rises from 68% to 81% on the real days and from 57% to 78%
+  on the synthetic day; hours below 70% fall from 9.0 to 2.6 and from 4.2 to 0.8. On the synthetic day the lowest level in either slot
+  is 64.9% (above 60% throughout; above 70% for 87% of the slot time). It costs nothing on the real days (-5.82 against -5.77) and
+  gives up £0.39 of arbitrage on the synthetic day (-2.74 against -3.13), a day built to be all arbitrage.
+- Before and after on 8 Oct: the evening slot window (17:30 to 22:55) no longer sells down to 21.9%; it stays at or above 76.8%.
+- What the factor cannot fix: on 9 Oct a slot window begins at 11:00 with the battery already at 38.6%, and another (12:30 to 18:25) at
+  52%. The factor stops selling inside a slot; it does not raise a level a slot starts at. That needs the curve to act before the slot
+  (an earlier start), or the slot to be known earlier.
+- No effect on the top limit (highest level 93.6 to 95.0%), hold hours 7.2 to 8.3 h, mode changes about the same (105 to 120).
+- The factor applies to every smart-slot segment alike, including one already running. It could be scaled by how uncertain the slot is
+  (for example `1 + K * (1 - certainty)`), so a certain or running slot gets none; not yet tried.
+
 ## Not yet done
 
+- Scaling the slot factor by the slot's uncertainty, and an earlier-acting curve for slots that begin with the battery already low.
 - Tuning the top and bottom curves together (and a stronger bottom rate).
 - Splitting hold hours into daytime sun export and overnight ties, to say how much of Hold is a decision and how much a tie.
 - Turning the constants into settings once the shape is chosen.
