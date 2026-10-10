@@ -21,18 +21,22 @@ one at a time to see what each is worth; the model and the hard limits are not t
 
 ## Architecture
 
+![The layers of engine v2 and the data between them](img/engine-v2-architecture-layers.svg)
+
+<details><summary>Diagram source (Mermaid)</summary>
+
 ```mermaid
 flowchart TD
-    IN["Inputs every 10 s<br/>battery level, house, sun, car, grid event,<br/>prices, smart slots (the app reads these)"]
-    OBS["1 Observe  observe.py<br/>filtered battery level, debounced states,<br/>events: drift, band exit, forecast change, car, slot, price"]
-    TRG["Triggers  triggers.py<br/>when to re-plan: urgent event now,<br/>otherwise batched, and at least every 2 h"]
-    FC["2 Forecast  forecast.py<br/>48 h of segments: prices, sun and house<br/>as low / mid / high, slots as a chance<br/>(learned corrections applied)"]
-    LIM["4 Rules and limits  rules.py<br/>which modes are allowed or forced, floors, caps<br/>the SAME function for the plan and for now"]
-    VAL["3 Value  value.py<br/>dynamic programme over battery level<br/>costs: switch, wear, comfort, top-up, late event, end value<br/>THE PLAN: value curve, timeline, level path"]
-    LNS["Lines  value.lines<br/>value of a stored kWh now vs<br/>buy, sell, use and store-sun lines"]
-    EXE["5 Executor  execute.py<br/>picks the mode this tick from the lines and limits<br/>then the adjustments: bands, ask the plan, keep going, dwell, worth the change"]
-    LRN["Learning  learning.py<br/>scenario weights, solar bias, level offset"]
-    OUT["6 To the inverter  powerengine.py<br/>RAM remote control: write budget, damping,<br/>read-back, failsafe refresh (not engine v2)"]
+    IN["Inputs every 10 s<br/>battery level, house,<br/>sun, car, grid event,<br/>prices, smart slots<br/>(the app reads these)"]
+    OBS["1 Observe observe.py<br/>filtered battery<br/>level, debounced<br/>states, events: drift,<br/>band exit, forecast<br/>change, car, slot,<br/>price"]
+    TRG["Triggers triggers.py<br/>when to re-plan:<br/>urgent event now,<br/>otherwise batched, and<br/>at least every 2 h"]
+    FC["2 Forecast forecast.py<br/>48 h of segments:<br/>prices, sun and house<br/>as low / mid / high,<br/>slots as a chance<br/>(learned corrections<br/>applied)"]
+    LIM["4 Rules and limits<br/>rules.py which modes<br/>are allowed or forced,<br/>floors, caps the SAME<br/>function for the plan<br/>and for now"]
+    VAL["3 Value value.py<br/>dynamic programme over<br/>battery level costs:<br/>switch, wear, comfort,<br/>top-up, late event,<br/>end value THE PLAN:<br/>value curve, timeline,<br/>level path"]
+    LNS["Lines value.lines<br/>value of a stored kWh<br/>now vs buy, sell, use<br/>and store-sun lines"]
+    EXE["5 Executor execute.py<br/>picks the mode this<br/>tick from the lines<br/>and limits then the<br/>adjustments: bands,<br/>ask the plan, keep<br/>going, dwell, worth<br/>the change"]
+    LRN["Learning learning.py<br/>scenario weights,<br/>solar bias, level<br/>offset"]
+    OUT["6 To the inverter<br/>powerengine.py RAM<br/>remote control: write<br/>budget, damping, read-<br/>back, failsafe refresh<br/>(not engine v2)"]
 
     IN --> OBS
     OBS -->|events| TRG
@@ -49,6 +53,10 @@ flowchart TD
     LRN -->|corrections| FC
     LRN -->|level offset| OBS
 ```
+
+</details>
+
+(On a phone, tap the picture to open it full size and zoom. The Mermaid source is folded under it.)
 
 Read it as two loops:
 
@@ -120,26 +128,32 @@ level" rules.
 
 ## The executor's decision, and where each adjustment sits
 
+![The executor's decision order, with the adjustments marked](img/engine-v2-architecture-executor.svg)
+
+<details><summary>Diagram source (Mermaid)</summary>
+
 ```mermaid
 flowchart TD
-    A["Readings ok?"] -->|no| SU1["Self-use: hand back to the inverter"]
-    A -->|yes| B["Forced by a limit?<br/>grid event, free power, override"]
-    B -->|yes| F["That forced mode<br/>(hold at the reserve or event floor)"]
+    A["Readings ok?"] -->|no| SU1["Self-use: hand back to<br/>the inverter"]
+    A -->|yes| B["Forced by a limit?<br/>grid event, free<br/>power, override"]
+    B -->|yes| F["That forced mode (hold<br/>at the reserve or<br/>event floor)"]
     B -->|no| C["No plan yet?"]
-    C -->|yes| SU2["Self-use until the first plan"]
-    C -->|no| D["_candidate: from the lines"]
-    D --> D1["can charge? (value above buy line by the price band,<br/>level below target by the level band)"]
-    D --> D2["can sell? (value below sell line by the price band,<br/>level above floor by the level band)"]
+    C -->|yes| SU2["Self-use until the<br/>first plan"]
+    C -->|no| D["_candidate: from the<br/>lines"]
+    D --> D1["can charge? (value<br/>above buy line by the<br/>price band, level<br/>below target by the<br/>level band)"]
+    D --> D2["can sell? (value below<br/>sell line by the price<br/>band, level above<br/>floor by the level<br/>band)"]
     D1 --> E["both pay?"]
     D2 --> E
-    E -->|yes| LG["ADJUSTMENT: _leg_going<br/>a running charge or sale carries on to the end of its plan step<br/>else the plan's own mode for now"]
-    E -->|no| P["the one that pays, else Self-use or Hold<br/>by the price band against the use / store lines"]
+    E -->|yes| LG["ADJUSTMENT: _leg_going<br/>a running charge or<br/>sale carries on to the<br/>end of its plan step<br/>else the plan's own<br/>mode for now"]
+    E -->|no| P["the one that pays,<br/>else Self-use or Hold<br/>by the price band<br/>against the use /<br/>store lines"]
     LG --> PC
-    P --> PC["ADJUSTMENT: _with_the_programmes_choice<br/>a charge or sale may START only if value.choice_now<br/>(the plan's own comparison) would start it"]
-    PC --> DW["ADJUSTMENT: minimum dwell<br/>no change sooner than min_dwell_s after the last,<br/>unless the mode cannot go on"]
-    DW --> WC["ADJUSTMENT: _worth_the_change<br/>a change the plan did not ask for must earn<br/>more than 2 x switch_cost_p"]
+    P --> PC["ADJUSTMENT:<br/>_with_the_programmes_choice<br/>a charge or sale may<br/>START only if<br/>value.choice_now (the<br/>plan's own comparison)<br/>would start it"]
+    PC --> DW["ADJUSTMENT: minimum<br/>dwell no change sooner<br/>than min_dwell_s after<br/>the last, unless the<br/>mode cannot go on"]
+    DW --> WC["ADJUSTMENT:<br/>_worth_the_change a<br/>change the plan did<br/>not ask for must earn<br/>more than 2 x<br/>switch_cost_p"]
     WC --> M["The mode for this tick"]
 ```
+
+</details>
 
 The boxes marked ADJUSTMENT are the "adjustments" of the earlier table. Notes:
 
