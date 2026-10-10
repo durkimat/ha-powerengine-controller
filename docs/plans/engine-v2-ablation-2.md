@@ -1,5 +1,7 @@
 # Engine v2 ablation 2: pairs, the bare-minimum engine, and what stops it chattering
 
+> How the engine is built and where each setting applies: [engine-v2-architecture.md](engine-v2-architecture.md).
+
 10 Oct 2026 · follows `engine-v2-ablation-1.md`. Same days (7, 8, 9 Oct), same seed, same caveats: three days, in-sample, the
 simulator prices cash only. Negative adjusted cost is cheaper than the baseline (current code, archived config).
 

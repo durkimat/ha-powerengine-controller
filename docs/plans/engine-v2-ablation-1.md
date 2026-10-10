@@ -1,5 +1,7 @@
 # Engine v2 ablation 1: what each executor rule was worth
 
+> How the engine is built and where each setting applies: [engine-v2-architecture.md](engine-v2-architecture.md).
+
 10 Oct 2026 · step 3 of `engine-v2-mvp-and-simulator.md`. Produced with `tools/sim` on the code at `00a6b7c`.
 
 **Sample:** 7, 8 and 9 Oct only (6 Oct has no forecast at the start of the day; 10 Oct is partial). Seeded from the archived
