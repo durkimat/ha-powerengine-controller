@@ -225,7 +225,7 @@ def test_worker_rejects_unknown_settings_and_constants():
     assert "switch_cost_p: 3" in out and "reserve_soc: 10" in out
     with pytest.raises(ValueError, match="no constant"):
         worker.apply_consts({"engine_v2.value.NOT_THERE": 1})
-    assert "reserve_soc" in worker.catalogue(str(ROOT))
+    assert "reserve_soc" in worker.catalogue(str(ROOT))["settings"]
 
 
 def test_viewer_adapter():
@@ -306,3 +306,43 @@ def test_a_synthetic_day_is_read_beside_the_archive_and_never_replaces_a_real_on
     (data / "costs" / "2026-09-03.json").write_text("[]")
     with pytest.raises(SystemExit, match="both"):
         workspace.day_source("2026-09-03", data, extra)
+
+
+def test_catalogue_offers_settings_by_section_constants_layers_and_presets():
+    import worker
+
+    cat = worker.catalogue(str(ROOT))
+    from pe_core.engine_v2 import settings as s
+
+    assert set(cat["settings"]) == set(s.SETTINGS)  # every engine setting is offered
+    assert all(v["section"] for v in cat["settings"].values())
+    assert {sec for sec, _ in cat["sections"]} >= {v["section"] for v in cat["settings"].values()}
+    assert any(c["key"] == "engine_v2.value.COARSE_STEP_KWH" for c in cat["constants"])
+    assert {layer["id"] for layer in cat["layers"]} == {"leg_going", "programme_choice", "worth_the_change"}
+    assert set(cat["off_values"]) <= set(s.SETTINGS)  # an "off" only for a real setting
+    by_id = {p["id"]: p for p in cat["presets"]}
+    assert by_id["current"]["settings"] == {} and by_id["current"]["consts"] == {}
+    mvp = by_id["mvp"]
+    assert (
+        set(mvp["settings"]) <= set(s.SETTINGS) and "switch_cost_p" not in mvp["settings"]
+    )  # the plan's own cost stays
+    assert mvp["settings"]["late_events"] is False
+    assert len(mvp["consts"]) == 3 and len(by_id["mvp_programme_choice"]["consts"]) == 2
+
+
+def test_every_preset_applies_to_the_code():
+    import worker
+
+    worker._use_code(str(ROOT))
+    from pe_core.engine_v2 import execute
+
+    saved = {
+        n: getattr(execute.Executor, n) for n in ("_leg_going", "_with_the_programmes_choice", "_worth_the_change")
+    }
+    try:
+        for p in worker.catalogue(str(ROOT))["presets"]:
+            worker.apply_consts(p["consts"])
+            worker.patch_config("engine_v2: {}", p["settings"])
+    finally:
+        for n, f in saved.items():
+            setattr(execute.Executor, n, f)
