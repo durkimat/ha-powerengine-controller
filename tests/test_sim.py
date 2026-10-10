@@ -360,3 +360,44 @@ def test_a_day_whose_snapshot_starts_late_is_not_offered(tmp_path):
     assert workspace.days_with_snapshots(data) == ["2026-10-07"]
     (data / "costs" / "snapshots" / "2026-10-07.json").write_text("not json")
     assert workspace.days_with_snapshots(data) == []
+
+
+def test_a_trigger_table_entry_can_be_overridden_and_unknown_ones_refused():
+    import worker
+
+    worker._use_code(str(ROOT))
+    from pe_core.engine_v2 import types as T
+
+    saved = T.EVENT_KINDS["level"]
+    try:
+        assert T.Event(None, "level", "x").revalue is False
+        worker.apply_consts({"engine_v2.types.EVENT_KINDS.level": "@revalue"})
+        assert T.Event(None, "level", "x").revalue is True
+        with pytest.raises(ValueError, match="no entry"):
+            worker.apply_consts({"engine_v2.types.EVENT_KINDS.nonsense": "@revalue"})
+        with pytest.raises(ValueError, match="use one of"):
+            worker.apply_consts({"engine_v2.types.EVENT_KINDS.level": "yes"})
+    finally:
+        T.EVENT_KINDS["level"] = saved
+
+
+def test_follow_the_timeline_stub_prefers_the_plans_mode_when_allowed():
+    import worker
+
+    worker._use_code(str(ROOT))
+    from pe_core.engine_v2.execute import Executor
+
+    original = Executor._candidate
+    try:
+        worker.apply_consts({"engine_v2.execute.Executor._candidate": "@planned"})
+
+        class Lim:
+            allowed = frozenset({"charge", "hold"})
+
+        class Fake:
+            _planned_mode = staticmethod(lambda vr, now: vr)
+
+        assert Executor._candidate(Fake(), Lim(), None, 50.0, "charge", None) == "charge"
+        assert Executor._candidate is not original
+    finally:
+        Executor._candidate = original
