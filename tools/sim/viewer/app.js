@@ -40,18 +40,22 @@ async function catalogueFor(code) {
   return state.cat[key];
 }
 
+function overrideChips(v) {
+  const all = { ...v.settings, ...v.consts };
+  const chips = Object.entries(all).map(([k, x]) => el("span", { class: "chip", title: k }, `${k.split(".").pop()} = ${x}`));
+  return chips.length ? chips : "No overrides: the settings of the archived config.";
+}
+
 function renderVariants() {
   const host = $("variants");
   host.replaceChildren(...state.variants.map((v, idx) => {
     const refs = state.info.refs.map((r) => el("option", { value: r.name, selected: v.code === r.name }, `${r.name}  (${r.date})`));
-    const code = el("select", { onchange: (e) => { v.code = e.target.value; v.open = false; renderVariants(); } },
+    const code = el("select", { onchange: (e) => { v.code = e.target.value; renderVariants(); } },
       el("option", { value: "", selected: !v.code }, `Working tree — ${state.info.working}`), refs);
     const config = el("select", { onchange: (e) => { v.config = e.target.value; } }, el("option", { value: "" }, `Newest (${state.info.seed.config || "none"})`),
       state.info.configs.map((c) => el("option", { value: c, selected: v.config === c }, c)));
-    const chips = Object.entries(v.settings).map(([k, x]) => el("span", { class: "chip" }, `${k} = ${x}`))
-      .concat(Object.entries(v.consts).map(([k, x]) => el("span", { class: "chip" }, `${k} = ${x}`)));
-    const consts = el("input", { type: "text", placeholder: "constants, e.g. engine_v2.value.NAME=1", value: Object.entries(v.consts).map(([k, x]) => `${k}=${x}`).join("; "),
-      onchange: (e) => { v.consts = parseConsts(e.target.value); renderVariants(); } });
+    const chips = el("div", { class: "overrides" }, overrideChips(v));
+    v.refreshChips = () => chips.replaceChildren(...[].concat(overrideChips(v)).map((c) => (c instanceof Node ? c : document.createTextNode(c))));
     const box = el("div", { class: "variant" },
       el("div", { class: "top" },
         el("input", { type: "text", value: v.name, onchange: (e) => { v.name = e.target.value.trim() || v.name; } }),
@@ -59,53 +63,108 @@ function renderVariants() {
         idx ? el("button", { title: "Remove", onclick: () => { state.variants.splice(idx, 1); renderVariants(); } }, "✕") : ""),
       el("label", {}, "Code", code), el("label", {}, "Config", config),
       el("label", {}, "State", el("span", {}, el("input", { type: "checkbox", checked: v.fresh, onchange: (e) => { v.fresh = e.target.checked; } }), " start without learned state")),
-      el("label", {}, "Constants", consts),
-      el("div", { class: "overrides" }, chips.length ? chips : "No overrides: the settings of the archived config.",
-        el("div", {}, el("button", { onclick: async () => { v.open = !v.open; renderVariants(); } }, v.open ? "Hide settings" : "Engine settings…"))));
-    if (v.open) box.append(settingsPanel(v));
+      chips,
+      el("div", { class: "overrides" }, el("button", { onclick: () => { v.open = !v.open; renderVariants(); } }, v.open ? "Hide controls" : "Controls…")));
+    if (v.open) box.append(controlsPanel(v));
     return box;
   }));
 }
 
-function parseConsts(text) {
-  const out = {};
-  text.split(";").map((s) => s.trim()).filter(Boolean).forEach((s) => {
-    const i = s.indexOf("=");
-    if (i > 0) { const raw = s.slice(i + 1).trim(); out[s.slice(0, i).trim()] = raw !== "" && !isNaN(Number(raw)) ? Number(raw) : raw; }
-  });
-  return out;
-}
-
-function settingsPanel(v) {
-  const panel = el("div", { class: "settings" }, el("div", { class: "muted small", style: "padding:8px" }, "Loading the settings of this code…"));
+const isSet = (v, key) => key in v.settings || key in v.consts;
+function controlsPanel(v) {
+  const panel = el("div", { class: "settings" }, el("div", { class: "muted small", style: "padding:8px" }, "Loading what this code can be told…"));
   catalogueFor(v.code).then((cat) => {
-    const rows = el("div", {});
-    const filter = el("input", { type: "search", placeholder: "Filter settings", oninput: (e) => {
+    const filter = el("input", { type: "search", placeholder: "Filter settings and constants", oninput: (e) => {
       const q = e.target.value.toLowerCase();
-      rows.childNodes.forEach((r) => { r.style.display = r.dataset.text.includes(q) ? "" : "none"; });
+      panel.querySelectorAll("[data-text]").forEach((r) => { r.style.display = r.dataset.text.includes(q) ? "" : "none"; });
+      panel.querySelectorAll("details").forEach((d) => { if (q) d.open = true; });
     } });
-    Object.entries(cat.settings).forEach(([key, s]) => {
-      const set = key in v.settings;
-      const row = el("div", { class: `srow${set ? " set" : ""}` });
-      row.dataset.text = `${key} ${s.label} ${s.help}`.toLowerCase();
-      const change = (val) => { if (val === "" || val === null || val === undefined) delete v.settings[key]; else v.settings[key] = val; row.classList.toggle("set", key in v.settings); };
-      let input;
-      if (s.kind === "bool") {
-        input = el("select", { onchange: (e) => change(e.target.value === "" ? "" : e.target.value === "on") }, el("option", { value: "" }, `default (${s.default ? "on" : "off"})`),
-          el("option", { value: "on", selected: set && v.settings[key] === true }, "on"), el("option", { value: "off", selected: set && v.settings[key] === false }, "off"));
-      } else if (s.kind === "choice") {
-        input = el("select", { onchange: (e) => change(e.target.value) }, el("option", { value: "" }, `default (${s.default})`),
-          (s.min || []).map((o) => el("option", { value: o, selected: v.settings[key] === o }, o)));
-      } else {
-        input = el("input", { type: "number", step: s.kind === "int" ? 1 : "any", min: s.min, max: s.max, placeholder: `${s.default}${s.unit ? " " + s.unit : ""}`,
-          value: set ? v.settings[key] : "", onchange: (e) => change(e.target.value === "" ? "" : Number(e.target.value)) });
-      }
-      row.append(el("div", {}, el("div", {}, `${s.label} `, el("span", { class: "muted small" }, key)), el("div", { class: "help" }, s.help)), input);
-      rows.append(row);
+    const refresh = () => { v.refreshChips(); };
+    const presets = el("select", {}, el("option", { value: "" }, "Start from…"), cat.presets.map((p) => el("option", { value: p.id, title: p.help }, p.label)));
+    const apply = el("button", { onclick: () => {
+      const p = cat.presets.find((x) => x.id === presets.value);
+      if (!p) return;
+      v.settings = { ...p.settings }; v.consts = { ...p.consts };
+      renderVariants();
+    } }, "Apply");
+    const copy = el("button", { onclick: () => showYaml(panel, v) }, "Copy as config…");
+    const top = el("div", { class: "srow", style: "grid-template-columns: minmax(0,1fr) auto auto" }, presets, apply, copy);
+
+    const layers = el("details", { open: true }, el("summary", {}, "Rules that are code (switch off to test without them)"),
+      cat.layers.map((l) => {
+        const on = !(l.const in v.consts);
+        const row = el("div", { class: `srow${on ? "" : " set"}`, "data-text": `${l.label} ${l.help} ${l.id}`.toLowerCase() });
+        const box = el("input", { type: "checkbox", checked: on, onchange: (e) => {
+          if (e.target.checked) delete v.consts[l.const]; else v.consts[l.const] = l.stub;
+          row.classList.toggle("set", !e.target.checked); refresh();
+        } });
+        row.append(el("div", {}, el("div", {}, l.label), el("div", { class: "help" }, l.help)), el("label", { class: "small" }, box, " on"));
+        return row;
+      }));
+
+    const sections = el("div", {});
+    cat.sections.forEach(([sid, title]) => {
+      const keys = Object.entries(cat.settings).filter(([, s]) => s.section === sid);
+      if (!keys.length) return;
+      sections.append(el("details", { open: sid === "response" }, el("summary", {}, title, el("span", { class: "muted small" }, `  ${keys.length}`)),
+        keys.map(([key, s]) => settingRow(v, key, s, cat.off_values[key], refresh))));
     });
-    panel.replaceChildren(filter, rows);
+
+    const byModule = {};
+    cat.constants.forEach((c) => { (byModule[c.module] = byModule[c.module] || []).push(c); });
+    const consts = el("details", {}, el("summary", {}, "Constants in the code (no setting)", el("span", { class: "muted small" }, `  ${cat.constants.length}`)),
+      Object.entries(byModule).map(([m, list]) => [el("div", { class: "muted small", style: "padding:4px 8px" }, m),
+        list.map((c) => constRow(v, c, refresh))]));
+    panel.replaceChildren(filter, top, layers, sections, consts);
   }).catch((err) => panel.replaceChildren(el("div", { class: "err small", style: "padding:8px" }, `Could not read this code's settings: ${err.message}`)));
   return panel;
+}
+
+function settingRow(v, key, s, off, refresh) {
+  const row = el("div", { class: `srow${key in v.settings ? " set" : ""}`, "data-text": `${key} ${s.label} ${s.help}`.toLowerCase() });
+  const change = (val) => { if (val === "" || val === null || val === undefined) delete v.settings[key]; else v.settings[key] = val; row.classList.toggle("set", key in v.settings); refresh(); };
+  let input;
+  const set = key in v.settings;
+  if (s.kind === "bool") {
+    input = el("select", { onchange: (e) => change(e.target.value === "" ? "" : e.target.value === "on") }, el("option", { value: "" }, `default (${s.default ? "on" : "off"})`),
+      el("option", { value: "on", selected: set && v.settings[key] === true }, "on"), el("option", { value: "off", selected: set && v.settings[key] === false }, "off"));
+  } else if (s.kind === "choice") {
+    input = el("select", { onchange: (e) => change(e.target.value) }, el("option", { value: "" }, `default (${s.default})`),
+      (s.min || []).map((o) => el("option", { value: o, selected: v.settings[key] === o }, o)));
+  } else {
+    input = el("input", { type: "number", step: s.kind === "int" ? 1 : "any", min: s.min, max: s.max, placeholder: `${s.default}${s.unit ? " " + s.unit : ""}`,
+      value: set ? v.settings[key] : "", onchange: (e) => change(e.target.value === "" ? "" : Number(e.target.value)) });
+  }
+  const buttons = el("span", { class: "btns" });
+  if (off !== undefined) buttons.append(el("button", { title: `Set to ${off}: the same as the rule not being there`, onclick: () => { change(off); renderVariants(); } }, "off"));
+  if (set) buttons.append(el("button", { title: "Back to the config's value", onclick: () => { change(""); renderVariants(); } }, "↺"));
+  row.append(el("div", {}, el("div", {}, `${s.label} `, el("span", { class: "muted small" }, key)), el("div", { class: "help" }, s.help)), el("div", { class: "ctl" }, input, buttons));
+  return row;
+}
+
+function constRow(v, c, refresh) {
+  const row = el("div", { class: `srow${c.key in v.consts ? " set" : ""}`, "data-text": `${c.key} ${c.help}`.toLowerCase() });
+  const input = el("input", { type: "number", step: "any", placeholder: String(c.value), value: c.key in v.consts ? v.consts[c.key] : "",
+    onchange: (e) => { if (e.target.value === "") delete v.consts[c.key]; else v.consts[c.key] = Number(e.target.value); row.classList.toggle("set", c.key in v.consts); refresh(); } });
+  row.append(el("div", {}, el("div", {}, c.name), el("div", { class: "help" }, c.help)), el("div", { class: "ctl" }, input));
+  return row;
+}
+
+/** The variant's engine settings as the `engine_v2:` block of the config, to paste by hand; what is only a simulator override is a comment. */
+function configYaml(v) {
+  const lines = ["engine_v2:"];
+  Object.entries(v.settings).forEach(([k, x]) => lines.push(`  ${k}: ${x}`));
+  if (lines.length === 1) lines[0] = "engine_v2: {}";
+  const sim = Object.entries(v.consts).map(([k, x]) => `#   ${k} = ${x}`);
+  return lines.join("\n") + (sim.length ? `\n# simulator-only overrides (not config settings):\n${sim.join("\n")}` : "") + "\n";
+}
+
+function showYaml(panel, v) {
+  panel.querySelector(".yaml")?.remove();
+  const area = el("textarea", { class: "yaml", readonly: true, rows: 8 }, configYaml(v));
+  panel.prepend(area);
+  area.focus(); area.select();
+  try { navigator.clipboard?.writeText(area.value); } catch (e) { /* not a secure page: the text is selected, copy it by hand */ }
 }
 
 // ---- days ------------------------------------------------------------------------------------------------------------

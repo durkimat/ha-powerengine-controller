@@ -22,6 +22,13 @@ tools/sim/pe_sim.py check --days ...            # the runner against the nightly
 - Runs are cached by code, day, inputs, settings and seed; asking again is instant. `--force` ignores the cache.
 - A full day is about 2 minutes; several run at once (`--jobs`).
 
+**Controls in the GUI.** "Controls…" on a variant lists everything the code under test can be told: its engine settings in the
+config page's sections (with an `off` button where zero or off is the same as the rule being absent, `switches.OFF_VALUES`),
+the rules that are code (`switches.LAYERS`, switched off by stubbing the method), the module constants of `engine_v2`
+(found by reading the source), presets (`switches.PRESETS`: Current, MVP, MVP + ask the plan), and "Copy as config" (the
+`engine_v2:` block to paste by hand; simulator-only overrides come out as comments). A new engine setting appears by itself; a
+new rule that is only code needs a line in `switches.py`.
+
 **Synthetic days.** `tools/sim/synth.py sunny` builds a day the archive lacks (an east-facing sunny day, smart slots, no
 event) from a real day's house load; it goes to `~/pe-sim/synthetic/`, is read beside the archive, and is only run when asked
 (`--days synthetic`), never in `all`. See the module's docstring.

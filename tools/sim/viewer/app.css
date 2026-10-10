@@ -55,3 +55,9 @@ tr.total td { font-weight: 700; } td.good { color: var(--good); } td.bad { color
 #tip b { display: block; margin-bottom: 2px; }
 .err { color: var(--bad); }
 svg text { fill: var(--muted); font-size: 10.5px; }
+
+.settings details > summary { cursor: pointer; padding: 6px 8px; font-weight: 600; background: var(--bg); border-bottom: 1px solid var(--line); position: sticky; top: 29px; }
+.srow .ctl { display: flex; gap: 4px; align-items: center; }
+.srow .btns { display: inline-flex; gap: 2px; }
+.srow .btns button { padding: 0 6px; font-size: 12px; }
+textarea.yaml { width: 100%; font: 12px/1.4 ui-monospace, monospace; background: var(--card); color: var(--text); border: 0; border-bottom: 1px solid var(--line); }

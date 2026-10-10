@@ -166,7 +166,7 @@ class Handler(BaseHTTPRequestHandler):
         cid = workspace.code_id(root)
         if cid not in self.batches.last_catalogue:
             self.batches.last_catalogue[cid] = runner.catalogue(str(root))
-        self._json({"code": label, "settings": self.batches.last_catalogue[cid]})
+        self._json({"code": label, **self.batches.last_catalogue[cid]})
 
     def _saved(self) -> list:
         try:

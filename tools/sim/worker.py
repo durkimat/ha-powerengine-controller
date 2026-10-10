@@ -28,14 +28,73 @@ def _use_code(root: str) -> None:
     sys.path.insert(0, str(Path(root) / workspace.APP_DIR))
 
 
+def _constants(root: str) -> list[dict]:
+    """The module-level numbers and flags of engine_v2 (NAME = 1.5  # what it is): the tuning that has no setting."""
+    import ast
+
+    out = []
+    folder = Path(root) / workspace.APP_DIR / "pe_core" / "engine_v2"
+    for path in sorted(folder.glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        for node in ast.parse(text).body:
+            if not (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)):
+                continue
+            name = node.targets[0].id
+            if not name.isupper() or name.startswith("_"):
+                continue
+            try:
+                value = ast.literal_eval(node.value)
+            except (ValueError, SyntaxError):
+                continue
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                if not isinstance(value, bool):
+                    continue
+            line = lines[node.lineno - 1]
+            help_ = line.split("#", 1)[1].strip() if "#" in line else ""
+            out.append(
+                {
+                    "key": f"engine_v2.{path.stem}.{name}",
+                    "module": path.stem,
+                    "name": name,
+                    "value": value,
+                    "help": help_,
+                }
+            )
+    return out
+
+
 def catalogue(root: str) -> dict:
+    """What the GUI can offer for this code: its engine settings (in the config page's sections), its module constants,
+    and the switches and presets of switches.py that apply to it."""
     _use_code(root)
+    import switches
+
+    from pe_core.engine_v2 import execute
     from pe_core.engine_v2 import settings as s
 
-    out = {}
+    where = {key: (sid, title) for sid, title, keys in s.SECTIONS for key in keys}
+    settings = {}
     for key, (kind, default, lo, hi, unit, label, help_) in s.SETTINGS.items():
-        out[key] = {"kind": kind, "default": default, "min": lo, "max": hi, "unit": unit, "label": label, "help": help_}
-    return out
+        sid, title = where.get(key, ("other", "Other"))
+        settings[key] = {
+            "kind": kind,
+            "default": default,
+            "min": lo,
+            "max": hi,
+            "unit": unit,
+            "label": label,
+            "help": help_,
+            "section": sid,
+            "section_title": title,
+        }
+    present = {name for name in vars(execute.Executor)}
+    return {
+        "settings": settings,
+        "sections": [[sid, title] for sid, title, _ in s.SECTIONS] + [["other", "Other"]],
+        "constants": _constants(root),
+        **switches.for_code(present),
+    }
 
 
 def _typed(text):
