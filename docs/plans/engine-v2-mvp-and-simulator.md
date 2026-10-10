@@ -4,7 +4,7 @@
 
 > **Status (10 Oct):** step 1 (archive) done. Step 2 (the runner, `tools/sim`) built: it drives the whole app, v2 only, not
 > `EngineV2` alone, because v2's result depends on app state kept by `_cycle` and `_evaluate` (measured: the same day gave 5, 11 or
-> 18 mode changes depending on which callbacks ran). A day takes about 2 minutes. See `tools/sim/README.md`. Steps 3 to 5 not started.
+> 18 mode changes depending on which callbacks ran). A day takes about 2 minutes. See `tools/sim/README.md`. Step 3 first pass done: `engine-v2-ablation-1.md`. Steps 4 and 5 not started.
 
 ## Recommendation
 
