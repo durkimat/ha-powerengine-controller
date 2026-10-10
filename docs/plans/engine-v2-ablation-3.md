@@ -1,5 +1,7 @@
 # Engine v2 ablation 3: the smallest set that keeps the minimum engine calm
 
+> How the engine is built and where each setting applies: [engine-v2-architecture.md](engine-v2-architecture.md).
+
 10 Oct 2026 · follows `engine-v2-ablation-2.md`. Same days (7, 8, 9 Oct), same seed and caveats (three days, in-sample, cash only).
 Every variant starts from the MVP (all executor layers and extras off, switch cost 4p kept) with **"ask the plan before a charge
 or sale starts"** (`_with_the_programmes_choice`, "pc") left on, and adds back the other pieces. The baseline is the current
