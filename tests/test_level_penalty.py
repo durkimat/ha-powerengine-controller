@@ -141,3 +141,24 @@ def test_the_slope_used_for_a_part_way_stop_matches_the_cost(on, monkeypatch):
                 - value._pen_partial(P, dt, e0, e0 + (f - h) * d_e, f - h)
             ) / (2 * h)
             assert value._dpen_partial(P, dt, e0, d_e, f) == pytest.approx(num, rel=0.02, abs=0.02)
+
+
+def test_hold_has_a_tiny_cost_only_when_asked_and_only_in_hold(monkeypatch):
+    facts = BatteryFacts()
+    lim = Limits(
+        allowed=frozenset({"self_use", "hold", "charge"}),
+        forced=None,
+        floor_soc=12.0,
+        ceiling_soc=100.0,
+        rule="normal",
+        reason="",
+    )
+    s = V2Settings()
+    S0 = value._make(seg(), facts, s, lim)
+    base_hold = value._phys(S0, kwh(60), "hold", 0.3, 10.0)
+    base_self = value._phys(S0, kwh(60), "self_use", 0.3, 10.0)
+    monkeypatch.setattr(value, "HOLD_COST_P_PER_H", 0.2)
+    S1 = value._make(seg(), facts, s, lim)
+    assert value._phys(S1, kwh(60), "hold", 0.3, 10.0)[1] == pytest.approx(base_hold[1] + 0.2 * 0.5)
+    assert value._phys(S1, kwh(60), "self_use", 0.3, 10.0)[1] == pytest.approx(base_self[1])
+    assert value._phys(S1, kwh(60), "hold", 0.3, 10.0)[2] == base_hold[2]  # it is cash, not comfort

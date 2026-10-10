@@ -82,6 +82,11 @@ LEVEL_BOT_ANCHOR_SOC = 15.0
 LEVEL_BOT_DOUBLING_PTS = 5.0
 PEN_RES = 100                 # table entries per kWh
 
+# A tiny cost, in pence per hour, of the battery sitting in Hold. It is not a rule against holding: a hold that saves
+# more than this (keeping a kWh worth 12p instead of covering the house at 6p, say) still wins. It breaks ties: when
+# selling or charging costs the same now or later (a flat price stretch), the plan acts now rather than waiting in Hold.
+HOLD_COST_P_PER_H = 0.0
+
 
 # --- the level penalty ---------------------------------------------------------------------------------------------
 class _Pen:
@@ -209,7 +214,7 @@ class _Seg:
     __slots__ = ("seg", "lim", "dt", "cap", "eta_c", "eta_d", "taper", "dtaper", "max_chg", "max_dis", "chg_f",
                  "chg_cap", "dis_cap", "export_limit", "fuse", "floor", "ceil", "car", "export_p", "event_p",
                  "wear_h", "wear_s", "ccost", "topup", "sw", "lo", "hi", "allowed", "forced", "outcomes", "scen",
-                 "mid", "late_p", "pen", "fcap")
+                 "mid", "late_p", "pen", "fcap", "hold_p")
 
 
 def _groups(solar: Spread, load: Spread) -> list[tuple[float, float, float]]:
@@ -278,6 +283,7 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     S.topup = settings.top_up_cost_p
     S.sw = settings.switch_cost_p
     S.lo, S.hi = settings.comfort_low_soc / 100 * S.cap, settings.comfort_high_soc / 100 * S.cap
+    S.hold_p = HOLD_COST_P_PER_H
     S.pen = _level_penalty(S.cap)
     S.fcap = S.hi if (S.ccost or S.topup) else S.cap          # where charging early stops being free (see `_walk`)
     if S.pen is not None:
@@ -372,6 +378,8 @@ def _phys(S: _Seg, e: float, mode: str, net: float, imp_p: float, ckw: float | N
         if mode == EVENT:
             evx = sold
     cash = imp * imp_p - (exp - evx) * S.export_p - evx * S.event_p + S.wear_h * house + S.wear_s * sold
+    if mode == HOLD:
+        cash += S.hold_p * dt
     comfort = 0.0
     if S.ccost:
         hi, lo = S.hi, S.lo

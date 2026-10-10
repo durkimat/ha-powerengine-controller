@@ -61,9 +61,57 @@ follow-the-plan baseline without a curve: 21.3 h, -5.42).
   recharge cycles (21:30 to 23:00 sale, 23:00 to 01:30 recharge, more pairs after); its holds there are ties between equal-priced
   segments, which a small preference for acting sooner could remove (not yet tested).
 
+## Results 2: the finer top sweep, the bottom curve, and the Hold-cost tie-break
+
+Same days and variant (follow-the-plan, 7 to 9 Oct, 72 hours, synthetic day alongside). Current engine for reference: 11.2 h at or
+above 95%, 3.2 h at or below 25%, -5.44. Follow-the-plan baseline: 21.3 h and 0.9 h, -5.42, hold 1.8 h.
+
+**Top curve, top-up out** (the form you prefer):
+
+| Doubling, rate at 100% | Highest | h at or above 95% | h at or above 93% | Adj £ | Modes | Flips | Hold h |
+|---|---|---|---|---|---|---|---|
+| 3 pts, 100p | 95.9% | 1.0 | 1.7 | -5.53 | 94 | 17 | 8.8 |
+| **3 pts, 200p** | **94.6%** | **0.0** | **0.8** | **-5.92** | **87** | **13** | 6.7 |
+| 3 pts, 300p | 94.1% | 0.0 | 1.1 | -5.59 | 88 | 16 | 7.0 |
+| 4 pts, 100p | 94.4% | 0.0 | 0.4 | -5.67 | 99 | 17 | 9.1 |
+| 4 pts, 200p | 94.0% | 0.0 | 0.2 | -6.06 | 93 | 20 | 7.1 |
+| 4 pts, 300p | 96.7% | 0.6 | 0.9 | -5.94 | 90 | 19 | 6.4 |
+
+Several settings land the practical limit at 94 to 96% with the top-up out; **3 points per doubling at 200p** is the calmest of
+them (13 flip-flops, fewer than the baseline's 14) and cheaper than the baseline by £0.50. The results are not monotonic in the
+rate (4 pts at 300p reaches 96.7%, above 200p's 94.0%): the plan's own dynamics move things by a point or so, so read a setting as a
+neighbourhood, not a number. Every curve is cheaper than both baselines.
+
+**Bottom curve** (starts at 70%, doubles every 5 points, rate set at the 15% reserve):
+
+| Rate at 15% | Lowest | h at or below 25% | h at or below 20% | Adj £ | Modes | Hold h | Synthetic: lowest, h at or below 25% |
+|---|---|---|---|---|---|---|---|
+| none | 14.8% | 0.9 | 0.6 | -5.42 | 81 | 1.8 | 14.8%, 3.4 |
+| 1p | 14.8% | 0.9 | 0.6 | -5.38 | 79 | 1.4 | 14.8%, 1.4 |
+| 3p | 14.9% | 0.8 | 0.4 | -5.55 | 85 | 1.2 | 15.9%, 2.1 |
+| **10p** | **21.9%** | **0.2** | **0.0** | **-5.66** | **77** | **1.1** | **20.2%, 0.8** |
+
+A 10p rate at the reserve lifts the practical floor to about 20 to 22%, with no cost and no extra holding. It addresses the synthetic
+day's deep discharge (3.4 h at or below 25% falls to 0.8 h). A stronger rate would raise the floor further. The top and bottom curves
+together (3 pts at 100p with the bottom at 3p) did worse on the synthetic day (30 mode changes, 7 flip-flops), so they interact
+and should be tuned together.
+
+**Hold-cost tie-break** (`HOLD_COST_P_PER_H`, a tiny cost per hour of sitting in Hold, off by default):
+
+| Hold cost | Hold h (real) | Modes | Adj £ | Synthetic hold h |
+|---|---|---|---|---|
+| none | 1.8 | 81 | -5.42 | 2.4 |
+| 0.02 to 0.05 p/h | 2.2 | 82 | -5.29 | 0.8 |
+| 0.2 p/h | 1.8 | 77 | -5.12 | 0.8 |
+| with top 3 pts/100p: none, 0.05, 0.2 | 8.8, 8.4, 7.3 | 94, 97, 92 | -5.53, -5.55, -5.95 | 1.1 |
+
+It does **not** reliably reduce Hold: on the real days hold hours stay level (1.8 to 2.2 h), and with the top curve only the largest
+value moves them (8.8 to 7.3 h). The cost effect points the opposite way with and without the top curve (£0.13 to 0.30 dearer
+without, £0.42 cheaper with), which is noise-level. The overnight holds are short ties (2 to 20 minutes each); the bulk of the hold
+time is the daytime sun export, which this does not touch. **Not recommended as it stands**; the constant is left off.
+
 ## Not yet done
 
-- A finer top sweep with the top-up out (3 and 4 points per doubling, 100 to 300p).
-- The bottom curve: its effect on the reserve-forced holds on the synthetic day.
-- The tie-break (a small time preference) for the overnight holds.
+- Tuning the top and bottom curves together (and a stronger bottom rate).
+- Splitting hold hours into daytime sun export and overnight ties, to say how much of Hold is a decision and how much a tie.
 - Turning the constants into settings once the shape is chosen.
