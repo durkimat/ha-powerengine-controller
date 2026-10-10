@@ -5,6 +5,7 @@
 set -u
 cd "$(dirname "$0")/.."
 export PATH="$HOME/.local/bin:$PATH"
+[ -d .venv/bin ] && export PATH="$PWD/.venv/bin:$PATH"
 full=0; card=0
 for a in "$@"; do case "$a" in --full) full=1 ;; --card) card=1 ;; *) echo "usage: $0 [--full] [--card]"; exit 2 ;; esac; done
 out="$(mktemp)"; trap 'rm -f "$out"' EXIT
