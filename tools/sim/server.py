@@ -1,4 +1,5 @@
-"""The GUI's server: `pe_sim.py serve`. Standard library only, bound to 127.0.0.1.
+"""The GUI's server: `pe_sim.py serve`. Standard library only, bound to 127.0.0.1 unless `--host` says otherwise
+(there is no login: anyone who can reach the address can start runs and read the plans).
 
 It serves the viewer (`viewer/`) and a small JSON API: what is available (days, branches, archived configs, saved
 variants), the engine settings of any code version, running a batch of variants over days, and reading a finished run.
@@ -87,6 +88,7 @@ class Handler(BaseHTTPRequestHandler):
     ws: runner.Workspace
     batches: Batches
     port: int
+    bind: str = "127.0.0.1"
 
     def log_message(self, *_):  # quiet
         pass
@@ -107,7 +109,7 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"error": why}, status)
 
     def _host_ok(self) -> bool:
-        return (self.headers.get("Host") or "") in (f"127.0.0.1:{self.port}", f"localhost:{self.port}")
+        return (self.headers.get("Host") or "") in {f"{h}:{self.port}" for h in ("127.0.0.1", "localhost", self.bind)}
 
     # --- GET ---
     def do_GET(self):
@@ -197,12 +199,12 @@ class Handler(BaseHTTPRequestHandler):
         return self._bad("not found", HTTPStatus.NOT_FOUND)
 
 
-def serve(data: Path, work: Path, port: int, n_jobs: int) -> int:
+def serve(data: Path, work: Path, port: int, n_jobs: int, host: str = "127.0.0.1") -> int:
     ws = runner.Workspace(data, work)
-    Handler.ws, Handler.batches, Handler.port = ws, Batches(ws, n_jobs), port
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    Handler.ws, Handler.batches, Handler.port, Handler.bind = ws, Batches(ws, n_jobs), port, host
+    httpd = ThreadingHTTPServer((host, port), Handler)
     print(
-        f"PowerEngine simulator: http://127.0.0.1:{port}/   (archive {data}, work {work}; Ctrl-C to stop)", flush=True
+        f"PowerEngine simulator: http://{host}:{port}/   (archive {data}, work {work}; Ctrl-C to stop)", flush=True
     )
     try:
         httpd.serve_forever()

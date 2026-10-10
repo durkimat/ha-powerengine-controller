@@ -3,7 +3,7 @@
 
     pe_sim.py run   --days 2026-10-06..2026-10-09 [--code REF] [--set k=v ...] [--sweep k=a,b,c] [--jobs N] [--out DIR]
     pe_sim.py check --days ...        the runner against the nightly comparison's own code, on the same inputs
-    pe_sim.py serve [--port 8765]     the GUI (127.0.0.1 only)
+    pe_sim.py serve [--port 8765]     the GUI (127.0.0.1 unless --host)
 
 Reads the archive (`--data`, default ~/pe-data) and never writes to it. Writes cached runs to `--work`
 (default ~/pe-sim)
@@ -130,7 +130,7 @@ def cmd_check(a) -> int:
 def cmd_serve(a) -> int:
     import server
 
-    return server.serve(Path(a.data), Path(a.work), a.port, a.jobs)
+    return server.serve(Path(a.data), Path(a.work), a.port, a.jobs, a.host)
 
 
 def main(argv=None) -> int:
@@ -155,6 +155,7 @@ def main(argv=None) -> int:
     s = sub.add_parser("serve", help="the GUI")
     _common(s)
     s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--host", default="127.0.0.1", help="address to listen on (no login: trusted networks only)")
     s.set_defaults(fn=cmd_serve)
     a = ap.parse_args(argv)
     return a.fn(a)
