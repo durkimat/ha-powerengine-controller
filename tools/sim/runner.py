@@ -80,6 +80,19 @@ def parse_assignments(items) -> dict:
     return out
 
 
+def parse_variant(text: str, default_code: str | None = None) -> Variant:
+    """`name[@ref]:key=value,key=value`: a named variant. A key with a dot is a constant, else an engine setting."""
+    head, _, body = text.partition(":")
+    name, _, ref = head.partition("@")
+    v = Variant(name.strip(), ref.strip() or default_code)
+    for item in [x for x in body.split(",") if x.strip()]:
+        key, sep, value = item.partition("=")
+        if not sep or not key.strip():
+            raise SystemExit(f"--variant {text!r}: expected key=value, got {item!r}")
+        (v.consts if "." in key else v.settings)[key.strip()] = value.strip()
+    return v
+
+
 def sweep_variants(base: Variant, sweeps: list[str]) -> list[Variant]:
     """`key=a,b,c` (several --sweep options make a grid)."""
     if not sweeps:

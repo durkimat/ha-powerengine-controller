@@ -44,8 +44,11 @@ def cmd_run(a) -> int:
     for k in list(mine.settings):
         if "." in k:
             mine.consts[k] = mine.settings.pop(k)
+    named = [runner.parse_variant(t, a.code) for t in a.variant or []]
     if a.code or mine.settings or mine.consts or a.sweep or a.config or a.fresh:
-        variants = ([] if a.no_base else [base]) + runner.sweep_variants(mine, a.sweep or [])
+        variants = ([] if a.no_base else [base]) + runner.sweep_variants(mine, a.sweep or []) + named
+    elif named:
+        variants = [base, *named]
     jobs, by_variant = [], {}
     for v in variants:
         by_variant[v.name] = [ws.job(v, d) for d in days]
@@ -60,6 +63,8 @@ def cmd_run(a) -> int:
             first = res
         elif not a.no_base and variants[0].name == "base":
             print(scoreboard.versus(first, res, name) + "\n")
+    if len(variants) > 2:
+        print(scoreboard.ranking(ordered, variants[0].name) + "\n")
     if a.out:
         export.write_report(Path(a.out), [v.as_dict() for v in variants], ordered)
         print(f"report written to {a.out}", file=sys.stderr)
@@ -143,6 +148,12 @@ def main(argv=None) -> int:
         "--set", action="append", metavar="KEY=VALUE", help="an engine_v2 setting, or pe_core.mod.NAME=value"
     )
     r.add_argument("--sweep", action="append", metavar="KEY=A,B,C", help="a grid (repeat for more axes)")
+    r.add_argument(
+        "--variant",
+        action="append",
+        metavar="NAME[@REF]:K=V,K=V",
+        help="a named variant (repeat): code ref after @, then settings or constants",
+    )
     r.add_argument("--config", help="an archived config file name to seed from (default: the newest)")
     r.add_argument("--fresh", action="store_true", help="start without the learned state")
     r.add_argument("--no-base", action="store_true", help="don't run the baseline (this checkout, defaults) beside it")

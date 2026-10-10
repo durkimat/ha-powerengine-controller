@@ -92,3 +92,47 @@ def versus(base: list[dict], other: list[dict], name: str) -> str:
         f"{name} vs base over {len(days)} day(s): adj cost {d_adj:+.2f} GBP (worst day {worst} "
         f"{o[worst]['adj_cost'] - b[worst]['adj_cost']:+.2f}), mode changes {d_mode:+d}, flip-flops {d_flip:+d}"
     )
+
+
+def ranking(results: dict[str, list[dict]], base: str) -> str:
+    """Every variant against the baseline over the days both ran, cheapest first: what each change was worth."""
+    b = {r["day"]: r["score"] for r in results[base] if r.get("status") == "ok"}
+    rows = []
+    for name, res in results.items():
+        if name == base:
+            continue
+        o = {r["day"]: r["score"] for r in res if r.get("status") == "ok"}
+        days = sorted(set(b) & set(o))
+        if not days:
+            rows.append((0.0, [name, "-", "-", "-", "-", "-", "-", "not run"]))
+            continue
+
+        def d(key, days=days, o=o):
+            return sum((o[x][key] or 0) - (b[x][key] or 0) for x in days)
+
+        per_day = [o[x]["adj_cost"] - b[x]["adj_cost"] for x in days]
+        rows.append(
+            (
+                d("adj_cost"),
+                [
+                    name,
+                    f"{d('adj_cost'):+.2f}",
+                    f"{max(per_day):+.2f}",
+                    f"{d('mode_changes'):+.0f}",
+                    f"{d('flip_flops'):+.0f}",
+                    f"{d('peak_charge_kwh'):+.2f}",
+                    f"{min(o[x]['min_soc'] for x in days):.0f}",
+                    str(len(days)),
+                ],
+            )
+        )
+    head = ["variant", "d adj GBP", "worst day", "d modes", "d flips", "d peak kWh", "min %", "days"]
+    rows.sort(key=lambda r: r[0])
+    width = [max(len(str(r[1][i])) for r in rows + [(0, head)]) for i in range(len(head))]
+
+    def fmt(cells):
+        return "  ".join(
+            str(c).rjust(w) if i else str(c).ljust(w) for i, (c, w) in enumerate(zip(cells, width, strict=True))
+        )
+
+    return "\n".join([f"Against {base} (negative d adj is cheaper):", fmt(head), *[fmt(r[1]) for r in rows]])

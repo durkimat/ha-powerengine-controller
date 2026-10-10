@@ -44,16 +44,37 @@ def _typed(text):
     return yaml.safe_load(text) if isinstance(text, str) else text
 
 
+STUBS = {  # what a layer is replaced with: its neutral answer (an ablation: "as if this rule were not there")
+    "@true": lambda self, *a, **k: True,
+    "@false": lambda self, *a, **k: False,
+    "@pass": lambda self, pick, *a, **k: pick,  # a method that hands back its first argument
+}
+
+
 def apply_consts(consts: dict) -> None:
-    """Module constants, named `pe_core.<module path>.NAME` (the `pe_core.` may be left off)."""
+    """Module constants, named `pe_core.<module path>.NAME` (the `pe_core.` may be left off). The path may go on into a
+    class: `engine_v2.execute.Executor._leg_going=@false` replaces that method with a stub (@true, @false or @pass)."""
     import importlib
 
     for dotted, value in consts.items():
-        mod, _, name = (dotted if dotted.startswith("pe_core.") else f"pe_core.{dotted}").rpartition(".")
-        module = importlib.import_module(mod)
-        if not hasattr(module, name):
-            raise ValueError(f"{mod} has no constant {name}")
-        setattr(module, name, _typed(value))
+        parts = (dotted if dotted.startswith("pe_core.") else f"pe_core.{dotted}").split(".")
+        module, rest = None, parts
+        for n in range(len(parts) - 1, 0, -1):  # the longest importable prefix is the module
+            try:
+                module, rest = importlib.import_module(".".join(parts[:n])), parts[n:]
+                break
+            except ImportError:
+                continue
+        if module is None:
+            raise ValueError(f"cannot find the module of {dotted}")
+        owner = module
+        for name in rest[:-1]:
+            owner = getattr(owner, name, None)
+            if owner is None:
+                raise ValueError(f"{dotted}: no {name}")
+        if not hasattr(owner, rest[-1]):
+            raise ValueError(f"{'.'.join(parts[: len(parts) - len(rest)])} has no constant {'.'.join(rest)}")
+        setattr(owner, rest[-1], STUBS[value] if isinstance(value, str) and value in STUBS else _typed(value))
 
 
 def patch_config(text: str, settings: dict) -> str:

@@ -203,9 +203,7 @@ def serve(data: Path, work: Path, port: int, n_jobs: int, host: str = "127.0.0.1
     ws = runner.Workspace(data, work)
     Handler.ws, Handler.batches, Handler.port, Handler.bind = ws, Batches(ws, n_jobs), port, host
     httpd = ThreadingHTTPServer((host, port), Handler)
-    print(
-        f"PowerEngine simulator: http://{host}:{port}/   (archive {data}, work {work}; Ctrl-C to stop)", flush=True
-    )
+    print(f"PowerEngine simulator: http://{host}:{port}/   (archive {data}, work {work}; Ctrl-C to stop)", flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

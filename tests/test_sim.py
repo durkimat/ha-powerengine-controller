@@ -234,3 +234,38 @@ def test_viewer_adapter():
         [node, str(ROOT / "tools" / "sim" / "viewer" / "test_adapt.cjs")], capture_output=True, text=True
     )
     assert run.returncode == 0, run.stderr + run.stdout
+
+
+def test_named_variants_and_ranking():
+    v = runner.parse_variant("no_leg@main:engine_v2.execute.Executor._leg_going=@false,reserve_soc=20")
+    assert (v.name, v.code) == ("no_leg", "main")
+    assert v.settings == {"reserve_soc": "20"} and v.consts == {"engine_v2.execute.Executor._leg_going": "@false"}
+    assert runner.parse_variant("x", "ref").code == "ref"
+    with pytest.raises(SystemExit):
+        runner.parse_variant("x:oops")
+    base = [fake_result("2026-10-07", -0.5, 1), fake_result("2026-10-08", -0.4)]
+    cheaper = [fake_result("2026-10-07", -0.9, 4), fake_result("2026-10-08", -0.3)]
+    text = scoreboard.ranking(
+        {"base": base, "worse": cheaper, "gone": [{"day": "2026-10-07", "status": "failed"}]}, "base"
+    )
+    lines = text.splitlines()
+    assert "worse" in text and "not run" in text and lines[1].startswith("variant")
+    assert "-0.30" in text and "+3" in text  # total adj cost -0.4 + 0.1, three more flip-flops
+
+
+def test_a_layer_can_be_stubbed_and_unknown_ones_are_refused():
+    import worker
+
+    worker._use_code(str(ROOT))
+    from pe_core.engine_v2.execute import Executor
+
+    original = Executor._worth_the_change
+    try:
+        worker.apply_consts({"engine_v2.execute.Executor._worth_the_change": "@true"})
+        assert Executor._worth_the_change(None) is True
+        with pytest.raises(ValueError, match="no constant"):
+            worker.apply_consts({"engine_v2.execute.Executor._not_a_layer": "@true"})
+        with pytest.raises(ValueError, match="no Nothing"):
+            worker.apply_consts({"engine_v2.execute.Nothing.x": "@true"})
+    finally:
+        Executor._worth_the_change = original
