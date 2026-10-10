@@ -24,7 +24,7 @@ BECAUSE = {
     "car_stop": "The car stopped charging", "drift": "The house drifted from the forecast",
     "band_exit": "The battery left its expected range", "forecast_update": "The solar forecast changed",
     "deadline": "A charge or sale ran past its expected end", "override": "The manual override changed",
-    "settings": "The settings were saved", "learned": "Something learned changed",
+    "settings": "The settings were saved", "replan": "You asked for a re-plan", "learned": "Something learned changed",
     "data_back": "The readings came back",
     "backstop": "The backstop timer", "retry": "Trying again after a problem",
 }

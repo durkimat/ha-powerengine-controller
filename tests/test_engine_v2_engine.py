@@ -142,6 +142,20 @@ def test_a_settings_change_revalues_and_reaches_every_layer(stubs):
     assert eng.learner.s.price_band_p == 1.5 and eng.triggers.s.price_band_p == 1.5
 
 
+def test_asking_for_a_replan_revalues_at_once_and_only_once(stubs):
+    f, v = stubs
+    eng = EngineV2(V2Settings())
+    tick(eng, 0)
+    solves = v.solves
+    out = tick(eng, 5)
+    assert not out.revalued and v.solves == solves                  # nothing happened: the plan stands
+    eng.ask_replan()
+    out = tick(eng, 10)
+    assert out.revalued and v.solves == solves + 1 and v.because[-1] == "You asked for a re-plan"
+    out = tick(eng, 15)
+    assert not out.revalued and v.solves == solves + 1               # one request, one revalue
+
+
 def test_the_backstop_revalues_after_the_maximum_age(stubs):
     f, v = stubs
     v.value_p = 3.0                                          # self-use: no charge with a deadline in the way

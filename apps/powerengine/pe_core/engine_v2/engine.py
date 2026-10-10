@@ -71,6 +71,10 @@ class EngineV2:
             part.s = settings
         self._settings_dirty = True
 
+    def ask_replan(self) -> None:
+        """The owner pressed "Re-plan now": the next tick works the values out again from the live readings."""
+        self._replan_asked = True
+
     # ---- the tick -------------------------------------------------------------------------------
     def step(self, inp: StepInput) -> StepOutput:
         try:
@@ -96,6 +100,9 @@ class EngineV2:
         if self._settings_dirty and not any(e.kind == "settings" for e in events):
             events.append(Event(now, "settings", "The engine's settings were saved"))
         self._settings_dirty = False
+        if getattr(self, "_replan_asked", False):
+            self._replan_asked = False
+            events.append(Event(now, "replan", "You asked for a re-plan"))
 
         # --- revalue? ---
         level = obs.level_filtered if obs.level_filtered is not None else obs.level_reported
