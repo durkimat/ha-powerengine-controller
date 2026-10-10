@@ -110,6 +110,24 @@ STUBS = {  # what a layer is replaced with: its neutral answer (an ablation: "as
 }
 
 
+# for a dict constant (EVENT_KINDS: kind -> (revalue?, urgent?)): the value an entry is set to
+DICT_STUBS = {"@revalue": (True, False), "@revalue_urgent": (True, True), "@no_revalue": (False, False)}
+
+
+def _follow_the_timeline(original):
+    """Replaces `Executor._candidate`: the mode is the one the plan's expected timeline has for now, if the limits allow it
+    (else what the executor would have chosen). The executor then only follows the plan; it does not re-derive the choice from
+    the price lines."""
+
+    def candidate(self, lim, ln, level, vr=None, now=None):
+        planned = self._planned_mode(vr, now)
+        if planned is not None and planned in lim.allowed:
+            return planned
+        return original(self, lim, ln, level, vr, now)
+
+    return candidate
+
+
 def apply_consts(consts: dict) -> None:
     """Module constants, named `pe_core.<module path>.NAME` (the `pe_core.` may be left off). The path may go on into a
     class: `engine_v2.execute.Executor._leg_going=@false` replaces that method with a stub (@true, @false or @pass)."""
@@ -128,11 +146,21 @@ def apply_consts(consts: dict) -> None:
             raise ValueError(f"cannot find the module of {dotted}")
         owner = module
         for name in rest[:-1]:
-            owner = getattr(owner, name, None)
+            owner = owner.get(name) if isinstance(owner, dict) else getattr(owner, name, None)
             if owner is None:
                 raise ValueError(f"{dotted}: no {name}")
+        if isinstance(owner, dict):  # a table entry, e.g. engine_v2.types.EVENT_KINDS.level=@revalue
+            if rest[-1] not in owner:
+                raise ValueError(f"{dotted}: the table has no entry {rest[-1]}")
+            if value not in DICT_STUBS:
+                raise ValueError(f"{dotted}: use one of {', '.join(DICT_STUBS)}")
+            owner[rest[-1]] = DICT_STUBS[value]
+            continue
         if not hasattr(owner, rest[-1]):
             raise ValueError(f"{'.'.join(parts[: len(parts) - len(rest)])} has no constant {'.'.join(rest)}")
+        if value == "@planned":
+            setattr(owner, rest[-1], _follow_the_timeline(getattr(owner, rest[-1])))
+            continue
         setattr(owner, rest[-1], STUBS[value] if isinstance(value, str) and value in STUBS else _typed(value))
 
 
