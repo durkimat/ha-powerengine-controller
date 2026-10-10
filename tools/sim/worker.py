@@ -115,9 +115,9 @@ DICT_STUBS = {"@revalue": (True, False), "@revalue_urgent": (True, True), "@no_r
 
 
 def _follow_the_timeline(original):
-    """Replaces `Executor._candidate`: the mode is the one the plan's expected timeline has for now, if the limits allow it
-    (else what the executor would have chosen). The executor then only follows the plan; it does not re-derive the choice from
-    the price lines."""
+    """Replaces `Executor._candidate`: the mode is the one the plan's expected timeline has for now, if the limits
+    allow it (else what the executor would have chosen). The executor then only follows the plan; it does not
+    re-derive the choice from the price lines."""
 
     def candidate(self, lim, ln, level, vr=None, now=None):
         planned = self._planned_mode(vr, now)
