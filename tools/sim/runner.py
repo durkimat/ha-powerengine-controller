@@ -56,10 +56,12 @@ class Variant:
         )
 
 
-def parse_days(text: str, available: list[str]) -> list[str]:
-    """`A..B` (inclusive), `A,B,C`, or `all` (every day with a snapshot). Only days the archive can replay."""
+def parse_days(text: str, available: list[str], synthetic: list[str] | None = None) -> list[str]:
+    """`A..B` (inclusive), `A,B,C`, `all` (every real day with a snapshot) or `synthetic` (the days synth.py made)."""
     if text == "all":
         return list(available)
+    if text == "synthetic":
+        return list(synthetic or [])
     days = []
     for part in text.split(","):
         if ".." in part:
@@ -116,6 +118,7 @@ def sweep_variants(base: Variant, sweeps: list[str]) -> list[Variant]:
 class Workspace:
     def __init__(self, data: Path, work: Path):
         self.data, self.work = Path(data), Path(work)
+        self.extra = self.work / "synthetic"  # days made by synth.py, read beside the archive
         workspace.check_work(self.work, self.data)
         (self.work / "runs").mkdir(parents=True, exist_ok=True)
 
@@ -135,7 +138,14 @@ class Workspace:
         seed = self.seed_for(v)
         cid = workspace.code_id(root)
         key = workspace.job_key(
-            code=cid, day=day, data=self.data, seed=seed, fresh=v.fresh, settings=v.settings, consts=v.consts
+            code=cid,
+            day=day,
+            data=self.data,
+            seed=seed,
+            fresh=v.fresh,
+            settings=v.settings,
+            consts=v.consts,
+            extra=self.extra,
         )
         return {
             "key": key,
@@ -144,6 +154,7 @@ class Workspace:
             "label": label,
             "code_id": cid,
             "data": str(self.data),
+            "extra": str(self.extra),
             "seed": {k: str(p) if p else None for k, p in seed.items()},
             "seed_names": {k: (p.name if p else None) for k, p in seed.items()},
             "fresh": v.fresh,

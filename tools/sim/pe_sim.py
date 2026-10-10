@@ -31,13 +31,15 @@ import workspace  # noqa: E402
 def _common(p):
     p.add_argument("--data", default=str(workspace.default_data()), help="the archive (read only)")
     p.add_argument("--work", default=str(workspace.default_work()), help="cached runs and exported code")
-    p.add_argument("--days", default="all", help="A..B, A,B,C or all (every day that has a forecast snapshot)")
+    p.add_argument(
+        "--days", default="all", help="A..B, A,B,C, all (every real day with a forecast snapshot) or synthetic"
+    )
     p.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2), help="runs at a time")
 
 
 def cmd_run(a) -> int:
     ws = runner.Workspace(Path(a.data), Path(a.work))
-    days = runner.parse_days(a.days, workspace.days_with_snapshots(ws.data))
+    days = runner.parse_days(a.days, workspace.days_with_snapshots(ws.data), workspace.synthetic_days(ws.extra))
     base = runner.Variant("base", None)
     variants = [base]
     mine = runner.Variant("variant", a.code, runner.parse_assignments(a.set), {}, a.config, a.fresh)
@@ -82,7 +84,7 @@ def cmd_check(a) -> int:
     Also prints the recorded nightly result of that day, which differs for honest reasons: the config, learned state
     and code of that night were not today's."""
     ws = runner.Workspace(Path(a.data), Path(a.work))
-    days = runner.parse_days(a.days, workspace.days_with_snapshots(ws.data))
+    days = runner.parse_days(a.days, workspace.days_with_snapshots(ws.data), workspace.synthetic_days(ws.extra))
     root, label = workspace.resolve_code(None, ws.work)
     seed = workspace.seed_files(ws.data)
     bad = 0
