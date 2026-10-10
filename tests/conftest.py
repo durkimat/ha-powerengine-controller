@@ -22,7 +22,7 @@ def his_words_after_each_test():
 # skips them for a quick local check (tools/check.sh); CI and the release run everything.
 SLOW_MODULES = {
     "test_replay", "test_compare_crosscheck", "test_engine_compare", "test_engine_v2_app", "test_engine_v2_evening",
-    "test_history_records_app", "test_demo_app",
+    "test_history_records_app", "test_demo_app", "test_sim_run",
 }
 
 

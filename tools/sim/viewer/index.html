@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PowerEngine simulator</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <h1>PowerEngine simulator</h1>
+  <span id="where" class="muted"></span>
+</header>
+<main>
+  <section id="setup">
+    <h2>Variants</h2>
+    <p class="muted small">Each variant is some code (a branch) and some engine settings. The first one is the baseline the others are compared with.</p>
+    <div id="variants"></div>
+    <div class="row">
+      <button id="add">Add variant</button>
+      <button id="save" title="Remember these variants for next time">Save set</button>
+    </div>
+    <h2>Days</h2>
+    <div id="days" class="days"></div>
+    <div class="row">
+      <button id="run" class="primary">Run</button>
+      <label class="small"><input type="checkbox" id="force"> ignore cached runs</label>
+    </div>
+    <div id="progress" class="small"></div>
+  </section>
+  <section id="results">
+    <div id="score"></div>
+    <div id="plan"></div>
+  </section>
+</main>
+<div id="tip" role="tooltip"></div>
+<script src="plan_layout.js"></script>
+<script src="adapt.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -42,7 +42,8 @@ owner approves each run on GitHub. It can't run `tools/release.sh` itself (it ne
   (`.yml`, not `.yaml`: AppDaemon loads every `.yaml` under apps/), `docs/ha/*.yaml` must stay identical (a test), each starts with the
   `hapackage.MARKER` line, and `pe_core/hapackage.py` decides. Edit the docs file, then copy it over the shipped one. See "HA config" below.
 - `tools/release.sh`: the release (`docs/RELEASING.md`). `tools/diag_summary.py`: summarises a diagnostics export (`--help`).
-  `tools/build_demo_pack.py`: rebuilds the demo pack.
+  `tools/build_demo_pack.py`: rebuilds the demo pack. `tools/sim/`: the simulator (stored days through the real app with other code or
+  settings, and a GUI; `tools/sim/README.md`).
 - `tests/`: pytest. `tests/test_replay.py` with `tests/replay_harness.py` replays a recorded night through the
   whole app (see "Replay safety net").
 - The card repo has one JS file, `ha-powerengine-card.js`, and `tests/helpers.test.cjs` (node --test).
