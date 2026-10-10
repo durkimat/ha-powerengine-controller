@@ -114,7 +114,9 @@ def test_seed_assembly_only_links_the_archive(tmp_path):
     save = workspace.assemble_save_dir(tmp_path / "save", data, workspace.seed_files(data), fresh=False)
     assert (save / "config.yaml").read_text() == "x: 1"
     assert (save / "engine_v2_state.json").exists() and (save / "costs" / "slots.json").exists()
-    assert (save / "costs" / "2026-10-07.json").is_symlink() and (save / "costs" / "snapshots").is_symlink()
+    assert (save / "costs" / "2026-10-07.json").is_symlink() and (
+        save / "costs" / "snapshots" / "2026-10-07.json"
+    ).is_symlink()
     fresh = workspace.assemble_save_dir(tmp_path / "save2", data, workspace.seed_files(data), fresh=True)
     assert not (fresh / "engine_v2_state.json").exists()
 
@@ -269,3 +271,38 @@ def test_a_layer_can_be_stubbed_and_unknown_ones_are_refused():
             worker.apply_consts({"engine_v2.execute.Nothing.x": "@true"})
     finally:
         Executor._worth_the_change = original
+
+
+def test_synthetic_sun_is_an_early_east_facing_curve():
+    import synth
+
+    curve = [synth.solar_kw(h / 2 + 0.25, 4.0) for h in range(48)]
+    assert max(curve) == pytest.approx(4.0, abs=0.1)
+    assert curve.index(max(curve)) / 2 < 11 and sum(curve[:14]) == 0  # peaks before 11:00, nothing before 07:00
+    assert sum(curve[:24]) > sum(curve[24:])  # more before noon than after
+    assert curve[32] < 1.0 and curve[40] == 0.0  # a tail through the afternoon, none by 20:00
+    assert synth.parse_slots("09:00-12:00,13:00-16:30") == [(9.0, 12.0), (13.0, 16.5)]
+    assert synth.in_slot(9.0, [(9.0, 12.0)]) and not synth.in_slot(12.0, [(9.0, 12.0)])
+
+
+def test_a_synthetic_day_is_read_beside_the_archive_and_never_replaces_a_real_one(tmp_path):
+    data = make_archive(tmp_path)
+    extra = tmp_path / "work" / "synthetic"
+    (extra / "costs" / "snapshots").mkdir(parents=True)
+    (extra / "costs" / "2026-09-03.json").write_text("[]")
+    (extra / "costs" / "snapshots" / "2026-09-03.json").write_text("{}")
+    assert workspace.days_with_snapshots(data, extra) == ["2026-09-03", "2026-10-07"]
+    assert workspace.days_with_snapshots(data) == ["2026-10-07"]
+    assert workspace.synthetic_days(extra) == ["2026-09-03"]
+    assert runner.parse_days("synthetic", ["2026-10-07"], ["2026-09-03"]) == ["2026-09-03"]
+    assert runner.parse_days("all", ["2026-10-07"], ["2026-09-03"]) == [
+        "2026-10-07"
+    ]  # a gate never takes synthetic days
+    assert workspace.day_source("2026-09-03", data, extra) == extra / "costs"
+    save = workspace.assemble_save_dir(tmp_path / "save", data, workspace.seed_files(data), False, extra)
+    assert (save / "costs" / "2026-09-03.json").is_symlink() and (
+        save / "costs" / "snapshots" / "2026-10-07.json"
+    ).is_symlink()
+    (data / "costs" / "2026-09-03.json").write_text("[]")
+    with pytest.raises(SystemExit, match="both"):
+        workspace.day_source("2026-09-03", data, extra)

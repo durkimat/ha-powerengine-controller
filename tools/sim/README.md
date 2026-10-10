@@ -22,6 +22,10 @@ tools/sim/pe_sim.py check --days ...            # the runner against the nightly
 - Runs are cached by code, day, inputs, settings and seed; asking again is instant. `--force` ignores the cache.
 - A full day is about 2 minutes; several run at once (`--jobs`).
 
+**Synthetic days.** `tools/sim/synth.py sunny` builds a day the archive lacks (an east-facing sunny day, smart slots, no
+event) from a real day's house load; it goes to `~/pe-sim/synthetic/`, is read beside the archive, and is only run when asked
+(`--days synthetic`), never in `all`. See the module's docstring.
+
 **Fidelity.** The result of a day depends on app state that `_cycle` and `_evaluate` keep (slot tracking, the overnight
 window, the mode), so the runner drives the whole app, not the engine alone. `check` proves it against the nightly code.
 Seeding uses the newest archived config, learned state and slot history, so a replay of an earlier day knows slightly

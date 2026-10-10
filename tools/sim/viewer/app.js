@@ -110,11 +110,11 @@ function settingsPanel(v) {
 
 // ---- days ------------------------------------------------------------------------------------------------------------
 function renderDays() {
-  $("days").replaceChildren(...state.info.days.map((d, i) => {
-    const last = i === state.info.days.length - 1;
-    const box = el("input", { type: "checkbox", checked: state.days.has(d), onchange: (e) => { if (e.target.checked) state.days.add(d); else state.days.delete(d); } });
-    return el("label", { class: last ? "partial" : "", title: last ? "The newest day may be partial" : "" }, box, ` ${d.slice(5)}`);
-  }));
+  const real = state.info.days.filter((d) => !(state.info.synthetic || []).includes(d));
+  const box = (d, extra, title) => el("label", { class: extra, title },
+    el("input", { type: "checkbox", checked: state.days.has(d), onchange: (e) => { if (e.target.checked) state.days.add(d); else state.days.delete(d); } }), ` ${d.slice(5)}`);
+  $("days").replaceChildren(...real.map((d, i) => box(d, i === real.length - 1 ? "partial" : "", i === real.length - 1 ? "The newest day may be partial" : "")),
+    ...(state.info.synthetic || []).map((d) => box(d, "partial", "Synthetic day (tools/sim/synth.py): not real data, never part of a gate")));
 }
 
 // ---- running ---------------------------------------------------------------------------------------------------------
@@ -339,7 +339,7 @@ async function start() {
   }
   $("where").textContent = `${state.info.days.length} days with forecasts · ${state.info.jobs} runs at a time`;
   state.variants = state.info.variants.length ? state.info.variants : [blank("base")];
-  state.info.days.slice(0, -1).forEach((d) => state.days.add(d));       // the partial newest day is opt-in
+  state.info.days.filter((d) => !(state.info.synthetic || []).includes(d)).slice(0, -1).forEach((d) => state.days.add(d));   // the partial newest day and synthetic days are opt-in
   renderVariants();
   renderDays();
   $("add").onclick = () => { state.variants.push(blank(uniqueName("variant"))); renderVariants(); };

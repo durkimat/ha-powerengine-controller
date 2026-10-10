@@ -15,6 +15,7 @@ rules and for what the code does now, and GitHub issues are the backlog.
 | [engine-pages-and-comparison.md](engine-pages-and-comparison.md) | Engine v1 / Engine v2 pages with badges and histories, forecast snapshots, and the nightly same-day replay that compares the engines on the Costs page | The engine pages, the comparison, forecast snapshots |
 | [engine-v2-mvp-and-simulator.md](engine-v2-mvp-and-simulator.md) | A simpler engine v2 executor (the plan as the policy) and a local simulator that replays stored days with other code or settings; step 2 (the simulator, `tools/sim`) is built | Engine v2 simplification, the simulator, ablation and gates |
 | [engine-v2-ablation-1.md](engine-v2-ablation-1.md) | Ablation 1: what each executor rule and setting was worth on 7 to 9 Oct, and what step 4 should try first | Simplifying the engine v2 executor |
+| [engine-v2-ablation-2.md](engine-v2-ablation-2.md) | Ablation 2: pairs, the bare-minimum engine (it chatters), what stops the chatter, and the synthetic day | The step 4 policy executor |
 | [demo-and-easier-install.md](demo-and-easier-install.md) | Demo mode design, install simplification, steps A1–D1, decisions, risks | Demo or install work (#192), the native integration (#177) |
 
 Keep these up to date: when a step lands, update the plan's Status box in the same PR.

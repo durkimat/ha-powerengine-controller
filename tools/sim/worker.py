@@ -153,7 +153,11 @@ def run(job: dict) -> dict:
     }
     with tempfile.TemporaryDirectory(prefix="pe-sim-") as tmp:
         save = workspace.assemble_save_dir(
-            Path(tmp) / "save", Path(job["data"]), {k: v and Path(v) for k, v in job["seed"].items()}, job["fresh"]
+            Path(tmp) / "save",
+            Path(job["data"]),
+            {k: v and Path(v) for k, v in job["seed"].items()},
+            job["fresh"],
+            Path(job["extra"]) if job.get("extra") else None,
         )
         costs = str(save / "costs")
         try:

@@ -150,9 +150,31 @@ def refs() -> list[dict]:
 # --- the archive ----------------------------------------------------------------------------------------------
 
 
-def days_with_snapshots(data: Path) -> list[str]:
-    snaps = Path(data) / "costs" / "snapshots"
-    return sorted(p.stem for p in snaps.glob("????-??-??.json")) if snaps.is_dir() else []
+def days_with_snapshots(data: Path, extra: Path | None = None) -> list[str]:
+    """Days that have a forecast snapshot: the archive's, and any synthetic ones under `extra`."""
+    days = set()
+    for root in (data, extra):
+        snaps = Path(root) / "costs" / "snapshots" if root else None
+        if snaps is not None and snaps.is_dir():
+            days |= {p.stem for p in snaps.glob("????-??-??.json")}
+    return sorted(days)
+
+
+def synthetic_days(extra: Path | None) -> list[str]:
+    """Days made by synth.py (they exist only under `extra`)."""
+    snaps = Path(extra) / "costs" / "snapshots" if extra else None
+    return sorted(p.stem for p in snaps.glob("????-??-??.json")) if snaps is not None and snaps.is_dir() else []
+
+
+def day_source(day: str, data: Path, extra: Path | None) -> Path:
+    """The costs folder that holds `day`: the archive's, or the synthetic one. A date in both is refused."""
+    real, fake = (
+        (Path(data) / "costs" / f"{day}.json").exists(),
+        bool(extra) and (Path(extra) / "costs" / f"{day}.json").exists(),
+    )
+    if real and fake:
+        raise SystemExit(f"{day} is both a real archived day and a synthetic one: remove one")
+    return Path(extra) / "costs" if fake else Path(data) / "costs"
 
 
 def newest(folder: Path, pattern: str) -> Path | None:
@@ -178,16 +200,22 @@ def configs(data: Path) -> list[Path]:
     )
 
 
-def assemble_save_dir(dest: Path, data: Path, seed: dict, fresh: bool) -> Path:
+def assemble_save_dir(dest: Path, data: Path, seed: dict, fresh: bool, extra: Path | None = None) -> Path:
     """The folder `compare.run` expects (config.yaml, engine_v2_state.json, costs/), made of copies and links into
     the archive. The archive is only ever read: the run writes into its own temporary folders."""
     dest = Path(dest)
     costs = _ensure(dest / "costs")
-    src = Path(data) / "costs"
-    for p in src.glob("????-??-??.json"):
-        (costs / p.name).symlink_to(p)
-    if (src / "snapshots").is_dir():
-        (costs / "snapshots").symlink_to(src / "snapshots")
+    snaps = _ensure(costs / "snapshots")
+    for root in (data, extra):
+        src = Path(root) / "costs" if root else None
+        if src is None or not src.is_dir():
+            continue
+        for p in src.glob("????-??-??.json"):
+            if not (costs / p.name).exists():
+                (costs / p.name).symlink_to(p)
+        for p in (src / "snapshots").glob("????-??-??.json") if (src / "snapshots").is_dir() else []:
+            if not (snaps / p.name).exists():
+                (snaps / p.name).symlink_to(p)
     if seed.get("config"):
         shutil.copyfile(seed["config"], dest / "config.yaml")
     if seed.get("state") and not fresh:
@@ -197,8 +225,10 @@ def assemble_save_dir(dest: Path, data: Path, seed: dict, fresh: bool) -> Path:
     return dest
 
 
-def job_key(*, code: str, day: str, data: Path, seed: dict, fresh: bool, settings: dict, consts: dict) -> str:
-    costs = Path(data) / "costs"
+def job_key(
+    *, code: str, day: str, data: Path, seed: dict, fresh: bool, settings: dict, consts: dict, extra: Path | None = None
+) -> str:
+    costs = day_source(day, data, extra)
     return sha(
         RUNNER_VERSION,
         code,

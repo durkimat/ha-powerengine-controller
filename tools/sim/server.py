@@ -151,7 +151,8 @@ class Handler(BaseHTTPRequestHandler):
         ws = self.ws
         label = workspace.code_label(workspace.REPO, None)
         return {
-            "days": workspace.days_with_snapshots(ws.data),
+            "days": workspace.days_with_snapshots(ws.data, ws.extra),
+            "synthetic": workspace.synthetic_days(ws.extra),
             "refs": workspace.refs(),
             "working": label,
             "configs": [p.name for p in workspace.configs(ws.data)],
