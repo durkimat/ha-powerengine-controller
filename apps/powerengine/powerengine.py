@@ -166,6 +166,7 @@ DEMO_EVENT, DEMO_RESULT_EVENT = "pe_demo", "pe_demo_result"
 OVERRIDE_EVENT, OVERRIDE_RESULT_EVENT = "pe_override", "pe_override_result"
 HISTORY_DAY_EVENT = "pe_history_day"
 V2_HISTORY_DAY_EVENT = "pe_v2_history_day"
+V2_REPLAN_EVENT = "pe_v2_replan"        # the plan card's "Re-plan now" button (admin only: HA's fire_event needs admin)
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
 PAUSE_ENTITY = "switch.pe_ctl_pause"
@@ -498,6 +499,7 @@ class PowerEngine(hass.Hass):
         self.listen_event(self._on_history_day, HISTORY_DAY_EVENT)
         self._v2_history_date = None                         # a day picked on the Engine v2 page's history
         self.listen_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
+        self.listen_event(self._on_v2_replan, V2_REPLAN_EVENT)
         self.run_every(self._publish_v2_history, "now+65", 900)
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
@@ -1853,6 +1855,19 @@ class PowerEngine(hass.Hass):
                 self._publish_v2_history()
         except Exception as err:
             self._warn_daily("v2history", f"Could not save engine v2's history: {err!r}")
+
+    def _on_v2_replan(self, event_name, data, kwargs):
+        """The plan card's "Re-plan now" (pe_v2_replan): drop what the engine had cached (solar forecast, learned
+        figures) and work the values out again from the live readings now. Active, Passive and Pause are unchanged."""
+        if event_name != V2_REPLAN_EVENT or self._demo or self.cfg is None or self._engine_name() != "v2":
+            return
+        eng = self.__dict__.get("_v2")
+        if eng is None:
+            return
+        self._v2_cache, self._v2_learned_sig = {}, None
+        eng.ask_replan()
+        self.log("Engine v2: re-plan asked for from the card")
+        return self._cycle(None)
 
     def _on_v2_history_day(self, event_name, data, kwargs):
         """The Engine v2 history's date picker (pe_v2_history_day {date}): show that day, if it is still kept."""

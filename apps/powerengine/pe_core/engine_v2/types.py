@@ -186,6 +186,7 @@ EVENT_KINDS: dict[str, tuple[bool, bool]] = {
     "override": (True, True),
     "mode_switch": (False, True),         # Active / Passive / Pause changed
     "settings": (True, True),
+    "replan": (True, True),               # the owner pressed "Re-plan now" on the card
     "learned": (True, False),
     "bms": (False, True),
     "data_missing": (False, True),
