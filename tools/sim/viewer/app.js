@@ -248,7 +248,7 @@ function drawChart(host, A, B, nowMs, clock, keepScroll) {
   const hOf = (ms) => (ms - L.t0) / PL.HOUR_MS;
   const yA = (pct) => H.a * (1 - Math.max(0, Math.min(100, pct)) / 100);
   const axis = svg("svg", { width: 38, height: total }, null);
-  [0, 25, 50, 75, 100].forEach((p) => svg("text", { x: 34, y: yA(p) + 4, "text-anchor": "end" }, axis, `${p}%`));
+  [0, 25, 50, 75, 100].forEach((p) => svg("text", { x: 34, y: Math.min(H.a - 2, Math.max(10, yA(p) + 4)), "text-anchor": "end" }, axis, `${p}%`));
   const scroller = el("div", { class: "scroller" });
   const s = svg("svg", { width: W, height: total }, null);
   scroller.append(s);

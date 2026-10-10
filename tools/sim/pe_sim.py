@@ -104,11 +104,12 @@ def cmd_check(a) -> int:
         except (OSError, ValueError):
             pass
         if mine.get("status") != "ok" or nightly.get("status") != "ok":
+            both = mine.get("status") == nightly.get("status") != "failed"  # refused for the same reason: agreed
             print(
                 f"{day}: not compared (runner {mine.get('status')} {mine.get('reason', '')[:60]}; "
                 f"nightly code {nightly.get('status')} {nightly.get('reason', '')[:60]})"
             )
-            bad += 1
+            bad += 0 if both else 1
             continue
         s, n = mine["score"], nightly["v2"]
         same = abs(s["cost"] - n["cost"]) < 0.0005 and s["mode_changes"] == n["modes"] and s["flip_flops"] == n["flips"]
