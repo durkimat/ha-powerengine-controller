@@ -67,6 +67,104 @@ PATH_STEP_MIN = 15
 BISECT_STEPS = 7
 _ORDER = (SELF_USE, HOLD, CHARGE, EXPORT)
 
+# A smooth cost on where the battery sits (docs/plans/engine-v2-level-penalty.md): a rate in pence per kWh per hour
+# for the energy in each percent-layer beyond a start level, doubling every `..._DOUBLING_PTS` points. The top curve
+# starts at LEVEL_TOP_START_SOC and reaches LEVEL_TOP_RATE_AT_FULL_P at 100%; the bottom one starts at
+# LEVEL_BOT_START_SOC and reaches LEVEL_BOT_RATE_AT_FLOOR_P at LEVEL_BOT_ANCHOR_SOC. A rate of 0 switches a curve off
+# (both off: the plan is exactly as without them). It is a cost of the level itself, so it enters the value curve and
+# the live lines with no rule.
+LEVEL_TOP_START_SOC = 90.0
+LEVEL_TOP_RATE_AT_FULL_P = 0.0
+LEVEL_TOP_DOUBLING_PTS = 2.0
+LEVEL_BOT_START_SOC = 70.0
+LEVEL_BOT_RATE_AT_FLOOR_P = 0.0
+LEVEL_BOT_ANCHOR_SOC = 15.0
+LEVEL_BOT_DOUBLING_PTS = 5.0
+PEN_RES = 100                 # table entries per kWh
+
+
+# --- the level penalty ---------------------------------------------------------------------------------------------
+class _Pen:
+    """Tables over the battery level (kWh, `res` entries per kWh): `phi[i]` the cost in pence per hour of holding that
+    level, `dphi[i]` its slope in pence per kWh per hour (the rate of the layer at that level: positive above the top
+    start, negative below the bottom start), and the top curve's start."""
+    __slots__ = ("phi", "dphi", "res", "top_start_kwh")
+
+
+_pen_cache: dict = {}
+
+
+def _layer(x: float, a: float, d: float) -> tuple[float, float]:
+    """(rate, cumulative rate) of a curve `x` points past its start: rate a*(2^(x/d)-1), and its integral over them."""
+    k = math.log(2.0) / d
+    grow = 2.0 ** (x / d) - 1.0
+    return a * grow, a * (grow / k - x)
+
+
+def _level_penalty(cap: float) -> _Pen | None:
+    top_on = LEVEL_TOP_RATE_AT_FULL_P > 0.0 and LEVEL_TOP_START_SOC < 100.0
+    bot_on = LEVEL_BOT_RATE_AT_FLOOR_P > 0.0 and LEVEL_BOT_START_SOC > LEVEL_BOT_ANCHOR_SOC
+    if not (top_on or bot_on):
+        return None
+    key = (cap, LEVEL_TOP_START_SOC, LEVEL_TOP_RATE_AT_FULL_P, LEVEL_TOP_DOUBLING_PTS, LEVEL_BOT_START_SOC,
+           LEVEL_BOT_RATE_AT_FLOOR_P, LEVEL_BOT_ANCHOR_SOC, LEVEL_BOT_DOUBLING_PTS)
+    hit = _pen_cache.get(key)
+    if hit is not None:
+        return hit
+    span_top = (100.0 - LEVEL_TOP_START_SOC) / LEVEL_TOP_DOUBLING_PTS
+    span_bot = (LEVEL_BOT_START_SOC - LEVEL_BOT_ANCHOR_SOC) / LEVEL_BOT_DOUBLING_PTS
+    a_top = LEVEL_TOP_RATE_AT_FULL_P / (2.0**span_top - 1.0) if top_on else 0.0
+    a_bot = LEVEL_BOT_RATE_AT_FLOOR_P / (2.0**span_bot - 1.0) if bot_on else 0.0
+    n = int(round(cap * PEN_RES))
+    phi, rate = [], []
+    per_point = cap / 100.0
+    for i in range(n + 2):
+        pct = i / PEN_RES / cap * 100.0
+        r = c = 0.0
+        if top_on and pct > LEVEL_TOP_START_SOC:
+            r1, c1 = _layer(pct - LEVEL_TOP_START_SOC, a_top, LEVEL_TOP_DOUBLING_PTS)
+            r, c = r + r1, c + c1
+        if bot_on and pct < LEVEL_BOT_START_SOC:
+            r1, c1 = _layer(LEVEL_BOT_START_SOC - pct, a_bot, LEVEL_BOT_DOUBLING_PTS)
+            r, c = r - r1, c + c1                              # more energy lowers the bottom penalty: a negative slope
+        rate.append(r)
+        phi.append(c * per_point)
+    pen = _Pen()
+    pen.phi, pen.dphi, pen.res = phi, rate, PEN_RES
+    pen.top_start_kwh = LEVEL_TOP_START_SOC / 100.0 * cap if top_on else cap
+    if len(_pen_cache) > 8:
+        _pen_cache.clear()
+    _pen_cache[key] = pen
+    return pen
+
+
+def _phi(P: _Pen, e: float) -> float:
+    i = int(e * P.res + 0.5)
+    t = P.phi
+    return t[i] if i < len(t) else t[-1]
+
+
+def _dphi(P: _Pen, e: float) -> float:
+    i = int(e * P.res + 0.5)
+    t = P.dphi
+    return t[i] if i < len(t) else t[-1]
+
+
+def _pen_partial(P: _Pen, dt: float, e0: float, ef: float, f: float) -> float:
+    """Pence of the level penalty for a charge or sale that moves the level from e0 to ef over the share f of the
+    segment and then holds at ef for the rest (Simpson over the move: the cost is convex, trapezoid overstates)."""
+    pm = _phi(P, 0.5 * (e0 + ef))
+    return dt * (f * (_phi(P, e0) + 4.0 * pm + _phi(P, ef)) / 6.0 + (1.0 - f) * _phi(P, ef))
+
+
+def _dpen_partial(P: _Pen, dt: float, e0: float, d_e: float, f: float) -> float:
+    """The slope of `_pen_partial` in f, when the level reached at f is ef = e0 + f * d_e."""
+    ef = e0 + f * d_e
+    em = 0.5 * (e0 + ef)
+    simpson = (_phi(P, e0) + 4.0 * _phi(P, em) + _phi(P, ef)) / 6.0
+    ramp = f * (2.0 * _dphi(P, em) + _dphi(P, ef)) * d_e / 6.0
+    return dt * (simpson + ramp - _phi(P, ef) + (1.0 - f) * _dphi(P, ef) * d_e)
+
 
 # --- level grids ---------------------------------------------------------------------------------------------------
 class _Arr:
@@ -111,7 +209,7 @@ class _Seg:
     __slots__ = ("seg", "lim", "dt", "cap", "eta_c", "eta_d", "taper", "dtaper", "max_chg", "max_dis", "chg_f",
                  "chg_cap", "dis_cap", "export_limit", "fuse", "floor", "ceil", "car", "export_p", "event_p",
                  "wear_h", "wear_s", "ccost", "topup", "sw", "lo", "hi", "allowed", "forced", "outcomes", "scen",
-                 "mid", "late_p")
+                 "mid", "late_p", "pen", "fcap")
 
 
 def _groups(solar: Spread, load: Spread) -> list[tuple[float, float, float]]:
@@ -180,6 +278,10 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     S.topup = settings.top_up_cost_p
     S.sw = settings.switch_cost_p
     S.lo, S.hi = settings.comfort_low_soc / 100 * S.cap, settings.comfort_high_soc / 100 * S.cap
+    S.pen = _level_penalty(S.cap)
+    S.fcap = S.hi if (S.ccost or S.topup) else S.cap          # where charging early stops being free (see `_walk`)
+    if S.pen is not None:
+        S.fcap = min(S.fcap, S.pen.top_start_kwh)
     S.forced = lim.forced or (EVENT if seg.event else FREE if seg.free else seg.manual)
     S.allowed = tuple(m for m in _ORDER if m in lim.allowed) or (SELF_USE,)
     scen = []
@@ -221,9 +323,10 @@ def _phys(S: _Seg, e: float, mode: str, net: float, imp_p: float, ckw: float | N
           dkw: float | None = None) -> tuple:
     """One segment of battery physics, consistent with v1's planner.step. `net` is house + car - sun in kWh (positive:
     the house needs energy). Returns (end kWh, cost p, comfort p, import, export, event export, battery to house,
-    battery sold, grid to battery, top-up p), energies in kWh, cost including wear, comfort and the top-up. The top-up
-    (`top_up_cost_p`: grid energy charged above the comfort band's top) is counted in the comfort figure, element 2,
-    and is also returned alone as the last element, because a part-way charge has to price it from its end level."""
+    battery sold, grid to battery, top-up p, level penalty p), energies in kWh, cost including wear, comfort and the
+    top-up. The top-up (`top_up_cost_p`: grid energy charged above the comfort band's top) is counted in the comfort
+    figure, element 2, and is also returned alone (element 9), because a part-way charge has to price it from its end
+    level; the level penalty is counted there too and returned alone as the last element (10), for the same reason."""
     dt, cap = S.dt, S.cap
     imp = exp = evx = house = sold = gtb = top = 0.0
     end = e
@@ -275,8 +378,11 @@ def _phys(S: _Seg, e: float, mode: str, net: float, imp_p: float, ckw: float | N
         ex0 = (e - hi if e > hi else 0.0) + (lo - e if e < lo else 0.0)
         ex1 = (end - hi if end > hi else 0.0) + (lo - end if end < lo else 0.0)
         comfort = S.ccost * dt * 0.5 * (ex0 + ex1)
-    comfort += top
-    return (end, cash + comfort, comfort, imp, exp, evx, house, sold, gtb, top)
+    pen = 0.0
+    if S.pen is not None:
+        pen = _pen_partial(S.pen, dt, e, end, 1.0)
+    comfort += top + pen
+    return (end, cash + comfort, comfort, imp, exp, evx, house, sold, gtb, top, pen)
 
 
 def _top_up(S: _Seg, e0: float, e1: float, grid_share: float) -> float:
@@ -301,7 +407,10 @@ def _mix(a: tuple, b: tuple, f: float, S: _Seg | None = None) -> tuple:
     out = tuple(f * x + g * y for x, y in zip(a, b, strict=True))
     if S is not None and a[9] > 0.0:
         top = _top_up(S, b[0], out[0], _grid_share(S, a, b))
-        out = out[:1] + (out[1] - out[9] + top, out[2] - out[9] + top) + out[3:9] + (top,)
+        out = out[:1] + (out[1] - out[9] + top, out[2] - out[9] + top) + out[3:9] + (top,) + out[10:]
+    if S is not None and S.pen is not None:               # the level penalty from the level the part-way step reaches
+        pen = _pen_partial(S.pen, S.dt, b[0], out[0], f)
+        out = out[:1] + (out[1] - out[10] + pen, out[2] - out[10] + pen) + out[3:10] + (pen,)
     return out
 
 
@@ -320,6 +429,12 @@ def _partial(scen: list, full: list, hold: list, Vn: _Arr, S: _Seg | None = None
         return None
     d_c = [full[i][1] - hold[i][1] for i in range(n)]
     ps = [s[0] for s in scen]
+    pen = S.pen if S is not None else None
+    base = [hold[i][1] for i in range(n)]
+    if pen is not None:      # the level penalty is priced from the level reached, not mixed
+        for i in range(n):
+            d_c[i] -= full[i][10] - hold[i][10]
+            base[i] -= hold[i][10]
     # top-up: per scenario the pence per kWh of level above the band's top, and what the full charge's linear share was
     tc = [0.0] * n
     if S is not None and S.topup:
@@ -331,10 +446,16 @@ def _partial(scen: list, full: list, hold: list, Vn: _Arr, S: _Seg | None = None
     def top(i: int, f: float) -> float:
         return tc[i] * max(0.0, eh[i] + f * d_e[i] - max(eh[i], S.hi)) if tc[i] else 0.0
 
+    def pen_f(i: int, f: float) -> float:
+        return _pen_partial(pen, S.dt, eh[i], eh[i] + f * d_e[i], f) if pen is not None else 0.0
+
+    def dpen_f(i: int, f: float) -> float:
+        return _dpen_partial(pen, S.dt, eh[i], d_e[i], f) if pen is not None else 0.0
+
     def slope(f: float) -> float:
         t = 0.0
         for i in range(n):
-            s_i = d_c[i] + _slope(Vn, eh[i] + f * d_e[i]) * d_e[i]
+            s_i = d_c[i] + _slope(Vn, eh[i] + f * d_e[i]) * d_e[i] + dpen_f(i, f)
             if tc[i] and (eh[i] >= S.hi or eh[i] + f * d_e[i] > S.hi):
                 s_i += tc[i] * d_e[i]
             t += ps[i] * s_i
@@ -343,7 +464,7 @@ def _partial(scen: list, full: list, hold: list, Vn: _Arr, S: _Seg | None = None
     def cost(f: float) -> float:
         t = 0.0
         for i in range(n):
-            t += ps[i] * (hold[i][1] + f * d_c[i] + top(i, f) + _val(Vn, eh[i] + f * d_e[i]))
+            t += ps[i] * (base[i] + f * d_c[i] + top(i, f) + pen_f(i, f) + _val(Vn, eh[i] + f * d_e[i]))
         return t
 
     if slope(0.0) >= -SLOPE_TOL or slope(1.0) < -SLOPE_TOL:
@@ -731,9 +852,9 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
                         vks=None if vks is None else vks[i:ends[i] + 1])
             reach = sub[-1]["e1"]
             sale_goes_on = i == 0 and prev == EXPORT and sub[0]["mode"] == EXPORT
-            capped = bool((S.ccost or S.topup) and reach > S.hi)
+            capped = bool((S.ccost or S.topup or S.pen is not None) and reach > S.fcap)
             if capped:                              # early is free only inside the band: above its top the hours cost
-                reach = S.hi
+                reach = S.fcap
             target = reach if (any(r["mode"] == CHARGE for r in sub) and reach > e + 1e-9
                                and not sale_goes_on) else None
             target_to = ends[i]
@@ -1020,8 +1141,11 @@ def run_target(vr: ValueResult, t: datetime, soc: float, import_p: float, facts:
     if not any(r["mode"] == CHARGE for r in recs):
         return None
     reach = recs[-1]["e1"] / cap * 100
-    if settings.comfort_cost_p > 0 or settings.top_up_cost_p > 0:      # early only up to the band's top (see `_walk`)
-        reach = min(reach, settings.comfort_high_soc)
+    top_pct = settings.comfort_high_soc if (settings.comfort_cost_p > 0 or settings.top_up_cost_p > 0) else 100.0
+    if LEVEL_TOP_RATE_AT_FULL_P > 0.0:
+        top_pct = min(top_pct, LEVEL_TOP_START_SOC)
+    if top_pct < 100.0:                                               # early only up to the band's top (see `_walk`)
+        reach = min(reach, top_pct)
     return reach
 
 
