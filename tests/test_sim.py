@@ -27,7 +27,9 @@ def make_archive(tmp_path, days=("2026-10-07",)):
     (data / "costs" / "snapshots").mkdir(parents=True)
     for d in days:
         (data / "costs" / f"{d}.json").write_text("[]")
-        (data / "costs" / "snapshots" / f"{d}.json").write_text("{}")
+        (data / "costs" / "snapshots" / f"{d}.json").write_text(
+            json.dumps({"entries": [{"at": f"{d}T00:00:08+01:00"}]})
+        )
     for sub, name, text in (
         ("config", "a.yaml", "x: 1"),
         ("engine_v2_state", "s.json", "{}"),
@@ -290,7 +292,9 @@ def test_a_synthetic_day_is_read_beside_the_archive_and_never_replaces_a_real_on
     extra = tmp_path / "work" / "synthetic"
     (extra / "costs" / "snapshots").mkdir(parents=True)
     (extra / "costs" / "2026-09-03.json").write_text("[]")
-    (extra / "costs" / "snapshots" / "2026-09-03.json").write_text("{}")
+    (extra / "costs" / "snapshots" / "2026-09-03.json").write_text(
+        json.dumps({"entries": [{"at": "2026-09-03T00:00:08+01:00"}]})
+    )
     assert workspace.days_with_snapshots(data, extra) == ["2026-09-03", "2026-10-07"]
     assert workspace.days_with_snapshots(data) == ["2026-10-07"]
     assert workspace.synthetic_days(extra) == ["2026-09-03"]
@@ -346,3 +350,13 @@ def test_every_preset_applies_to_the_code():
     finally:
         for n, f in saved.items():
             setattr(execute.Executor, n, f)
+
+
+def test_a_day_whose_snapshot_starts_late_is_not_offered(tmp_path):
+    data = make_archive(tmp_path, days=("2026-10-06", "2026-10-07"))
+    (data / "costs" / "snapshots" / "2026-10-06.json").write_text(
+        json.dumps({"entries": [{"at": "2026-10-06T14:20:00+01:00"}]})
+    )
+    assert workspace.days_with_snapshots(data) == ["2026-10-07"]
+    (data / "costs" / "snapshots" / "2026-10-07.json").write_text("not json")
+    assert workspace.days_with_snapshots(data) == []

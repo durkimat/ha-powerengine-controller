@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 RUNNER_VERSION = 1  # bump when a change makes cached results wrong
@@ -150,13 +151,30 @@ def refs() -> list[dict]:
 # --- the archive ----------------------------------------------------------------------------------------------
 
 
+def snapshot_usable(path: Path, day: str) -> bool:
+    """Can a replay start from this snapshot? It needs an entry within the first half hour of the day (the forecasts as
+    they were at midnight), which `compare.day` checks too; a snapshot that begins later is refused there ("no forecast
+    record at the start of the day"), so the simulator does not offer it."""
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        for entry in data.get("entries") or []:
+            at = datetime.fromisoformat(str(entry["at"]).replace("Z", "+00:00"))
+            local = at if at.tzinfo else at.replace(tzinfo=timezone.utc)
+            if local.date().isoformat() == day:
+                return (local.hour * 60 + local.minute) <= 30
+            return False
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    return False
+
+
 def days_with_snapshots(data: Path, extra: Path | None = None) -> list[str]:
-    """Days that have a forecast snapshot: the archive's, and any synthetic ones under `extra`."""
+    """Days a replay can start from: those with a usable forecast snapshot, the archive's and any synthetic ones."""
     days = set()
     for root in (data, extra):
         snaps = Path(root) / "costs" / "snapshots" if root else None
         if snaps is not None and snaps.is_dir():
-            days |= {p.stem for p in snaps.glob("????-??-??.json")}
+            days |= {p.stem for p in snaps.glob("????-??-??.json") if snapshot_usable(p, p.stem)}
     return sorted(days)
 
 
