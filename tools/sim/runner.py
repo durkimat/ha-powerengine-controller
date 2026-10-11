@@ -56,6 +56,11 @@ class Variant:
         )
 
 
+def is_const(key: str) -> bool:
+    """A dotted key is a module constant or a method (`engine_v2.value.NAME`); `system.<key>` is a config setting."""
+    return "." in key and not key.startswith("system.")
+
+
 def parse_days(text: str, available: list[str], synthetic: list[str] | None = None) -> list[str]:
     """`A..B` (inclusive), `A,B,C`, `all` (every real day with a snapshot) or `synthetic` (the days synth.py made)."""
     if text == "all":
@@ -91,7 +96,7 @@ def parse_variant(text: str, default_code: str | None = None) -> Variant:
         key, sep, value = item.partition("=")
         if not sep or not key.strip():
             raise SystemExit(f"--variant {text!r}: expected key=value, got {item!r}")
-        (v.consts if "." in key else v.settings)[key.strip()] = value.strip()
+        (v.consts if is_const(key) else v.settings)[key.strip()] = value.strip()
     return v
 
 
@@ -109,7 +114,7 @@ def sweep_variants(base: Variant, sweeps: list[str]) -> list[Variant]:
     for combo in itertools.product(*axes):
         settings, consts = dict(base.settings), dict(base.consts)
         for key, value in combo:
-            (consts if "." in key else settings)[key] = value
+            (consts if is_const(key) else settings)[key] = value
         label = ",".join(f"{k}={v}" for k, v in combo)
         out.append(Variant(f"{base.name}[{label}]", base.code, settings, consts, base.config, base.fresh))
     return out

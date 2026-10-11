@@ -79,13 +79,18 @@ class Triggers:
         self.last_causes: list = list(st.get("last_causes") or [])  # the kinds behind the revalue now running
         self.tz = None
 
+    def _revalues(self, e: Event) -> bool:
+        """Does this event ask for a re-plan? Its kind says so, and a charge or sale reaching its level does too when
+        the engine is set to re-plan there (engine 2.1 beta)."""
+        return e.revalue or (e.kind == "level" and self.s.replan_on_level)
+
     # ---- when -----------------------------------------------------------------------------------
     def due(self, now: datetime, events: tuple[Event, ...], last_value_at: datetime | None) -> str | None:
         """The "because" text when a revalue should run now, else None. Returning text consumes what was pending."""
         ts = now.timestamp()
         urgent = False
         for e in events:
-            if e.revalue:
+            if self._revalues(e):
                 if not any(k == e.kind for k, _ in self.pending):
                     self.pending.append([e.kind, e.text])
                 if self.pending_since is None:
@@ -134,7 +139,7 @@ class Triggers:
             if mark is None or (e.urgent and not events[mark].urgent):
                 mark = events.index(e)
             self.recent.append({"at": now.isoformat(timespec="seconds"), "kind": e.kind,
-                                "text": e.text[:TEXT_MAX], "effect": "revalue" if e.revalue else "recheck"})
+                                "text": e.text[:TEXT_MAX], "effect": "revalue" if self._revalues(e) else "recheck"})
         if mode_changed and mark is not None:
             self.recent[len(self.recent) - len(events) + mark]["effect"] = "mode_change"
         self.recent = self.recent[-RECENT:]

@@ -5,6 +5,10 @@ tables are in [ablation 1 to 5](engine-v2-ablation-1.md), [the level penalty](en
 [the architecture page](engine-v2-architecture.md). All figures: the simulator on 7, 8 and 9 Oct (72 hours) and one synthetic day,
 cash only, in-sample, so they rank ideas better than they price them.
 
+> **Status (11 Oct):** the combined "new approach" below shipped as **engine 2.1 beta**, a third choice on the config page (0.9.136;
+> see [the architecture page](engine-v2-architecture.md)). The figures here come from the experiments, which engine 2.1 beta reproduces
+> exactly (seven days, to the penny and the mode change).
+
 ## The methods, and how effective each was
 
 | Method | What it is | Effect |

@@ -295,7 +295,7 @@ def entity_states(out: StepOutput, engine, settings: V2Settings, tz,
     return res
 
 
-def settings_state(settings: V2Settings) -> tuple[str, dict]:
+def settings_state(settings: V2Settings, profile: str | None = None) -> tuple[str, dict]:
     """sensor.pe_diag_v2_settings: the catalogue with the values in use (the config page's schema)."""
-    return str(len(SETTINGS)), catalogue(settings)
+    return str(len(SETTINGS)), catalogue(settings, profile)
 

@@ -15,18 +15,19 @@ bottom, below S_bot:   rate(s) = A_bot * (2^((S_bot - s) / D_bot) - 1)        A_
 cost per hour at level s = (capacity / 100) * the integral of rate over the layers from the start to s   (closed form)
 ```
 
-| Constant | Default | Meaning |
+| Setting | Default (v2 / 2.1 beta) | Meaning |
 |---|---|---|
-| `LEVEL_TOP_START_SOC` | 90 | where the top curve starts (zero cost here: no kink) |
-| `LEVEL_TOP_RATE_AT_FULL_P` | 0 (off) | rate at 100%, p per kWh per hour |
-| `LEVEL_TOP_DOUBLING_PTS` | 2 | points per doubling |
-| `LEVEL_BOT_START_SOC` | 70 | where the bottom curve starts |
-| `LEVEL_BOT_RATE_AT_FLOOR_P` | 0 (off) | rate at the anchor, p per kWh per hour |
-| `LEVEL_BOT_ANCHOR_SOC` | 15 | the level the bottom rate is set at (the reserve) |
-| `LEVEL_BOT_DOUBLING_PTS` | 5 | points per doubling |
+| `level_top_start_soc` | 90 / 90 | where the top curve starts (zero cost here: no kink) |
+| `level_top_rate_p` | 0 (off) / 200 | rate at 100%, p per kWh per hour |
+| `level_top_doubling_pts` | 2 / 3 | points per doubling |
+| `level_bot_start_soc` | 70 / 70 | where the bottom curve starts |
+| `level_bot_rate_p` | 0 (off) / 10 | rate at your reserve, p per kWh per hour |
+| `level_bot_doubling_pts` | 5 / 5 | points per doubling |
+| `slot_bot_factor` | 1 / 300 | inside a smart slot the bottom rate is multiplied by this |
+| `slot_bot_start_soc` | 0 (as usual) / 80 | inside a smart slot the bottom curve starts here |
 
-They are numeric constants (no engine setting yet), so the simulator can dial them from its constants panel. They become engine
-settings, with the card's config page entries, when the shape is decided.
+They are engine v2 settings (they were numeric constants in the experiments, until engine 2.1 beta, 0.9.136). The bottom curve's rate
+is set at the reserve level (`reserve_soc`), which was 15% in the tests.
 
 ## How it is applied
 

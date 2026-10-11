@@ -256,7 +256,8 @@ def test_the_diag_sensor(made):
 def test_the_settings_sensor_has_the_catalogue_and_fits():
     state, attrs = publish.settings_state(V2Settings())
     assert state == str(len(SETTINGS))
-    assert set(attrs) == {"settings", "sections", "values"} and len(attrs["settings"]) == len(SETTINGS)
+    assert set(attrs) == {"settings", "sections", "values", "engines"} \
+        and len(attrs["settings"]) == len(SETTINGS)
     assert size(attrs) < LIMIT and attrs["values"]["reserve_soc"] == 12
     assert "<<" not in json.dumps(attrs)
 

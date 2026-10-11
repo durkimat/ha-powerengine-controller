@@ -44,7 +44,7 @@ def cmd_run(a) -> int:
     variants = [base]
     mine = runner.Variant("variant", a.code, runner.parse_assignments(a.set), {}, a.config, a.fresh)
     for k in list(mine.settings):
-        if "." in k:
+        if runner.is_const(k):
             mine.consts[k] = mine.settings.pop(k)
     named = [runner.parse_variant(t, a.code) for t in a.variant or []]
     if a.code or mine.settings or mine.consts or a.sweep or a.config or a.fresh:

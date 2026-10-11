@@ -67,33 +67,14 @@ PATH_STEP_MIN = 15
 BISECT_STEPS = 7
 _ORDER = (SELF_USE, HOLD, CHARGE, EXPORT)
 
-# A smooth cost on where the battery sits (docs/plans/engine-v2-level-penalty.md): a rate in pence per kWh per hour
-# for the energy in each percent-layer beyond a start level, doubling every `..._DOUBLING_PTS` points. The top curve
-# starts at LEVEL_TOP_START_SOC and reaches LEVEL_TOP_RATE_AT_FULL_P at 100%; the bottom one starts at
-# LEVEL_BOT_START_SOC and reaches LEVEL_BOT_RATE_AT_FLOOR_P at LEVEL_BOT_ANCHOR_SOC. A rate of 0 switches a curve off
-# (both off: the plan is exactly as without them). It is a cost of the level itself, so it enters the value curve and
-# the live lines with no rule.
-LEVEL_TOP_START_SOC = 90.0
-LEVEL_TOP_RATE_AT_FULL_P = 0.0
-LEVEL_TOP_DOUBLING_PTS = 2.0
-LEVEL_BOT_START_SOC = 70.0
-LEVEL_BOT_RATE_AT_FLOOR_P = 0.0
-LEVEL_BOT_ANCHOR_SOC = 15.0
-LEVEL_BOT_DOUBLING_PTS = 5.0
+# A smooth cost on where the battery sits (docs/plans/engine-v2-level-penalty.md; the settings `level_top_*`,
+# `level_bot_*` and `slot_bot_*`): a rate in pence per kWh per hour for the energy in each percent-layer beyond a
+# start level, doubling every so many points. The top curve starts at `level_top_start_soc` and reaches
+# `level_top_rate_p` at 100%; the bottom one starts at `level_bot_start_soc` and reaches `level_bot_rate_p` at
+# `level_bot_anchor_soc`. A rate of 0 switches a curve off (both off: the plan is exactly as without them). It is a
+# cost of the level itself, so it enters the value curve and the live lines with no rule. Inside a smart slot the
+# bottom rate is multiplied by `slot_bot_factor` and the curve may start higher (`slot_bot_start_soc`).
 PEN_RES = 100                 # table entries per kWh
-
-# The bottom curve can be made sharper inside a smart slot (a cheap stretch that may be cut short): its rate is
-# multiplied by LEVEL_BOT_SLOT_FACTOR, and where they are above 0, its start level and its doubling distance are
-# replaced. The plan then keeps the battery higher through a slot, relying less on the slot to refill what it has sold.
-# 1, 0 and 0 change nothing.
-LEVEL_BOT_SLOT_FACTOR = 1.0
-LEVEL_BOT_SLOT_START_SOC = 0.0
-LEVEL_BOT_SLOT_DOUBLING_PTS = 0.0
-
-# A tiny cost, in pence per hour, of the battery sitting in Hold. It is not a rule against holding: a hold that saves
-# more than this (keeping a kWh worth 12p instead of covering the house at 6p, say) still wins. It breaks ties: when
-# selling or charging costs the same now or later (a flat price stretch), the plan acts now rather than waiting in Hold.
-HOLD_COST_P_PER_H = 0.0
 
 
 # --- the level penalty ---------------------------------------------------------------------------------------------
@@ -114,25 +95,25 @@ def _layer(x: float, a: float, d: float) -> tuple[float, float]:
     return a * grow, a * (grow / k - x)
 
 
-def _level_penalty(cap: float, slot: bool = False) -> _Pen | None:
-    """The tables for a battery of `cap` kWh; `slot` asks for the version used inside a smart slot."""
-    bot_start, bot_rate, bot_d = LEVEL_BOT_START_SOC, LEVEL_BOT_RATE_AT_FLOOR_P, LEVEL_BOT_DOUBLING_PTS
+def _level_penalty(cap: float, slot: bool, s: V2Settings) -> _Pen | None:
+    """The tables for a battery of `cap` kWh under settings `s`; `slot` asks for the one used inside a smart slot."""
+    top_start, top_rate, top_d = s.level_top_start_soc, s.level_top_rate_p, s.level_top_doubling_pts
+    anchor = max(s.reserve_soc, 0.0)                      # the bottom curve's rate is set at your reserve
+    bot_start, bot_rate, bot_d = s.level_bot_start_soc, s.level_bot_rate_p, s.level_bot_doubling_pts
     if slot:
-        bot_rate *= LEVEL_BOT_SLOT_FACTOR
-        bot_start = LEVEL_BOT_SLOT_START_SOC or bot_start
-        bot_d = LEVEL_BOT_SLOT_DOUBLING_PTS or bot_d
-    top_on = LEVEL_TOP_RATE_AT_FULL_P > 0.0 and LEVEL_TOP_START_SOC < 100.0
-    bot_on = bot_rate > 0.0 and bot_start > LEVEL_BOT_ANCHOR_SOC
+        bot_rate *= s.slot_bot_factor
+        bot_start = s.slot_bot_start_soc or bot_start
+    top_on = top_rate > 0.0 and top_start < 100.0
+    bot_on = bot_rate > 0.0 and bot_start > anchor
     if not (top_on or bot_on):
         return None
-    key = (cap, LEVEL_TOP_START_SOC, LEVEL_TOP_RATE_AT_FULL_P, LEVEL_TOP_DOUBLING_PTS, bot_start, bot_rate,
-           LEVEL_BOT_ANCHOR_SOC, bot_d)
+    key = (cap, top_start, top_rate, top_d, bot_start, bot_rate, anchor, bot_d)
     hit = _pen_cache.get(key)
     if hit is not None:
         return hit
-    span_top = (100.0 - LEVEL_TOP_START_SOC) / LEVEL_TOP_DOUBLING_PTS
-    span_bot = (bot_start - LEVEL_BOT_ANCHOR_SOC) / bot_d
-    a_top = LEVEL_TOP_RATE_AT_FULL_P / (2.0**span_top - 1.0) if top_on else 0.0
+    span_top = (100.0 - top_start) / top_d
+    span_bot = (bot_start - anchor) / bot_d
+    a_top = top_rate / (2.0**span_top - 1.0) if top_on else 0.0
     a_bot = bot_rate / (2.0**span_bot - 1.0) if bot_on else 0.0
     n = int(round(cap * PEN_RES))
     phi, rate = [], []
@@ -140,8 +121,8 @@ def _level_penalty(cap: float, slot: bool = False) -> _Pen | None:
     for i in range(n + 2):
         pct = i / PEN_RES / cap * 100.0
         r = c = 0.0
-        if top_on and pct > LEVEL_TOP_START_SOC:
-            r1, c1 = _layer(pct - LEVEL_TOP_START_SOC, a_top, LEVEL_TOP_DOUBLING_PTS)
+        if top_on and pct > top_start:
+            r1, c1 = _layer(pct - top_start, a_top, top_d)
             r, c = r + r1, c + c1
         if bot_on and pct < bot_start:
             r1, c1 = _layer(bot_start - pct, a_bot, bot_d)
@@ -150,7 +131,7 @@ def _level_penalty(cap: float, slot: bool = False) -> _Pen | None:
         phi.append(c * per_point)
     pen = _Pen()
     pen.phi, pen.dphi, pen.res = phi, rate, PEN_RES
-    pen.top_start_kwh = LEVEL_TOP_START_SOC / 100.0 * cap if top_on else cap
+    pen.top_start_kwh = top_start / 100.0 * cap if top_on else cap
     if len(_pen_cache) > 8:
         _pen_cache.clear()
     _pen_cache[key] = pen
@@ -228,7 +209,7 @@ class _Seg:
     __slots__ = ("seg", "lim", "dt", "cap", "eta_c", "eta_d", "taper", "dtaper", "max_chg", "max_dis", "chg_f",
                  "chg_cap", "dis_cap", "export_limit", "fuse", "floor", "ceil", "car", "export_p", "event_p",
                  "wear_h", "wear_s", "ccost", "topup", "sw", "lo", "hi", "allowed", "forced", "outcomes", "scen",
-                 "mid", "late_p", "pen", "fcap", "hold_p")
+                 "mid", "late_p", "pen", "fcap")
 
 
 def _groups(solar: Spread, load: Spread) -> list[tuple[float, float, float]]:
@@ -297,8 +278,7 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     S.topup = settings.top_up_cost_p
     S.sw = settings.switch_cost_p
     S.lo, S.hi = settings.comfort_low_soc / 100 * S.cap, settings.comfort_high_soc / 100 * S.cap
-    S.hold_p = HOLD_COST_P_PER_H
-    S.pen = _level_penalty(S.cap, seg.slot_prob is not None)
+    S.pen = _level_penalty(S.cap, seg.slot_prob is not None, settings)
     S.fcap = S.hi if (S.ccost or S.topup) else S.cap          # where charging early stops being free (see `_walk`)
     if S.pen is not None:
         S.fcap = min(S.fcap, S.pen.top_start_kwh)
@@ -392,8 +372,6 @@ def _phys(S: _Seg, e: float, mode: str, net: float, imp_p: float, ckw: float | N
         if mode == EVENT:
             evx = sold
     cash = imp * imp_p - (exp - evx) * S.export_p - evx * S.event_p + S.wear_h * house + S.wear_s * sold
-    if mode == HOLD:
-        cash += S.hold_p * dt
     comfort = 0.0
     if S.ccost:
         hi, lo = S.hi, S.lo
@@ -1164,8 +1142,8 @@ def run_target(vr: ValueResult, t: datetime, soc: float, import_p: float, facts:
         return None
     reach = recs[-1]["e1"] / cap * 100
     top_pct = settings.comfort_high_soc if (settings.comfort_cost_p > 0 or settings.top_up_cost_p > 0) else 100.0
-    if LEVEL_TOP_RATE_AT_FULL_P > 0.0:
-        top_pct = min(top_pct, LEVEL_TOP_START_SOC)
+    if settings.level_top_rate_p > 0.0:
+        top_pct = min(top_pct, settings.level_top_start_soc)
     if top_pct < 100.0:                                               # early only up to the band's top (see `_walk`)
         reach = min(reach, top_pct)
     return reach

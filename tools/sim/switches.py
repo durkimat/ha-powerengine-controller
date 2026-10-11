@@ -58,6 +58,13 @@ _BARE = {k: v for k, v in OFF_VALUES.items() if k not in ("switch_cost_p", "wear
 
 PRESETS = [
     {
+        "id": "engine_2_1_beta",
+        "label": "Engine 2.1 beta (as released, top-up cost out)",
+        "help": "The released profile: follows the plan, level curves, sharper bottom in smart slots. Your saved settings win over its values, so the top-up cost is set to 0 here, as in the tests.",
+        "settings": {"system.engine": "v2_1", "top_up_cost_p": 0},
+        "consts": {},
+    },
+    {
         "id": "current",
         "label": "Current",
         "help": "The archived config as it is: no overrides.",

@@ -13,7 +13,7 @@ from typing import Any
 
 import yaml
 
-from .engine_v2.settings import SettingsError, V2Settings, parse_v2
+from .engine_v2.settings import SettingsError, V2Settings, parse_v2, profile_of
 from .names import fill
 from .roles import RETIRED_ROLES, ROLE_BY_KEY, is_forbidden_control
 
@@ -116,7 +116,8 @@ SYSTEM_CHOICES = {
                                     ("fixed", "Fixed times (set below)"))),
     "engine": ("engine", (("v1", "Engine v1: a half-hour plan, remade every 5 minutes and on changes"),
                           ("v2", "Engine v2: acts on conditions (a level reached, a price change, "
-                                 "the sun falling short)"))),
+                                 "the sun falling short)"),
+                          ("v2_1", "Engine 2.1 beta: engine v2 following its own plan"))),
     "other_controller": ("control", (("none", "No other battery controller"),
                                      ("predbat", "Predbat, switched over with the handover package"),
                                      ("other", "Another controller: PowerEngine checks the guard entities below"))),
@@ -153,8 +154,9 @@ SETTING_TEXT = {
                          "by the guards you have mapped."),
     "engine": ("Planning engine", "",
                "Which engine plans and decides. Engine v1 plans in half-hours. Engine v2 works out what a stored "
-               "kWh is worth and acts when a condition is met. Switching changes neither Active, Passive nor Pause; "
-               "each engine keeps its own settings."),
+               "kWh is worth and acts when a condition is met. Engine 2.1 beta is engine v2 following its own plan "
+               "(same settings). Switching changes neither Active, Passive nor Pause; each engine keeps its own "
+               "settings."),
     "smart_max_requests_per_day": ("Requests per day", "requests",
                                    "The most times a day PowerEngine changes the car's ready-by time to ask for "
                                    "slots. Each change makes the supplier re-plan the car's charging."),
@@ -201,16 +203,14 @@ SETTING_TEXT = {
                                "wear is at least this."),
     "arbitrage_min_soc": ("Arbitrage band: bottom", "%",
                           "A guide, not a limit. Outside the fixed overnight window a sale may go up to 5 points "
-                          "below this (paying the outside-band cost) so a cycle can use whole half-hours; a refill "
-                          "then may depend on optional smart-charge slots that can be withdrawn, so never lower. "
-                          "Inside the overnight window, where the refill is guaranteed, selling may go lower when it "
-                          "still pays after the outside-band cost."),
+                          "below this (paying the outside-band cost) so a cycle can use whole half-hours; the refill "
+                          "may depend on smart-charge slots that can be withdrawn, so never lower. Inside the "
+                          "overnight window, where the refill is guaranteed, selling may go lower when it still pays."),
     "arbitrage_max_soc": ("Arbitrage band: top", "%",
-                          "A guide, not a limit. With arbitrage on, grid charging (smart-charge slots included) may "
-                          "run up to 5 points past this (paying the outside-band cost) so a cycle can use whole "
-                          "half-hours; the final top-up at the end of the overnight window fills to the grid-charge "
-                          "target for the day ahead. Solar can still fill it higher. Set 100 to allow full charges "
-                          "any time."),
+                          "A guide, not a limit. With arbitrage on, grid charging (smart slots included) may run up "
+                          "to 5 points past this (paying the outside-band cost) so a cycle can use whole half-hours; "
+                          "the final top-up of the overnight window fills to the day's grid-charge target. Solar can "
+                          "still fill it higher. 100 allows full charges any time."),
     "arbitrage_band_penalty_p": ("Arbitrage outside-band cost", "p/kWh",
                                  "Extra cost counted for each kWh arbitrage moves outside the band. Higher keeps "
                                  "cycles inside it more strictly; 0 ignores the band."),
@@ -619,7 +619,7 @@ def parse_config(data: Any) -> Config:
         raise ConfigError("a fixed overnight window needs a start and an end that differ")
 
     try:
-        engine_v2 = parse_v2(data.get("engine_v2"), features, safety)
+        engine_v2 = parse_v2(data.get("engine_v2"), features, safety, profile_of(system["engine"]))
     except SettingsError as err:
         raise ConfigError(str(err)) from err
 
