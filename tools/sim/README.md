@@ -31,7 +31,7 @@ new rule that is only code needs a line in `switches.py`.
 
 **Synthetic days.** `tools/sim/synth.py sunny` builds a day the archive lacks (an east-facing sunny day, smart slots, no
 event) from a real day's house load; it goes to `~/pe-sim/synthetic/`, is read beside the archive, and is only run when asked
-(`--days synthetic`), never in `all`. See the module's docstring.
+(`--days synthetic`), never in `all`. `synth.py cloudy` makes a cloudy day with an announced grid event. See the module's docstring.
 
 **Fidelity.** The result of a day depends on app state that `_cycle` and `_evaluate` keep (slot tracking, the overnight
 window, the mode), so the runner drives the whole app, not the engine alone. `check` proves it against the nightly code.

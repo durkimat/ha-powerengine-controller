@@ -44,6 +44,29 @@ Day by day (adjusted cost, mode changes): 7 Oct -1.00 (11) against -1.27 (20); 8
 against -2.87 (56); synthetic -2.88 (11) against -2.74 (25). The new approach is cheaper on two real days and dearer on the other and on
 the synthetic one, so its £0.38 over three days is a narrow win, not a clear one.
 
+## A cloudy day with a short-notice grid event (`2026-09-10`)
+
+Synthetic, made by `synth.py cloudy`: the 8 Oct house load, 6.9 kWh of sun (2.0 kW peak; a clear day gives 18.9 kWh) with a drifting
+cloud pattern, a forecast that expected 20% more than came, no smart slot, and a grid event 17:30 to 18:30 announced at 10:00. In every
+variant the announcement triggers a re-plan at once (10:00:30) and the battery is sold into the event at 115p (from about 77 to 80% down to
+about 46 to 51%).
+
+| | Current | New approach | New + insurance on | New, 15 min steps |
+|---|---|---|---|---|
+| Adjusted cost | **-3.67** | -3.45 | -3.47 | -3.40 |
+| Mode changes / flip-flops | 10 / 0 | 22 / 7 | 15 / 1 | 18 / 3 |
+| Lowest level | 14.9% | 21.9% | 15.8% | 20.0% |
+| Peak-rate grid charge (kWh) | 0.0 | 0.0 | 1.1 | 0.0 |
+
+- The new approach is **£0.22 dearer** here. The likely reason (not isolated): the top ceiling. The current engine stored the sun up to 98.5% by
+  midday (the new approach 92.8%), 1.5 kWh more for the evening peak at 28.84p instead of selling it at 15p. That is the price of keeping the
+  top below about 95%, and on a day with little sun to waste it shows.
+- The 7 flip-flops are discharge and hold alternating from 10:21 to 12:08 at the 90% mark as the cloud comes and goes.
+- With late-event insurance on, the plan bought 1.1 kWh at 28.84p at 17:06 to 17:19, just before the event, to sell it at 115p: valid
+  arbitrage into an announced event, and the reason for its 1.1 kWh of peak-rate charge.
+
+All five days together (adjusted cost): current -11.99, new approach -12.01: **level on cost**; 64 mode changes against 165.
+
 ## Are we more effective, and is the change volume acceptable?
 
 - **Money:** a little better on real days (£0.38, about 7%, over three days); about the same or slightly worse once late-event
