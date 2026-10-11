@@ -1,0 +1,73 @@
+# Engine v2: recap of the new approach, 10 to 11 Oct 2026
+
+What we tried, what each thing was worth, the combined result against the current engine, and what is still open. Details and
+tables are in [ablation 1 to 5](engine-v2-ablation-1.md), [the level penalty](engine-v2-level-penalty.md) and
+[the architecture page](engine-v2-architecture.md). All figures: the simulator on 7, 8 and 9 Oct (72 hours) and one synthetic day,
+cash only, in-sample, so they rank ideas better than they price them.
+
+## The methods, and how effective each was
+
+| Method | What it is | Effect |
+|---|---|---|
+| Simulator (`tools/sim`) | Real app, engine v2, stored days, any code or settings, a GUI | Agrees with the nightly code exactly; ~2 min a day |
+| Ablation | Switch executor rules off one at a time | Every rule buys calm, not money; "ask the plan" does most of the work (1,743 changes to 127) |
+| Price band | A wider band the price must clear | **Does not work**: makes the chatter worse alone; the loop is at the charge target, not a price |
+| Re-plan at the target | A re-plan when a charge or sale ends | Small alone (about 20%); useful only with the executor below |
+| **Follow the plan** | The executor takes the mode of the plan's timeline for now (no per-tick price comparison) | **Works**: 81 changes and 14 flips against 43 and 5 for the same money, with one extra rule (2 min dwell) |
+| Finer plan steps (15 or 10 min) | Shorter segments in the plan | £0.3 to £0.7 cheaper over 3 days for 2 to 2.8 times the solve time; does not reduce Hold |
+| Raise the switch cost | 6p or 8p instead of 4p | Calmer (81 to 57 changes) but £0.55 to £0.68 dearer |
+| **Top curve** | Exponential cost above 90% (3 pts per doubling, 200p at 100%) | **Works**: highest level 94.6%, 0.0 h at 95% or above (current engine 11.2 h); cheaper, not dearer |
+| **Bottom curve** | Exponential cost below 70% (5 pts, 10p at the 15% reserve) | **Works**: lowest level about 22%; hours at or below 25% from 0.9 to 0.2 |
+| **Sharper bottom in smart slots** | Rate x300, starting at 80%, in slot segments | **Works**: mean level in slots 68% to 81% (real days), 57% to 78% (synthetic); lowest 64.9% on the synthetic day |
+| Hold-cost tie-break | A tiny cost per hour of Hold | **Does not work**: Hold hours unchanged |
+
+## The combined result: "the new approach" against the current engine
+
+New approach = follow-the-plan executor + re-plan at target + 2 min dwell, with every band, layer and extra cost off (price band,
+level band, comfort cost, top-up cost), the plan's own 4p switch cost, top curve (3 pts, 200p), bottom curve (5 pts, 10p), smart-slot
+bottom curve (x300, from 80%). Late-event insurance and prefer-self-use are off, as in all the tests.
+
+| 7 to 9 Oct | Current | New approach | New + insurance on | New, 15 min steps |
+|---|---|---|---|---|
+| Adjusted cost | -5.44 | **-5.82** | -5.57 | -5.84 |
+| Mode changes (3 days) | 43 | 118 | 120 | 114 |
+| Flip-flops | 5 | 22 | 27 | 18 |
+| Commands per day | 14 | 39 | 40 | 38 |
+| Hold hours | 1.5 | 7.9 | 4.2 | 8.0 |
+| Hours at or above 95% | 11.2 | **0.1** | 1.1 | 0.1 |
+| Highest / lowest level | 100% / 14.9% | 95.0% / 14.9% | 95.5% / 16.6% | 95.8% / 18.4% |
+| Hours at or below 25% | 3.2 | **0.8** | 0.6 | 0.5 |
+| Slot windows: mean level / hours below 70% | 72% / 7.6 | **81% / 2.6** | 81% / 2.4 | 81% / 2.9 |
+| Plan calculation time (3 days) | 194 s | 368 s | 482 s | 633 s |
+
+Day by day (adjusted cost, mode changes): 7 Oct -1.00 (11) against -1.27 (20); 8 Oct -1.78 (15) against -1.68 (42); 9 Oct -2.66 (17)
+against -2.87 (56); synthetic -2.88 (11) against -2.74 (25). The new approach is cheaper on two real days and dearer on the other and on
+the synthetic one, so its £0.38 over three days is a narrow win, not a clear one.
+
+## Are we more effective, and is the change volume acceptable?
+
+- **Money:** a little better on real days (£0.38, about 7%, over three days); about the same or slightly worse once late-event
+  insurance and prefer-self-use are put back on (£0.13). The benefit is mostly **control**, not cash: the top of the battery is kept
+  below 95% (current: 11 h at or above it), the bottom is held up, and smart slots are no longer used to sell the battery down.
+- **Change volume: not yet at the level of the current engine.** 118 mode changes in three days against 43 (39 commands a day
+  against 14; one change every 37 minutes against every 100) and 22 flip-flops against 5. The follow-the-plan executor alone made 81;
+  adding the curves took it to 118, so the curves add changes of their own. Under RAM control the daily write budget does not apply
+  (nothing is EEPROM), so this is about noise and control-path load, not wear, but it is above what we can call settled.
+
+## What is still open
+
+1. **Change volume**, the main one. Untried: a longer dwell (5 or 10 minutes), a switch cost of 5 to 6p, a level band on the new
+   executor, a smoother way for the curves to settle at their start levels. Target: about 70 changes in three days or fewer.
+2. **Hold hours** (7.9 against 1.5): mostly daytime "export the sun rather than store it" holds that the top curve causes. Valid in the
+   model; a self-use mode with a charge cap, if the inverter has one, would not need Hold at all. Overnight holds are ties and a
+   tie-break did not help.
+3. **Smart slots that start with the battery already low** (9 Oct 11:00, 38.6%): the curve cannot raise a level a slot starts at.
+4. **Late-event insurance and prefer-self-use** were off in every test and cannot be judged by replay; with them on the cost advantage
+   shrinks and flip-flops rise (27).
+5. **Calculation time**: about twice the current engine's (re-plans at every target); not measured on the HA host.
+6. **Evidence is thin**: three real days of one autumn week and one synthetic day, in-sample. The incident days (6 Oct evening, the
+   look-ahead-end cases) are not yet built as permanent scenarios, so the plan's gates are not yet runnable. Real inverter readings
+   are noisier than the simulated ones, which the dwell and the filters are for.
+7. **Productionising**: the follow-the-plan executor is a simulator stub; the curves are constants, not engine settings (no config
+   page entries); the code PRs (#290 and what is stacked on it) are not all merged.
+8. **The real test** is a few weeks running it live, in preview alongside the current engine first.
