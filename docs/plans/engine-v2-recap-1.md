@@ -67,6 +67,31 @@ about 46 to 51%).
 
 All five days together (adjusted cost): current -11.99, new approach -12.01: **level on cost**; 64 mode changes against 165.
 
+## Two more synthetic days: the afternoon smart slot withdrawn at 12:05
+
+Both are the sunny day of 3 Sep (east-facing sun, slots 09:00 to 12:00 and 13:00 to 16:00) with the afternoon slot taken back at 12:05,
+so the afternoon runs at the normal 28.84p. `2026-08-27` is that alone; `2026-08-20` adds a grid event 18:00 to 19:00 announced at 13:00.
+(`synth.py sunny --withdraw "13:00-16:00@12:05"`, with `--events 18:00-19:00 --announce 13:00`.)
+
+| Adjusted cost (hold hours) | Current | New approach | New, 10 min steps |
+|---|---|---|---|
+| 27 Aug, slot withdrawn | -1.48 (4.4 h) | **-2.14 (2.9 h)** | -2.04 (2.0 h) |
+| 20 Aug, + event 18:00 to 19:00 | -4.03 (4.0 h) | **-4.91 (3.1 h)** | -4.84 (2.8 h) |
+
+- This is the case the slot curve is for. The current engine sold the battery down to 24.8% by the end of the morning slot counting on the
+  afternoon refill; with the slot withdrawn it ran flat (14.9%) by 18:30 and then held at the reserve for **4 hours at 28.84p**
+  (the worst kind of hold: a hard limit, grid at the dear rate). The new approach kept 80.5% at the end of the morning slot and
+  never went below 40%. It is £0.66 and £0.88 better on the two days.
+- Its holds on those days are 7 to 95 minutes of "spare sun exported rather than stored" at 65 to 67%, plus short pauses. After the
+  withdrawal the plan sold the surplus (76 to 66% at 15p) because more is stored than the evening needs and overnight refill is cheap; the
+  marginal kWh is worth about 14p against 15.8p for exporting sun, so the plan is almost indifferent.
+- **10-minute steps** (replacing 15 minutes in the saved set): over the seven days -18.76 against -19.05 at 30 minutes, so no gain with the
+  curves on (it was cheaper only on the plain follow-the-plan variant), and slower. Per day it is better on 27 Aug, 20 Aug, 3 Sep and
+  10 Sep by a few pence to 10p, and worse on 7 Oct (£0.14) and 8 Oct (-£0.15 better).
+
+Seven days together (adjusted cost): current -17.49, new approach -19.05 (£1.56, 9%, better), 10-minute steps -18.76. Hold hours:
+current 10.1 h, new approach 20.5 h; on the withdrawn-slot days the new approach holds less than the current engine, elsewhere more.
+
 ## Are we more effective, and is the change volume acceptable?
 
 - **Money:** a little better on real days (£0.38, about 7%, over three days); about the same or slightly worse once late-event
