@@ -141,7 +141,7 @@ Read the named file before touching that area (they are one-liners here; the det
 - **New adapter or definition** (Phase 0 step 8, Phase 1 wizard): needs a detect entry (`adapters/detect.py` or the definition's `detect:`).
 - **Dashboard templates** (`docs/history/backlog-and-recent-fixes.md`): never read a key a window may lack (`w.get('manual')`).
 - **HA package files** (same file, 0.9.109): a change to either package file is shipped by editing both copies; the owner's HA config git copy must be pulled before he pushes.
-- **Card contract** (`docs/history/engine-v2-and-comparison.md`, `phase1-generic-core.md`): sensors and attributes the card reads (`sensor.pe_diag_version` `wizard`, `site_options`, `demo`; the v2 sensors) must not change shape without the card and a `MIN_*_VERSION` bump.
+- **Card contract** (`docs/history/engine-v2-and-comparison.md`, `phase1-generic-core.md`): sensors and attributes the card reads (`sensor.pe_diag_version` `wizard`, `site_options`, `demo`; the v2 sensors; `sensor.pe_state_engine` `choice` and `sensor.pe_diag_v2_settings` `engines`, which show engine 2.1 beta) must not change shape without the card and a `MIN_*_VERSION` bump.
 
 ## Where the history is
 

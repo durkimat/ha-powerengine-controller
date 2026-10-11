@@ -83,7 +83,7 @@ from pe_core.energy import Recorder
 from pe_core.engine_v2 import publish as v2publish
 from pe_core.engine_v2 import triggers as v2_triggers
 from pe_core.engine_v2.engine import EngineV2
-from pe_core.engine_v2.settings import V2Settings
+from pe_core.engine_v2.settings import V2Settings, profile_of
 from pe_core.engine_v2.types import BatteryFacts, Situation, StepInput
 from pe_core.entities import (
     ENTITIES,
@@ -139,6 +139,7 @@ from pe_core.wizard import wizard_info
 HEARTBEAT_SECONDS = 60
 V2_SAVE_SECONDS = 300             # engine v2's state file is saved this often (and on terminate)
 V2_PREVIEW_REASON = "Preview: engine v1 is in control"
+ENGINE_LABELS = {"v1": "v1", "v2": "v2", "v2_1": "2.1 beta"}
 V2_CACHE_SECONDS = 60             # the certainty scores and the forecast points the v2 tick reuses
 DATA_GAP_GRACE_S = 180             # a reading missing this long or less keeps the last decision (_bridge_data_gap)
 LOWWRITE_START = "02:40:00"       # after the Simulator has had its hour
@@ -758,9 +759,15 @@ class PowerEngine(hass.Hass):
 
     # --- engine v2 (pe_core/engine_v2, docs/plans/engine-v2.md) ------------------------------------
 
+    def _engine_choice(self):
+        """The system setting's choice: "v1", "v2" or "v2_1" (engine 2.1 beta)."""
+        choice = self.cfg.system.get("engine") if self.cfg is not None else None
+        return choice if choice in ("v2", "v2_1") else "v1"
+
     def _engine_name(self):
-        """The engine the system setting chooses: "v1" (the half-hour plan) or "v2" (values and exit conditions)."""
-        return "v2" if self.cfg is not None and self.cfg.system.get("engine") == "v2" else "v1"
+        """The engine family the system setting chooses: "v1" (the half-hour plan) or "v2" (values and exit conditions;
+        engine 2.1 beta is engine v2 with a profile of settings, so it is "v2" everywhere the app asks)."""
+        return "v1" if self._engine_choice() == "v1" else "v2"
 
     def _v2_preview_on(self):
         """True while engine v1 is in control and the preview setting is on: engine v2 then works out its decision
@@ -769,7 +776,7 @@ class PowerEngine(hass.Hass):
 
     def _engine_attrs(self):
         """Attributes of sensor.pe_state_engine: v2_preview only once the preview has really run (its engine exists)."""
-        attrs = {"v2_available": True}
+        attrs = {"v2_available": True, "choice": self._engine_choice()}
         if self._v2_preview_on() and self.__dict__.get("_v2") is not None:
             attrs["v2_preview"] = True
         return attrs
@@ -825,19 +832,20 @@ class PowerEngine(hass.Hass):
 
     def _publish_v2_settings(self):
         """The v2 settings catalogue with the values in use (the config page's schema)."""
-        state, attrs = v2publish.settings_state(self.cfg.engine_v2 if self.cfg is not None else V2Settings())
+        state, attrs = v2publish.settings_state(self.cfg.engine_v2 if self.cfg is not None else V2Settings(),
+                                                profile_of(self._engine_choice()))
         self._publish_if_changed("diag_v2_settings", state, attrs)
 
     def _engine_switched(self, was):
         """The engine setting changed in a config save. Active, Passive and Pause stay as they are. Engine v2 starts
         from its saved state and works its values out at once; going back to v1 hands control to v1's next cycle (the
         inverter keeps its last command, and the RAM refresh carries on, meanwhile)."""
-        now = self._engine_name()
+        now, was = ENGINE_LABELS[self._engine_choice()], ENGINE_LABELS.get(was, was)
         self._save_engine_state()
         self._v2 = None                                    # rebuilt from the saved state; its first step revalues
         self._v2_cache, self._v2_learned_sig = {}, None
         self.log(f"Engine changed from {was} to {now}: the mode (Active, Passive or Pause) is unchanged; "
-                 + ("engine v2 works out its values on its next tick" if now == "v2"
+                 + ("engine v2 works out its values on its next tick" if self._engine_name() == "v2"
                     else "engine v1 takes over at its next cycle"))
         self._logbook(f"planning engine changed from {was} to {now}")
         self._notify("health", (f"engine:{now}:{datetime.now(timezone.utc).isoformat(timespec='minutes')}",
@@ -920,6 +928,8 @@ class PowerEngine(hass.Hass):
             out = eng.step(self._v2_input(r, send, method, preview))
             tz = self.tz or timezone.utc
             for key, (state, attrs) in v2publish.entity_states(out, eng, eng.s, tz, preview).items():
+                if key == "state_engine":                      # it also names the choice (v2 or 2.1 beta)
+                    attrs = {**attrs, "choice": self._engine_choice()}
                 self._publish_if_changed(key, state, attrs)
             self._record_v2_history(r.now, out, send, preview)
             if not preview:
@@ -3905,7 +3915,7 @@ class PowerEngine(hass.Hass):
     def _reload(self):
         """Re-read config.yaml in place and republish status (no app restart)."""
         self._temps_at = None                              # cold settings may have changed: recompute soon
-        engine_before = self._engine_name()
+        engine_before, choice_before = self._engine_name(), self._engine_choice()
         p_before = self._params(conversion=False) if self.cfg is not None else None
         self.cfg_error = None
         try:
@@ -3917,8 +3927,13 @@ class PowerEngine(hass.Hass):
         if self.cfg is not None:
             self._publish_names()                          # the site's adapters may have changed
             self._publish_v2_settings()
+            self._publish_if_changed("state_engine", self._engine_name(), self._engine_attrs())    # the choice, now
             if self._engine_name() != engine_before:
-                self._engine_switched(engine_before)
+                self._engine_switched(choice_before)
+            elif self._engine_choice() != choice_before:         # v2 and 2.1 beta: one engine, other settings
+                now, was = ENGINE_LABELS[self._engine_choice()], ENGINE_LABELS[choice_before]
+                self.log(f"Engine changed from {was} to {now}: it works its values out again with the new settings")
+                self._logbook(f"planning engine changed from {was} to {now}")
         if self.cfg is not None and self.costbook is not None:
             fid = flow_id(self.cfg)
             if fid != self.costbook.flow_id:              # inputs that shape the flows changed: rebuild from history

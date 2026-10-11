@@ -264,6 +264,32 @@ filters readings; **LEARN** learns a correction that feeds the forecast or filte
 | `reserve_latched` | `execute.py`, `rules.py` | Once the battery has been held at the reserve, it may not discharge again until it has risen `level_band_pct` above it. | No |
 | `LEVEL_EPS` (0.1 point) | `execute.py` | A charge or sale "has reached its level" within this of it. | No |
 
+## Engine 2.1 beta (0.9.136)
+
+Engine 2.1 beta is **engine v2 with a different executor and two level limits, chosen on the config page** (`system.engine: v2_1`).
+The app treats it as engine v2 everywhere (`sensor.pe_state_engine` still says `v2`, with an attribute `choice`), so the plan, the
+sensors, the history and the control path are the same. What differs:
+
+| Part | Engine v2 (`executor: lines`) | Engine 2.1 beta (`executor: plan`) |
+|---|---|---|
+| Which mode now | the lines against the live prices, then `_with_the_programmes_choice`, `_leg_going`, the price and level bands, `_worth_the_change` | the mode the plan's timeline has for now, if the limits allow it; otherwise the lines |
+| Minimum dwell | on (120 s) | on (120 s): the only adjustment kept |
+| Re-plan at a target | no | yes (`replan_on_level`) |
+| Top and bottom of the battery | the comfort band and the top-up cost | exponential curves in the plan (`level_top_*`, `level_bot_*`), sharper bottom inside smart slots (`slot_bot_*`) |
+
+It has no separate settings block: it **uses the `engine_v2:` settings**, and a profile (`PROFILES["2.1"]` in `settings.py`) supplies the
+value for any key the config has not set. What you have saved is kept, so a saved `top_up_cost_p` stays (the tests ran it at 0).
+Selecting engine v2 again restores v2's own starting values for what was not saved. The ten new settings are in the section
+"Plan-following and battery limits (2.1 beta)" and, with `executor: lines` and the curves at 0, change nothing for engine v2.
+
+| Setting | Kind | Where applied | What it does |
+|---|---|---|---|
+| `executor` | LIVE | `execute.py` | `lines` or `plan`: how the mode is chosen each tick |
+| `replan_on_level` | WHEN | `triggers.py` | a charge or sale reaching its target asks for a re-plan |
+| `level_top_start_soc`, `level_top_rate_p`, `level_top_doubling_pts` | MODEL | `value.py` | the top curve ([details](engine-v2-level-penalty.md)) |
+| `level_bot_start_soc`, `level_bot_rate_p`, `level_bot_doubling_pts` | MODEL | `value.py` | the bottom curve, its rate set at your reserve |
+| `slot_bot_factor`, `slot_bot_start_soc` | MODEL | `value.py` | the bottom curve inside a smart slot (the factor multiplies its rate; the start level replaces the usual one) |
+
 ## Things worth being clear about
 
 - **The switch cost is in two places.** In the plan it is added to every change of mode (that is what makes the plan calm). In the

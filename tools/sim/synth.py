@@ -19,6 +19,7 @@ import argparse
 import copy
 import json
 import math
+import random
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -44,11 +45,28 @@ def solar_kw(
 
 def parse_slots(text: str) -> list[tuple[float, float]]:
     out = []
-    for part in text.split(","):
+    for part in [x for x in text.split(",") if x.strip()]:
         a, _, b = part.partition("-")
         (h1, m1), (h2, m2) = (tuple(int(x) for x in t.split(":")) for t in (a, b))
         out.append((h1 + m1 / 60, h2 + m2 / 60))
     return out
+
+
+def sun_model(peak_kw: float, cloud: float | None, seed: int) -> tuple[list[float], float, tuple[float, float]]:
+    """(the day's actual kW per half-hour, the share of a clear day the morning forecast expected, the forecast's low
+    and high figures as shares of its middle). Sunny: the clear curve, forecast right, narrow spread. Cloudy (`cloud`
+    is the average share of a clear day that gets through): the clear curve scaled half-hour by half-hour by a slowly
+    drifting cloud factor (a seeded AR(1) walk, within 12% to 90%), a forecast that expected a little more than came
+    (20% more), and a wide spread."""
+    clear = [solar_kw(i / 2 + 0.25, peak_kw) for i in range(48)]
+    if cloud is None:
+        return clear, 1.0, (0.9, 1.05)
+    rng = random.Random(seed)
+    x, actual = 0.0, []
+    for c in clear:
+        x = 0.7 * x + 0.7 * rng.uniform(-1.0, 1.0)
+        actual.append(round(c * min(0.9, max(0.12, cloud + 0.18 * x)), 4))
+    return actual, min(0.9, cloud * 1.2), (0.6, 1.3)
 
 
 def in_slot(hour: float, slots) -> bool:
@@ -68,6 +86,12 @@ def make(
     slots: list,
     slot_p: float,
     tomorrow_scale: float,
+    *,
+    cloud: float | None = None,
+    seed: int = 1,
+    events: list | None = None,
+    announce_h: float | None = None,
+    withdraw: list | None = None,
 ) -> dict:
     src_costs = Path(data) / "costs"
     records = json.loads((src_costs / f"{template_day}.json").read_text(encoding="utf-8"))
@@ -78,18 +102,23 @@ def make(
     if (src_costs / f"{new_day}.json").exists():
         raise SystemExit(f"{new_day} is a real day in the archive: choose another date")
     shift = d1 - d0
+    actual_kw, fc_scale, (spread_lo, spread_hi) = sun_model(peak_kw, cloud, seed)
+    events = list(events or [])
+    withdraw = list(withdraw or [])  # [(start h, end h, withdrawn at h)]: a slot taken back that day
+    gone = [(a, b) for a, b, _ in withdraw]
+    slots_final = [w for w in slots if w not in gone]  # the slots that actually happen
+    wd_h = min((t for _, _, t in withdraw), default=None)
 
     # ---- the day's records: the template's house load and prices, the new sun, slots, no car, no event
     new = copy.deepcopy(records)
     for i, r in enumerate(new):
         r["start"] = _iso(datetime.fromisoformat(r["start"]) + shift)
-        hour = i / 2 + 0.25
-        kw = solar_kw(hour, peak_kw)
+        kw = actual_kw[i]
         r["solar"] = round(kw * 0.5, 5)
-        r["car"], r["axle"], r["free"], r["live"] = 0.0, False, False, False
+        r["car"], r["axle"], r["free"], r["live"] = 0.0, in_slot(i / 2, events), False, False
         r["source"], r["synthetic"] = "synthetic", True
         v = r["v"]
-        slot = in_slot(i / 2, slots)
+        slot = in_slot(i / 2, slots_final)
         v["slot"], v["event"], v["event_kwh"], v["event_gross"] = slot, None, 0.0, 0.0
         v["act"] = slot_p / 100 if slot else v["std"]
     metered_note = "grid and battery columns are the template's and mean nothing here"
@@ -102,12 +131,14 @@ def make(
     first = copy.deepcopy(snap["entries"][0])
     states = first["states"]
 
-    def day_rates(offset: int, with_slots: bool) -> list[dict]:
+    def day_rates(offset: int, with_slots: bool, windows: list | None = None) -> list[dict]:
         day0 = midnight.replace(second=0) + timedelta(days=offset)
         rows = []
         for i, r in enumerate(new):
             a = day0 + i * HALF
-            price = slot_p / 100 if with_slots and in_slot(i / 2, slots) else r["v"]["std"]
+            price = (
+                slot_p / 100 if with_slots and in_slot(i / 2, slots if windows is None else windows) else r["v"]["std"]
+            )
             rows.append({"start": _iso(a), "end": _iso(a + HALF), "value_inc_vat": round(price, 5), "is_capped": False})
         return rows
 
@@ -120,7 +151,7 @@ def make(
         for i in range(48):
             kw = solar_kw(i / 2 + 0.25, peak_kw) * scale
             a = day0 + i * HALF
-            e10, e90 = round(kw * 0.9, 4), round(kw * 1.05, 4)
+            e10, e90 = round(kw * spread_lo, 4), round(kw * spread_hi, 4)
             det.append(
                 {"period_start": _iso(a), "pv_estimate": round(kw, 4), "pv_estimate10": e10, "pv_estimate90": e90}
             )
@@ -166,7 +197,7 @@ def make(
         return str(round(total, 4)), attrs
 
     for role, off, sc in (
-        ("solar_forecast_today", 0, 1.0),
+        ("solar_forecast_today", 0, fc_scale),
         ("solar_forecast_tomorrow", 1, tomorrow_scale),
         ("solar_forecast_day3", 2, tomorrow_scale),
     ):
@@ -199,7 +230,17 @@ def make(
         _iso(w0 + k * HALF): seen_at for w0, w1 in slot_windows for k in range(int((w1 - w0) / HALF))
     }
 
+    wd_dt = None if wd_h is None else midnight.replace(second=0) + timedelta(hours=wd_h)
+    gone_dt = [
+        (midnight.replace(second=0) + timedelta(hours=a), midnight.replace(second=0) + timedelta(hours=b))
+        for a, b in gone
+    ]
+
+    def active_windows(now: datetime) -> list:
+        return [w for w in slot_windows if not (wd_dt is not None and now >= wd_dt and w in gone_dt)]
+
     def dispatch_state(now: datetime) -> tuple[str, dict]:
+        windows = active_windows(now)
         planned = [
             {
                 "start": _iso(a),
@@ -207,11 +248,11 @@ def make(
                 "charge_in_kwh": -1.0 * (b - a).total_seconds() / 3600,
                 "source": "SMART",
             }
-            for a, b in slot_windows
+            for a, b in windows
             if b > now
         ]
-        cur = next(((a, b) for a, b in slot_windows if a <= now < b), None)
-        nxt = next(((a, b) for a, b in slot_windows if a > now), None)
+        cur = next(((a, b) for a, b in windows if a <= now < b), None)
+        nxt = next(((a, b) for a, b in windows if a > now), None)
         base = states[roles["smart_dispatches"]]["attributes"] if roles.get("smart_dispatches") in states else {}
         return ("on" if cur else "off"), {
             **base,
@@ -228,13 +269,14 @@ def make(
         st, at = dispatch_state(midnight)
         states[roles["smart_dispatches"]] = {"state": st, "attributes": at}
 
-    today_rows = day_rates(0, True)
+    rows_all, rows_final = day_rates(0, True), day_rates(0, True, slots_final)
 
     def rate_state(now: datetime) -> dict | None:
         """The current-rate sensor: the price now, over the run of equal-priced half-hours around now."""
         eid = roles.get("import_rate_now")
         if eid not in states:
             return None
+        today_rows = rows_final if (wd_dt is not None and now >= wd_dt) else rows_all
         k = next(
             n
             for n, x in enumerate(today_rows)
@@ -256,9 +298,10 @@ def make(
         states[roles["import_rate_now"]] = rs
     entries = [first]
     changes = [
-        datetime.fromisoformat(today_rows[k]["start"])
+        datetime.fromisoformat(rows[k]["start"])
+        for rows in (rows_all, rows_final)
         for k in range(1, 48)
-        if today_rows[k]["value_inc_vat"] != today_rows[k - 1]["value_inc_vat"]
+        if rows[k]["value_inc_vat"] != rows[k - 1]["value_inc_vat"]
     ]
     for t in sorted(set(changes) | {w for pair in slot_windows for w in pair}):
         if t <= midnight:
@@ -271,6 +314,49 @@ def make(
             st, at = dispatch_state(t + timedelta(seconds=1))
             s_[roles["smart_dispatches"]] = {"state": st, "attributes": at}
         entries.append({"at": _iso(t + timedelta(seconds=1)), "states": s_})
+    # a withdrawn slot: at that time the supplier's rates and dispatches no longer include it
+    if wd_dt is not None:
+        s_ = {}
+        eid = roles.get("import_rates_today")
+        if eid in states:
+            prices = [x["value_inc_vat"] for x in rows_final]
+            s_[eid] = {
+                "state": _iso(wd_dt),
+                "attributes": {
+                    **states[eid]["attributes"],
+                    "rates": rows_final,
+                    "min_rate": min(prices),
+                    "max_rate": max(prices),
+                    "average_rate": round(sum(prices) / len(prices), 6),
+                },
+            }
+        rs = rate_state(wd_dt + timedelta(seconds=1))
+        if rs:
+            s_[roles["import_rate_now"]] = rs
+        if roles.get("smart_dispatches") in states:
+            st, at = dispatch_state(wd_dt + timedelta(seconds=1))
+            s_[roles["smart_dispatches"]] = {"state": st, "attributes": at}
+        entries.append({"at": _iso(wd_dt + timedelta(seconds=1)), "states": s_})
+    # a grid event: announced at `announce_h` (its start and end appear), running between them (on, then off)
+    ev_active, ev_start, ev_end = (roles.get(k) for k in ("axle_event_active", "axle_event_start", "axle_event_end"))
+    if events and ev_active in states and ev_start in states and ev_end in states:
+        at0 = midnight.replace(second=0)
+
+        def utc(h: float) -> str:
+            return (at0 + timedelta(hours=h) - at0.utcoffset()).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+        def ts(entity: str, text: str) -> dict:
+            return {"state": text, "attributes": states[entity]["attributes"]}
+
+        for a, b in events:
+            notice = at0 + timedelta(hours=announce_h if announce_h is not None else max(0.0, a - 1.0), seconds=1)
+            entries.append({"at": _iso(notice), "states": {ev_start: ts(ev_start, utc(a)), ev_end: ts(ev_end, utc(b))}})
+            entries.append(
+                {"at": _iso(at0 + timedelta(hours=a, seconds=1)), "states": {ev_active: ts(ev_active, "on")}}
+            )
+            entries.append(
+                {"at": _iso(at0 + timedelta(hours=b, seconds=1)), "states": {ev_active: ts(ev_active, "off")}}
+            )
     snap_new = {**snap, "day": new_day, "entries": entries, "synthetic": True}
 
     (out / "costs" / "snapshots").mkdir(parents=True, exist_ok=True)
@@ -285,6 +371,7 @@ def make(
         "house_kwh": round(sum(r["house"] for r in new), 2),
         "peak_kw": max(r["solar"] for r in new) * 2,
         "slot_half_hours": sum(1 for r in new if r["v"]["slot"]),
+        "event_half_hours": sum(1 for r in new if r["axle"]),
         "entries": len(entries),
         "out": str(out),
     }
@@ -292,24 +379,60 @@ def make(
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("kind", choices=["sunny"])
+    ap.add_argument("kind", choices=["sunny", "cloudy"])
     ap.add_argument(
         "--from", dest="template", default="2026-10-08", help="a real day to take the house load and prices from"
     )
     ap.add_argument(
-        "--date", default="2026-09-03", help="the synthetic day's date (same weekday as --from, not in the archive)"
+        "--date",
+        default=None,
+        help="the synthetic day's date (same weekday as --from, not in the archive); "
+        "default 2026-09-03 sunny, 2026-09-10 cloudy",
     )
     ap.add_argument("--data", default=str(workspace.default_data()))
     ap.add_argument("--out", default=str(workspace.default_work() / "synthetic"))
     ap.add_argument("--peak-kw", type=float, default=4.0)
-    ap.add_argument("--slots", default="09:00-12:00,13:00-16:00", help="smart slot windows, local time")
+    ap.add_argument(
+        "--slots", default=None, help="smart slot windows, local time (sunny: 09:00-12:00,13:00-16:00; cloudy: none)"
+    )
     ap.add_argument("--slot-p", type=float, default=6.66, help="smart slot price, p/kWh")
     ap.add_argument(
-        "--tomorrow-scale", type=float, default=1.0, help="the next two days' forecast as a fraction of today's"
+        "--tomorrow-scale", type=float, default=None, help="the next two days' forecast as a share of a clear day"
     )
+    ap.add_argument(
+        "--cloud", type=float, default=0.38, help="cloudy: the average share of a clear day that gets through"
+    )
+    ap.add_argument("--seed", type=int, default=7, help="cloudy: the seed of the cloud pattern")
+    ap.add_argument(
+        "--withdraw", default="", help="slots taken back that day, local: START-END@HH:MM (13:00-16:00@12:05)"
+    )
+    ap.add_argument("--events", default=None, help="grid events, local time (cloudy: 17:30-18:30)")
+    ap.add_argument("--announce", default=None, help="when the event is announced, local HH:MM (cloudy: 10:00)")
     a = ap.parse_args(argv)
+    cloudy = a.kind == "cloudy"
+    slots = a.slots if a.slots is not None else ("" if cloudy else "09:00-12:00,13:00-16:00")
+    events = parse_slots(a.events if a.events is not None else ("17:30-18:30" if cloudy else ""))
+    ann = a.announce if a.announce is not None else ("10:00" if cloudy else None)
+    announce_h = None if ann is None else int(ann.split(":")[0]) + int(ann.split(":")[1]) / 60
+    withdraw = []
+    for part in [x for x in a.withdraw.split(",") if x.strip()]:
+        window, _, at = part.partition("@")
+        (w,) = parse_slots(window)
+        withdraw.append((w[0], w[1], int(at.split(":")[0]) + int(at.split(":")[1]) / 60))
     info = make(
-        a.template, a.date, Path(a.data), Path(a.out), a.peak_kw, parse_slots(a.slots), a.slot_p, a.tomorrow_scale
+        a.template,
+        a.date or ("2026-09-10" if cloudy else "2026-09-03"),
+        Path(a.data),
+        Path(a.out),
+        a.peak_kw,
+        parse_slots(slots),
+        a.slot_p,
+        a.tomorrow_scale if a.tomorrow_scale is not None else (0.5 if cloudy else 1.0),
+        cloud=a.cloud if cloudy else None,
+        seed=a.seed,
+        events=events,
+        announce_h=announce_h,
+        withdraw=withdraw,
     )
     print(json.dumps(info))
     return 0

@@ -165,15 +165,24 @@ def apply_consts(consts: dict) -> None:
 
 
 def patch_config(text: str, settings: dict) -> str:
+    """The config text with `settings` applied: an engine_v2 setting by its name, or a `system.<key>` (for example
+    `system.engine=v2_1` runs engine 2.1 beta)."""
     import yaml
 
     from pe_core.engine_v2 import settings as s
 
-    unknown = [k for k in settings if k not in s.SETTINGS]
+    system = {k[len("system.") :]: v for k, v in settings.items() if k.startswith("system.")}
+    engine = {k: v for k, v in settings.items() if not k.startswith("system.")}
+    unknown = [k for k in engine if k not in s.SETTINGS]
     if unknown:
         raise ValueError(f"unknown engine setting(s): {', '.join(unknown)}")
     cfg = yaml.safe_load(text)
-    cfg["engine_v2"] = {**(cfg.get("engine_v2") or {}), **{k: _typed(v) for k, v in settings.items()}}
+    cfg["engine_v2"] = {**(cfg.get("engine_v2") or {}), **{k: _typed(v) for k, v in engine.items()}}
+    if system:
+        cfg["system"] = {
+            **(cfg.get("system") or {}),
+            **{k: _typed(v) if k != "engine" else v for k, v in system.items()},
+        }
     return yaml.safe_dump(cfg, sort_keys=False)
 
 

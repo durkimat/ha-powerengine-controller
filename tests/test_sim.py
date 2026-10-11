@@ -401,3 +401,16 @@ def test_follow_the_timeline_stub_prefers_the_plans_mode_when_allowed():
         assert Executor._candidate is not original
     finally:
         Executor._candidate = original
+
+
+def test_cloudy_sun_is_lower_seeded_and_forecast_a_little_optimistic():
+    import synth
+
+    clear, scale_c, spread_c = synth.sun_model(4.0, None, 1)
+    cloudy, scale, spread = synth.sun_model(4.0, 0.38, 7)
+    assert synth.sun_model(4.0, 0.38, 7)[0] == cloudy  # the same seed gives the same day
+    assert synth.sun_model(4.0, 0.38, 8)[0] != cloudy
+    assert 0.2 < sum(cloudy) / sum(clear) < 0.6  # roughly the share asked for
+    assert all(c <= k + 1e-9 for c, k in zip(cloudy, clear, strict=True)) and max(cloudy) < max(clear)
+    assert scale == pytest.approx(0.456) and scale_c == 1.0 and spread[1] / spread[0] > spread_c[1] / spread_c[0]
+    assert synth.parse_slots("") == [] and synth.parse_slots("17:30-18:30") == [(17.5, 18.5)]

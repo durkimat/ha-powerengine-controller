@@ -20,6 +20,9 @@ rules and for what the code does now, and GitHub issues are the backlog.
 | [engine-v2-ablation-3.md](engine-v2-ablation-3.md) | Ablation 3: the smallest set of rules that keeps the minimum engine calm, and what a mode change is worth | Choosing what the step 4 policy executor keeps |
 | [engine-v2-ablation-4.md](engine-v2-ablation-4.md) | Ablation 4: does a wider price band stop the chatter? (no; and where the chatter actually is) | Deciding how to calm the live read |
 | [engine-v2-ablation-5.md](engine-v2-ablation-5.md) | Ablation 5: re-plan when a target is reached, and an executor that follows the plan's timeline (nearly as calm as today's, no price comparison) | Designing the step 4 executor |
+| [engine-v2-level-penalty.md](engine-v2-level-penalty.md) | A smooth exponential cost on the battery level (top and bottom curves) in the plan, how it is applied, and first results | Keeping the battery out of the top (or bottom) of its range |
+| [engine-v2-recap-1.md](engine-v2-recap-1.md) | Recap of the new approach (follow the plan, level curves, slot curve), the combined result against the current engine, and what is open | Deciding what to do next with engine v2 |
+| [engine-v2-holds-1.md](engine-v2-holds-1.md) | Every hold of the new approach on the seven test days: conditions at the time and why the engine held | Judging whether Hold is a missed opportunity |
 | [demo-and-easier-install.md](demo-and-easier-install.md) | Demo mode design, install simplification, steps A1–D1, decisions, risks | Demo or install work (#192), the native integration (#177) |
 
 Keep these up to date: when a step lands, update the plan's Status box in the same PR.

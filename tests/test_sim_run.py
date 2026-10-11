@@ -58,3 +58,45 @@ def test_a_synthetic_day_can_be_made_from_a_real_one(tmp_path):
     assert snap["day"] == day and snap["entries"][0]["at"].startswith(day)
     with pytest.raises(SystemExit, match="weekday"):
         synth.make(template, "2026-09-04", DATA, tmp_path, 4.0, [], 6.66, 1.0)
+
+
+def test_a_withdrawn_slot_and_an_announced_event_reach_the_snapshot(tmp_path):
+    import json
+    from datetime import date
+
+    import synth
+
+    template = next((d for d in workspace.days_with_snapshots(DATA) if date.fromisoformat(d).weekday() == 3), None)
+    if template is None:
+        pytest.skip("the archive has no Thursday with a snapshot")
+    slots = synth.parse_slots("09:00-12:00,13:00-16:00")
+    info = synth.make(
+        template,
+        "2026-08-20",
+        DATA,
+        tmp_path,
+        4.0,
+        slots,
+        6.66,
+        1.0,
+        events=[(18.0, 19.0)],
+        announce_h=13.0,
+        withdraw=[(13.0, 16.0, 12 + 5 / 60)],
+    )
+    assert info["slot_half_hours"] == 6 and info["event_half_hours"] == 2  # only the morning slot happens
+    recs = json.loads((tmp_path / "costs" / "2026-08-20.json").read_text())
+    assert recs[27]["v"]["act"] > 0.2 and not recs[27]["v"]["slot"] and recs[19]["v"]["slot"]
+    snap = json.loads((tmp_path / "costs" / "snapshots" / "2026-08-20.json").read_text())
+    roles = snap["roles"]
+    entries = sorted(snap["entries"], key=lambda e: e["at"])
+    disp = [e for e in entries if roles["smart_dispatches"] in (e.get("states") or {})]
+    before = next(e for e in reversed(disp) if e["at"] < "2026-08-20T12:05")
+    after = next(e for e in disp if e["at"] >= "2026-08-20T12:05")
+    assert before["states"][roles["smart_dispatches"]]["attributes"][
+        "planned_dispatches"
+    ]  # the afternoon slot is planned
+    assert after["states"][roles["smart_dispatches"]]["attributes"]["planned_dispatches"] == []  # then taken back
+    ann = next(e for e in entries if roles["axle_event_start"] in (e.get("states") or {}) and e["at"] > "2026-08-20T01")
+    assert ann["at"].startswith("2026-08-20T13:00") and ann["states"][roles["axle_event_start"]]["state"].startswith(
+        "2026-08-20T17:00"
+    )

@@ -20,65 +20,76 @@ W0 = "Starting weight; learned from then on."
 # key: (kind, default, min, max, unit, label, help). kind: "number", "int", "bool" or "choice" (min = the options).
 SETTINGS: dict[str, tuple] = {
     # --- what is allowed ---------------------------------------------------------------------------------------
-    "arbitrage": ("bool", False, None, None, "", "Sell from the battery",
-                  "Export stored energy outside grid events when a kWh sold is worth more than keeping it."),
+    "arbitrage": ('bool', False, None, None, '', 'Sell from the battery',
+                 'Export stored energy outside grid events when a kWh sold is worth more than keeping it.'),
     "events": ("bool", True, None, None, "", "Grid events",
                "Act on grid events (<<event>>): export at full power while one runs."),
-    "late_events": ("bool", True, None, None, "", "Be prepared for a late grid event",
-                    "Plan as if a grid event (<<event>>) could be announced at short notice at any time, a few "
-                    "times a month. A battery that is full when one arrives sells at the event rate, so the plan "
-                    "values energy in the battery a little more and fills it at the end of the cheap rate. Needs "
-                    "grid events on."),
-    "late_events_per_week": ("number", 1.5, 0, 14, "per week", "Late grid events expected",
-                             "How many grid events a week you expect to arrive at short notice. 0 switches this off."),
-    "late_event_hours": ("number", 1.0, 0.5, 4, "h", "How long a late grid event lasts",
-                         "The length the plan allows for one. Longer means more energy sold, so more value in a "
-                         "full battery."),
+    "late_events": ('bool', True, None, None, '', 'Be prepared for a late grid event',
+                 'Plan as if a grid event (<<event>>) could be announced at short notice: a full battery sells at the '
+                 'event rate, so stored energy is valued a little more.'),
+    "late_events_per_week": ('number', 1.5, 0, 14, 'per week', 'Late grid events expected',
+                 'How many grid events a week you expect at short notice. 0: off.'),
+    "late_event_hours": ('number', 1.0, 0.5, 4, 'h', 'How long a late grid event lasts',
+                 'How long the plan assumes one lasts: longer, more value in a full battery.'),
     "event_plus_export": ("bool", True, None, None, "", "Export rate paid on top of a grid event",
                           "The supplier's export rate is paid on top of the grid event's own rate."),
     "free_power": ("bool", True, None, None, "", "Free-power sessions", "Charge to 100% during a free-power session."),
-    "prefer_self_use": ("bool", True, None, None, "", "Prefer Self-use to Hold by day",
-                        "Outside cheap-rate times the battery runs the house (Self-use) and stores spare sun, instead "
-                        "of holding to export the sun. Hold is kept for cheap-rate times (the overnight window and "
-                        "smart slots), the car, the reserve and manual overrides. Off: engine v2 may hold by day when "
-                        "selling spare sun at the export rate beats storing it (it works out cheaper on a sunny day, "
-                        "by the gap between the export rate and the night's rate, but the battery sits idle)."),
-    "preview_when_v1": ("bool", True, None, None, "", "Preview while engine v1 is in control",
-                        "Work out and show what engine v2 would do while engine v1 is in control. Nothing is sent."),
-    "charge_ceiling_soc": ("number", 100, 10, 100, "%", "Highest grid charge",
-                           "A charge from the grid never goes above this. Sun can still fill the battery."),
+    "prefer_self_use": ('bool', True, None, None, '', 'Prefer Self-use to Hold by day',
+                 'By day the battery runs the house and stores spare sun; Hold is kept for cheap-rate times, the car, '
+                 'the reserve and overrides. Off: v2 may hold by day to export spare sun.'),
+    "preview_when_v1": ('bool', True, None, None, '', 'Preview while engine v1 is in control',
+                 'Work out and show what engine v2 would do while v1 is in control. Nothing is sent.'),
+    "charge_ceiling_soc": ('number', 100, 10, 100, '%', 'Highest grid charge',
+                 'A grid charge never goes above this. Sun can still fill the battery.'),
     # --- floors ------------------------------------------------------------------------------------------------
-    "reserve_soc": ("number", 12, 0, 100, "%", "Your reserve",
-                    "Kept back in normal running. Grid events may go below it (never below the battery's hard floor)."),
-    "hard_floor_margin_pct": ("number", 1, 0, 10, "points", "Grid event margin above the hard floor",
-                              "A grid event stops this far above the battery's hard floor, so the battery's "
-                              "own cut-off never ends it."),
+    "reserve_soc": ('number', 12, 0, 100, '%', 'Your reserve',
+                 'Kept back in normal running. Grid events may go below it (never below the hard floor).'),
+    "hard_floor_margin_pct": ('number', 1, 0, 10, 'points', 'Grid event margin above the hard floor',
+                 "A grid event stops this far above the battery's hard floor, so its cut-off never ends it."),
     # --- value and costs ---------------------------------------------------------------------------------------
-    "wear_house_p": ("number", 0.0, 0, 20, "p/kWh", "Wear: battery supplying the house",
-                     "Cost counted per kWh the battery supplies to the house. 0 treats the battery as a sunk cost."),
+    "wear_house_p": ('number', 0.0, 0, 20, 'p/kWh', 'Wear: battery supplying the house',
+                 'Cost per kWh the battery supplies to the house. 0: the battery is a sunk cost.'),
     "wear_sale_p": ("number", 0.0, 0, 20, "p/kWh", "Wear: sales",
                     "Cost counted per kWh the battery sells (exports and grid events)."),
     "event_value_p": ("number", 100.0, 0, 500, "p/kWh", "Grid event pays",
                       "What a grid event pays per kWh exported, before any export rate on top."),
-    "terminal_value": ("choice", "refill", ("refill", "fixed"), None, "", "Energy left at the end of the look-ahead",
-                       "Refill: worth the cheapest import price after losses, but only as much as could still be "
-                       "bought back before the next dear stretch; below that the plan keeps what the house will "
-                       "need then. Fixed: the figure below."),
+    "terminal_value": ('choice', 'refill', ('refill', 'fixed'), None, '', 'Energy left at the end of the look-ahead',
+                 'Refill: the cheapest import price after losses, for what could be bought back before the next dear '
+                 'stretch; below that, what the house will need. Fixed: the figure below.'),
     "terminal_value_p": ("number", 10.0, 0, 100, "p/kWh", "Fixed value of energy left",
                          "Used when the energy left at the end is set to Fixed."),
     # --- comfort band ------------------------------------------------------------------------------------------
-    "comfort_low_soc": ("number", 20, 0, 100, "%", "Comfort band: lower edge",
-                        "Below this the battery pays the comfort cost for each hour it stays there."),
-    "comfort_high_soc": ("number", 90, 0, 100, "%", "Comfort band: upper edge",
-                         "Above this the battery pays the comfort cost for each hour it stays there."),
-    "comfort_cost_p": ("number", 0.3, 0, 10, "p per kWh per hour", "Comfort cost",
-                       "The price of each kWh held outside the band for an hour: a soft guide inside the plan, not a "
-                       "limit. 0 switches the band off."),
-    "top_up_cost_p": ("number", 5.0, 0, 20, "p/kWh", "Grid charging above the comfort band",
-                      "What each kWh charged from the grid above the band's top counts as costing in the plan. It "
-                      "keeps cycling under the top, while a last fill before a dear stretch (the end of a cheap "
-                      "slot, ahead of the morning) still happens, because it saves far more. Sun is not charged it. "
-                      "0 switches it off."),
+    "comfort_low_soc": ('number', 20, 0, 100, '%', 'Comfort band: lower edge',
+                 'Below this the battery pays the comfort cost for each hour there.'),
+    "comfort_high_soc": ('number', 90, 0, 100, '%', 'Comfort band: upper edge',
+                 'Above this the battery pays the comfort cost for each hour there.'),
+    "comfort_cost_p": ('number', 0.3, 0, 10, 'p per kWh per hour', 'Comfort cost',
+                 'The price of each kWh held outside the band for an hour: a soft guide, not a limit. 0: off.'),
+    "top_up_cost_p": ('number', 5.0, 0, 20, 'p/kWh', 'Grid charging above the comfort band',
+                 "What each kWh charged from the grid above the band's top counts as costing. It keeps cycling under "
+                 'the top, yet a last fill before a dear stretch still happens. 0: off.'),
+    # --- following the plan and the top and bottom of the battery (engine 2.1 beta) -----------------------------
+    "executor": ('choice', 'lines', ('lines', 'plan'), None, '', 'How the mode is chosen',
+                 "Lines: compare live prices with a stored kWh's value, plus v2's rules. Plan: take the plan's mode "
+                 'for now (2.1 beta).'),
+    "replan_on_level": ('bool', False, None, None, '', 'Re-plan when a charge or sale ends',
+                 'Re-plan as soon as a charge or sale reaches its target.'),
+    "level_top_start_soc": ("number", 90, 50, 100, "%", "Top: where the cost starts",
+                            "Above this level each stored kWh costs a rate per hour."),
+    "level_top_rate_p": ('number', 0.0, 0, 1000, 'p/kWh/h', 'Top: rate at 100%',
+                 'The rate at 100%, doubling every few points above the start. 0: off.'),
+    "level_top_doubling_pts": ("number", 2.0, 0.5, 20, "points", "Top: points per doubling",
+                               "How steeply the top rate climbs."),
+    "level_bot_start_soc": ("number", 70, 0, 100, "%", "Bottom: where the cost starts",
+                            "Below this level each stored kWh costs a rate per hour."),
+    "level_bot_rate_p": ('number', 0.0, 0, 1000, 'p/kWh/h', 'Bottom: rate at your reserve',
+                 'The rate at your reserve, doubling every few points below the start. 0: off.'),
+    "level_bot_doubling_pts": ("number", 5.0, 0.5, 30, "points", "Bottom: points per doubling",
+                               "How steeply the bottom rate climbs."),
+    "slot_bot_factor": ('number', 1.0, 1, 1000, 'times', 'Slots: bottom multiplier',
+                 'In a smart slot the bottom rate is multiplied by this. 1: no change.'),
+    "slot_bot_start_soc": ('number', 0, 0, 100, '%', 'Slots: bottom start',
+                 'In a smart slot the bottom curve starts here (0: as usual).'),
     # --- forecast caution and learning -------------------------------------------------------------------------
     "solar_low_pct": ("number", 25, 0, 100, "%", "Solar: weight of the low forecast", W0),
     "solar_mid_pct": ("number", 50, 0, 100, "%", "Solar: weight of the middle forecast", W0),
@@ -86,48 +97,47 @@ SETTINGS: dict[str, tuple] = {
     "load_low_pct": ("number", 25, 0, 100, "%", "House load: weight of the low figure", W0),
     "load_mid_pct": ("number", 50, 0, 100, "%", "House load: weight of the middle figure", W0),
     "load_high_pct": ("number", 25, 0, 100, "%", "House load: weight of the high figure", W0),
-    "learn_scenario_weights": ("bool", True, None, None, "", "Learn the weights from experience",
-                               "Move the weights towards how often the sun and the house came in low, middle or high."),
+    "learn_scenario_weights": ('bool', True, None, None, '', 'Learn the weights from experience',
+                 'Move the weights towards how often the sun and house came in low, middle or high.'),
     "scenario_half_life_days": ("number", 14, 1, 60, "days", "Learning: half-life",
                                 "How quickly old days stop counting."),
-    "scenario_prior_days": ("number", 7, 0, 60, "days", "Learning: weight of the starting values",
-                            "The starting weights count as this many days of experience."),
-    "learn_solar_bias": ("bool", True, None, None, "", "Learn the solar forecast's bias",
-                         "Scale the solar forecast by how it has compared with the real sun over the last 14 days."),
+    "scenario_prior_days": ('number', 7, 0, 60, 'days', 'Learning: weight of the starting values',
+                 'The starting weights count as this many days of experience.'),
+    "learn_solar_bias": ('bool', True, None, None, '', "Learn the solar forecast's bias",
+                 'Scale the solar forecast by how it compared with the real sun over the last 14 days.'),
     "learn_soc_offset": ("bool", True, None, None, "", "Learn the battery reading's offset",
                          "Learn how far the battery reading is off while charging, holding and discharging."),
     # --- responsiveness ----------------------------------------------------------------------------------------
-    "price_band_p": ("number", 0.5, 0, 5, "p/kWh", "Price band",
-                     "A mode starts only when better by this much, and stops only when worse by this much."),
-    "level_band_pct": ("number", 1.0, 0, 5, "points", "Level band",
-                       "A charge that reached its target restarts only this far below it (the same for a sale)."),
-    "switch_cost_p": ("number", 2.0, 0, 20, "p per change", "Cost of a mode change",
-                      "What each change of mode is counted as costing, in the plan and when deciding to change. Every "
-                      "change costs the same, so resting in Hold between a charge and a sale never saves it. It stops "
-                      "cycles too small to be worth the commands."),
+    "price_band_p": ('number', 0.5, 0, 5, 'p/kWh', 'Price band',
+                 'A mode starts only when better by this much, and stops only when worse by this much.'),
+    "level_band_pct": ('number', 1.0, 0, 5, 'points', 'Level band',
+                 'A charge that reached its target restarts only this far below it (and a sale likewise).'),
+    "switch_cost_p": ('number', 2.0, 0, 20, 'p per change', 'Cost of a mode change',
+                 'What each change of mode counts as costing, in the plan and when deciding. Every change costs the '
+                 'same, so resting in Hold between a charge and a sale never saves it.'),
     "min_dwell_s": ("int", 120, 0, 3600, "s", "Shortest time in a mode",
                     "No change of mode sooner than this after the last one, except for safety events."),
-    "deadline_grace_min": ("number", 10, 1, 60, "min", "Deadline grace",
-                           "How long a charge or sale may run past its expected end before the engine looks again."),
+    "deadline_grace_min": ('number', 10, 1, 60, 'min', 'Deadline grace',
+                 'How long a charge or sale may run past its expected end before the engine looks again.'),
     "debounce_s": ("int", 20, 0, 300, "s", "Reading debounce", "A changed reading must last this long to count."),
-    "car_start_debounce_s": ("int", 60, 0, 600, "s", "Car start debounce",
-                             "The car must report charging this long before it counts (car wake-ups are 15 to 70 s)."),
+    "car_start_debounce_s": ('int', 60, 0, 600, 's', 'Car start debounce',
+                 'The car must report charging this long before it counts (wake-ups last 15 to 70 s).'),
     "car_stop_debounce_s": ("int", 30, 0, 600, "s", "Car stop debounce",
                             "The car must report not charging this long before it counts as stopped."),
     "stale_after_s": ("int", 180, 30, 1800, "s", "Missing reading grace",
                       "A required reading missing for this long counts as missing data."),
-    "soc_filter_gain": ("number", 0.05, 0.001, 1, "", "Battery level filter gain",
-                        "How quickly the filtered battery level is pulled to the reading at each sample."),
-    "drift_kwh": ("number", 0.75, 0.1, 5, "kWh", "Forecast drift",
-                  "Work the values out again when what happened differs from the forecast by this much."),
-    "band_exit_min": ("number", 10, 1, 60, "min", "Outside the expected range",
-                      "Work the values out again when the battery has been outside its expected range this long."),
-    "forecast_change_pct": ("number", 10, 1, 100, "%", "Solar forecast change",
-                            "Work the values out again when a forecast update moves the rest of the day by this much."),
-    "revalue_coalesce_s": ("int", 10, 0, 120, "s", "Batch window",
-                           "Reasons to work the values out arriving this close together run once."),
-    "max_value_age_min": ("int", 120, 10, 720, "min", "Backstop",
-                          "Work the values out at least this often, in case a trigger was missed."),
+    "soc_filter_gain": ('number', 0.05, 0.001, 1, '', 'Battery level filter gain',
+                 'How quickly the filtered battery level is pulled to the reading at each sample.'),
+    "drift_kwh": ('number', 0.75, 0.1, 5, 'kWh', 'Forecast drift',
+                 'Re-plan when what happened differs from the forecast by this much.'),
+    "band_exit_min": ('number', 10, 1, 60, 'min', 'Outside the expected range',
+                 'Re-plan when the battery has been outside its expected range this long.'),
+    "forecast_change_pct": ('number', 10, 1, 100, '%', 'Solar forecast change',
+                 'Re-plan when a forecast update moves the rest of the day by this much.'),
+    "revalue_coalesce_s": ('int', 10, 0, 120, 's', 'Batch window',
+                 'Reasons to re-plan arriving this close together run once.'),
+    "max_value_age_min": ('int', 120, 10, 720, 'min', 'Backstop',
+                 'Work the values out at least this often, in case a trigger was missed.'),
     "sample_s": ("int", 10, 5, 60, "s", "Sample interval",
                  "How often the readings are checked against the conditions."),
     # --- model -------------------------------------------------------------------------------------------------
@@ -144,6 +154,9 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
       "prefer_self_use", "preview_when_v1")),
     ("floors", "Floors", ("reserve_soc", "hard_floor_margin_pct")),
     ("comfort", "Comfort band", ("comfort_low_soc", "comfort_high_soc", "comfort_cost_p", "top_up_cost_p")),
+    ("levels", "Plan-following and battery limits (2.1 beta)",
+     ("executor", "replan_on_level", "level_top_start_soc", "level_top_rate_p", "level_top_doubling_pts",
+      "level_bot_start_soc", "level_bot_rate_p", "level_bot_doubling_pts", "slot_bot_factor", "slot_bot_start_soc")),
     ("value", "Value and costs",
      ("wear_house_p", "wear_sale_p", "event_value_p", "terminal_value", "terminal_value_p")),
     ("forecast", "Forecast caution and learning",
@@ -191,6 +204,16 @@ class V2Settings:
     event_value_p: float = 100.0
     terminal_value: str = "refill"
     terminal_value_p: float = 10.0
+    executor: str = "lines"
+    replan_on_level: bool = False
+    level_top_start_soc: float = 90
+    level_top_rate_p: float = 0.0
+    level_top_doubling_pts: float = 2.0
+    level_bot_start_soc: float = 70
+    level_bot_rate_p: float = 0.0
+    level_bot_doubling_pts: float = 5.0
+    slot_bot_factor: float = 1.0
+    slot_bot_start_soc: float = 0
     comfort_low_soc: float = 20
     comfort_high_soc: float = 90
     comfort_cost_p: float = 0.3
@@ -260,13 +283,36 @@ def _check(key: str, value: Any) -> Any:
     return int(round(value)) if kind == "int" else value
 
 
+# The engines the system setting offers, in the order the config page lists them. "v2_1" (engine 2.1 beta) is engine v2
+# with a profile: the settings below take these values wherever the config does not set them, so what you have saved
+# is kept.
+ENGINES = ("v1", "v2", "v2_1")
+PROFILES = {
+    "2.1": {
+        "executor": "plan", "replan_on_level": True,
+        "price_band_p": 0.0, "level_band_pct": 0.0, "min_dwell_s": 120, "comfort_cost_p": 0.0, "top_up_cost_p": 0.0,
+        "prefer_self_use": False, "late_events": False,
+        "level_top_start_soc": 90, "level_top_rate_p": 200.0, "level_top_doubling_pts": 3.0,
+        "level_bot_start_soc": 70, "level_bot_rate_p": 10.0, "level_bot_doubling_pts": 5.0,
+        "slot_bot_factor": 300.0, "slot_bot_start_soc": 80,
+    },
+}
+
+
+def profile_of(engine: str | None) -> str | None:
+    """The settings profile an engine choice uses: "2.1" for engine 2.1 beta, else None."""
+    return "2.1" if engine == "v2_1" else None
+
+
 # Settings an earlier release had and a saved config may still hold: dropped quietly, never an error.
 RETIRED = frozenset({"reversal_cost_p"})   # 0.9.129: one cost for every change (switch_cost_p)
 
 
-def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None) -> V2Settings:
-    """The `engine_v2:` block, validated. Missing keys come from v1's equivalent (`SEED_FROM`), else the default.
-    Raises SettingsError for an unknown key, a wrong type, a value out of range, or settings that contradict."""
+def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None,
+             profile: str | None = None) -> V2Settings:
+    """The `engine_v2:` block, validated. Missing keys come from v1's equivalent (`SEED_FROM`), else the profile's value
+    (engine 2.1 beta), else the default. Raises SettingsError for an unknown key, a wrong type, a value out of range, or
+    settings that contradict."""
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):
@@ -282,21 +328,29 @@ def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None)
             values[key] = _check(key, raw[key])
         elif key in SEED_FROM and SEED_FROM[key][1] in v1[SEED_FROM[key][0]]:
             values[key] = _check(key, v1[SEED_FROM[key][0]][SEED_FROM[key][1]])
+        elif profile in PROFILES and key in PROFILES[profile]:
+            values[key] = _check(key, PROFILES[profile][key])
         else:
             values[key] = spec[1]
     if values["comfort_low_soc"] >= values["comfort_high_soc"]:
         raise SettingsError("the comfort band's lower edge must be below its upper edge")
+    if values["level_top_rate_p"] > 0 and values["level_top_start_soc"] >= 100:
+        raise SettingsError("the top of the battery's cost must start below 100%")
+    if values["level_bot_rate_p"] > 0 and values["level_bot_start_soc"] <= values["reserve_soc"]:
+        raise SettingsError("the bottom of the battery's cost must start above your reserve")
     for part in ("solar", "load"):
         if values[f"{part}_low_pct"] + values[f"{part}_mid_pct"] + values[f"{part}_high_pct"] <= 0:
             raise SettingsError(f"the {part} weights can't all be 0")
     return V2Settings(**values)
 
 
-def catalogue(current: V2Settings | None = None) -> dict:
-    """The schema for the config page (published on sensor.pe_diag_v2_settings): every setting with its default,
-    range, label and help, the sections, and the values in use now."""
+def catalogue(current: V2Settings | None = None, profile: str | None = None) -> dict:
+    """The schema for the config page (published on sensor.pe_diag_v2_settings): every setting with its default (the
+    profile's, under engine 2.1 beta), range, label and help, the sections, the values in use now, and the engines the
+    system setting offers (so the card shows only the ones the app has)."""
     rows = []
     for key, (kind, default, lo, hi, unit, label, help_) in SETTINGS.items():
+        default = PROFILES.get(profile, {}).get(key, default)
         row = {"key": key, "kind": kind, "default": default, "unit": unit, "label": fill(label), "help": fill(help_)}
         if kind == "choice":
             row["options"] = list(lo)
@@ -305,4 +359,4 @@ def catalogue(current: V2Settings | None = None) -> dict:
         rows.append(row)
     return {"settings": rows,
             "sections": [{"key": k, "label": fill(label), "keys": list(keys)} for k, label, keys in SECTIONS],
-            "values": (current or V2Settings()).as_dict()}
+            "values": (current or V2Settings()).as_dict(), "engines": list(ENGINES)}

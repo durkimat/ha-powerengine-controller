@@ -128,13 +128,15 @@ class Executor:
 
         pick = self._pick_now(now, obs, lim, ln, vr, level, facts)
         cur = self.mode
-        if cur is not None and pick.mode in (CHARGE, EXPORT) and pick.mode != cur and not pick.forced and not urgent:
+        lines_executor = self.s.executor != "plan"                   # "plan": the mode is the plan's (`_candidate`)
+        if lines_executor and cur is not None and pick.mode in (CHARGE, EXPORT) and pick.mode != cur \
+                and not pick.forced and not urgent:
             pick = self._with_the_programmes_choice(pick, now, lim, ln, vr, level, facts)
         if cur is not None and pick.mode != cur and not pick.forced and not urgent \
                 and self.since is not None and ts - self.since < self.s.min_dwell_s \
                 and not self._must_exit(cur, lim, ln, level):
             pick = self._pick_for(cur, lim, ln, level, facts, vr)        # minimum time: stay a little longer
-        elif cur is not None and pick.mode != cur and not pick.forced and not urgent \
+        elif lines_executor and cur is not None and pick.mode != cur and not pick.forced and not urgent \
                 and not self._must_exit(cur, lim, ln, level) and not self._worth_the_change(cur, pick, lim, ln, level,
                                                                                             facts, obs):
             pick = self._pick_for(cur, lim, ln, level, facts, vr)        # a change must pay for itself
@@ -233,6 +235,10 @@ class Executor:
     # the mode the prices and levels ask for, with hysteresis from the mode now
     def _candidate(self, lim: Limits, ln: Lines, level: float, vr: ValueResult | None = None,
                    now: datetime | None = None) -> str:
+        if self.s.executor == "plan":                  # follow the plan: its mode for now, if the limits allow it
+            planned = self._planned_mode(vr, now)
+            if planned is not None and planned in lim.allowed:
+                return planned
         cur, band = self.mode, self.s.price_band_p
         can_c = self._can_charge(lim, ln, level, staying=cur == CHARGE)
         can_e = self._can_export(lim, ln, level, staying=cur == EXPORT)
@@ -243,7 +249,8 @@ class Executor:
             # running goes on to the end of its plan step (a revaluation can't turn it round part-way: the lines
             # compare one step at a time, and what is left of the cycle is priced in the plan); the exits and an
             # urgent event still end it.
-            if cur in (CHARGE, EXPORT) and not self._urgent and self._leg_going(cur, level, now):
+            if cur in (CHARGE, EXPORT) and not self._urgent and self.s.executor != "plan" \
+                    and self._leg_going(cur, level, now):
                 return cur
             planned = self._planned_mode(vr, now)
             if planned in (CHARGE, EXPORT):

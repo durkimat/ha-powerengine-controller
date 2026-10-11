@@ -87,7 +87,7 @@ def test_engine_v1_is_the_default_and_previews_v2_without_sending(tmp_path, mp):
     run = simulate(tmp_path, mp, 1)
     app = run["app"]
     assert app._engine_name() == "v1" and app.cfg.system["engine"] == "v1" and app.cfg.engine_v2.preview_when_v1
-    assert app._published["state_engine"] == ("v1", {"v2_available": True, "v2_preview": True})
+    assert app._published["state_engine"] == ("v1", {"v2_available": True, "choice": "v1", "v2_preview": True})
     assert app._published["diag_v2_settings"][0].isdigit()           # the settings catalogue is always there
     for key in ("v2_mode", "v2_value", "v2_timeline", "v2_value_curve", "v2_triggers", "diag_v2"):
         assert key in app._published and app._published[key][0] != "unknown"
@@ -116,7 +116,7 @@ def test_the_preview_never_sends_a_command_of_its_own(tmp_path, mp):
 def test_preview_off_publishes_nothing_from_v2(tmp_path, mp):
     run = simulate(tmp_path, mp, 1, preview=False)
     app = run["app"]
-    assert app._published["state_engine"] == ("v1", {"v2_available": True})
+    assert app._published["state_engine"] == ("v1", {"v2_available": True, "choice": "v1"})
     for key in ("v2_mode", "v2_value", "v2_timeline", "v2_value_curve", "v2_triggers", "diag_v2"):
         assert key not in app._published
     assert app._v2 is None and not (run["folder"] / "demo" / "engine_v2_state.json").exists()
@@ -162,7 +162,7 @@ def test_v1_still_makes_its_plan_but_does_not_decide(v2_run):
 
 def test_the_v2_sensors_are_published_and_each_is_under_15000_bytes(v2_run):
     app = v2_run["app"]
-    assert app._published["state_engine"] == ("v2", {"v2_available": True})
+    assert app._published["state_engine"] == ("v2", {"v2_available": True, "choice": "v2"})
     for key in V2_SENSORS:
         assert key in app._published, key
         assert attr_bytes(app, key) < LIMIT, key
@@ -254,6 +254,33 @@ def test_switching_the_engine_in_a_config_save_keeps_the_mode_and_rebuilds_v2(tm
     assert app._published["state_engine"][0] == "v2"
 
 
+def test_engine_2_1_beta_is_engine_v2_with_a_profile_and_switching_to_it_keeps_the_engine(tmp_path, mp):
+    run = simulate(tmp_path, mp, 0.5, engine="v2")
+    app = run["app"]
+    first = app._v2
+    assert app._engine_choice() == "v2" and app.cfg.engine_v2.executor == "lines"
+    raw = json.loads(json.dumps(app.cfg.raw))
+    raw["system"]["engine"] = "v2_1"
+    app._on_save("pe_config_save", {"config": raw}, {})
+    assert app._engine_name() == "v2" and app._engine_choice() == "v2_1"          # engine v2 everywhere the app asks
+    assert app.cfg.engine_v2.executor == "plan" and app.cfg.engine_v2.replan_on_level
+    assert app.mode.effective == "active" and app._v2 is first                    # the same engine, other settings
+    assert any("Engine changed from v2 to 2.1 beta" in m["msg"] for m in app._log_ring.lines)
+    Clock.now += timedelta(minutes=1)
+    app._engine_tick({})
+    assert app._v2 is first and first.s.executor == "plan" and first.vr is not None
+    state, attrs = app._published["state_engine"]
+    assert state == "v2" and attrs["choice"] == "v2_1"
+    settings = app._published["diag_v2_settings"][1]
+    assert settings["engines"] == ["v1", "v2", "v2_1"] and settings["values"]["executor"] == "plan"
+    assert next(r for r in settings["settings"] if r["key"] == "level_top_rate_p")["default"] == 200.0
+    assert attr_bytes(app, "diag_v2_settings") < LIMIT
+    raw["system"]["engine"] = "v2"
+    app._on_save("pe_config_save", {"config": raw}, {})
+    assert app._engine_choice() == "v2" and app.cfg.engine_v2.executor == "lines"
+    assert app._published["state_engine"][1]["choice"] == "v2"
+
+
 def test_a_save_is_answered_before_the_reload(v2_run):
     """The card waits for pe_config_result; the reload (inputs, dashboard, a whole cycle) comes after the answer."""
     app = v2_run["app"]
@@ -279,4 +306,4 @@ def test_the_diagnostics_export_has_an_engine_v2_section(v2_run):
 
 def test_live_v2_says_it_is_not_a_preview(v2_run):
     assert v2_run["app"]._published["v2_mode"][1]["preview"] is False
-    assert v2_run["app"]._published["state_engine"] == ("v2", {"v2_available": True})
+    assert v2_run["app"]._published["state_engine"] == ("v2", {"v2_available": True, "choice": "v2"})
