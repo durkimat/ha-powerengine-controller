@@ -428,6 +428,9 @@ class Executor:
                                       f"{imp:.2f}p")
         if lim.rule == "reserve":
             return _Pick(HOLD, "reserve", f"{lim.reason}: the grid covers the house at {imp:.2f}p")
+        if HOLD not in lim.allowed and SELF_USE in lim.allowed:     # Hold is only for the car and the reserve
+            return _Pick(SELF_USE, "value", f"A stored kWh is worth {v:.1f}p, but Hold is only for the car and the "
+                                            f"reserve: the battery covers the house at {imp:.2f}p")
         if self.sun_spare and SELF_USE in lim.allowed:
             why = (f"Spare sun is not worth storing: a stored kWh is worth {v:.1f}p, under the "
                    f"{ln.store_sun_line_p:.2f}p it needs, so the battery holds and the sun is exported at {exp:.2f}p")

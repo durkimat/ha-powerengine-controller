@@ -282,7 +282,7 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     S.fcap = S.hi if (S.ccost or S.topup) else S.cap          # where charging early stops being free (see `_walk`)
     if S.pen is not None:
         S.fcap = min(S.fcap, S.pen.top_start_kwh)
-    S.forced = lim.forced or (EVENT if seg.event else FREE if seg.free else seg.manual)
+    S.forced = lim.forced or (EVENT if seg.event else FREE if seg.free and not lim.allowed else seg.manual)
     S.allowed = tuple(m for m in _ORDER if m in lim.allowed) or (SELF_USE,)
     scen = []
     for p, so, ho in _groups(seg.solar_kwh, seg.load_kwh):
@@ -1171,7 +1171,7 @@ def choice_now(vr: ValueResult, t: datetime, soc: float, import_p: float, facts:
 
 
 def _forced_of(sg: Segment, lim: Limits) -> str | None:
-    return lim.forced or (EVENT if sg.event else FREE if sg.free else sg.manual)
+    return lim.forced or (EVENT if sg.event else FREE if sg.free and not lim.allowed else sg.manual)
 
 
 def _effective_price(sg: Segment) -> float:
