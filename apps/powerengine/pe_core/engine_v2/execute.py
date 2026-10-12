@@ -79,6 +79,12 @@ def _iso(ts: float | None) -> str | None:
     return None if ts is None else datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="seconds")
 
 
+# Engine 2.1 corridor, "ignore re-plans" variant: a run that reaches the edge of the plan's corridor is on target, so
+# that does not ask for a re-plan (kind "level_edge"), and a re-plan made for another reason while the run goes on keeps
+# the edge the run has if it still lies inside the new plan's corridor. Off: as prototype 2.
+CORRIDOR_STICKY = True
+
+
 class Executor:
     def __init__(self, settings: V2Settings, state: dict | None = None):
         self.s = settings
@@ -107,6 +113,8 @@ class Executor:
         self._plan_sell: float | None = None
         self._edge: float | None = None                              # plan executor: where the run in mind ends (%)
         self._edge_mode: str | None = None                           # ... and the mode it is the edge of
+        self._edge_key: tuple | None = None                          # ... and which run of which plan (mode, end, made)
+        self._reached: tuple | None = None                           # the run that ended at its edge: not restarted
         self._urgent = False                                         # an urgent event is being handled this step
         self.last_decision: v1d.Decision | None = None
 
@@ -128,6 +136,7 @@ class Executor:
         self._plan_target = self._plan_leg_end(vr, now, CHARGE)
         self._plan_sell = self._plan_leg_end(vr, now, EXPORT)
 
+        edge_before = (self._edge_mode, self._edge, self._edge_key)
         pick = self._pick_now(now, obs, lim, ln, vr, level, facts)
         cur = self.mode
         lines_executor = self.s.executor != "plan"                   # "plan": the mode is the plan's (`_candidate`)
@@ -149,10 +158,16 @@ class Executor:
             self._note_change(ts, cur, pick.mode)
             prior = self.target_soc
             if cur == CHARGE and level is not None and prior is not None and level >= prior - LEVEL_EPS:
-                new_events.append(Event(now, "level", f"The battery reached {level:.0f}%: the charge ends"))
+                new_events.append(Event(now, self._level_kind(edge_before, cur),
+                                        f"The battery reached {level:.0f}%: the charge ends"))
+                if edge_before[0] == cur and edge_before[2] is not None:
+                    self._reached = edge_before[2]
             elif cur == EXPORT and level is not None \
                     and level <= (lim.floor_soc if prior is None else prior) + LEVEL_EPS:
-                new_events.append(Event(now, "level", f"The battery reached {level:.0f}%: the sale ends"))
+                new_events.append(Event(now, self._level_kind(edge_before, cur),
+                                        f"The battery reached {level:.0f}%: the sale ends"))
+                if edge_before[0] == cur and edge_before[2] is not None:
+                    self._reached = edge_before[2]
             self.mode, self.since, self.chosen_by = pick.mode, ts, chosen_by
             self.deadline_fired = False
             self.dl_key = None
@@ -272,6 +287,11 @@ class Executor:
             return SELF_USE
         return HOLD if HOLD in lim.allowed else SELF_USE
 
+    @staticmethod
+    def _level_kind(edge_before: tuple, cur: str | None) -> str:
+        """A run that ended at the edge of the plan's corridor is on target: no re-plan for it (CORRIDOR_STICKY)."""
+        return "level_edge" if CORRIDOR_STICKY and edge_before[0] == cur and edge_before[1] is not None else "level"
+
     # ---- following the plan by level ------------------------------------------------------------
     def _plan_candidate(self, lim: Limits, level: float | None, vr: ValueResult | None,
                         now: datetime | None) -> str | None:
@@ -281,7 +301,8 @@ class Executor:
         once, so a plan that ended a run part-way through a segment and filled the rest with a hold (`remainder`: a way
         of saying how much, not a decision to hold) is not waited out. The next action starts early only where the
         prices are those of now; across a price change the clock stands. None: the plan says nothing for now."""
-        self._edge = self._edge_mode = None
+        prev_edge, prev_mode = self._edge, self._edge_mode
+        self._edge = self._edge_mode = self._edge_key = None
         if vr is None or now is None or level is None or not vr.timeline:
             return None
         items = [i for i in vr.timeline if i.end > now]
@@ -296,20 +317,25 @@ class Executor:
             first = ended or prev
             if first is not None:
                 edge, _last = self._corridor_edge(vr.timeline, first)
-                if self._short_of(cur, edge, level):
-                    self._edge, self._edge_mode = edge, cur
+                if CORRIDOR_STICKY and prev_mode == cur and prev_edge is not None \
+                        and self._in_corridor(_last, prev_edge):
+                    edge = prev_edge                             # a re-plan inside the corridor: the run's edge stands
+                key = (cur, _last.end, getattr(vr, "made_at", None))
+                if self._short_of(cur, edge, level) and not (CORRIDOR_STICKY and key == self._reached):
+                    self._edge, self._edge_mode, self._edge_key = edge, cur, key
                     return cur
         k = 0
         while k < len(items):
             it = items[k]
             if it.mode in (CHARGE, EXPORT):
                 edge, last = self._corridor_edge(vr.timeline, it)
-                if self._short_of(it.mode, edge, level):
+                key = (it.mode, last.end, getattr(vr, "made_at", None))
+                if self._short_of(it.mode, edge, level) and not (CORRIDOR_STICKY and key == self._reached):
                     if k and not self._same_prices(vr, now, it.start):
                         break                                    # a price change lies between: wait for the clock
                     if it.mode not in lim.allowed:
                         return None
-                    self._edge, self._edge_mode = edge, it.mode
+                    self._edge, self._edge_mode, self._edge_key = edge, it.mode, key
                     return it.mode
                 k = next((j for j in range(k, len(items)) if items[j].end >= last.end), len(items) - 1) + 1
                 continue
@@ -335,6 +361,12 @@ class Executor:
         lo = last.level_lo if last.level_lo is not None else last.level_end
         hi = last.level_hi if last.level_hi is not None else last.level_end
         return (lo if first.mode == CHARGE else hi), last
+
+    @staticmethod
+    def _in_corridor(last, edge: float) -> bool:
+        lo = last.level_lo if last.level_lo is not None else last.level_end
+        hi = last.level_hi if last.level_hi is not None else last.level_end
+        return lo - LEVEL_EPS <= edge <= hi + LEVEL_EPS
 
     @staticmethod
     def _short_of(mode: str, edge: float, level: float) -> bool:

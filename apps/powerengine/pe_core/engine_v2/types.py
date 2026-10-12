@@ -168,6 +168,7 @@ class ValueResult:
 EVENT_KINDS: dict[str, tuple[bool, bool]] = {
     "start": (True, True),                # engine started or switched to
     "level": (False, False),              # the filtered level reached an exit level (target, floor)
+    "level_edge": (False, False),         # ... the edge of the plan's corridor: the plan already says what follows
     "reserve": (False, True),             # the level reached the reserve or the hard floor
     "price": (False, False),              # a price boundary passed (published or estimated)
     "slot_start": (False, False),

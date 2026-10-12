@@ -191,3 +191,44 @@ def test_the_lines_executor_does_not_look_at_the_plans_mode():
         allowed=frozenset({"export", "hold", "self_use", "charge"}), floor_soc=12.0, ceiling_soc=100.0
     )
     assert Executor(V2Settings(executor="lines"))._candidate(lim, ln, 60.0, vr, now) != "export"
+
+
+def test_a_level_at_the_corridor_edge_does_not_ask_for_a_re_plan():
+    now = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+    tr = Triggers(V2Settings(replan_on_level=True))
+    later = now + timedelta(seconds=11)
+    assert tr.due(now, (Event(now, "level_edge", "The battery reached 80%: the charge ends"),), now) is None
+    assert tr.due(later, (), now) is None
+
+
+def test_a_re_plan_inside_the_corridor_leaves_the_runs_edge_alone():
+    ex = Executor(V2Settings(executor="plan"))
+    ex.mode = "charge"
+    first = _tl(("charge", 0, 20, 50, 80, 78, 82, False), ("hold", 20, 30, 80, 80, 80, 80, True))
+    assert ex._plan_candidate(ALLOW, 70.0, first, T0 + timedelta(minutes=5)) == "charge" and ex._edge == 78
+    inside = _tl(("charge", 0, 20, 50, 80, 74, 82, False), ("hold", 20, 30, 80, 80, 80, 80, True))
+    assert ex._plan_candidate(ALLOW, 70.0, inside, T0 + timedelta(minutes=6)) == "charge"
+    assert ex._edge == 78                                       # not 74: the new plan still contains the old edge
+    outside = _tl(("charge", 0, 20, 50, 90, 88, 92, False), ("hold", 20, 30, 90, 90, 90, 90, True))
+    assert ex._plan_candidate(ALLOW, 70.0, outside, T0 + timedelta(minutes=7)) == "charge"
+    assert ex._edge == 88                                       # a plan that moved the target takes over
+
+
+def test_a_run_that_ended_at_its_edge_is_not_started_again_by_a_wobble():
+    vr = _tl(("export", 0, 60, 90, 60, 68, 72, False))
+    ex = Executor(V2Settings(executor="plan"))
+    ex.mode = "export"
+    assert ex._plan_candidate(ALLOW, 75.0, vr, T0 + timedelta(minutes=5)) == "export"
+    ex._reached = ex._edge_key                                  # what the level event records at the edge
+    ex.mode = "hold"
+    assert ex._plan_candidate(ALLOW, 75.0, vr, T0 + timedelta(minutes=6)) != "export"   # the level wobbled up
+
+
+def test_the_expected_range_of_a_run_is_its_whole_corridor():
+    from pe_core.engine_v2.observe import Observer
+    vr = _tl(("charge", 0, 20, 50, 80, 78, 82, False), ("hold", 20, 30, 80, 80, 80, 80, True),
+             ("self_use", 30, 60, 80, 70, 70, 70, False))
+    span = Observer._run_span
+    assert span(vr, T0 + timedelta(minutes=5)) == (50, 82)      # on the run
+    assert span(vr, T0 + timedelta(minutes=25)) == (50, 82)     # in the hold that fills out its segment
+    assert span(vr, T0 + timedelta(minutes=40)) is None         # later: the clock's path again

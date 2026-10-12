@@ -153,6 +153,9 @@ METRIC_COLS = [
     ("day", 10),
     ("holds", 5),
     ("hold@tgt min", 12),
+    ("wait min", 8),
+    ("car min", 8),
+    ("idle min", 8),
     ("runs", 4),
     ("cut", 4),
     ("over mean", 9),
@@ -236,7 +239,34 @@ def run_metrics(result: dict) -> dict | None:
                 return lvl
         return trace[-1][1] if trace else None
 
-    over, under, inside, hold_min, holds, cut = [], [], [], 0.0, 0, 0
+    rows = sorted((datetime.fromisoformat(r["start"]), (r["act"], r["exp"], bool(r.get("axle")), bool(r.get("free"))))
+                  for r in s.get("rows", []))
+
+    def prices_over(a, b):
+        """The distinct (import, export, event, free) in force at some time in [a, b]."""
+        seen, cur = set(), None
+        for st, v in rows:
+            if st <= a:
+                cur = v
+            elif st <= b:
+                if cur is not None:
+                    seen.add(cur)
+                cur = v
+        if cur is not None:
+            seen.add(cur)
+        return seen
+
+    cars = [(datetime.fromisoformat(r["start"]), r.get("car") or 0.0) for r in s.get("rows", [])]
+
+    def car_on(a, b):
+        return any(kwh > 0.05 and st < b and st + timedelta(minutes=30) > a for st, kwh in cars)
+
+    at_target: list = []  # (start, minutes, mode before, mode after, level) of each hold at a reached target
+
+    def key_after(n):
+        return changes[n + 1][1] if n + 1 < len(changes) else "end"
+
+    over, under, inside, hold_min, wait_min, car_min, holds, cut = [], [], [], 0.0, 0.0, 0.0, 0, 0
     for n, (t, key) in enumerate(changes):
         nxt = changes[n + 1][0] if n + 1 < len(changes) else end_of_day
         if key == "hold":
@@ -246,7 +276,13 @@ def run_metrics(result: dict) -> dict | None:
             tgt = _target(plan, prev_t, prev) if plan and prev in RUN_MODES else None
             lvl = level_at(t)
             if tgt is not None and lvl is not None and tgt[0] - REACHED_PT <= lvl <= tgt[1] + REACHED_PT:
-                hold_min += (nxt - t).total_seconds() / 60
+                mins = (nxt - t).total_seconds() / 60
+                hold_min += mins
+                at_target.append((t.strftime("%H:%M"), round(mins), prev, key_after(n), round(lvl, 1)))
+                if len(prices_over(t, nxt)) > 1:
+                    wait_min += mins  # a price (or event) changed during or at the end of it: it waited for that
+                elif car_on(t, nxt):
+                    car_min += mins  # the car was charging: the battery is held for it, whatever the plan's prices
         if key in RUN_MODES:
             probe = max(t, nxt - timedelta(seconds=60))  # the plan that governed the end of the run
             plan = _plan_in_force(plans, probe)
@@ -270,6 +306,9 @@ def run_metrics(result: dict) -> dict | None:
     return {
         "holds": holds,
         "hold_at_target_min": round(hold_min, 1),
+        "hold_wait_min": round(wait_min, 1),
+        "hold_car_min": round(car_min, 1),
+        "hold_idle_min": round(hold_min - wait_min - car_min, 1),
         "runs": len(over) + len(under) + len(inside),
         "cut_early": cut,
         "overshoot_mean": _rd(_mean(over)),
@@ -278,6 +317,7 @@ def run_metrics(result: dict) -> dict | None:
         "undershoot_max": _rd(max(under, default=None)),
         "level_err_mean": _rd(_mean(errs)),
         "level_err_max": _rd(max(errs, default=None)),
+        "_at_target": at_target,
         "_over": over,
         "_under": under,
         "_errs": errs,
@@ -289,6 +329,9 @@ def metrics_row(day: str, m: dict) -> list[str]:
         day,
         str(m["holds"]),
         _g(m["hold_at_target_min"], 0),
+        _g(m["hold_wait_min"], 0),
+        _g(m["hold_car_min"], 0),
+        _g(m["hold_idle_min"], 0),
         str(m["runs"]),
         str(m["cut_early"]),
         _g(m["overshoot_mean"]),
@@ -308,6 +351,9 @@ def metrics_total(ms: list[dict]) -> dict:
     return {
         "holds": sum(m["holds"] for m in ms),
         "hold_at_target_min": round(sum(m["hold_at_target_min"] for m in ms), 1),
+        "hold_wait_min": round(sum(m["hold_wait_min"] for m in ms), 1),
+        "hold_car_min": round(sum(m["hold_car_min"] for m in ms), 1),
+        "hold_idle_min": round(sum(m["hold_idle_min"] for m in ms), 1),
         "runs": runs,
         "cut_early": sum(m["cut_early"] for m in ms),
         "overshoot_mean": _rd(_mean(over)),
