@@ -140,7 +140,7 @@ def fake_result(day, cost, flips=0):
     plan = {
         "at": "2026-10-07T12:00:00+01:00",
         "because": "test",
-        "timeline": [["charge", "2026-10-07T12:00", "2026-10-07T13:00", 40.0, 60.0, "", ""]],
+        "timeline": [["charge", "2026-10-07T12:00+01:00", "2026-10-07T13:00+01:00", 40.0, 60.0, "", ""]],
     }
     return {
         "day": day,
@@ -148,6 +148,7 @@ def fake_result(day, cost, flips=0):
         "code": "x @ abc",
         "score": score,
         "series": {
+            "tz": "Europe/London",
             "changes": [["12:00:00", "charge"]],
             "trace": [["12:00", 40.0, "charge", 5000, 0]],
             "plans": [plan],
