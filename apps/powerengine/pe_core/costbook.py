@@ -109,8 +109,8 @@ class CostBook:
         keep_existing: don't replace a half-hour already fully recorded (a backfill never overwrites a full live
         record, but does fill in one cut short by a restart).
         engine / live: the engine chosen and whether it was in control (Active, not paused) when the record was
-        written (`day_engine`); a backfill from history passes neither, so those records carry no tag. profile: engine v2's
-        settings profile in use (`day_engine_info` reports it); only engine v2 records carry one.
+        written (`day_engine`); a backfill from history passes neither, so those records carry no tag.
+        profile: engine v2's settings profile in use (`day_engine_info` reports it); only engine v2 records carry one.
         """
         self.learn_rates(r)
         window = self.window()

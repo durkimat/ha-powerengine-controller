@@ -282,7 +282,7 @@ def test_day_engine_names_the_settings_profile_engine_v2_ran(tmp_path):
     put(book, d, [{"engine": "v2", "live": True, "profile": "defaults"}] * 2
         + [{"engine": "v2", "live": True, "profile": "2.1 beta"}] * 2)
     assert book.day_engine_info(d) == {"engine": "v2", "live": True, "profile": "mixed"}
-    d = date(2026, 10, 8)                                                  # v1 hours carry no profile; old v2 records none
+    d = date(2026, 10, 8)                                                  # v1 and old v2 records: none
     put(book, d, [{"engine": "v1", "live": True}] * 2 + [{"engine": "v2", "live": True}] * 2)
     assert "profile" not in book.day_engine_info(d)
 

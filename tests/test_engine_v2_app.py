@@ -311,4 +311,5 @@ def test_the_diagnostics_export_has_an_engine_v2_section(v2_run):
 
 def test_live_v2_says_it_is_not_a_preview(v2_run):
     assert v2_run["app"]._published["v2_mode"][1]["preview"] is False
-    assert v2_run["app"]._published["state_engine"] == ("v2", {"v2_available": True, "choice": "v2", "profile": "defaults"})
+    expected = {"v2_available": True, "choice": "v2", "profile": "defaults"}
+    assert v2_run["app"]._published["state_engine"] == ("v2", expected)
