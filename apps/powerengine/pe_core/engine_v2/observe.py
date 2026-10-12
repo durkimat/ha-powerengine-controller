@@ -15,7 +15,7 @@ import json
 from datetime import datetime, timezone
 
 from .settings import V2Settings
-from .types import Event, Forecast, Observation, StepInput, ValueResult
+from .types import CHARGE, EXPORT, Event, Forecast, Observation, StepInput, ValueResult
 
 CHARGING, HOLDING, DISCHARGING = "charging", "holding", "discharging"
 FLOW_W = 200                      # below this the battery counts as holding
@@ -25,6 +25,8 @@ SUN_BAND_KW = 0.05                # net load inside +/- this keeps the sun/short
 BMS_MOVE_KW = 0.5
 PRICE_SETTLE_S = 90               # a live price change this soon after a boundary is the same change
 MIN_FORECAST_KWH = 0.5            # a rest-of-day total below this is too small to judge a change by
+BAND_SLACK_MIN = 0                # minutes: while a charge or sale is near, the expected range is the plan's over this
+                                  # long before and after now, inside the stretch where the prices stay the same
 REQUIRED = (("battery_soc", "battery level"), ("import_rate", "import rate"))
 
 
@@ -328,17 +330,16 @@ class Observer:
         try:
             step = float(p["step_min"]) * 60
             x = (ts - datetime.fromisoformat(p["start"]).timestamp()) / step
-            i = int(x // 1)
-            if i < 0:
-                raise IndexError(i)
-            # between the path's points: a charge moves several points in one step, so the point at the step's start
-            # alone would put a battery that is on time outside the band for most of every step
-            f = min(1.0, x - i)
-            mid, low, high = (p[k][i] + f * (p[k][min(i + 1, len(p[k]) - 1)] - p[k][i]) for k in ("mid", "low", "high"))
+            if x < 0 or int(x // 1) >= len(p["mid"]):
+                raise IndexError(x)
+            vals = [self._path_at(p, x)]
+            for xx in self._slack_xs(vr, now, ts, step, x):
+                vals.append(self._path_at(p, xx))
         except (KeyError, IndexError, ValueError, TypeError):
             self.band_since = None
             return
-        lo, hi = min(mid, low, high) - self.s.level_band_pct, max(mid, low, high) + self.s.level_band_pct
+        flat = [v for row in vals for v in row]
+        lo, hi = min(flat) - self.s.level_band_pct, max(flat) + self.s.level_band_pct
         if lo <= self.level <= hi:
             self.band_since, self.band_fired = None, False
             return
@@ -347,6 +348,46 @@ class Observer:
             self.band_fired = True
             ev("band_exit", f"The battery has been outside its expected range ({lo:.0f} to {hi:.0f}%) for "
                             f"{self.s.band_exit_min:g} minutes")
+
+    @staticmethod
+    def _path_at(p: dict, x: float) -> tuple[float, float, float]:
+        """The path's (mid, low, high) at step position x, between its points: a charge moves several points in one
+        step, so the point at the step's start alone would put a battery that is on time outside the band for most of
+        every step. Past the end it is the last point."""
+        n = len(p["mid"])
+        i = min(int(x // 1), n - 1)
+        f = min(1.0, x - i)
+        return tuple(p[k][i] + f * (p[k][min(i + 1, n - 1)] - p[k][i]) for k in ("mid", "low", "high"))
+
+    @staticmethod
+    def _same_prices(a, b) -> bool:
+        return (abs(a.import_p - b.import_p) < 0.01 and abs(a.export_p - b.export_p) < 0.01
+                and a.slot_prob == b.slot_prob and a.event == b.event and a.free == b.free)
+
+    def _slack_xs(self, vr: ValueResult, now: datetime, ts: float, step: float, x: float) -> list[float]:
+        """The path positions to add to the expected range for the time slack (BAND_SLACK_MIN): both ends of
+        [now - slack, now + slack] and the path's points between, cut where the prices change, and only while a charge
+        or a sale of the plan is in that window (a margin in time is for the runs, not for the holds and self-use)."""
+        slack = BAND_SLACK_MIN * 60
+        if slack <= 0 or not vr.timeline:
+            return []
+        segs = vr.forecast.segments
+        k = next((i for i, g in enumerate(segs) if g.start <= now < g.end), None)
+        if k is None:
+            return []
+        a = b = k
+        while a > 0 and segs[a - 1].end == segs[a].start and self._same_prices(segs[a - 1], segs[k]):
+            a -= 1
+        while b + 1 < len(segs) and segs[b + 1].start == segs[b].end and self._same_prices(segs[b + 1], segs[k]):
+            b += 1
+        t0 = max(ts - slack, segs[a].start.timestamp())
+        t1 = min(ts + slack, segs[b].end.timestamp())
+        if not any(it.mode in (CHARGE, EXPORT) and it.start.timestamp() < t1 and it.end.timestamp() > t0
+                   for it in vr.timeline):
+            return []
+        x0, x1 = x + (t0 - ts) / step, x + (t1 - ts) / step
+        knots = range(int(x0 // 1) + 1, int(x1 // 1) + 1)
+        return [max(0.0, x0), *[float(i) for i in knots if i > x0], max(0.0, x1)]
 
     def _rest_of_day(self, inp: StepInput) -> dict:
         now = inp.now

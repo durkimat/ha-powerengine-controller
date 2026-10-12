@@ -337,6 +337,43 @@ def test_inside_the_band_nothing_happens():
     assert not any(e.kind == "band_exit" for ob in res for e in ob.events)
 
 
+def _slack_case(monkeypatch, slack, ahead_min, *, mode="charge", price_change_at=None):
+    """A charge planned 20 to 76% over the hour (a 7-point step each 15 min); the battery is `ahead_min` minutes ahead
+    of the line at minute 15 of the run. Returns the band_exit events seen over ten minutes of ticks."""
+    from pe_core.engine_v2 import observe
+    from pe_core.engine_v2.types import TimelineItem
+    monkeypatch.setattr(observe, "BAND_SLACK_MIN", slack)
+    mid = [20.0, 34.0, 48.0, 62.0, 76.0, 76.0]
+    path = {"start": T0.isoformat(), "step_min": 15, "mid": mid, "low": mid, "high": mid}
+    segs = [segment(T0 + timedelta(minutes=30 * i), import_p=7.0 if price_change_at is None or 30 * i < price_change_at
+                    else 30.0) for i in range(4)]
+    item = TimelineItem(mode, T0, T0 + timedelta(hours=1), 20.0, 76.0, "", "")
+    vr = value_result(T0, forecast(T0, segs), path=path, timeline=(item,))
+    o = Observer(SETTINGS)
+    seen = []
+    t = T0 + timedelta(minutes=15)
+    for sec in range(0, 11 * 60, 10):
+        now = t + timedelta(seconds=sec)
+        o.level = 20.0 + 56.0 * ((15 + ahead_min) * 60 + sec) / 3600
+        o._band(now.timestamp(), vr, now, lambda kind, text: seen.append(kind))
+    return seen
+
+
+def test_a_time_slack_lets_a_charge_run_ahead_or_behind_the_clock_without_leaving_the_band(monkeypatch):
+    assert _slack_case(monkeypatch, 0, 0) == []                      # on time: in the band
+    assert _slack_case(monkeypatch, 0, 12) == ["band_exit"]          # 12 minutes ahead: out of it, as today
+    assert _slack_case(monkeypatch, 15, 12) == []                    # with 15 minutes of slack it is inside
+    assert _slack_case(monkeypatch, 15, -12) == []                   # and 12 minutes behind
+    assert _slack_case(monkeypatch, 15, 40) == ["band_exit"]         # far enough off still leaves it
+
+
+def test_the_time_slack_stops_at_a_price_change_and_is_only_for_charges_and_sales(monkeypatch):
+    # prices rise at minute 30: from minute 20 the window past it is cut, so being ahead is no longer covered
+    assert _slack_case(monkeypatch, 30, 25, price_change_at=30) == ["band_exit"]
+    assert _slack_case(monkeypatch, 30, 25) == []                    # the same battery with no price change
+    assert _slack_case(monkeypatch, 15, 12, mode="hold") == ["band_exit"]  # a hold item: no slack
+
+
 class P:
     def __init__(self, start, kwh):
         self.start, self.kwh = start, kwh
