@@ -53,6 +53,17 @@ def sun_points(kwh=0.5, band=True, days=2):
 ST = V2Settings()
 
 
+@pytest.fixture(autouse=True)
+def _unmerged(monkeypatch):
+    """These tests look at the cut grid itself; the merge (`merge_equal`) has its own tests below."""
+    monkeypatch.setattr(F, "MERGE_EQUAL", False)
+
+
+@pytest.fixture
+def merged(monkeypatch):
+    monkeypatch.setattr(F, "MERGE_EQUAL", True)
+
+
 def test_segments_cut_at_real_dispatch_minutes():
     now = at(21, 0)
     inp = make(now)
@@ -281,3 +292,29 @@ def test_gbp_to_pence_and_empty_prices():
     inp.readings.rates, inp.readings.import_rate = [], None
     seg = F.build(inp, ST).segments[0]
     assert seg.import_p == F.FALLBACK_IMPORT_P
+
+
+def test_the_pieces_of_a_half_hour_rejoin_so_the_plan_does_not_depend_on_the_cut(merged):
+    inp = make(at(10, 0), sun=sun_points())
+    ten = F.build(inp, replace(ST, max_segment_min=10)).segments
+    thirty = F.build(inp, replace(ST, max_segment_min=30)).segments
+    assert [(s.start, s.end) for s in ten] == [(s.start, s.end) for s in thirty]
+    for a, b in zip(ten, thirty, strict=True):
+        assert a.solar_kwh.mid == pytest.approx(b.solar_kwh.mid) and a.load_kwh.high == pytest.approx(b.load_kwh.high)
+
+
+def test_neighbours_that_differ_in_a_price_or_the_sun_per_hour_stay_apart(merged):
+    inp = make(at(10, 0), cheap={22, 23}, sun=sun_points())
+    segs = F.build(inp, ST).segments
+    assert any(s.import_p == pytest.approx(CHEAP * 100) for s in segs)
+    edges = {s.start for s in segs}
+    assert at(11, 0) in edges and at(12, 0) in edges                   # the price changes
+    sunny = next(s for s in segs if s.start == at(10, 0))
+    assert sunny.hours == 0.5 or sunny.end <= at(11, 0)                # sun differs half-hour to half-hour: not joined
+
+
+def test_flat_half_hours_join_into_one_segment_with_summed_energy(merged):
+    inp = make(at(2, 0))
+    unmerged = F.merge_equal(list(F.build(inp, ST).segments))
+    segs = F.build(inp, ST).segments
+    assert len(segs) < 96 and sum(s.load_kwh.mid for s in segs) == pytest.approx(sum(s.load_kwh.mid for s in unmerged))

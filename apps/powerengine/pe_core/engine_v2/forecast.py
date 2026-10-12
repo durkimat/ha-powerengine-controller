@@ -23,6 +23,7 @@ events and free-power sessions and turns it into pence per kWh.
 from __future__ import annotations
 
 import math
+from dataclasses import fields, replace
 from datetime import datetime, timezone
 
 from .. import decide as v1d
@@ -37,6 +38,8 @@ LOW_FACTOR, HIGH_FACTOR = 0.7, 1.2          # sun band when the forecast gives n
 LOAD_LOW_FACTOR, LOAD_HIGH_FACTOR = 0.8, 1.3  # house band when nothing is learned (of the profile)
 FALLBACK_IMPORT_P = 30.0                    # no price at all: assume dear, never cheap
 BIAS_RANGE = (0.5, 1.5)
+MERGE_EQUAL = True      # join neighbouring segments whose prices, rules, sun and house per hour are all equal
+MERGE_REL_TOL = 1e-9
 HORIZON_H = 48          # always solved this far (prices past the last published ones are estimated)
 DISPLAY_H = 36          # what the timeline shows: the last hours before the end of the look-ahead are where the
                         # value of the energy left over bends the plan, so they are solved but not shown (0.9.122)
@@ -126,6 +129,52 @@ def _cuts(now: datetime, end: datetime, windows: list[Window], max_min: float) -
         minutes = (b - a).total_seconds() / 60
         n = max(1, math.ceil(minutes / max_min - 1e-9))
         out += [a + (b - a) * i / n for i in range(1, n)] + [b]
+    return out
+
+
+def _same(a: float, b: float) -> bool:
+    return abs(a - b) <= MERGE_REL_TOL * max(1.0, abs(a), abs(b))
+
+
+def _rate(sp: Spread, hours: float) -> tuple[float, float, float]:
+    return sp.low / hours, sp.mid / hours, sp.high / hours
+
+
+def _joinable(a: Segment, b: Segment) -> bool:
+    """Two neighbours say the same thing about the world: every price and rule equal, and the sun and the house the
+    same per hour. A plan over them cannot tell where one ends, so the grid they were cut on is not part of the plan."""
+    if a.end != b.start:
+        return False
+    for f in fields(Segment):
+        if f.name in ("start", "end", "solar_kwh", "load_kwh"):
+            continue
+        x, y = getattr(a, f.name), getattr(b, f.name)
+        if isinstance(x, float) and isinstance(y, float):
+            if not _same(x, y):
+                return False
+        elif x != y:
+            return False
+    for sa, sb in ((a.solar_kwh, b.solar_kwh), (a.load_kwh, b.load_kwh)):
+        if sa.w != sb.w or not all(_same(x, y) for x, y in zip(_rate(sa, a.hours), _rate(sb, b.hours), strict=True)):
+            return False
+    return True
+
+
+def _join(a: Segment, b: Segment) -> Segment:
+    def add(x: Spread, y: Spread) -> Spread:
+        return Spread(x.low + y.low, x.mid + y.mid, x.high + y.high, x.w)
+    return replace(a, end=b.end, solar_kwh=add(a.solar_kwh, b.solar_kwh), load_kwh=add(a.load_kwh, b.load_kwh))
+
+
+def merge_equal(segments: list[Segment]) -> list[Segment]:
+    """Neighbouring segments that are `_joinable`, as one. With the default 30-minute cut nothing joins unless a
+    stretch is flat for longer than a half-hour; with a shorter `max_segment_min` the pieces of a half-hour rejoin."""
+    out: list[Segment] = []
+    for sg in segments:
+        if out and _joinable(out[-1], sg):
+            out[-1] = _join(out[-1], sg)
+        else:
+            out.append(sg)
     return out
 
 
@@ -243,6 +292,8 @@ def build(inp: StepInput, settings: V2Settings, learned: dict | None = None) -> 
         notes.append("There is no house load history yet: the house is taken as a flat guess.")
     if any(sg.slot_prob is not None and sg.slot_prob < 1 for sg in segments):
         notes.append(f"{N('dispatch')}s that have not started are counted as a chance, not a certainty.")
+    if MERGE_EQUAL:
+        segments = merge_equal(segments)
     return Forecast(made_at=now, segments=tuple(segments), notes=tuple(notes))
 
 
