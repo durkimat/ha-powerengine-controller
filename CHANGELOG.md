@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.138 (beta)
+
+### Behaviour changes
+
+- **Costs and history now say which settings profile engine v2 ran on.** Each half-hour cost record from now on carries the engine v2 profile in use ("defaults", "2.1 beta" or one of yours). The Engine v2 history, the plan history's "in control" and the nightly same-day comparison show it next to "engine v2", and a day where you changed profile is marked "mixed". Days recorded before this release have no profile and show as before. Costs themselves are unchanged: they were always worked out from what the inverter did.
+- **The engine badge names the profile.** The badge on the Engine v2 tab reads "Engine v2 · 2.1 beta" while engine v2 is the engine in use.
+- **The settings section "Plan-following and battery limits"** no longer says "(2.1 beta)" in its title, since any profile can use it.
+- **The diagnostics export and `tools/diag_summary.py`** record and print the profile in use ("engine in use: v2 (profile 2.1 beta)").
+
+### Behind the scenes
+
+- `costbook.add(profile=...)` writes `profile` on each record; `day_engine_info` returns `profile` for a day engine v2 ran (the name, or `mixed`), and the plan history, the engine v2 history and the comparison rows carry it as `profile`. `sensor.pe_state_engine` has a `profile` attribute while engine v2 is the engine. No attribute is near the 16 KB limit. Nothing in control or planning changed, so the replay is unchanged.
+
 ## 0.9.137 (beta)
 
 ### Behaviour changes

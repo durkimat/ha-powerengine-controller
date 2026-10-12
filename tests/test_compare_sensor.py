@@ -130,7 +130,7 @@ def test_the_entity_is_registered_like_the_others():
 
 class DI:
     day = date(2026, 10, 6)
-    in_control, live, metered_gbp = "v2", True, 1.234
+    in_control, live, metered_gbp, profile = "v2", True, 1.234, None
 
 
 def outcome():

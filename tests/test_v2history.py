@@ -271,3 +271,29 @@ def test_recent_marks_previews_and_is_empty_without_records(tmp_path):
     h.load(date(2026, 10, 7))["ran"] = [_ran(t(10), sent=False, preview=True), _ran(t(10, 30))]
     got = h.recent_attributes(t(12), 18)["series"]
     assert got[0]["preview"] is True and got[0]["sent"] is False and "preview" not in got[1]
+
+
+def test_day_engine_names_the_settings_profile_engine_v2_ran(tmp_path):
+    book = CostBook(str(tmp_path), timezone.utc)
+    d = date(2026, 10, 6)
+    put(book, d, [{"engine": "v2", "live": True, "profile": "2.1 beta"}] * 4)
+    assert book.day_engine_info(d) == {"engine": "v2", "live": True, "profile": "2.1 beta"}
+    d = date(2026, 10, 7)                                                  # the profile changed during the day
+    put(book, d, [{"engine": "v2", "live": True, "profile": "defaults"}] * 2
+        + [{"engine": "v2", "live": True, "profile": "2.1 beta"}] * 2)
+    assert book.day_engine_info(d) == {"engine": "v2", "live": True, "profile": "mixed"}
+    d = date(2026, 10, 8)                                                  # v1 and old v2 records: none
+    put(book, d, [{"engine": "v1", "live": True}] * 2 + [{"engine": "v2", "live": True}] * 2)
+    assert "profile" not in book.day_engine_info(d)
+
+
+def test_the_comparison_names_the_profile_the_day_ran_on():
+    from pe_core.compare.day import day_profile
+    from pe_core.compare.sensor import day_row
+    live = {"engine": "v2", "live": True, "profile": "2.1 beta"}
+    assert day_profile([live, live]) == "2.1 beta"
+    assert day_profile([live, {**live, "profile": "defaults"}]) == "mixed"
+    assert day_profile([{"engine": "v1", "live": True}, {**live, "live": False}]) is None
+    ok = {"status": "ok", "in_control": "v2", "live": True, "v1": {}, "v2": {}, "profile": "2.1 beta"}
+    assert day_row(__import__("datetime").date(2026, 10, 9), ok, True)["profile"] == "2.1 beta"
+    assert "profile" not in day_row(__import__("datetime").date(2026, 10, 9), {**ok, "profile": None}, True)

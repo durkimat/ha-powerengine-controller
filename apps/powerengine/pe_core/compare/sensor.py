@@ -37,6 +37,8 @@ def day_row(day: date, result: dict | None, has_snapshot: bool) -> dict:
     row.update(in_control=result.get("in_control"), live=bool(result.get("live")), v1=v1.get("saving"),
                v2=v2.get("saving"), bound=(result.get("bound") or {}).get("saving"),
                v1_flips=v1.get("flips"), v2_flips=v2.get("flips"), calib=_calib(result))
+    if result.get("profile") is not None:
+        row["profile"] = result["profile"]
     row["best"] = tag_best(row["v1"], row["v2"])
     if row["v1"] is not None and row["v2"] is not None:
         row["diff"] = round(row["v2"] - row["v1"], 3)

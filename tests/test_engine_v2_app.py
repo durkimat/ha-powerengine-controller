@@ -5,7 +5,7 @@ import json
 import os
 import shutil
 import sys
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from replay_harness import Clock
@@ -162,7 +162,7 @@ def test_v1_still_makes_its_plan_but_does_not_decide(v2_run):
 
 def test_the_v2_sensors_are_published_and_each_is_under_15000_bytes(v2_run):
     app = v2_run["app"]
-    assert app._published["state_engine"] == ("v2", {"v2_available": True, "choice": "v2"})
+    assert app._published["state_engine"] == ("v2", {"v2_available": True, "choice": "v2", "profile": "defaults"})
     for key in V2_SENSORS:
         assert key in app._published, key
         assert attr_bytes(app, key) < LIMIT, key
@@ -270,7 +270,7 @@ def test_engine_2_1_beta_is_engine_v2_with_a_profile_and_switching_to_it_keeps_t
     app._engine_tick({})
     assert app._v2 is first and first.s.executor == "plan" and first.vr is not None
     state, attrs = app._published["state_engine"]
-    assert state == "v2" and attrs["choice"] == "v2_1"
+    assert state == "v2" and attrs["choice"] == "v2_1" and attrs["profile"] == "2.1 beta"
     settings = app._published["diag_v2_settings"][1]
     assert settings["engines"] == ["v1", "v2"] and settings["values"]["executor"] == "plan"
     assert next(r for r in settings["settings"] if r["key"] == "level_top_rate_p")["default"] == 200.0
@@ -303,10 +303,13 @@ def test_the_diagnostics_export_has_an_engine_v2_section(v2_run):
     bundle = app._diag_bundle(datetime(2026, 10, 6, 5, tzinfo=timezone.utc))
     e = bundle["engine_v2"]
     assert e["in_use"] == "v2" and e["health"]["engine"] == "v2" and e["journal"] and len(e["journal"]) <= 300
-    assert e["timeline"]["items"]
+    assert e["timeline"]["items"] and e["profile"] == "defaults"
+    recs = [x for d in app.costbook.recorded_days() for x in app.costbook.day_records(date.fromisoformat(d))]
+    assert recs and all(x.get("profile") == "defaults" for x in recs if x.get("engine") == "v2")      # costs say which
     json.dumps(bundle, default=str)
 
 
 def test_live_v2_says_it_is_not_a_preview(v2_run):
     assert v2_run["app"]._published["v2_mode"][1]["preview"] is False
-    assert v2_run["app"]._published["state_engine"] == ("v2", {"v2_available": True, "choice": "v2"})
+    expected = {"v2_available": True, "choice": "v2", "profile": "defaults"}
+    assert v2_run["app"]._published["state_engine"] == ("v2", expected)

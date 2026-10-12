@@ -272,6 +272,7 @@ def engine_v2_of(app, tz):
     items = as_list(as_dict(e.get("timeline")).get("items"))[:PLAN_SLOTS]
     return {
         "in_use": e.get("in_use"),
+        "profile": e.get("profile"),
         "mode": health.get("mode"),
         "values_age_min": health.get("values_age_min"),
         "revalues_today": today.get("revalues"),
@@ -509,7 +510,7 @@ def render(s):
     v = s.get("engine_v2")
     if v:
         add(
-            f"engine in use: {v['in_use']}"
+            f"engine in use: {v['in_use']}" + (f" (profile {v['profile']})" if v.get("profile") else "")
             + (f"; v2 mode {v['mode']}, values {v['values_age_min']} min old" if v.get("mode") else "")
         )
         if v.get("revalues_by_cause") or v.get("revalues_today") is not None:
