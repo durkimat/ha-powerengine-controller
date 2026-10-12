@@ -202,3 +202,13 @@ def test_the_engine_comparison_has_a_line_per_day():
     off["app"]["engine_compare"] = {**compare_section(), "feature": False}
     assert ds.summarise(off)["engine_compare"] is None
     assert ds.summarise(export())["engine_compare"] is None                                     # an older app
+
+
+def test_a_calibration_without_a_percentage_still_renders():
+    e = export()
+    sec = compare_section()
+    sec["results"][2]["calibration"] = {"engine": "v2", "diff": -0.86, "diff_pct": None}
+    del sec["results"][0]["calibration"]["diff_pct"]
+    e["app"]["engine_compare"] = sec
+    text = ds.render(ds.summarise(e))
+    assert "replay -0.04 GBP off metered" in text and "replay -0.86 GBP off metered" in text

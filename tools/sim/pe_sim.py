@@ -61,6 +61,7 @@ def cmd_run(a) -> int:
     for name, res in ordered.items():
         label = next((r.get("code") for r in res if r.get("code")), "?")
         print(scoreboard.table(f"{name}  [{label}]  {json.dumps(variants_of(variants, name))}", res) + "\n")
+        print(scoreboard.metrics_table(res) + "\n")
         if first is None:
             first = res
         elif not a.no_base and variants[0].name == "base":
