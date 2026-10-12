@@ -34,7 +34,9 @@ def _common(p):
     p.add_argument(
         "--days", default="all", help="A..B, A,B,C, all (every real day with a forecast snapshot) or synthetic"
     )
-    p.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2), help="runs at a time")
+    p.add_argument(
+        "--jobs", type=int, default=max(1, os.cpu_count() or 2), help="runs at a time (default: every CPU thread)"
+    )
 
 
 def cmd_run(a) -> int:
