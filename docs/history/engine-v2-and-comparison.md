@@ -75,3 +75,15 @@ Fixed at the root, in two parts:
   fixed value gives the old flat figure. Tests: `test_engine_v2_value.py` (the cheap-window end, the peak end, the control that
   shows the old value dumping).
 
+
+## Settings profiles (0.9.137)
+
+Engine 2.1 beta (0.9.136) was engine v2 plus a settings overlay (`PROFILES["2.1"]`) that only filled keys the config did not set, so a
+saved `top_up_cost_p: 5` beat the beta's 0 and a switch needed a manual fix. 0.9.137 makes the overlay a **profile**:
+`pe_core/engine_v2/settings.py` (`BUILTIN_PROFILES`: `defaults`, `2.1 beta`; `SITE_KEYS`: house settings a profile never holds; `parse_profiles`,
+`profile_values`). Config keys `v2_profile` (in use) and `v2_profiles` (yours, name -> values that differ from the defaults, max 10).
+Precedence: `engine_v2:` (changes on top) > the profile > the v1-seeded value (`SEED_FROM`) > the default. **Loading a profile is done by the
+card**: it sends the config with `v2_profile` set and the profile keys cleared from `engine_v2:`; the app only reads the result. `system.engine: v2_1`
+parses as engine v2 with the `2.1 beta` profile (a saved `v2_profile` wins), and `_engine_choice()` still returns `v2_1` while that profile is in
+use (the state-engine `choice`, logs). The profile list is `sensor.pe_diag_v2_profiles`, not the settings sensor (14.9 KB of the 16 KB limit).
+Tests: `tests/test_engine_v2_profiles.py`, card `tests/profiles.test.cjs`.

@@ -107,6 +107,8 @@ ENTITIES: tuple[EntityDef, ...] = (
               {"icon": "mdi:engine-outline", "entity_category": "diagnostic"}),
     EntityDef("sensor", "diag_v2_settings", "Engine v2 settings",
               {"icon": "mdi:tune-variant", "entity_category": "diagnostic"}),
+    EntityDef("sensor", "diag_v2_profiles", "Engine v2 profile",
+              {"icon": "mdi:content-save-cog-outline", "entity_category": "diagnostic"}),
     EntityDef("sensor", "diag_system_losses", "System losses yesterday",
               {"device_class": "energy", "unit_of_measurement": "kWh", "icon": "mdi:fire",
                "entity_category": "diagnostic", "suggested_display_precision": 1}),
