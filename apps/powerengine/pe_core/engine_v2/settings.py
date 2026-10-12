@@ -154,7 +154,7 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
       "prefer_self_use", "preview_when_v1")),
     ("floors", "Floors", ("reserve_soc", "hard_floor_margin_pct")),
     ("comfort", "Comfort band", ("comfort_low_soc", "comfort_high_soc", "comfort_cost_p", "top_up_cost_p")),
-    ("levels", "Plan-following and battery limits (2.1 beta)",
+    ("levels", "Plan-following and battery limits",
      ("executor", "replan_on_level", "level_top_start_soc", "level_top_rate_p", "level_top_doubling_pts",
       "level_bot_start_soc", "level_bot_rate_p", "level_bot_doubling_pts", "slot_bot_factor", "slot_bot_start_soc")),
     ("value", "Value and costs",

@@ -89,6 +89,8 @@ def build_result(day_input, outcome: dict, took_s: float, made_at: str | None = 
            "v1": engine("v1"), "v2": engine("v2"),
            "bound": {"cost": _r(bound["cost_gbp"]), "saving": _r(bound["adj_save_gbp"])},
            "metered": {"cost": _r(day_input.metered_gbp)}, "calibration": None}
+    if day_input.profile is not None:
+        out["profile"] = day_input.profile
     if day_input.live and day_input.in_control in ("v1", "v2"):
         replay = out[day_input.in_control]["cost"]
         metered = out["metered"]["cost"]

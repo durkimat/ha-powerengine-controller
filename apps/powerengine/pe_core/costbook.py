@@ -102,13 +102,15 @@ class CostBook:
 
     def add(self, hh: HalfHour, r: Readings, *, capacity: float, eff: float, floor_soc: float, max_kw: float,
             includes_ev: bool, axle_value: float = 1.0, axle_plus_export: bool = True,
-            keep_existing: bool = False, engine: str | None = None, live: bool | None = None) -> dict | None:
+            keep_existing: bool = False, engine: str | None = None, live: bool | None = None,
+            profile: str | None = None) -> dict | None:
         """Value a completed half-hour and store it. Returns the stored record, or None if it can't be valued.
 
         keep_existing: don't replace a half-hour already fully recorded (a backfill never overwrites a full live
         record, but does fill in one cut short by a restart).
         engine / live: the engine chosen and whether it was in control (Active, not paused) when the record was
-        written (`day_engine`); a backfill from history passes neither, so those records carry no tag.
+        written (`day_engine`); a backfill from history passes neither, so those records carry no tag. profile: engine v2's
+        settings profile in use (`day_engine_info` reports it); only engine v2 records carry one.
         """
         self.learn_rates(r)
         window = self.window()
@@ -128,6 +130,8 @@ class CostBook:
             rec["engine"] = engine
         if live is not None:
             rec["live"] = bool(live)
+        if profile is not None:
+            rec["profile"] = profile
         if keep_existing and any(x.get("start") == rec["start"] and x.get("fv") == self.flow_id
                                  and (x.get("seconds") or 0) >= 0.8 * 1800 for x in records):
             return None                     # a full live half-hour wins; a partial one (restart) is replaced
@@ -139,7 +143,9 @@ class CostBook:
         return rec
 
     def day_engine_info(self, day: date) -> dict | None:
-        """Which engine ran a day: {"engine": "v1"|"v2"|"mixed", "live": bool}, or None with no records.
+        """Which engine ran a day: {"engine": "v1"|"v2"|"mixed", "live": bool}, or None with no records. A day that
+        engine v2 ran also says its settings profile ("profile": the name, or "mixed" when it changed during the day)
+        when the records carry one.
 
         Records with `live` true decide (a record without the key is an old one: v1, counted live); a day with no
         live record gives the engine the records say was chosen, with live false. Both engines live in one day:
@@ -152,7 +158,11 @@ class CostBook:
         live = [x for x in recs if x.get("live", True)]
         pool, is_live = (live, True) if live else (recs, False)
         engines = {x.get("engine") or "v1" for x in pool}
-        return {"engine": engines.pop() if len(engines) == 1 else "mixed", "live": is_live}
+        info = {"engine": engines.pop() if len(engines) == 1 else "mixed", "live": is_live}
+        profiles = {x["profile"] for x in pool if x.get("profile") is not None and x.get("engine") == "v2"}
+        if profiles:
+            info["profile"] = profiles.pop() if len(profiles) == 1 else "mixed"
+        return info
 
     def day_engine(self, day: date) -> str | None:
         """`day_engine_info(day)["engine"]`: "v1", "v2", "mixed", or None when the day has no records."""

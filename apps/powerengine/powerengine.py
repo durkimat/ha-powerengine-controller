@@ -776,9 +776,15 @@ class PowerEngine(hass.Hass):
         in its tick, publishes its sensors and sends nothing."""
         return self.cfg is not None and self._engine_name() == "v1" and bool(self.cfg.engine_v2.preview_when_v1)
 
+    def _engine_profile(self):
+        """The engine v2 settings profile in use, or None under engine v1 (which has none)."""
+        return self.cfg.v2_profile if self.cfg is not None and self._engine_name() == "v2" else None
+
     def _engine_attrs(self):
         """Attributes of sensor.pe_state_engine: v2_preview only once the preview has really run (its engine exists)."""
         attrs = {"v2_available": True, "choice": self._engine_choice()}
+        if self._engine_profile() is not None:
+            attrs["profile"] = self._engine_profile()
         if self._v2_preview_on() and self.__dict__.get("_v2") is not None:
             attrs["v2_preview"] = True
         return attrs
@@ -936,7 +942,7 @@ class PowerEngine(hass.Hass):
             tz = self.tz or timezone.utc
             for key, (state, attrs) in v2publish.entity_states(out, eng, eng.s, tz, preview).items():
                 if key == "state_engine":                      # it also names the choice (v2 or 2.1 beta)
-                    attrs = {**attrs, "choice": self._engine_choice()}
+                    attrs = {**attrs, "choice": self._engine_choice(), "profile": self._engine_profile()}
                 self._publish_if_changed(key, state, attrs)
             self._record_v2_history(r.now, out, send, preview)
             if not preview:
@@ -1125,7 +1131,7 @@ class PowerEngine(hass.Hass):
                 learning.hour_of(hh.start))
         try:
             rec = self.costbook.add(hh, r, engine=self._engine_name(), live=self.mode.effective == "active",
-                                    **self._cost_params())
+                                    profile=self._engine_profile(), **self._cost_params())
             if rec is None:
                 return
             if rec["v"].get("event"):
@@ -1814,6 +1820,8 @@ class PowerEngine(hass.Hass):
                                       info["engine"] if info else None)
             view = day_view(day, self.costbook.day_records(day), snap, label, tz, now)
             view["in_control"], view["live"] = (info["engine"], info["live"]) if info else (None, None)
+            if info and info.get("profile") is not None:
+                view["profile"] = info["profile"]
             recorded = self.costbook.recorded_days()
             view["earliest"] = min(recorded[0], day.isoformat()) if recorded else day.isoformat()  # for the picker
             view["latest"] = today.isoformat()
@@ -1855,6 +1863,8 @@ class PowerEngine(hass.Hass):
         info = self.costbook.day_engine_info(day) if self.costbook is not None else None
         if info is None and (today is None or day == today):
             info = {"engine": self._engine_name(), "live": self.mode.effective == "active"}
+            if self._engine_profile() is not None:
+                info["profile"] = self._engine_profile()
         return info
 
     def _record_v2_history(self, now, out, send, preview):
@@ -1910,6 +1920,8 @@ class PowerEngine(hass.Hass):
             day = self._v2_history_date or today
             info = self._day_engine(day, today)
             attrs = h.attributes(day, today, info["engine"] if info else None, info["live"] if info else None)
+            if info and info.get("profile") is not None:
+                attrs = {**attrs, "profile": info["profile"]}
             self._publish_state("v2_history", day.isoformat(), attrs)
         except Exception as err:
             self._warn_daily("v2history_pub", f"Could not build engine v2's history: {err!r}")
@@ -4008,7 +4020,8 @@ class PowerEngine(hass.Hass):
                 (self._published.get("v2_timeline") or (None, None))[1],
                 {name: (self._published.get(key) or (None, None))[1] for name, key in (
                     ("mode", "v2_mode"), ("value", "v2_value"), ("value_curve", "v2_value_curve"),
-                    ("learning", "diag_v2"))})),
+                    ("learning", "diag_v2"))},
+                profile=self._engine_profile())),
             "forecast_snapshots": s(lambda: fcsnap.summary(self._fcsnap.folder))
             if self.__dict__.get("_fcsnap") else None,
             "v2_history": s(lambda: v2history.summary(self._v2hist.folder, self.tz)) if self.__dict__.get("_v2hist")

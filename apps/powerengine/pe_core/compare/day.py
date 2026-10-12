@@ -30,6 +30,7 @@ class DayInput:
     in_control: str | None           # "v1" | "v2" | "mixed" | None (no records)
     live: bool                       # an engine was really sending commands (Active, not paused)
     metered_gbp: float
+    profile: str | None = None       # engine v2's settings profile the records name ("mixed" if it changed), if any
 
 
 class Refused(Exception):
@@ -58,6 +59,13 @@ def day_engine(records: list[dict]) -> tuple[str | None, bool]:
     if len(engines) > 1:
         return "mixed", bool(live)
     return engines.pop(), bool(live)
+
+
+def day_profile(records: list[dict]) -> str | None:
+    """The engine v2 settings profile the day's live v2 records name, "mixed" if more than one, None if none do."""
+    names = {r["profile"] for r in records if r.get("profile") is not None and r.get("engine") == "v2"
+             and r.get("live")}
+    return (names.pop() if len(names) == 1 else "mixed") if names else None
 
 
 def metered_cost(records: list[dict]) -> float:
@@ -94,4 +102,4 @@ def load_day(costs_dir: str, day: date, tz_name: str | None = None) -> DayInput:
     pack = {"version": 1, "tz": str(tz.key), "source": "real day",
             "days": {KEY: day_from_records(records, "", "", 1.0, tz)}}
     engine, live = day_engine(records)
-    return DayInput(day, tz, start, records, pack, snap, engine, live, metered_cost(records))
+    return DayInput(day, tz, start, records, pack, snap, engine, live, metered_cost(records), day_profile(records))

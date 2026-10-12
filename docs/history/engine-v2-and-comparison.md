@@ -87,3 +87,7 @@ card**: it sends the config with `v2_profile` set and the profile keys cleared f
 parses as engine v2 with the `2.1 beta` profile (a saved `v2_profile` wins), and `_engine_choice()` still returns `v2_1` while that profile is in
 use (the state-engine `choice`, logs). The profile list is `sensor.pe_diag_v2_profiles`, not the settings sensor (14.9 KB of the 16 KB limit).
 Tests: `tests/test_engine_v2_profiles.py`, card `tests/profiles.test.cjs`.
+
+0.9.138 follow-up: cost records carry the profile (`costbook.add(profile=)`, `day_engine_info()["profile"]`, `compare.day.day_profile`), published as
+`profile` on `sensor.pe_state_engine`, the plan history, `sensor.pe_v2_history`, the comparison rows and the diagnostics export's
+`engine_v2` section (`diag_summary` prints it). Only engine v2 records carry one; days before 0.9.138 have none.
