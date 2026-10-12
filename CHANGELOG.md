@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.137 (beta)
+
+### Behaviour changes
+
+- **Engine 2.1 beta is now a settings profile of engine v2, not a third engine.** Under "Planning engine" there are two choices again, engine v1 and engine v2. Engine v2 has a **Settings profile** box: "defaults" (engine v2's own starting values), "2.1 beta" (the plan-following set from 0.9.136) and any profiles you save yourself. If you were on engine 2.1 beta, you are now on engine v2 with the "2.1 beta" profile, and the engine behaves exactly as it did.
+- **Loading a profile replaces the tuning settings.** Before, a value you had saved (for example "Grid charging above the comfort band" at 5p) silently beat the beta's value, so switching to 2.1 beta needed a manual fix. Now loading a profile drops the changes you made on top of the previous one, so the engine runs exactly the profile's numbers. Your reserve, the comfort band's edges, what the engine may do (selling, grid events, free power) and the wear and grid-event figures belong to your house, not the profile, and are never changed by loading one.
+- **Save your own.** Change settings on the page, then "Save as a new profile…" (up to 10), "Save changes to" a profile of yours, "Revert" to the profile in use, or delete one. A saved profile keeps only what differs from engine v2's defaults, so later improvements to a default still reach you for settings you did not tune. Loading, saving and deleting send only the profile change; other unsaved edits on the page stay unsaved.
+
+### Behind the scenes
+
+- New config keys `v2_profile` (the profile in use) and `v2_profiles` (yours). A profile gives a value wherever `engine_v2:` does not set one, before the v1-seeded values. `system.engine: v2_1` is still accepted and means engine v2 with the "2.1 beta" profile (unless `v2_profile` is set); `sensor.pe_state_engine` still says `choice: v2_1` while that profile is in use.
+- New sensor `sensor.pe_diag_v2_profiles` (state: the profile in use; attributes: built-in profiles with their values, your profile names, the house-only settings a profile never holds). It is separate because the settings sensor is at 14.9 KB of the 16 KB limit. `sensor.pe_diag_v2_settings` `engines` is now `["v1", "v2"]`.
+- `MIN_CARD_VERSION` is 0.9.137: an older card does not know the new config keys and would drop them on its next save. Replay and engine behaviour are unchanged.
+
 ## 0.9.136 (beta)
 
 ### Behaviour changes
