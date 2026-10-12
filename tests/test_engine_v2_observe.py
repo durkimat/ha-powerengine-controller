@@ -343,6 +343,7 @@ def _slack_case(monkeypatch, slack, ahead_min, *, mode="charge", price_change_at
     from pe_core.engine_v2 import observe
     from pe_core.engine_v2.types import TimelineItem
     monkeypatch.setattr(observe, "BAND_SLACK_MIN", slack)
+    monkeypatch.setattr(observe, "CORRIDOR_BAND", False)  # these test the time slack alone
     mid = [20.0, 34.0, 48.0, 62.0, 76.0, 76.0]
     path = {"start": T0.isoformat(), "step_min": 15, "mid": mid, "low": mid, "high": mid}
     segs = [segment(T0 + timedelta(minutes=30 * i), import_p=7.0 if price_change_at is None or 30 * i < price_change_at
