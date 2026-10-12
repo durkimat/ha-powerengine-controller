@@ -318,3 +318,19 @@ def test_flat_half_hours_join_into_one_segment_with_summed_energy(merged):
     unmerged = F.merge_equal(list(F.build(inp, ST).segments))
     segs = F.build(inp, ST).segments
     assert len(segs) < 96 and sum(s.load_kwh.mid for s in segs) == pytest.approx(sum(s.load_kwh.mid for s in unmerged))
+
+
+def test_a_running_slot_is_certain_for_the_whole_half_hour_however_it_is_cut():
+    """The half-hour in progress is certain; the cut grid (max_segment_min) must not make its later pieces a chance."""
+    now = at(23, 5)
+    inp = make(now, cheap={46, 47, 48, 49})
+    inp.readings.rates = rate_windows(2, cheap={46, 47, 48, 49})
+    inp.readings.dispatches = [Window(at(23, 0), at(1, 0, day=1), 0.0)]
+    inp.slot_hold = lambda: 0.4
+    inp.slots_whole_house = True
+    for cut in (10, 30):
+        fc = F.build(inp, replace(ST, max_segment_min=cut))
+        running = [s for s in fc.segments if s.start < at(23, 30)]
+        assert running and all(s.slot_prob == 1.0 for s in running), cut
+        later = [s for s in fc.segments if at(23, 30) <= s.start < at(1, 0, day=1)]
+        assert later and all(s.slot_prob == pytest.approx(0.4) for s in later), cut

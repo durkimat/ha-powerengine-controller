@@ -239,7 +239,7 @@ def build(inp: StepInput, settings: V2Settings, learned: dict | None = None) -> 
                 if disp.start <= now:
                     # The half-hour in progress is certain (its price is on the tariff now); the ones still to come
                     # in a running window are a chance like any other, with the rate at which running windows held.
-                    prob = 1.0 if a <= now or inp.slot_hold is None else min(1.0, max(0.0, float(inp.slot_hold())))
+                    prob = 1.0 if a < hh_end or inp.slot_hold is None else min(1.0, max(0.0, float(inp.slot_hold())))
                 else:
                     seen = (inp.slot_first_seen or {}).get(disp.start.isoformat())
                     try:
