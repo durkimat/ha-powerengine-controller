@@ -140,6 +140,10 @@ class TimelineItem:
     level_end: float
     until: str                            # the condition that ends it, in words ("until 88%", "until 05:30")
     reason: str                           # plain words naming the prices
+    level_lo: float | None = None         # a charge or sale ends anywhere in this corridor (percent), as good as level_end
+    level_hi: float | None = None         # to within the tolerance of value.CORRIDOR_COST_P; None: a point (level_end)
+    remainder: bool = False               # a hold that only fills out the rest of a segment after a stop part-way: a
+                                          # way of saying how much, not a decision to hold
 
 
 @dataclass(frozen=True)
