@@ -415,3 +415,38 @@ def test_cloudy_sun_is_lower_seeded_and_forecast_a_little_optimistic():
     assert all(c <= k + 1e-9 for c, k in zip(cloudy, clear, strict=True)) and max(cloudy) < max(clear)
     assert scale == pytest.approx(0.456) and scale_c == 1.0 and spread[1] / spread[0] > spread_c[1] / spread_c[0]
     assert synth.parse_slots("") == [] and synth.parse_slots("17:30-18:30") == [(17.5, 18.5)]
+
+
+def test_the_simulated_hold_sells_spare_sun_as_the_real_inverters_does():
+    """Hold is Force charge at 0 W. The demo world lets spare sun charge the battery under it; the real inverter does
+    not (4 Oct 2026), so the simulator patches the world and the demo itself stays as it was."""
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+
+    import worker
+
+    from pe_core.demo.pack import load_pack
+    from pe_core.demo.world import CAPACITY_KWH, IDS, DemoWorld
+
+    tz = ZoneInfo("Europe/London")
+
+    class Patched(DemoWorld):
+        pass
+
+    worker.hold_sells_spare_sun(Patched)
+    soc = {}
+    for cls in (DemoWorld, Patched):
+        t = [datetime(2026, 10, 6, 10, tzinfo=tz).astimezone(timezone.utc)]
+        world = cls(load_pack(), "sunny", tz, lambda t=t: t[0])
+        world.energy = 0.5 * CAPACITY_KWH
+        world.call_service("number/set_value", entity_id=IDS["rc_charge_power"], value=0)
+        for _ in range(30):
+            t[0] += timedelta(minutes=1)
+            world.call_service("select/select_option", entity_id=IDS["rc_mode"], option="Force charge")
+            world.step()
+        f = world.flows
+        assert f["solar_w"] > f["house_w"]
+        soc[cls] = world.soc
+        assert f["house_w"] + f["car_w"] - f["solar_w"] + f["charge_w"] - f["discharge_w"] - f["grid_w"] == \
+            pytest.approx(0, abs=1e-6)
+    assert soc[DemoWorld] > 50.5 and soc[Patched] == pytest.approx(50, abs=0.01)

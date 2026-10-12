@@ -19,7 +19,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-RUNNER_VERSION = 1  # bump when a change makes cached results wrong
+RUNNER_VERSION = 2  # bump when a change makes cached results wrong (2: Hold sells spare sun, as the inverter does)
 REPO = Path(__file__).resolve().parents[2]
 APP_DIR = Path("apps") / "powerengine"
 CODE_SUFFIXES = {".py", ".yml", ".yaml", ".lovelace", ".template", ".json"}
