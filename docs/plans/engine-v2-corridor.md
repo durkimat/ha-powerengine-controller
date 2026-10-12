@@ -67,6 +67,62 @@ fix the symptoms in these three days.** Holds and minutes in Hold at a target we
 makes cost and flip-flops worse. A zero tolerance (level-driven, point target) halves nothing but cuts flip-flops 28 to 20
 at the same cost; that is the only clear gain.
 
+## Prototype 3: a corridor is a price tolerance, so nothing in the plan's clock may end a run inside it
+
+Prototype 2 stopped a run at the corridor edge, but three things still told the engine it was off plan, because they
+read the plan by *time* where the corridor is a price tolerance read by *level*. Of 404 re-plans over the three days
+only 36 were "level reached"; 250 (62%) were "The battery left its expected range".
+
+1. `observe._band` indexes the plan's level path by clock time. A run that reaches its edge early is ahead of the clock,
+   and the hold that follows is behind it; 10 minutes of either is a re-plan. Fixed (`CORRIDOR_BAND`): while the clock is
+   in a charge or sale, or in the hold that only fills out its segment, the range is the whole run, from where it starts
+   to the far edge of its corridor (`Observer._run_span`).
+2. A run that reaches its edge is on target, so the level event it raises (`level_edge`) no longer asks for a re-plan,
+   and a re-plan made for another reason while the run goes on keeps the run's edge if the new corridor still contains it
+   (`CORRIDOR_STICKY`).
+3. With the re-plans gone nothing broke the loop where a sale holds at its edge, the level wobbles back above it, and
+   the same sale restarts (two-minute discharge/hold pairs from 08:51 to 12:00 on 8 Oct: 33 flips). The run that ended
+   at its edge is now not restarted by the plan it ran under (`Executor._reached`, as for a charge target in v1); a new
+   plan allows it again.
+
+Same three days, `system.engine=v2_1`, tolerance in pence (CORRIDOR_COST_P):
+
+| | adj GBP | flips | modes | holds | min in Hold at target | cut runs | re-plans |
+|---|---|---|---|---|---|---|---|
+| baseline (main) | -5.59 | 28 | 127 | 29 | 126 | 20 | 395 |
+| prototype 2, 0.5p | -5.45 | 26 | 132 | 42 | 247 | 29 | 434 |
+| + sticky edge and level_edge, 0.5p | -5.70 | 24 | 125 | 34 | 179 | 28 | 404 |
+| + corridor range, no latch, 0.5p | -5.56 | 33 | 133 | 36 | 258 | 23 | 227 |
+| prototype 3 (all three), 0p | -5.48 | 17 | 118 | 30 | 150 | 18 | |
+| prototype 3, 0.5p | -5.72 | 21 | 115 | 28 | 210 | 20 | 224 |
+| prototype 3, 2p | -5.61 | 17 | 109 | 24 | 205 | 25 | |
+
+Re-plans fall from 395 to 224 (-43%): smart slots 92 and prices 39 are the hard inputs, and "left its expected range"
+falls from 243 to 63. Against the baseline: cost about 0.1 GBP better (noise), flips 28 to 17-21, modes 127 to 109-118,
+calculation time about 40% less (304 s against 522 s). **Minutes in Hold at a target are higher** (150-210 against 126).
+
+### Splitting the holds (scoreboard: wait / car / idle)
+
+A hold at a reached target is *waiting* if a price or event changes during it or at its end, *car* if the car charges
+during it (the battery is held for the car whatever the prices), else *idle*. Same three days:
+
+| | at target | wait | car | idle |
+|---|---|---|---|---|
+| baseline | 126 | 0 | 32 | 94 |
+| prototype 3, 0.5p | 210 | 11 | 52 | 147 |
+
+So the extra Hold is not waiting for prices (11 minutes). 53 of the 84 extra minutes are idle, 20 are car. The idle ones
+are mostly on 8 Oct, 09:00-11:00: the battery sits at 89-93% with the sun refilling it, a sale of a few points
+(93 to 86) runs to its near edge in minutes, holds 14-38 minutes while the sun refills it, and the band exit re-plans
+and restarts it (discharge, hold, discharge four times; the baseline has one such hold that morning). A stop at the near
+edge sells less than the plan's best point, and a later plan makes the rest up. Holds at 8 Oct 19:57 (33 min) were the
+car and are plan holds, correctly. An earlier draft of this section quoted 169 re-plans
+and 9 range exits: those were read from the default engine's variant by mistake.
+
+Verdict so far: the prototype cuts re-plans and flips, and costs no more, but adds idle Hold at the near edge of a
+corridor, and shows no measurable saving. It does not yet use the time flexibility it creates.
+Still not run: 11 Oct, the synthetic day, replay, the full tier. Constants only; no setting, card or release.
+
 ## Why it probably falls short, and what to look at next
 
 - Many holds are not remainders: they follow runs cut by a re-plan, or are genuine plan holds; the metric counts both.
