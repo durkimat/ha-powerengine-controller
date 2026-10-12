@@ -393,6 +393,14 @@ def summarise(export, since=None):
 # --- text ---------------------------------------------------------------------------------------------------
 
 
+def _calib_text(cal):
+    """", replay -0.04 GBP (-2.0%) off metered"; either figure may be missing in an export."""
+    diff, pct = cal.get("diff"), cal.get("diff_pct")
+    if diff is None:
+        return ""
+    return f", replay {diff:+.2f} GBP" + (f" ({pct}%)" if pct is not None else "") + " off metered"
+
+
 def render(s):
     tz = zone(s.get("timezone"))
     T = lambda iso: stamp(parse_time(iso), tz)  # noqa: E731
@@ -562,7 +570,7 @@ def render(s):
                 f"  {d['day']} v1 {d['v1']:+.2f} (flips {d['v1_flips']}) v2 {d['v2']:+.2f} (flips {d['v2_flips']}) "
                 f"bound {d['bound']:+.2f} GBP, {d['took_s']} s; in control {d['in_control']}"
                 + (" (live)" if d["live"] else " (not live)")
-                + (f", replay {cal['diff']:+.2f} GBP ({cal['diff_pct']}%) off metered" if cal else "")
+                + (_calib_text(cal) if cal else "")
             )
     w = s.get("writes")
     if w:
