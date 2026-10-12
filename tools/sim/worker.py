@@ -207,6 +207,9 @@ def _plan(vr, at, tz) -> dict:
                 _r(i.level_end, 1),
                 i.until,
                 i.reason,
+                _r(getattr(i, "level_lo", None), 1),
+                _r(getattr(i, "level_hi", None), 1),
+                bool(getattr(i, "remainder", False)),
             ]
             for i in vr.timeline
         ],

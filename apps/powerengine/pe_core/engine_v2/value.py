@@ -869,7 +869,7 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
     plan that opened with "charge now" was one nothing followed, and every revaluation opened with it again."""
     ends = _stretch_ends(segs)
     recs, e, prev_mode = [], e0, prev
-    target, target_to, capped = None, -1, False
+    target, target_to, capped, target_corridor = None, -1, False, None
     for i, S in enumerate(segs):
         corridor = None
         if kind == "mid":
@@ -889,19 +889,22 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
             target = reach if (any(r["mode"] == CHARGE for r in sub) and reach > e + 1e-9
                                and not sale_goes_on) else None
             target_to = ends[i]
+            target_corridor = None if capped else next(
+                (r["corridor"] for r in reversed(sub) if r["mode"] == CHARGE and r["corridor"]), None)
         if kind == "self":
             mode, stop = S.forced or SELF_USE, None
         elif (front and target is not None and i <= target_to and not S.forced and CHARGE in S.allowed
               and e < target - 1e-9 and e < S.ceil - 1e-9
               and not (capped and _phys(S, e, CHARGE, net, imp_p)[0] > target + 1e-9)):
             mode, stop = CHARGE, min(target, S.ceil)
+            corridor = target_corridor        # where the stretch's own charge stops: the same corridor
         elif vks is not None:
             mode, share, span = _dp_choice(S, e, imp_p, vks[i], prev_mode)
             stop = None
             if share < 1.0:                                  # a charge or sale that stops part-way: where it stops
                 lo, hi = _phys(S, e, HOLD, net, imp_p)[0], _phys(S, e, mode, net, imp_p)[0]
                 stop = lo + share * (hi - lo)
-                if span is not None:                         # and the stretch of levels that is as good to within a tolerance
+                if span is not None:                         # the levels as good as that to within a tolerance
                     corridor = (lo + span[0] * (hi - lo), lo + span[1] * (hi - lo))
         else:
             mode, stop = _policy(S, rows[i], step, e, imp_p, net, prev_mode, band)

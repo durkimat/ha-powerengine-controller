@@ -190,20 +190,23 @@ def _planned_level(plan: dict, t: datetime):
 
 
 def _target(plan: dict, t: datetime, mode: str):
-    """What the plan in force said about a `mode` run begun at `t`: (level, time) at the end of the consecutive items
-    in that direction (charge or export) from the one that covers `t`; None when `t` is not in such an item."""
+    """What the plan in force said about a `mode` run at `t`: (corridor low, corridor high, time) at the end of the
+    consecutive items in that direction (charge or export) from the one that covers `t`; None when `t` is not in
+    such an item. A plan without corridors (older code) has a point: low and high are the item's end level."""
     want = "charge" if mode == "charge" else "export"
     end = last_b = None
     for i in plan["timeline"]:
         a, b = datetime.fromisoformat(i[1]), datetime.fromisoformat(i[2])
+        lo = i[7] if len(i) > 7 and i[7] is not None else i[4]
+        hi = i[8] if len(i) > 8 and i[8] is not None else i[4]
         if end is None:
             if a <= t < b and i[0] == want:
-                end, last_b = i[4], b
+                end, last_b = (lo, hi), b
         elif a == last_b and i[0] == want:
-            end, last_b = i[4], b
+            end, last_b = (lo, hi), b
         else:
             break
-    return None if end is None else (end, last_b)
+    return None if end is None else (*end, last_b)
 
 
 def _rd(x):
@@ -233,29 +236,31 @@ def run_metrics(result: dict) -> dict | None:
                 return lvl
         return trace[-1][1] if trace else None
 
-    over, under, hold_min, holds, cut = [], [], 0.0, 0, 0
+    over, under, inside, hold_min, holds, cut = [], [], [], 0.0, 0, 0
     for n, (t, key) in enumerate(changes):
         nxt = changes[n + 1][0] if n + 1 < len(changes) else end_of_day
         if key == "hold":
             holds += 1
             prev_t, prev = changes[n - 1] if n else (None, None)
             plan = _plan_in_force(plans, prev_t) if n else None
-            tgt = (_target(plan, prev_t, prev) or (None,))[0] if plan and prev in RUN_MODES else None
+            tgt = _target(plan, prev_t, prev) if plan and prev in RUN_MODES else None
             lvl = level_at(t)
-            if tgt is not None and lvl is not None and abs(lvl - tgt) <= REACHED_PT:
+            if tgt is not None and lvl is not None and tgt[0] - REACHED_PT <= lvl <= tgt[1] + REACHED_PT:
                 hold_min += (nxt - t).total_seconds() / 60
         if key in RUN_MODES:
             probe = max(t, nxt - timedelta(seconds=60))  # the plan that governed the end of the run
             plan = _plan_in_force(plans, probe)
-            tgt, item_end = (_target(plan, probe, key) or (None, None)) if plan else (None, None)
+            tgt = _target(plan, probe, key) if plan else None
             lvl = level_at(nxt)
             if tgt is None or lvl is None:
                 continue
+            lo, hi, item_end = tgt
             if nxt < item_end - timedelta(minutes=CUT_MIN):  # cut short: no target was missed, so not scored
                 cut += 1
                 continue
-            d = (lvl - tgt) if key == "charge" else (tgt - lvl)  # positive: went past the target
-            (over if d > 0 else under).append(abs(d))
+            past = (lvl - hi) if key == "charge" else (lo - lvl)  # positive: went past the corridor
+            short = (lo - lvl) if key == "charge" else (lvl - hi)  # positive: stopped short of it
+            (over if past > 0 else under if short > 0 else inside).append(max(past, short, 0.0))
     errs = []
     for t, lvl in trace:
         plan = _plan_in_force(plans, t)
@@ -265,7 +270,7 @@ def run_metrics(result: dict) -> dict | None:
     return {
         "holds": holds,
         "hold_at_target_min": round(hold_min, 1),
-        "runs": len(over) + len(under),
+        "runs": len(over) + len(under) + len(inside),
         "cut_early": cut,
         "overshoot_mean": _rd(_mean(over)),
         "overshoot_max": _rd(max(over, default=None)),
@@ -299,10 +304,11 @@ def metrics_total(ms: list[dict]) -> dict:
     over = [x for m in ms for x in m["_over"]]
     under = [x for m in ms for x in m["_under"]]
     errs = [x for m in ms for x in m["_errs"]]
+    runs = sum(m["runs"] for m in ms)
     return {
         "holds": sum(m["holds"] for m in ms),
         "hold_at_target_min": round(sum(m["hold_at_target_min"] for m in ms), 1),
-        "runs": len(over) + len(under),
+        "runs": runs,
         "cut_early": sum(m["cut_early"] for m in ms),
         "overshoot_mean": _rd(_mean(over)),
         "overshoot_max": _rd(max(over, default=None)),

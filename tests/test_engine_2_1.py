@@ -113,24 +113,66 @@ def _plan_with(mode):
     return SimpleNamespace(timeline=(item,)), t0.replace(minute=30)
 
 
+T0 = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+
+
+def _tl(*items, same_prices=True):
+    """items: (mode, start minute, end minute, level_start, level_end, lo, hi, remainder)."""
+    from pe_core.engine_v2.types import Segment, Spread, TimelineItem
+    out = []
+    for mode, a, b, l0, l1, lo, hi, rem in items:
+        out.append(TimelineItem(mode, T0 + timedelta(minutes=a), T0 + timedelta(minutes=b), l0, l1, "", "",
+                                level_lo=lo, level_hi=hi, remainder=rem))
+    sp = Spread(0, 0, 0)
+    segs = tuple(
+        Segment(T0 + timedelta(minutes=m), T0 + timedelta(minutes=m + 30), 7.0 if (same_prices or m < 30) else 30.0,
+                15.0, sp, sp)
+        for m in range(0, 120, 30))
+    return SimpleNamespace(timeline=tuple(out), forecast=SimpleNamespace(segments=segs))
+
+
+ALLOW = SimpleNamespace(allowed=frozenset({"charge", "export", "hold", "self_use"}))
+
+
 def test_the_plan_executor_takes_the_plans_mode_when_the_limits_allow_it():
-    vr, now = _plan_with("export")
-    allowed = SimpleNamespace(allowed=frozenset({"export", "hold", "self_use", "charge"}))
-    assert Executor(V2Settings(executor="plan"))._candidate(allowed, None, 60.0, vr, now) == "export"
-    not_allowed = SimpleNamespace(allowed=frozenset({"hold", "self_use"}))
-    # a limit takes the plan's mode away: the executor falls back to its lines
-    ln = SimpleNamespace(
-        value_p=10.0,
-        store_sun_line_p=15.8,
-        use_line_p=6.3,
-        charge_now=False,
-        charge_target_soc=None,
-        sell_floor_soc=None,
-        buy_line_p=7.0,
-        sell_line_p=14.2,
-    )
-    got = Executor(V2Settings(executor="plan"))._candidate(not_allowed, ln, 60.0, vr, now)
-    assert got in ("hold", "self_use")
+    vr = _tl(("export", 0, 60, 80, 60, 60, 60, False))
+    now = T0 + timedelta(minutes=30)
+    ex = Executor(V2Settings(executor="plan"))
+    assert ex._plan_candidate(ALLOW, 70.0, vr, now) == "export"
+    # a limit takes the plan's mode away: nothing is said, and the caller falls back to its lines
+    assert ex._plan_candidate(SimpleNamespace(allowed=frozenset({"hold", "self_use"})), 70.0, vr, now) is None
+
+
+def test_a_charge_runs_to_the_corridor_edge_not_the_clock():
+    vr = _tl(("charge", 0, 20, 50, 80, 78, 82, False), ("hold", 20, 30, 80, 80, 80, 80, True),
+             ("export", 30, 60, 80, 60, 60, 60, False))
+    ex = Executor(V2Settings(executor="plan"))
+    ex.mode = "charge"
+    assert ex._plan_candidate(ALLOW, 70.0, vr, T0 + timedelta(minutes=10)) == "charge"
+    assert ex._plan_candidate(ALLOW, 77.0, vr, T0 + timedelta(minutes=10)) == "charge"        # short of the edge (78)
+    assert ex._edge == 78
+    # at the edge the next action starts at once (the hold only fills out the segment), not at minute 30
+    assert ex._plan_candidate(ALLOW, 78.0, vr, T0 + timedelta(minutes=10)) == "export"
+    # slower than planned: the item's time is over but the edge is not reached, the charge goes on
+    assert ex._plan_candidate(ALLOW, 75.0, vr, T0 + timedelta(minutes=25)) == "charge"
+
+
+def test_the_next_action_waits_for_the_clock_when_a_price_changes_before_it():
+    vr = _tl(("charge", 0, 20, 50, 80, 80, 80, False), ("hold", 20, 30, 80, 80, 80, 80, True),
+             ("export", 30, 60, 80, 60, 60, 60, False), same_prices=False)
+    ex = Executor(V2Settings(executor="plan"))
+    ex.mode = "charge"
+    assert ex._plan_candidate(ALLOW, 80.0, vr, T0 + timedelta(minutes=10)) == "hold"
+    assert ex._plan_candidate(ALLOW, 80.0, vr, T0 + timedelta(minutes=31)) == "export"
+
+
+def test_a_sale_stops_at_the_upper_edge_of_its_corridor():
+    vr = _tl(("export", 0, 20, 90, 70, 68, 72, False), ("hold", 20, 30, 70, 70, 70, 70, True),
+             ("self_use", 30, 60, 70, 65, 65, 65, False))
+    ex = Executor(V2Settings(executor="plan"))
+    ex.mode = "export"
+    assert ex._plan_candidate(ALLOW, 73.0, vr, T0 + timedelta(minutes=5)) == "export"
+    assert ex._plan_candidate(ALLOW, 72.0, vr, T0 + timedelta(minutes=5)) == "self_use"
 
 
 def test_the_lines_executor_does_not_look_at_the_plans_mode():
