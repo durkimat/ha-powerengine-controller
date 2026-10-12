@@ -23,6 +23,7 @@ rules and for what the code does now, and GitHub issues are the backlog.
 | [engine-v2-level-penalty.md](engine-v2-level-penalty.md) | A smooth exponential cost on the battery level (top and bottom curves) in the plan, how it is applied, and first results | Keeping the battery out of the top (or bottom) of its range |
 | [engine-v2-recap-1.md](engine-v2-recap-1.md) | Recap of the new approach (follow the plan, level curves, slot curve), the combined result against the current engine, and what is open | Deciding what to do next with engine v2 |
 | [engine-v2-holds-1.md](engine-v2-holds-1.md) | Every hold of the new approach on the seven test days: conditions at the time and why the engine held | Judging whether Hold is a missed opportunity |
+| [engine-v2-corridor.md](engine-v2-corridor.md) | Plan and execution by level: corridor, merged segments, measurements of two prototypes | Hold-at-target, grid dependence, plan-mode execution |
 | [demo-and-easier-install.md](demo-and-easier-install.md) | Demo mode design, install simplification, steps A1–D1, decisions, risks | Demo or install work (#192), the native integration (#177) |
 
 Keep these up to date: when a step lands, update the plan's Status box in the same PR.
