@@ -48,6 +48,8 @@ FLIP_FLOP_S = 600
 LEVEL_EPS = 0.1               # points: a mode that runs "until" a level is done within this of it. The filtered level
                               # only approaches a reading (99.999...% at 100%), so a bare `level < target` never ends it
 
+REVERSAL_LEVY_P = 0.0              # p per kWh the value must be past the line to turn a charge into a sale or back
+
 
 @dataclass
 class _Pick:
@@ -362,6 +364,8 @@ class Executor:
         if target is None:
             return False
         band = self.s.price_band_p
+        if not staying and self.mode == EXPORT:
+            band += REVERSAL_LEVY_P                      # turning a sale round into a charge: a levy
         # charge_now: the plan charges in this stretch at one price, so the charge starts now rather than at its end
         # (the same cost, and room left if the charge runs slower than modelled); the value test covers the rest
         if not (ln.charge_now or ln.value_p > ln.buy_line_p + (-band if staying else band)):
@@ -381,6 +385,8 @@ class Executor:
         if EXPORT not in lim.allowed:
             return False
         band = self.s.price_band_p
+        if not staying and self.mode == CHARGE:
+            band += REVERSAL_LEVY_P                      # turning a charge round into a sale: a levy
         if not ln.value_p < ln.sell_line_p + (band if staying else -band):
             return False
         floor = self._sell_floor(lim, ln, staying)

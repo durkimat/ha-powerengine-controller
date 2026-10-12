@@ -559,3 +559,23 @@ def test_self_use_and_hold_do_not_trade_places_for_a_margin_that_does_not_cover_
     assert step(ex, 0, ln=lines(6.9))[0].mode == HOLD                    # use line 6.65: hold
     assert step(ex, 10, ln=lines(5.6))[0].mode == HOLD                   # 1p under the line (past the band): too thin
     assert step(ex, 20, ln=lines(1.0))[0].mode == SELF_USE               # 5.6p under: 1.4p for the half hour, pays
+
+
+def test_a_reversal_levy_makes_turning_a_charge_into_a_sale_or_back_need_a_better_price(monkeypatch):
+    from pe_core.engine_v2 import execute
+    lim = limits(allowed=NORMAL | {EXPORT})
+    ex = Executor(s0(price_band_p=0.0, level_band_pct=0.0))
+    buy = lines(7.8, imp=7.0, target=88.0)                 # just over the buy line (7.37p)
+    sell = lines(14.0, exp=15.0, floor=40.0)               # just under the sell line (14.25p)
+    for levy in (0.0, 1.0):
+        monkeypatch.setattr(execute, "REVERSAL_LEVY_P", levy)
+        ex.mode = EXPORT
+        assert ex._can_charge(lim, buy, 50.0, staying=False) is (levy == 0.0)
+        assert ex._can_charge(lim, lines(9.0, imp=7.0, target=88.0), 50.0, staying=False)
+        ex.mode = CHARGE
+        assert ex._can_export(lim, sell, 70.0, staying=False) is (levy == 0.0)
+        assert ex._can_export(lim, lines(12.0, exp=15.0, floor=40.0), 70.0, staying=False)
+        ex.mode = SELF_USE
+        assert ex._can_charge(lim, buy, 50.0, staying=False) and ex._can_export(lim, sell, 70.0, staying=False)
+        ex.mode = CHARGE
+        assert ex._can_charge(lim, buy, 50.0, staying=True)          # carrying on is free
