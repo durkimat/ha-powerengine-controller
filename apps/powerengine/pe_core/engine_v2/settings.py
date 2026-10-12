@@ -283,12 +283,20 @@ def _check(key: str, value: Any) -> Any:
     return int(round(value)) if kind == "int" else value
 
 
-# The engines the system setting offers, in the order the config page lists them. "v2_1" (engine 2.1 beta) is engine v2
-# with a profile: the settings below take these values wherever the config does not set them, so what you have saved
-# is kept.
-ENGINES = ("v1", "v2", "v2_1")
-PROFILES = {
-    "2.1": {
+# The engines the system setting offers: v1 and v2. "v2_1" is no longer an engine of its own: an old config that says so
+# means engine v2 with the "2.1 beta" profile (ENGINE_ALIAS), and is still accepted.
+ENGINES = ("v1", "v2")
+ENGINE_ALIAS = {"v2_1": "v2"}
+
+# Profiles are named sets of engine v2's tuning. The profile in use gives the values wherever the `engine_v2:` block
+# (the changes you made on top of it) does not set one; loading a profile on the config page clears those changes, so
+# nothing left over from an earlier profile can win. A profile holds tuning only: the facts and permissions of the
+# house (SITE_KEYS) stay as they are when a profile is loaded.
+DEFAULT_PROFILE = "defaults"
+BETA_PROFILE = "2.1 beta"
+BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
+    DEFAULT_PROFILE: {},
+    BETA_PROFILE: {
         "executor": "plan", "replan_on_level": True,
         "price_band_p": 0.0, "level_band_pct": 0.0, "min_dwell_s": 120, "comfort_cost_p": 0.0, "top_up_cost_p": 0.0,
         "prefer_self_use": False, "late_events": False,
@@ -297,11 +305,69 @@ PROFILES = {
         "slot_bot_factor": 300.0, "slot_bot_start_soc": 80,
     },
 }
+BUILTIN_NOTES = {
+    DEFAULT_PROFILE: "Engine v2's own defaults.",
+    BETA_PROFILE: "Engine v2 following its own plan, with a smooth cost keeping the battery off the very top and "
+                  "bottom. Beta.",
+}
+# Settings that belong to the house, not to a way of tuning the engine: a profile never holds or changes them.
+SITE_KEYS = frozenset({
+    "arbitrage", "events", "event_plus_export", "free_power", "preview_when_v1", "charge_ceiling_soc",
+    "reserve_soc", "hard_floor_margin_pct", "comfort_low_soc", "comfort_high_soc",
+    "wear_house_p", "wear_sale_p", "event_value_p",
+})
+PROFILE_KEYS = tuple(k for k in SETTINGS if k not in SITE_KEYS)
+MAX_USER_PROFILES = 10
+MAX_PROFILE_NAME = 30
+
+
+def profile_name_problem(name: Any) -> str | None:
+    """Why a profile name can't be used, else None."""
+    if not isinstance(name, str) or not name.strip():
+        return "a profile needs a name"
+    if name != name.strip() or len(name) > MAX_PROFILE_NAME:
+        return f"a profile name has no spaces at its ends and is at most {MAX_PROFILE_NAME} characters"
+    if name.lower() in BUILTIN_PROFILES:
+        return f"'{name}' is the name of a built-in profile"
+    return None
+
+
+def parse_profiles(raw: Any) -> dict[str, dict[str, Any]]:
+    """The `v2_profiles:` block: your saved profiles, name -> the values that differ from engine v2's defaults."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise SettingsError("'v2_profiles' must be a mapping")
+    if len(raw) > MAX_USER_PROFILES:
+        raise SettingsError(f"at most {MAX_USER_PROFILES} profiles can be saved")
+    out: dict[str, dict[str, Any]] = {}
+    for name, values in raw.items():
+        problem = profile_name_problem(name)
+        if problem:
+            raise SettingsError(problem)
+        if not isinstance(values, dict):
+            raise SettingsError(f"profile '{name}' must be a mapping")
+        values = {k: v for k, v in values.items() if k not in RETIRED}
+        unknown = sorted(set(values) - set(PROFILE_KEYS))
+        if unknown:
+            raise SettingsError(f"profile '{name}' has setting(s) a profile can't hold: {', '.join(unknown)}")
+        out[name] = {k: _check(k, v) for k, v in values.items()}
+    return out
+
+
+def profile_values(name: str | None, user: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
+    """The values a profile gives (only those that differ from the defaults)."""
+    name = name or DEFAULT_PROFILE
+    if name in BUILTIN_PROFILES:
+        return dict(BUILTIN_PROFILES[name])
+    if user and name in user:
+        return dict(user[name])
+    raise SettingsError(f"unknown engine v2 profile '{name}'")
 
 
 def profile_of(engine: str | None) -> str | None:
-    """The settings profile an engine choice uses: "2.1" for engine 2.1 beta, else None."""
-    return "2.1" if engine == "v2_1" else None
+    """The profile an old `system.engine` value implies: the 2.1 beta profile for "v2_1", else None."""
+    return BETA_PROFILE if engine == "v2_1" else None
 
 
 # Settings an earlier release had and a saved config may still hold: dropped quietly, never an error.
@@ -309,10 +375,10 @@ RETIRED = frozenset({"reversal_cost_p"})   # 0.9.129: one cost for every change 
 
 
 def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None,
-             profile: str | None = None) -> V2Settings:
-    """The `engine_v2:` block, validated. Missing keys come from v1's equivalent (`SEED_FROM`), else the profile's value
-    (engine 2.1 beta), else the default. Raises SettingsError for an unknown key, a wrong type, a value out of range, or
-    settings that contradict."""
+             profile: dict | None = None) -> V2Settings:
+    """The `engine_v2:` block, validated. Missing keys come from the profile in use (`profile`: its values, see
+    `profile_values`), else v1's equivalent (`SEED_FROM`), else the default. Raises SettingsError for an unknown key, a
+    wrong type, a value out of range, or settings that contradict."""
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):
@@ -326,10 +392,10 @@ def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None,
     for key, spec in SETTINGS.items():
         if key in raw:
             values[key] = _check(key, raw[key])
+        elif profile and key in profile:
+            values[key] = _check(key, profile[key])
         elif key in SEED_FROM and SEED_FROM[key][1] in v1[SEED_FROM[key][0]]:
             values[key] = _check(key, v1[SEED_FROM[key][0]][SEED_FROM[key][1]])
-        elif profile in PROFILES and key in PROFILES[profile]:
-            values[key] = _check(key, PROFILES[profile][key])
         else:
             values[key] = spec[1]
     if values["comfort_low_soc"] >= values["comfort_high_soc"]:
@@ -344,13 +410,18 @@ def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None,
     return V2Settings(**values)
 
 
-def catalogue(current: V2Settings | None = None, profile: str | None = None) -> dict:
+def catalogue(current: V2Settings | None = None, profile: str | None = None,
+              user_profiles: dict[str, dict] | None = None) -> dict:
     """The schema for the config page (published on sensor.pe_diag_v2_settings): every setting with its default (the
-    profile's, under engine 2.1 beta), range, label and help, the sections, the values in use now, and the engines the
-    system setting offers (so the card shows only the ones the app has)."""
+    profile in use's), range, label and help, the sections, the values in use now, the engines the system setting
+    offers. (The profiles are on their own sensor, `profiles_catalogue`: this one is close to HA's 16 KB limit.)"""
+    try:
+        base = profile_values(profile, user_profiles)
+    except SettingsError:
+        base = {}
     rows = []
     for key, (kind, default, lo, hi, unit, label, help_) in SETTINGS.items():
-        default = PROFILES.get(profile, {}).get(key, default)
+        default = base.get(key, default)
         row = {"key": key, "kind": kind, "default": default, "unit": unit, "label": fill(label), "help": fill(help_)}
         if kind == "choice":
             row["options"] = list(lo)
@@ -360,3 +431,13 @@ def catalogue(current: V2Settings | None = None, profile: str | None = None) -> 
     return {"settings": rows,
             "sections": [{"key": k, "label": fill(label), "keys": list(keys)} for k, label, keys in SECTIONS],
             "values": (current or V2Settings()).as_dict(), "engines": list(ENGINES)}
+
+
+def profiles_catalogue(profile: str | None = None, user_profiles: dict[str, dict] | None = None) -> dict:
+    """The profiles for the config page (sensor.pe_diag_v2_profiles): the one in use, the built-in ones with their
+    values, your saved ones by name (the card has their values from the saved config), and the settings a profile
+    never holds."""
+    return {"profile": profile or DEFAULT_PROFILE,
+            "builtin": [{"name": n, "note": BUILTIN_NOTES[n], "values": dict(v)} for n, v in BUILTIN_PROFILES.items()],
+            "saved": sorted(user_profiles or {}), "site_keys": sorted(SITE_KEYS),
+            "max_saved": MAX_USER_PROFILES, "max_name": MAX_PROFILE_NAME}

@@ -83,7 +83,7 @@ from pe_core.energy import Recorder
 from pe_core.engine_v2 import publish as v2publish
 from pe_core.engine_v2 import triggers as v2_triggers
 from pe_core.engine_v2.engine import EngineV2
-from pe_core.engine_v2.settings import V2Settings, profile_of
+from pe_core.engine_v2.settings import BETA_PROFILE, V2Settings
 from pe_core.engine_v2.types import BatteryFacts, Situation, StepInput
 from pe_core.entities import (
     ENTITIES,
@@ -762,7 +762,9 @@ class PowerEngine(hass.Hass):
     def _engine_choice(self):
         """The system setting's choice: "v1", "v2" or "v2_1" (engine 2.1 beta)."""
         choice = self.cfg.system.get("engine") if self.cfg is not None else None
-        return choice if choice in ("v2", "v2_1") else "v1"
+        if choice == "v2" and self.cfg.v2_profile == BETA_PROFILE:
+            return "v2_1"                      # engine v2 with the 2.1 beta profile (kept for logs and old cards)
+        return choice if choice == "v2" else "v1"
 
     def _engine_name(self):
         """The engine family the system setting chooses: "v1" (the half-hour plan) or "v2" (values and exit conditions;
@@ -832,9 +834,14 @@ class PowerEngine(hass.Hass):
 
     def _publish_v2_settings(self):
         """The v2 settings catalogue with the values in use (the config page's schema)."""
-        state, attrs = v2publish.settings_state(self.cfg.engine_v2 if self.cfg is not None else V2Settings(),
-                                                profile_of(self._engine_choice()))
+        cfg = self.cfg
+        state, attrs = v2publish.settings_state(cfg.engine_v2 if cfg is not None else V2Settings(),
+                                                cfg.v2_profile if cfg is not None else None,
+                                                cfg.v2_profiles if cfg is not None else None)
         self._publish_if_changed("diag_v2_settings", state, attrs)
+        state, attrs = v2publish.profiles_state(cfg.v2_profile if cfg is not None else None,
+                                                cfg.v2_profiles if cfg is not None else None)
+        self._publish_if_changed("diag_v2_profiles", state, attrs)
 
     def _engine_switched(self, was):
         """The engine setting changed in a config save. Active, Passive and Pause stay as they are. Engine v2 starts

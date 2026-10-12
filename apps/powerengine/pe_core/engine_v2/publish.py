@@ -12,7 +12,7 @@ import math
 from datetime import datetime, timedelta
 
 from .forecast import DISPLAY_H
-from .settings import SETTINGS, V2Settings, catalogue
+from .settings import SETTINGS, V2Settings, catalogue, profiles_catalogue
 from .types import MODE_LABEL, ModeState, StepOutput, ValueResult
 
 LIMIT = 14_500                       # below the app's 15,000 byte warning
@@ -295,7 +295,14 @@ def entity_states(out: StepOutput, engine, settings: V2Settings, tz,
     return res
 
 
-def settings_state(settings: V2Settings, profile: str | None = None) -> tuple[str, dict]:
+def settings_state(settings: V2Settings, profile: str | None = None,
+                   user_profiles: dict | None = None) -> tuple[str, dict]:
     """sensor.pe_diag_v2_settings: the catalogue with the values in use (the config page's schema)."""
-    return str(len(SETTINGS)), catalogue(settings, profile)
+    return str(len(SETTINGS)), catalogue(settings, profile, user_profiles)
+
+
+def profiles_state(profile: str | None = None, user_profiles: dict | None = None) -> tuple[str, dict]:
+    """sensor.pe_diag_v2_profiles: the profile in use (the state) and the profiles on offer."""
+    attrs = profiles_catalogue(profile, user_profiles)
+    return attrs["profile"], attrs
 

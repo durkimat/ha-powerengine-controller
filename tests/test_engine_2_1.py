@@ -9,21 +9,31 @@ import pytest
 from pe_core.config import ConfigError, parse_config
 from pe_core.engine_v2.execute import Executor
 from pe_core.engine_v2.publish import settings_state
-from pe_core.engine_v2.settings import ENGINES, PROFILES, SETTINGS, SettingsError, V2Settings, parse_v2, profile_of
+from pe_core.engine_v2.settings import (
+    BUILTIN_PROFILES,
+    ENGINES,
+    SETTINGS,
+    SettingsError,
+    V2Settings,
+    parse_v2,
+    profile_of,
+    profile_values,
+)
 from pe_core.engine_v2.triggers import Triggers
 from pe_core.engine_v2.types import Event
 
 
 def test_the_profile_fills_what_the_config_does_not_set():
-    s = parse_v2({}, profile="2.1")
-    for key, value in PROFILES["2.1"].items():
+    s = parse_v2({}, profile=profile_values("2.1 beta"))
+    for key, value in BUILTIN_PROFILES["2.1 beta"].items():
         assert getattr(s, key) == value
     assert s.executor == "plan" and s.replan_on_level and s.level_top_rate_p == 200.0 and s.slot_bot_factor == 300.0
     assert s.late_events is False and s.prefer_self_use is False and s.top_up_cost_p == 0.0
 
 
 def test_what_you_saved_beats_the_profile_and_other_keys_still_seed_from_v1():
-    s = parse_v2({"top_up_cost_p": 4, "executor": "lines", "reserve_soc": 15}, {"arbitrage": True}, {}, "2.1")
+    beta = profile_values("2.1 beta")
+    s = parse_v2({"top_up_cost_p": 4, "executor": "lines", "reserve_soc": 15}, {"arbitrage": True}, {}, beta)
     assert s.top_up_cost_p == 4 and s.executor == "lines" and s.reserve_soc == 15
     assert s.arbitrage is True  # seeded from v1's feature, as for engine v2
     assert s.level_top_rate_p == 200.0  # unsaved: the profile's
@@ -37,12 +47,12 @@ def test_engine_v2_without_the_profile_is_unchanged():
 
 def test_the_profile_is_chosen_by_the_engine_setting():
     assert (
-        profile_of("v2_1") == "2.1"
+        profile_of("v2_1") == "2.1 beta"
         and profile_of("v2") is None
         and profile_of("v1") is None
         and profile_of(None) is None
     )
-    assert ENGINES == ("v1", "v2", "v2_1")
+    assert ENGINES == ("v1", "v2")
 
 
 def config(engine, extra=None):
@@ -61,7 +71,7 @@ def test_the_system_setting_accepts_v2_1_and_applies_the_profile():
     assert config("v1").engine_v2.executor == "lines"
     saved = config("v2_1", {"engine_v2": {"top_up_cost_p": 4}}).engine_v2
     assert saved.top_up_cost_p == 4 and saved.executor == "plan"
-    with pytest.raises(ConfigError, match="v1, v2, v2_1"):
+    with pytest.raises(ConfigError, match="v1, v2"):
         config("v3")
 
 
@@ -73,17 +83,17 @@ def test_the_new_settings_are_checked():
     with pytest.raises(SettingsError, match="one of"):
         parse_v2({"executor": "magic"})
     assert parse_v2({"executor": "plan"}).executor == "plan"
-    assert all(k in SETTINGS for k in PROFILES["2.1"])  # the profile names only real settings
+    assert all(k in SETTINGS for k in BUILTIN_PROFILES["2.1 beta"])  # the profile names only real settings
 
 
 def test_the_catalogue_shows_the_profiles_defaults_and_the_engines_on_offer():
     _, plain = settings_state(V2Settings(), None)
-    _, beta = settings_state(parse_v2({}, profile="2.1"), "2.1")
+    _, beta = settings_state(parse_v2({}, profile=profile_values("2.1 beta")), "2.1 beta")
     row = lambda attrs, key: next(r for r in attrs["settings"] if r["key"] == key)  # noqa: E731
     assert row(plain, "executor")["default"] == "lines" and row(beta, "executor")["default"] == "plan"
     assert row(beta, "level_top_rate_p")["default"] == 200.0 and row(plain, "level_top_rate_p")["default"] == 0.0
     assert row(beta, "arbitrage")["default"] == row(plain, "arbitrage")["default"]  # untouched keys: the same
-    assert beta["engines"] == ["v1", "v2", "v2_1"] and beta["values"]["executor"] == "plan"
+    assert beta["engines"] == ["v1", "v2"] and beta["values"]["executor"] == "plan"
     assert any(sec["key"] == "levels" for sec in beta["sections"])
 
 

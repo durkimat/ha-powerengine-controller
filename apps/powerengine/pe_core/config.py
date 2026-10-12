@@ -13,7 +13,17 @@ from typing import Any
 
 import yaml
 
-from .engine_v2.settings import SettingsError, V2Settings, parse_v2, profile_of
+from .engine_v2.settings import (
+    BUILTIN_PROFILES,
+    DEFAULT_PROFILE,
+    ENGINE_ALIAS,
+    SettingsError,
+    V2Settings,
+    parse_profiles,
+    parse_v2,
+    profile_of,
+    profile_values,
+)
 from .names import fill
 from .roles import RETIRED_ROLES, ROLE_BY_KEY, is_forbidden_control
 
@@ -40,6 +50,8 @@ KNOWN_KEYS = frozenset(
         "notifications",
         "site",
         "engine_v2",
+        "v2_profile",
+        "v2_profiles",
         "remove_entities",
     }
 )
@@ -116,8 +128,7 @@ SYSTEM_CHOICES = {
                                     ("fixed", "Fixed times (set below)"))),
     "engine": ("engine", (("v1", "Engine v1: a half-hour plan, remade every 5 minutes and on changes"),
                           ("v2", "Engine v2: acts on conditions (a level reached, a price change, "
-                                 "the sun falling short)"),
-                          ("v2_1", "Engine 2.1 beta: engine v2 following its own plan"))),
+                                 "the sun falling short)"))),
     "other_controller": ("control", (("none", "No other battery controller"),
                                      ("predbat", "Predbat, switched over with the handover package"),
                                      ("other", "Another controller: PowerEngine checks the guard entities below"))),
@@ -154,9 +165,9 @@ SETTING_TEXT = {
                          "by the guards you have mapped."),
     "engine": ("Planning engine", "",
                "Which engine plans and decides. Engine v1 plans in half-hours. Engine v2 works out what a stored "
-               "kWh is worth and acts when a condition is met. Engine 2.1 beta is engine v2 following its own plan "
-               "(same settings). Switching changes neither Active, Passive nor Pause; each engine keeps its own "
-               "settings."),
+               "kWh is worth and acts when a condition is met. Engine v2 has settings profiles (for "
+               "example the 2.1 beta one, which follows its own plan). Switching changes neither Active, Passive nor "
+               "Pause; each engine keeps its own settings."),
     "smart_max_requests_per_day": ("Requests per day", "requests",
                                    "The most times a day PowerEngine changes the car's ready-by time to ask for "
                                    "slots. Each change makes the supplier re-plan the car's charging."),
@@ -426,6 +437,8 @@ class Config:
     devices: tuple[Device, ...] = ()
     site: Site = field(default_factory=Site)
     engine_v2: V2Settings = field(default_factory=V2Settings)
+    v2_profile: str = DEFAULT_PROFILE                  # the engine v2 profile in use (built in, or one of v2_profiles)
+    v2_profiles: dict[str, dict[str, Any]] = field(default_factory=dict)     # your saved profiles
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -608,18 +621,25 @@ def parse_config(data: Any) -> Config:
         if key not in SYSTEM_DEFAULTS:
             raise ConfigError(f"unknown system setting '{key}'")
         if key in SYSTEM_CHOICES:
-            if value not in [v for v, _ in SYSTEM_CHOICES[key][1]] + ([""] if key == "other_controller" else []):
+            if value not in [v for v, _ in SYSTEM_CHOICES[key][1]] + ([""] if key == "other_controller" else [])\
+                    + (list(ENGINE_ALIAS) if key == "engine" else []):
                 raise ConfigError(f"system setting '{key}' must be one of "
                                   + ", ".join(v for v, _ in SYSTEM_CHOICES[key][1]))
         elif not isinstance(value, bool):
             raise ConfigError(f"system setting '{key}' must be true or false")
         system[key] = value
+    beta_alias = system["engine"] in ENGINE_ALIAS          # an old "v2_1": engine v2 with the 2.1 beta profile
+    system["engine"] = ENGINE_ALIAS.get(system["engine"], system["engine"])
 
     if system["overnight_window"] == "fixed" and safety["overnight_start_h"] == safety["overnight_end_h"]:
         raise ConfigError("a fixed overnight window needs a start and an end that differ")
 
     try:
-        engine_v2 = parse_v2(data.get("engine_v2"), features, safety, profile_of(system["engine"]))
+        v2_profiles = parse_profiles(data.get("v2_profiles"))
+        v2_profile = data.get("v2_profile") or (profile_of("v2_1") if beta_alias else DEFAULT_PROFILE)
+        if not isinstance(v2_profile, str) or (v2_profile not in BUILTIN_PROFILES and v2_profile not in v2_profiles):
+            raise SettingsError(f"unknown engine v2 profile {v2_profile!r}")
+        engine_v2 = parse_v2(data.get("engine_v2"), features, safety, profile_values(v2_profile, v2_profiles))
     except SettingsError as err:
         raise ConfigError(str(err)) from err
 
@@ -635,6 +655,8 @@ def parse_config(data: Any) -> Config:
         devices=_parse_devices(data.get("devices")),
         site=_parse_site(data.get("site")),
         engine_v2=engine_v2,
+        v2_profile=v2_profile,
+        v2_profiles=v2_profiles,
         raw=data,
     )
 
