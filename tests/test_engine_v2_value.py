@@ -717,3 +717,20 @@ def test_a_long_cheap_window_with_arbitrage_is_not_broken_up_by_holds():
     long_holds = [it for it in vr.timeline if it.mode == HOLD and it.start < window_end
                   and (it.end - it.start) >= timedelta(minutes=15)]
     assert long_holds == []
+
+
+def test_a_charge_that_stops_part_way_has_a_corridor_around_its_end_and_a_remainder_hold():
+    segs = cheap_then_peak(n_cheap=1, n_peak=2, n_after=0)
+    run, after = solve(segs, soc=12.0).timeline[:2]
+    assert run.mode == CHARGE and not run.remainder
+    assert run.level_lo <= run.level_end + 0.05 and run.level_hi >= run.level_end - 0.05
+    assert run.level_hi - run.level_lo > 0.0                       # a stop a little either side costs about the same
+    assert after.mode == HOLD and after.remainder and after.level_start == pytest.approx(after.level_end)
+
+
+def test_a_wider_cost_tolerance_widens_the_corridor():
+    segs = cheap_then_peak(n_cheap=1, n_peak=2, n_after=0)
+    narrow = solve(segs, soc=12.0, settings=replace(NO_COMFORT, corridor_cost_p=0.05)).timeline[0]
+    wide = solve(segs, soc=12.0, settings=replace(NO_COMFORT, corridor_cost_p=5.0)).timeline[0]
+    assert wide.level_hi - wide.level_lo > narrow.level_hi - narrow.level_lo
+    assert wide.level_lo <= narrow.level_lo + 1e-6 and wide.level_hi >= narrow.level_hi - 1e-6

@@ -6,8 +6,9 @@ forecast), so the plan (layer 3) and the live decision (layer 5) can never disag
 
   grid event in progress   forced EVENT, down to the battery's hard floor plus a margin (not the owner's reserve)
   manual override          forced to its mode (Self-use and Export keep the reserve; Charge stops at the ceiling)
-  free power               forced FREE (charge to 100%)
+  free power               forced FREE (charge to 100%); with `free_arbitrage` Charge or Export, up to 100%
   car charging             only Hold and Charge: the battery never feeds the car
+  `hold_only_car_reserve`  Hold is allowed only for the car and the reserve (below)
   level at the reserve     no discharge mode (every one of them, except a grid event)
   otherwise                Self-use, Hold, Charge, and Export when arbitrage is on; with `prefer_self_use` Hold only at
                          cheap-rate times (the overnight window, a smart slot)
@@ -81,15 +82,21 @@ def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str
         text = override_text or f"Manual override: {manual.replace('_', '-')}"
         return Limits(allowed=frozenset({manual}) & frozenset(CHOICE_MODES), forced=manual, floor_soc=floor,
                       ceiling_soc=ceiling, rule="override", reason=text, **common)
-    if free and s.free_power:
+    if free and s.free_power and not s.free_arbitrage:
         return Limits(allowed=frozenset(), forced=FREE, floor_soc=floor, ceiling_soc=100.0, rule="free",
                       reason="Free-power session: the battery charges to 100%", **common)
     allowed = {SELF_USE, HOLD, CHARGE}
     if s.arbitrage:
         allowed.add(EXPORT)
     rule, reason = "normal", ""
+    if free and s.free_power:                       # free power: charge it, or sell what is stored (arbitrage)
+        allowed -= {SELF_USE, HOLD}
+        ceiling, rule = 100.0, "free"
+        reason = "Free-power session: the battery charges, or sells what it holds if that pays more"
+    if s.hold_only_car_reserve:
+        allowed.discard(HOLD)                       # back for the car and the reserve below
     if car:
-        allowed &= {HOLD, CHARGE}
+        allowed = (allowed & {CHARGE}) | {HOLD}
         rule, reason = "car", "The car is charging: the battery holds so it never feeds the car"
     if s.prefer_self_use and not cheap and rule == "normal":
         allowed.discard(HOLD)                       # by day the battery runs the house and stores spare sun

@@ -15,7 +15,7 @@ import json
 from datetime import datetime, timezone
 
 from .settings import V2Settings
-from .types import Event, Forecast, Observation, StepInput, ValueResult
+from .types import CHARGE, EXPORT, Event, Forecast, Observation, StepInput, ValueResult
 
 CHARGING, HOLDING, DISCHARGING = "charging", "holding", "discharging"
 FLOW_W = 200                      # below this the battery counts as holding
@@ -339,6 +339,10 @@ class Observer:
             self.band_since = None
             return
         lo, hi = min(mid, low, high) - self.s.level_band_pct, max(mid, low, high) + self.s.level_band_pct
+        if self.s.executor == "plan":                    # while a run goes, the range is its whole corridor
+            span = self._run_span(vr, now)
+            if span is not None:
+                lo, hi = min(lo, span[0] - self.s.level_band_pct), max(hi, span[1] + self.s.level_band_pct)
         if lo <= self.level <= hi:
             self.band_since, self.band_fired = None, False
             return
@@ -347,6 +351,33 @@ class Observer:
             self.band_fired = True
             ev("band_exit", f"The battery has been outside its expected range ({lo:.0f} to {hi:.0f}%) for "
                             f"{self.s.band_exit_min:g} minutes")
+
+    @staticmethod
+    def _run_span(vr: ValueResult, now: datetime) -> tuple[float, float] | None:
+        """While `now` is in a charge or sale of the plan (or in the hold that only fills out its segment), the levels
+        the run may be at: from where it starts to the far edge of its corridor. A run follows the plan by level, so
+        reaching its edge early, or sitting at it while the clock still runs, is on track; None outside such a run."""
+        items = vr.timeline
+        k = next((i for i, it in enumerate(items) if it.start <= now < it.end), None)
+        if k is None:
+            return None
+        def part(it):
+            return it.mode in (CHARGE, EXPORT) or it.remainder
+        if not part(items[k]):
+            return None
+        a = b = k
+        while a > 0 and part(items[a - 1]) and items[a - 1].end == items[a].start:
+            a -= 1
+        while b + 1 < len(items) and part(items[b + 1]) and items[b + 1].start == items[b].end:
+            b += 1
+        if not any(it.mode in (CHARGE, EXPORT) for it in items[a:b + 1]):
+            return None
+        pts = []
+        for it in items[a:b + 1]:
+            pts += [it.level_start, it.level_end]
+            if it.level_lo is not None and it.level_hi is not None:
+                pts += [it.level_lo, it.level_hi]
+        return min(pts), max(pts)
 
     def _rest_of_day(self, inp: StepInput) -> dict:
         now = inp.now

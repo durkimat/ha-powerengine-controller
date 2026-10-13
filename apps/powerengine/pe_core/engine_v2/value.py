@@ -209,7 +209,7 @@ class _Seg:
     __slots__ = ("seg", "lim", "dt", "cap", "eta_c", "eta_d", "taper", "dtaper", "max_chg", "max_dis", "chg_f",
                  "chg_cap", "dis_cap", "export_limit", "fuse", "floor", "ceil", "car", "export_p", "event_p",
                  "wear_h", "wear_s", "ccost", "topup", "sw", "lo", "hi", "allowed", "forced", "outcomes", "scen",
-                 "mid", "late_p", "pen", "fcap")
+                 "mid", "late_p", "pen", "fcap", "corr")
 
 
 def _groups(solar: Spread, load: Spread) -> list[tuple[float, float, float]]:
@@ -279,10 +279,11 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     S.sw = settings.switch_cost_p
     S.lo, S.hi = settings.comfort_low_soc / 100 * S.cap, settings.comfort_high_soc / 100 * S.cap
     S.pen = _level_penalty(S.cap, seg.slot_prob is not None, settings)
+    S.corr = settings.corridor_cost_p
     S.fcap = S.hi if (S.ccost or S.topup) else S.cap          # where charging early stops being free (see `_walk`)
     if S.pen is not None:
         S.fcap = min(S.fcap, S.pen.top_start_kwh)
-    S.forced = lim.forced or (EVENT if seg.event else FREE if seg.free else seg.manual)
+    S.forced = lim.forced or (EVENT if seg.event else FREE if seg.free and not lim.allowed else seg.manual)
     S.allowed = tuple(m for m in _ORDER if m in lim.allowed) or (SELF_USE,)
     scen = []
     for p, so, ho in _groups(seg.solar_kwh, seg.load_kwh):
@@ -415,10 +416,14 @@ def _mix(a: tuple, b: tuple, f: float, S: _Seg | None = None) -> tuple:
 
 
 # --- the choice in one segment -------------------------------------------------------------------------------------
-def _partial(scen: list, full: list, hold: list, Vn: _Arr, S: _Seg | None = None) -> tuple[float, float] | None:
+def _partial(scen: list, full: list, hold: list, Vn: _Arr, S: _Seg | None = None,
+             corridor: bool = False) -> tuple[float, float] | tuple[float, float, tuple[float, float]] | None:
     """The best stop inside a charge (or a sale): the share f of the segment (0 < f < 1) spent on the mode, the rest
     held. The expected cost is convex in f, so the smallest f whose slope reaches zero is found by bisection, then
     snapped to the grid levels either side of it. Returns (expected cost-to-go, f) or None when full or none is best.
+    With `corridor`, also the range of f whose cost is within the corridor width (`corridor_cost_p`) of the best (the
+    cost is convex, so it is one stretch): (cost, f, (f_lo, f_hi)). A stop anywhere in it is as good as the best one to
+    within that tolerance.
     The cost of a part-way charge is the hold cost plus f of the difference, except the top-up (`_top_up`), which only
     starts above the comfort band's top and so is priced from the level the charge reaches."""
     n = len(scen)
@@ -486,7 +491,26 @@ def _partial(scen: list, full: list, hold: list, Vn: _Arr, S: _Seg | None = None
                 g = cost(f)
                 if g < best_g - 1e-9 or (abs(g - best_g) <= 1e-9 and f < best_f):
                     best_f, best_g = f, g
-    return best_g, best_f
+    if not corridor:
+        return best_g, best_f
+    limit = best_g + S.corr
+    if cost(0.0) <= limit:
+        f_lo = 0.0
+    else:
+        a, b = 0.0, best_f                    # cost falls from a (over the limit) to b (within it)
+        for _ in range(BISECT_STEPS):
+            mid = (a + b) / 2
+            a, b = (mid, b) if cost(mid) > limit else (a, mid)
+        f_lo = b
+    if cost(1.0) <= limit:
+        f_hi = 1.0
+    else:
+        a, b = best_f, 1.0                    # cost rises from a (within the limit) to b (over it)
+        for _ in range(BISECT_STEPS):
+            mid = (a + b) / 2
+            a, b = (a, mid) if cost(mid) > limit else (mid, b)
+        f_hi = a
+    return best_g, best_f, (f_lo, f_hi)
 
 
 # What a mode is, for the cost of changing between them (as v1's optimiser: self-use, hold, charge, discharge).
@@ -503,10 +527,12 @@ def switch_cost(prev: str, new: str, cost_p: float) -> float:
 
 
 def _candidates(S: _Seg, e: float, scen: list, imp_p: float, Vk: dict,
-                force: str | None = None, dscale: float = 1.0) -> list[tuple[float, str, float]]:
+                force: str | None = None, dscale: float = 1.0,
+                corridors: dict | None = None) -> list[tuple[float, str, float]]:
     """Every choice in one segment at level e for one price outcome, as (expected cost-to-go, mode, f), before the
     cost of changing mode. f is the share of the segment the mode runs (1 for everything but a charge or sale that
-    stops part-way). The cost-to-go of a mode is read from the next segment's curve for the kind of that mode."""
+    stops part-way). The cost-to-go of a mode is read from the next segment's curve for the kind of that mode.
+    `corridors`, when given, is filled with {mode: (f_lo, f_hi)} for the part-way stops (see `_partial`)."""
     ckw, dkw = _chg_kw(S, e), _dis_kw(S, e)
     forced = force or S.forced
     if forced:
@@ -526,9 +552,11 @@ def _candidates(S: _Seg, e: float, scen: list, imp_p: float, Vk: dict,
         elif mode in (CHARGE, EXPORT):
             if hold is None:
                 hold = [_phys(S, e, HOLD, s[3], imp_p) for s in scen]
-            part = _partial(scen, res, hold, Vn, S)
+            part = _partial(scen, res, hold, Vn, S, corridors is not None)
             if part is not None:
                 out.append((part[0], mode, part[1]))
+                if corridors is not None:
+                    corridors[mode] = part[2]
         g = 0.0
         for i in range(len(scen)):
             r = res[i]
@@ -806,17 +834,20 @@ def _stretch_ends(segs: list[_Seg]) -> list[int]:
     return ends
 
 
-def _dp_choice(S: _Seg, e: float, imp_p: float, vk_next: dict, prev: str | None) -> tuple[str, float]:
+def _dp_choice(S: _Seg, e: float, imp_p: float, vk_next: dict, prev: str | None,
+               ) -> tuple[str, float, tuple[float, float] | None]:
     """The mode (and the share of the segment it runs) the programme itself chooses at level e, coming from the mode
     `prev`: the same candidates and the same cost of a change as the backward pass, so the expected timeline is the
-    policy the values were worked out for, not a second rule laid over the curve."""
+    policy the values were worked out for, not a second rule laid over the curve. The third value is the corridor of
+    the share (see `_partial`) when the choice stops part-way, else None."""
     prev_kind = KIND[prev] if prev else NONE_K
     best, pick = math.inf, (SELF_USE, 1.0)
-    for g, mode, f in _candidates(S, e, S.scen, imp_p, vk_next):
+    corridors: dict = {}
+    for g, mode, f in _candidates(S, e, S.scen, imp_p, vk_next, corridors=corridors):
         g += switch_cost(prev_kind, KIND[mode], S.sw)
         if g < best - EPS:
             best, pick = g, (mode, f)
-    return pick
+    return pick[0], pick[1], (corridors.get(pick[0]) if pick[1] < 1.0 else None)
 
 
 def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band: float, front: bool = True,
@@ -839,8 +870,9 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
     plan that opened with "charge now" was one nothing followed, and every revaluation opened with it again."""
     ends = _stretch_ends(segs)
     recs, e, prev_mode = [], e0, prev
-    target, target_to, capped = None, -1, False
+    target, target_to, capped, target_corridor = None, -1, False, None
     for i, S in enumerate(segs):
+        corridor = None
         if kind == "mid":
             so, ho = S.mid
             net = ho + S.car - so
@@ -858,18 +890,23 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
             target = reach if (any(r["mode"] == CHARGE for r in sub) and reach > e + 1e-9
                                and not sale_goes_on) else None
             target_to = ends[i]
+            target_corridor = None if capped else next(
+                (r["corridor"] for r in reversed(sub) if r["mode"] == CHARGE and r["corridor"]), None)
         if kind == "self":
             mode, stop = S.forced or SELF_USE, None
         elif (front and target is not None and i <= target_to and not S.forced and CHARGE in S.allowed
               and e < target - 1e-9 and e < S.ceil - 1e-9
               and not (capped and _phys(S, e, CHARGE, net, imp_p)[0] > target + 1e-9)):
             mode, stop = CHARGE, min(target, S.ceil)
+            corridor = target_corridor        # where the stretch's own charge stops: the same corridor
         elif vks is not None:
-            mode, share = _dp_choice(S, e, imp_p, vks[i], prev_mode)
+            mode, share, span = _dp_choice(S, e, imp_p, vks[i], prev_mode)
             stop = None
             if share < 1.0:                                  # a charge or sale that stops part-way: where it stops
                 lo, hi = _phys(S, e, HOLD, net, imp_p)[0], _phys(S, e, mode, net, imp_p)[0]
                 stop = lo + share * (hi - lo)
+                if span is not None:                         # the levels as good as that to within a tolerance
+                    corridor = (lo + span[0] * (hi - lo), lo + span[1] * (hi - lo))
         else:
             mode, stop = _policy(S, rows[i], step, e, imp_p, net, prev_mode, band)
         full = _phys(S, e, mode, net, imp_p)
@@ -884,7 +921,8 @@ def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band:
         prev_mode = HOLD if f < 1.0 else mode
         recs.append({"k": first + i, "mode": mode, "f": f, "e0": e, "e1": res[0], "e_full": full[0], "e_hold": e_hold,
                      "cost": res[1] + change, "comfort": res[2], "imp": res[3], "exp": res[4], "evx": res[5],
-                     "house": res[6], "sold": res[7], "gtb": res[8], "imp_p": imp_p})
+                     "house": res[6], "sold": res[7], "gtb": res[8], "imp_p": imp_p,
+                     "corridor": corridor})
         e = res[0]
     return recs
 
@@ -995,16 +1033,20 @@ def _reason(mode: str, rec: dict, S: _Seg, value: float, ahead: str, by_level: b
 def _timeline(core: _Core, recs: list[dict], lam: tuple, step: float, now: datetime, tz,
               facts: BatteryFacts) -> tuple[TimelineItem, ...]:
     cap = core.cap
-    pieces = []     # (mode, start, end, e_start, e_end, rec index, by_level)
+    # (mode, start, end, e_start, e_end, rec index, by_level, remainder, e_lo, e_hi)
+    pieces = []
     for rec in recs:
         seg = core.segs[rec["k"]].seg
         dt = seg.end - seg.start
         if rec["f"] < 1.0:
             cut = seg.start + dt * rec["f"]
-            pieces.append((rec["mode"], seg.start, cut, rec["e0"], _level_at(rec, rec["f"]), rec["k"], True))
-            pieces.append((HOLD, cut, seg.end, _level_at(rec, rec["f"]), rec["e1"], rec["k"], True))
+            e_cut = _level_at(rec, rec["f"])
+            lo, hi = rec.get("corridor") or (e_cut, e_cut)
+            pieces.append((rec["mode"], seg.start, cut, rec["e0"], e_cut, rec["k"], True, False, lo, hi))
+            pieces.append((HOLD, cut, seg.end, e_cut, rec["e1"], rec["k"], True, True, rec["e1"], rec["e1"]))
         else:
-            pieces.append((rec["mode"], seg.start, seg.end, rec["e0"], rec["e1"], rec["k"], False))
+            pieces.append((rec["mode"], seg.start, seg.end, rec["e0"], rec["e1"], rec["k"], False, False,
+                           rec["e1"], rec["e1"]))
     merged: list[list] = []
     for p in pieces:
         if (p[2] - p[1]).total_seconds() < 30:
@@ -1012,12 +1054,13 @@ def _timeline(core: _Core, recs: list[dict], lam: tuple, step: float, now: datet
         if merged and merged[-1][0] == p[0]:
             m = merged[-1]
             m[2], m[4], m[6] = p[2], p[4], p[6]
-            m[7] = p[5]
+            m[7], m[8], m[9] = m[7] and p[7], p[8], p[9]            # a hold is a remainder only if every part is
+            m[10] = p[5]
         else:
             merged.append(list(p) + [p[5]])
     items = []
     for idx, m in enumerate(merged):
-        mode, t0, t1, e0, e1, k0, by_level, k_last = m
+        mode, t0, t1, e0, e1, k0, by_level, remainder, e_lo, e_hi, k_last = m
         S = core.segs[k0]
         span = recs[k0:k_last + 1]
         rec = dict(span[0])                       # the item's first record, with the flows of the whole item
@@ -1043,7 +1086,9 @@ def _timeline(core: _Core, recs: list[dict], lam: tuple, step: float, now: datet
             until = f"until {_when(t1, now, tz)}"
         items.append(TimelineItem(mode=mode, start=t0, end=t1, level_start=round(e0 / cap * 100, 1),
                                   level_end=round(soc1, 1), until=until,
-                                  reason=_reason(mode, rec, S, value, ahead, by_level, facts)))
+                                  reason=_reason(mode, rec, S, value, ahead, by_level, facts),
+                                  level_lo=round(min(e_lo, e_hi) / cap * 100, 1),
+                                  level_hi=round(max(e_lo, e_hi) / cap * 100, 1), remainder=remainder))
     return tuple(items)
 
 
@@ -1167,11 +1212,11 @@ def choice_now(vr: ValueResult, t: datetime, soc: float, import_p: float, facts:
         sg = replace(sg, start=t, solar_kwh=_scaled(sg.solar_kwh, frac), load_kwh=_scaled(sg.load_kwh, frac))
     S = _make(sg, facts, settings, vr.limits[k0])
     cap = vr.step_kwh * (len(vr.lam[0]) - 1)
-    return _dp_choice(S, min(cap, max(0.0, soc / 100 * cap)), import_p, vr.vk[k0], prev)
+    return _dp_choice(S, min(cap, max(0.0, soc / 100 * cap)), import_p, vr.vk[k0], prev)[:2]
 
 
 def _forced_of(sg: Segment, lim: Limits) -> str | None:
-    return lim.forced or (EVENT if sg.event else FREE if sg.free else sg.manual)
+    return lim.forced or (EVENT if sg.event else FREE if sg.free and not lim.allowed else sg.manual)
 
 
 def _effective_price(sg: Segment) -> float:

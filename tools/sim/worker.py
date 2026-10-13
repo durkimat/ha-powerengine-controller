@@ -128,6 +128,26 @@ def _follow_the_timeline(original):
     return candidate
 
 
+def hold_sells_spare_sun(world_cls) -> None:
+    """Make the simulated inverter's Hold what the real one's is: Force charge at 0 W takes no sun into the battery, so
+    spare sun goes to the grid (4 Oct 2026: +0.19 kW into the battery under Hold with 1.9 kW spare). The demo world
+    lets the sun charge it, so a Hold on a sunny morning ran the level up and the engine, which models the real
+    inverter, re-planned for it. Done here, on whatever world the code under test brings, so the demo is unchanged."""
+    if getattr(world_cls, "_hold_sells_sun", False):
+        return
+    original = world_cls._flows_at
+
+    def flows_at(self, t, dt_h):
+        original(self, t, dt_h)
+        f = self.flows
+        if self.option == "Force charge" and self.charge_w <= 0 and f["charge_w"] > 0:
+            f["grid_w"] -= f["charge_w"]
+            f["charge_w"] = 0.0
+
+    world_cls._flows_at = flows_at
+    world_cls._hold_sells_sun = True
+
+
 def apply_consts(consts: dict) -> None:
     """Module constants, named `pe_core.<module path>.NAME` (the `pe_core.` may be left off). The path may go on into a
     class: `engine_v2.execute.Executor._leg_going=@false` replaces that method with a stub (@true, @false or @pass)."""
@@ -261,6 +281,9 @@ def run(job: dict) -> dict:
         except Refused as why:
             return {**base, "status": why.status, "reason": why.reason}
         apply_consts(job["consts"])
+        from pe_core.demo import world as demo_world
+
+        hold_sells_spare_sun(demo_world.DemoWorld)
         sc = scenario_for(day_input, str(save), tmp, 24.0)
         original = sc.config_text
         sc.config_text = lambda engine: (

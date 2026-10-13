@@ -32,6 +32,7 @@ def condensed(result: dict) -> dict:
         "day": result["day"],
         "status": "ok",
         "score": result["score"],
+        "follow": {k: v for k, v in scoreboard.run_metrics(result).items() if not k.startswith("_")},
         "mode_changes": s["changes"],
         "level_5min": [[t, lvl, mode] for t, lvl, mode, *_ in s["trace"]],
         "replans": [plan_line(p) for p in s["plans"]],
@@ -67,6 +68,7 @@ def write_report(out: Path, variants: list[dict], results: dict[str, list[dict]]
             if x
         }
         md.append("```\n" + scoreboard.table(f"{v['name']}  [{label}]  {json.dumps(extra)}", res) + "\n```")
+        md.append("```\n" + scoreboard.metrics_table(res) + "\n```")
         if base and v["name"] != base and base in results:
             md.append(scoreboard.versus(results[base], res, v["name"]))
     (out / "report.md").write_text("\n\n".join(md) + "\n", encoding="utf-8")

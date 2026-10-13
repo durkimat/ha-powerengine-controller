@@ -75,6 +75,17 @@ def test_the_catalogue_lists_the_profiles_and_defaults_follow_the_one_in_use():
     cat, profiles = catalogue(parse_v2({}), "mine", saved), profiles_catalogue("mine", saved)
     assert next(r for r in cat["settings"] if r["key"] == "price_band_p")["default"] == 1.5
     assert profiles["profile"] == "mine" and profiles["saved"] == ["mine"]
-    assert [b["name"] for b in profiles["builtin"]] == ["defaults", "2.1 beta"]
+    assert [b["name"] for b in profiles["builtin"]] == ["defaults", "2.1 beta", "2.2 beta"]
     assert "reserve_soc" in profiles["site_keys"]
     assert len(json.dumps(profiles_catalogue("x", {f"p{i}": {} for i in range(10)}))) < 4000
+
+
+def test_the_2_2_beta_profile_is_2_1_beta_plus_the_five_new_settings_and_they_are_neutral_elsewhere():
+    from pe_core.engine_v2.settings import BETA22_PROFILE, BETA_PROFILE, BUILTIN_PROFILES, V2Settings
+    new = {"hold_only_car_reserve", "free_arbitrage", "reversal_levy_p", "reentry_levy_p"}
+    p22, p21 = BUILTIN_PROFILES[BETA22_PROFILE], BUILTIN_PROFILES[BETA_PROFILE]
+    assert {k: v for k, v in p22.items() if k not in new} == p21
+    assert new <= set(p22) and p22["reversal_levy_p"] == p22["reentry_levy_p"] == 4.0
+    d = V2Settings()
+    assert (d.hold_only_car_reserve, d.free_arbitrage, d.reversal_levy_p, d.reentry_levy_p, d.corridor_cost_p) == \
+        (False, False, 0.0, 0.0, 0.5)

@@ -48,6 +48,8 @@ FLIP_FLOP_S = 600
 LEVEL_EPS = 0.1               # points: a mode that runs "until" a level is done within this of it. The filtered level
                               # only approaches a reading (99.999...% at 100%), so a bare `level < target` never ends it
 
+REENTRY_WINDOW_S = 600             # a charge or sale that ended within this long ago has just ended
+
 
 @dataclass
 class _Pick:
@@ -105,6 +107,11 @@ class Executor:
         self._tz = None
         self._plan_target: float | None = None
         self._plan_sell: float | None = None
+        self._edge: float | None = None                              # plan executor: where the run in mind ends (%)
+        self._edge_mode: str | None = None                           # ... and the mode it is the edge of
+        self._edge_key: tuple | None = None                          # ... and which run of which plan (mode, end, made)
+        self._reached: tuple | None = None                           # the run that ended at its edge: not restarted
+        self._ts = 0.0                                               # the step's time (for the re-entry levy)
         self._urgent = False                                         # an urgent event is being handled this step
         self.last_decision: v1d.Decision | None = None
 
@@ -126,6 +133,8 @@ class Executor:
         self._plan_target = self._plan_leg_end(vr, now, CHARGE)
         self._plan_sell = self._plan_leg_end(vr, now, EXPORT)
 
+        edge_before = (self._edge_mode, self._edge, self._edge_key)
+        self._ts = ts
         pick = self._pick_now(now, obs, lim, ln, vr, level, facts)
         cur = self.mode
         lines_executor = self.s.executor != "plan"                   # "plan": the mode is the plan's (`_candidate`)
@@ -147,10 +156,16 @@ class Executor:
             self._note_change(ts, cur, pick.mode)
             prior = self.target_soc
             if cur == CHARGE and level is not None and prior is not None and level >= prior - LEVEL_EPS:
-                new_events.append(Event(now, "level", f"The battery reached {level:.0f}%: the charge ends"))
+                new_events.append(Event(now, self._level_kind(edge_before, cur),
+                                        f"The battery reached {level:.0f}%: the charge ends"))
+                if edge_before[0] == cur and edge_before[2] is not None:
+                    self._reached = edge_before[2]
             elif cur == EXPORT and level is not None \
                     and level <= (lim.floor_soc if prior is None else prior) + LEVEL_EPS:
-                new_events.append(Event(now, "level", f"The battery reached {level:.0f}%: the sale ends"))
+                new_events.append(Event(now, self._level_kind(edge_before, cur),
+                                        f"The battery reached {level:.0f}%: the sale ends"))
+                if edge_before[0] == cur and edge_before[2] is not None:
+                    self._reached = edge_before[2]
             self.mode, self.since, self.chosen_by = pick.mode, ts, chosen_by
             self.deadline_fired = False
             self.dl_key = None
@@ -187,7 +202,10 @@ class Executor:
         if ln is None:
             return _Pick(SELF_USE, "no_lines", "The live comparison could not be made: the battery stays on self-use",
                          forced=True)
-        return self._pick_for(self._candidate(lim, ln, level, vr, now), lim, ln, level, facts, vr)
+        mode = self._plan_candidate(lim, level, vr, now) if self.s.executor == "plan" else None
+        if mode is None:
+            mode = self._candidate(lim, ln, level, vr, now)
+        return self._pick_for(mode, lim, ln, level, facts, vr)
 
     def _forced(self, lim: Limits, ln, level: float, facts) -> _Pick:
         s = self.s
@@ -235,10 +253,6 @@ class Executor:
     # the mode the prices and levels ask for, with hysteresis from the mode now
     def _candidate(self, lim: Limits, ln: Lines, level: float, vr: ValueResult | None = None,
                    now: datetime | None = None) -> str:
-        if self.s.executor == "plan":                  # follow the plan: its mode for now, if the limits allow it
-            planned = self._planned_mode(vr, now)
-            if planned is not None and planned in lim.allowed:
-                return planned
         cur, band = self.mode, self.s.price_band_p
         can_c = self._can_charge(lim, ln, level, staying=cur == CHARGE)
         can_e = self._can_export(lim, ln, level, staying=cur == EXPORT)
@@ -270,6 +284,102 @@ class Executor:
         if ok:
             return SELF_USE
         return HOLD if HOLD in lim.allowed else SELF_USE
+
+    @staticmethod
+    def _level_kind(edge_before: tuple, cur: str | None) -> str:
+        """A run that ended at the edge of the plan's corridor is on target: no re-plan for it."""
+        return "level_edge" if edge_before[0] == cur and edge_before[1] is not None else "level"
+
+    # ---- following the plan by level ------------------------------------------------------------
+    def _plan_candidate(self, lim: Limits, level: float | None, vr: ValueResult | None,
+                        now: datetime | None) -> str | None:
+        """The plan executor: the plan's mode, followed by level and not by the clock. A charge or a sale runs until
+        its level reaches the edge of its corridor (the plan's `level_lo` / `level_hi`: any stop in it costs the same to
+        within a tolerance), however early or late that is against the plan's clock; the next action then starts at
+        once, so a plan that ended a run part-way through a segment and filled the rest with a hold (`remainder`: a way
+        of saying how much, not a decision to hold) is not waited out. The next action starts early only where the
+        prices are those of now; across a price change the clock stands. None: the plan says nothing for now."""
+        prev_edge, prev_mode = self._edge, self._edge_mode
+        self._edge = self._edge_mode = self._edge_key = None
+        if vr is None or now is None or level is None or not vr.timeline:
+            return None
+        items = [i for i in vr.timeline if i.end > now]
+        if not items:
+            return None
+        cur = self.mode
+        if items[0].start > now:                                 # a gap before the plan's first item
+            return None
+        if cur in (CHARGE, EXPORT) and cur in lim.allowed:       # a run going on: until its edge, even past its time
+            ended = items[0] if items[0].mode == cur else None
+            prev = next((i for i in reversed(vr.timeline) if i.end == items[0].start and i.mode == cur), None)
+            first = ended or prev
+            if first is not None:
+                edge, _last = self._corridor_edge(vr.timeline, first)
+                if prev_mode == cur and prev_edge is not None and self._in_corridor(_last, prev_edge):
+                    edge = prev_edge                             # a re-plan inside the corridor: the run's edge stands
+                key = (cur, _last.end, getattr(vr, "made_at", None))
+                if self._short_of(cur, edge, level) and key != self._reached:
+                    self._edge, self._edge_mode, self._edge_key = edge, cur, key
+                    return cur
+        k = 0
+        while k < len(items):
+            it = items[k]
+            if it.mode in (CHARGE, EXPORT):
+                edge, last = self._corridor_edge(vr.timeline, it)
+                key = (it.mode, last.end, getattr(vr, "made_at", None))
+                if self._short_of(it.mode, edge, level) and key != self._reached:
+                    if k and not self._same_prices(vr, now, it.start):
+                        break                                    # a price change lies between: wait for the clock
+                    if it.mode not in lim.allowed:
+                        return None
+                    self._edge, self._edge_mode, self._edge_key = edge, it.mode, key
+                    return it.mode
+                k = next((j for j in range(k, len(items)) if items[j].end >= last.end), len(items) - 1) + 1
+                continue
+            if it.remainder:
+                k += 1
+                continue
+            if k and not self._same_prices(vr, now, it.start):
+                break
+            return it.mode if it.mode in lim.allowed else None
+        here = items[0].mode if not items[0].remainder else HOLD   # nothing further to start early: the clock's mode
+        if items[0].mode in (CHARGE, EXPORT):                      # its run is done: hold until the next item starts
+            here = HOLD
+        return here if here in lim.allowed else None
+
+    @staticmethod
+    def _corridor_edge(timeline, first) -> tuple[float, object]:
+        """The edge of the corridor where the run that `first` begins ends (the consecutive items of its mode), the
+        edge nearest the start: the lower one for a charge, the upper one for a sale. Also the chain's last item."""
+        last = first
+        for it in timeline:
+            if it.mode == first.mode and it.start == last.end:
+                last = it
+        lo = last.level_lo if last.level_lo is not None else last.level_end
+        hi = last.level_hi if last.level_hi is not None else last.level_end
+        return (lo if first.mode == CHARGE else hi), last
+
+    @staticmethod
+    def _in_corridor(last, edge: float) -> bool:
+        lo = last.level_lo if last.level_lo is not None else last.level_end
+        hi = last.level_hi if last.level_hi is not None else last.level_end
+        return lo - LEVEL_EPS <= edge <= hi + LEVEL_EPS
+
+    @staticmethod
+    def _short_of(mode: str, edge: float, level: float) -> bool:
+        """The run of `mode` has not reached the edge of its corridor."""
+        return level < edge - LEVEL_EPS if mode == CHARGE else level > edge + LEVEL_EPS
+
+    @staticmethod
+    def _same_prices(vr: ValueResult, a: datetime, b: datetime) -> bool:
+        """The forecast says the same about the prices at `a` and at `b`: within such a stretch the timing is free."""
+        def seg(t):
+            return next((x for x in vr.forecast.segments if x.start <= t < x.end), None)
+        x, y = seg(a), seg(b)
+        if x is None or y is None:
+            return False
+        return (abs(x.import_p - y.import_p) < 0.01 and abs(x.export_p - y.export_p) < 0.01
+                and x.slot_prob == y.slot_prob and x.event == y.event and x.free == y.free)
 
     def _leg_going(self, mode: str, level: float, now: datetime | None) -> bool:
         """The charge or sale running now has not reached the end of its plan step (the step covering now, merged with
@@ -350,10 +460,17 @@ class Executor:
         """Where a charge stops: where buying stops being worth it now (the lines), and while a charge is running also
         where the expected timeline ends it. On a flat stretch of the value curve (the same cheap price later) the
         lines' target creeps up with each segment, so alone it would stop and restart the charge every half-hour."""
+        if self._edge_mode == CHARGE and self._edge is not None:      # the plan executor's corridor edge
+            return min(self._edge, lim.ceiling_soc)
         target = ln.charge_target_soc
         if staying and self._plan_target is not None:
             target = self._plan_target if target is None else max(target, self._plan_target)
         return None if target is None else min(target, lim.ceiling_soc)
+
+    def _just_left(self, mode: str) -> bool:
+        """`mode` (a charge or a sale) was running and ended within REENTRY_WINDOW_S: restarting it must earn a levy."""
+        last = self.changes[-1] if self.changes else None
+        return last is not None and last[1] == mode and self.mode != mode and self._ts - last[0] < REENTRY_WINDOW_S
 
     def _can_charge(self, lim, ln, level, staying: bool) -> bool:
         if CHARGE not in lim.allowed:
@@ -362,6 +479,10 @@ class Executor:
         if target is None:
             return False
         band = self.s.price_band_p
+        if not staying and self.mode == EXPORT:
+            band += self.s.reversal_levy_p                      # turning a sale round into a charge: a levy
+        if not staying and self._just_left(CHARGE):
+            band += self.s.reentry_levy_p  # a charge that has just ended: a margin
         # charge_now: the plan charges in this stretch at one price, so the charge starts now rather than at its end
         # (the same cost, and room left if the charge runs slower than modelled); the value test covers the rest
         if not (ln.charge_now or ln.value_p > ln.buy_line_p + (-band if staying else band)):
@@ -372,6 +493,8 @@ class Executor:
         """Where a sale stops: where selling stops being worth it now (the lines), and while a sale is running also
         where the expected timeline ends it (the lower of the two, as a charge takes the higher), never under the
         floor."""
+        if self._edge_mode == EXPORT and self._edge is not None:
+            return max(self._edge, lim.floor_soc)
         floor = ln.sell_floor_soc if ln.sell_floor_soc is not None else lim.floor_soc
         if staying and self._plan_sell is not None:
             floor = min(floor, self._plan_sell)
@@ -381,6 +504,10 @@ class Executor:
         if EXPORT not in lim.allowed:
             return False
         band = self.s.price_band_p
+        if not staying and self.mode == CHARGE:
+            band += self.s.reversal_levy_p                      # turning a charge round into a sale: a levy
+        if not staying and self._just_left(EXPORT):
+            band += self.s.reentry_levy_p                       # a sale that has just ended restarts only for a margin
         if not ln.value_p < ln.sell_line_p + (band if staying else -band):
             return False
         floor = self._sell_floor(lim, ln, staying)
@@ -428,6 +555,9 @@ class Executor:
                                       f"{imp:.2f}p")
         if lim.rule == "reserve":
             return _Pick(HOLD, "reserve", f"{lim.reason}: the grid covers the house at {imp:.2f}p")
+        if HOLD not in lim.allowed and SELF_USE in lim.allowed:     # Hold is only for the car and the reserve
+            return _Pick(SELF_USE, "value", f"A stored kWh is worth {v:.1f}p, but Hold is only for the car and the "
+                                            f"reserve: the battery covers the house at {imp:.2f}p")
         if self.sun_spare and SELF_USE in lim.allowed:
             why = (f"Spare sun is not worth storing: a stored kWh is worth {v:.1f}p, under the "
                    f"{ln.store_sun_line_p:.2f}p it needs, so the battery holds and the sun is exported at {exp:.2f}p")
