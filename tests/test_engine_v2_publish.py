@@ -343,3 +343,40 @@ def test_a_hold_for_the_car_leads_with_the_car_stopping_even_when_a_price_change
     _, a = publish._mode(out, eng, LOCAL)
     assert [(e["text"], e["first"]) for e in a["exits"]] == [("The car stops charging", True),
                                                              ("The price changes to 6.66p at 23:00", False)]
+
+
+def _run_plan(items, segs, now):
+    return value_result(now, forecast(now, segs), timeline=tuple(items))
+
+
+def _item(mode, a, b, l0, l1, now, remainder=False):
+    return TimelineItem(mode, now + timedelta(minutes=a), now + timedelta(minutes=b), l0, l1, "until x", "r",
+                        remainder=remainder)
+
+
+def test_the_displayed_plan_runs_the_next_step_as_soon_as_a_part_way_run_is_done():
+    """The plan fills the rest of a segment after a charge stops part-way with a hold, a way of saying how much; the
+    executor never rests there, so the display does not show it (prices the same: the next run starts at once)."""
+    now = T0
+    segs = [segment(now + timedelta(minutes=30 * i), import_p=8.88, export_p=15.0) for i in range(4)]
+    plan = [_item(CHARGE, 0, 14, 58, 64, now), _item(HOLD, 14, 30, 64, 64, now, True),
+            _item(CHARGE, 30, 52, 64, 73, now), _item(HOLD, 52, 60, 73, 73, now, True),
+            _item(EXPORT, 60, 90, 73, 60, now)]
+    shown = publish.as_run(_run_plan(plan, segs, now), V2Settings(hold_only_car_reserve=True))
+    assert [i.mode for i in shown] == [CHARGE, EXPORT]
+    assert shown[0].end - shown[0].start == timedelta(minutes=36) and shown[0].level_end == 73
+    assert shown[1].start == shown[0].end                        # the sale follows at once, for as long as planned
+    assert shown[1].end - shown[1].start == timedelta(minutes=30)
+
+
+def test_the_displayed_plan_keeps_the_clock_across_a_price_change_and_fills_the_wait_without_a_hold():
+    now = T0
+    segs = [segment(now, import_p=8.88, export_p=15.0), segment(now + timedelta(minutes=30), import_p=28.84,
+                                                                  export_p=15.0)]
+    plan = [_item(CHARGE, 0, 14, 58, 64, now), _item(HOLD, 14, 30, 64, 64, now, True),
+            _item(SELF_USE, 30, 60, 64, 60, now)]
+    shown = publish.as_run(_run_plan(plan, segs, now), V2Settings(hold_only_car_reserve=True))
+    assert [i.mode for i in shown] == [CHARGE, SELF_USE, SELF_USE]
+    assert shown[1].start == now + timedelta(minutes=14) and shown[1].end == now + timedelta(minutes=30)
+    held = publish.as_run(_run_plan(plan, segs, now), V2Settings(hold_only_car_reserve=False))
+    assert HOLD in [i.mode for i in held]
