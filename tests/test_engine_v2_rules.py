@@ -188,3 +188,30 @@ def test_prefer_self_use_is_a_setting_in_the_first_section():
     cat = catalogue()
     assert "prefer_self_use" in {s["key"]: s["keys"] for s in cat["sections"]}["allowed"]
     assert cat["values"]["prefer_self_use"] is True
+
+
+def _core(settings, **kw):
+    args = dict(event=False, manual=None, free=False, car=False, level=None, charge_factor=1.0, house_kw=None,
+                solar_kw=None, car_kw=0.0)
+    return rules._core(settings, BatteryFacts(), **{**args, **kw})
+
+
+def test_hold_only_for_the_car_and_the_reserve_takes_hold_away_everywhere_else():
+    s = replace(SETTINGS, arbitrage=True, hold_only_car_reserve=True)
+    for cheap in (True, False):
+        lim = _core(s, cheap=cheap)
+        assert lim.allowed == {SELF_USE, CHARGE, EXPORT}
+    assert _core(s, car=True, car_kw=7.0).allowed == {HOLD, CHARGE}
+    low = _core(s, level=12.0)
+    assert HOLD in low.allowed and SELF_USE not in low.allowed and low.rule == "reserve"
+    assert HOLD in _core(replace(s, hold_only_car_reserve=False)).allowed  # off: as before
+
+
+def test_free_arbitrage_lets_a_free_session_charge_or_sell_and_off_still_forces_the_charge():
+    s = replace(SETTINGS, free_power=True, arbitrage=True)
+    assert _core(s, free=True).forced == FREE
+    s = replace(s, free_arbitrage=True)
+    lim = _core(s, free=True)
+    assert lim.forced is None and lim.allowed == {CHARGE, EXPORT} and lim.ceiling_soc == 100.0 and lim.rule == "free"
+    assert _core(s, free=True, car=True, car_kw=7.0).allowed == {HOLD, CHARGE}
+    assert _core(replace(s, arbitrage=False), free=True).allowed == {CHARGE}

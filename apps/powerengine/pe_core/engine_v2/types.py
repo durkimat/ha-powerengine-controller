@@ -140,6 +140,10 @@ class TimelineItem:
     level_end: float
     until: str                            # the condition that ends it, in words ("until 88%", "until 05:30")
     reason: str                           # plain words naming the prices
+    level_lo: float | None = None         # a charge or sale may end anywhere in this corridor (percent):
+    level_hi: float | None = None         # as good as level_end within corridor_cost_p; None: a point
+    remainder: bool = False               # a hold that only fills out the rest of a segment after a stop part-way: a
+                                          # way of saying how much, not a decision to hold
 
 
 @dataclass(frozen=True)
@@ -164,6 +168,7 @@ class ValueResult:
 EVENT_KINDS: dict[str, tuple[bool, bool]] = {
     "start": (True, True),                # engine started or switched to
     "level": (False, False),              # the filtered level reached an exit level (target, floor)
+    "level_edge": (False, False),         # ... the edge of the plan's corridor: the plan already says what follows
     "reserve": (False, True),             # the level reached the reserve or the hard floor
     "price": (False, False),              # a price boundary passed (published or estimated)
     "slot_start": (False, False),

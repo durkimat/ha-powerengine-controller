@@ -34,6 +34,10 @@ SETTINGS: dict[str, tuple] = {
     "event_plus_export": ("bool", True, None, None, "", "Export rate paid on top of a grid event",
                           "The supplier's export rate is paid on top of the grid event's own rate."),
     "free_power": ("bool", True, None, None, "", "Free-power sessions", "Charge to 100% during a free-power session."),
+    "free_arbitrage": ("bool", False, None, None, "", "Free power: charge or sell",
+                       "A free-power session may also sell what is stored, as the plan decides, not only charge."),
+    "hold_only_car_reserve": ("bool", False, None, None, "", "Hold only for car and reserve",
+                              "Hold is kept for the car charging and the reserve; elsewhere charge, sell or self-use."),
     "prefer_self_use": ('bool', True, None, None, '', 'Prefer Self-use to Hold by day',
                  'By day the battery runs the house and stores spare sun; Hold is kept for cheap-rate times, the car, '
                  'the reserve and overrides. Off: v2 may hold by day to export spare sun.'),
@@ -108,6 +112,12 @@ SETTINGS: dict[str, tuple] = {
     "learn_soc_offset": ("bool", True, None, None, "", "Learn the battery reading's offset",
                          "Learn how far the battery reading is off while charging, holding and discharging."),
     # --- responsiveness ----------------------------------------------------------------------------------------
+    "reversal_levy_p": ("number", 0.0, 0, 20, "p/kWh", "Levy to turn a charge into a sale",
+                        "Turning a charge into a sale, or back, needs the price this far past the line."),
+    "reentry_levy_p": ("number", 0.0, 0, 20, "p/kWh", "Levy to restart a run that just ended",
+                       "A charge or sale that ended in the last 10 minutes restarts only this much further past."),
+    "corridor_cost_p": ("number", 0.5, 0, 5, "p", "Corridor width",
+                        "A charge or sale stops anywhere that costs within this of the best stop."),
     "price_band_p": ('number', 0.5, 0, 5, 'p/kWh', 'Price band',
                  'A mode starts only when better by this much, and stops only when worse by this much.'),
     "level_band_pct": ('number', 1.0, 0, 5, 'points', 'Level band',
@@ -150,12 +160,13 @@ SETTINGS: dict[str, tuple] = {
 SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("allowed", "What engine v2 may do",
      ("arbitrage", "events", "late_events", "late_events_per_week", "late_event_hours", "event_plus_export",
-      "free_power", "charge_ceiling_soc",
+      "free_power", "free_arbitrage", "hold_only_car_reserve", "charge_ceiling_soc",
       "prefer_self_use", "preview_when_v1")),
     ("floors", "Floors", ("reserve_soc", "hard_floor_margin_pct")),
     ("comfort", "Comfort band", ("comfort_low_soc", "comfort_high_soc", "comfort_cost_p", "top_up_cost_p")),
     ("levels", "Plan-following and battery limits",
-     ("executor", "replan_on_level", "level_top_start_soc", "level_top_rate_p", "level_top_doubling_pts",
+     ("executor", "replan_on_level", "reversal_levy_p", "reentry_levy_p", "corridor_cost_p",
+      "level_top_start_soc", "level_top_rate_p", "level_top_doubling_pts",
       "level_bot_start_soc", "level_bot_rate_p", "level_bot_doubling_pts", "slot_bot_factor", "slot_bot_start_soc")),
     ("value", "Value and costs",
      ("wear_house_p", "wear_sale_p", "event_value_p", "terminal_value", "terminal_value_p")),
@@ -194,6 +205,8 @@ class V2Settings:
     late_event_hours: float = 1.0
     event_plus_export: bool = True
     free_power: bool = True
+    free_arbitrage: bool = False
+    hold_only_car_reserve: bool = False
     prefer_self_use: bool = True
     preview_when_v1: bool = True
     charge_ceiling_soc: float = 100
@@ -229,6 +242,9 @@ class V2Settings:
     scenario_prior_days: float = 7
     learn_solar_bias: bool = True
     learn_soc_offset: bool = True
+    reversal_levy_p: float = 0.0
+    reentry_levy_p: float = 0.0
+    corridor_cost_p: float = 0.5
     price_band_p: float = 0.5
     level_band_pct: float = 1.0
     switch_cost_p: float = 2.0
@@ -294,6 +310,7 @@ ENGINE_ALIAS = {"v2_1": "v2"}
 # house (SITE_KEYS) stay as they are when a profile is loaded.
 DEFAULT_PROFILE = "defaults"
 BETA_PROFILE = "2.1 beta"
+BETA22_PROFILE = "2.2 beta"
 BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
     DEFAULT_PROFILE: {},
     BETA_PROFILE: {
@@ -305,10 +322,14 @@ BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
         "slot_bot_factor": 300.0, "slot_bot_start_soc": 80,
     },
 }
+BUILTIN_PROFILES[BETA22_PROFILE] = {**BUILTIN_PROFILES[BETA_PROFILE], "hold_only_car_reserve": True,
+                                    "free_arbitrage": True, "reversal_levy_p": 4.0, "reentry_levy_p": 4.0}
 BUILTIN_NOTES = {
     DEFAULT_PROFILE: "Engine v2's own defaults.",
     BETA_PROFILE: "Engine v2 following its own plan, with a smooth cost keeping the battery off the very top and "
                   "bottom. Beta.",
+    BETA22_PROFILE: "2.1 beta, and Hold only for the car and the reserve, free power that may also sell, and levies "
+                    "against turning a run round or restarting one that just ended. Beta.",
 }
 # Settings that belong to the house, not to a way of tuning the engine: a profile never holds or changes them.
 SITE_KEYS = frozenset({
