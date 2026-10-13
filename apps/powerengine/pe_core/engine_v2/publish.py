@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 from datetime import datetime, timedelta
 
+from .execute import Executor
 from .forecast import DISPLAY_H
 from .settings import SETTINGS, V2Settings, catalogue, profiles_catalogue
-from .types import MODE_LABEL, ModeState, StepOutput, ValueResult
+from .types import CHARGE, EXPORT, HOLD, MODE_LABEL, SELF_USE, ModeState, StepOutput, TimelineItem, ValueResult
 
 LIMIT = 14_500                       # below the app's 15,000 byte warning
 CURVE_PCTS = tuple(range(0, 101, 10))
@@ -211,6 +213,39 @@ def _thin_sun(a: dict) -> None:
     sun["step_min"] *= 2
 
 
+def as_run(vr: ValueResult, settings: V2Settings) -> list[TimelineItem]:
+    """The plan's timeline as the plan executor will run it, for display only (the plan itself is not changed). The
+    plan ends a charge or sale part-way through a segment and fills the rest with a hold (`remainder`), a way of saying
+    how much; the executor never rests there: a run follows the plan by level, and the next step starts as soon as the
+    run is done wherever the prices are those of now (`Executor._plan_candidate`). Where they differ the clock stands
+    and the battery does what the rules allow in between (a hold only where one is allowed, else self-use)."""
+    idle = HOLD if not settings.hold_only_car_reserve else SELF_USE
+    out: list[TimelineItem] = []
+    cursor = None
+    for it in vr.timeline:
+        if it.remainder:
+            continue
+        if cursor is not None and cursor < it.start:
+            if Executor._same_prices(vr, cursor, it.start):         # the next step starts as soon as the run is done
+                span = it.end - it.start
+                it = replace(it, start=cursor, end=cursor + span) if it.mode in (CHARGE, EXPORT) \
+                    else replace(it, start=cursor)
+            else:                                                   # the clock stands: the rest is what fills the wait
+                level = out[-1].level_end if out else it.level_start
+                out.append(TimelineItem(
+                    mode=idle, start=cursor, end=it.start, level_start=level, level_end=level,
+                    until=f"until {it.start:%H:%M}", remainder=True,
+                    reason="The run has reached its target; the battery waits for the next step."))
+        if out and out[-1].mode == it.mode and out[-1].end == it.start and it.mode in (CHARGE, EXPORT):
+            last = out[-1]
+            out[-1] = replace(last, end=it.end, level_end=it.level_end, until=it.until, level_lo=it.level_lo,
+                              level_hi=it.level_hi)
+        else:
+            out.append(it)
+        cursor = out[-1].end
+    return out
+
+
 def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, tz) -> tuple[str, dict]:
     if vr is None:
         return "unknown", {}
@@ -220,7 +255,7 @@ def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, t
     keep = int(DISPLAY_H * 60 // step_min) + 1                    # path points up to the end of what is shown
     path = {k: [_r(x, 1) for x in p.get(k, [])][:keep] for k in ("mid", "low", "high")}
     items = []
-    for it in vr.timeline:
+    for it in as_run(vr, settings):
         if it.start >= cut:
             break
         end, level_end = it.end, it.level_end

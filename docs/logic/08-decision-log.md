@@ -114,3 +114,4 @@ want to change or remove a rule, read its row first: the incident is what the ru
 | The margin applies to the plan's own picks too, not only to the lines' (a re-plan on a smart-slot change had turned a charge into a sale 2 minutes after it began, live on 13 Oct) | `execute._inertia_ok`, called from `_pick_now` |
 | Every journal row names the settings profile in use (a hold at 08:27 could not be tied to a profile) | `engine.EngineV2.profile` |
 | The history shows what ran to the second, not the mode that ran longest in each half-hour | `v2history.runs_of` (`runs` on `sensor.pe_v2_history` and `sensor.pe_v2_recent`) |
+| The published forecast shows the plan as the executor runs it (a part-way run is followed at once by the next step where prices match; the wait is self-use, not a hold, where Hold is not allowed). Display only: the plan and the engine are unchanged | `publish.as_run` |
