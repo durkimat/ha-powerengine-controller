@@ -111,3 +111,6 @@ want to change or remove a rule, read its row first: the incident is what the ru
 | Carrying on with a charge or sale costs nothing; turning one round, or restarting one that just ended, needs a margin | `execute._can_charge`, `_can_export` (`reversal_levy_p`, `reentry_levy_p`) |
 | The plan executor follows the plan by level, with a corridor of stop levels | `execute._plan_candidate`, `value._partial` (`corridor_cost_p`) |
 | The new behaviour ships as a profile, "2.2 beta", and nobody is moved to it | `settings.BUILTIN_PROFILES` |
+| The margin applies to the plan's own picks too, not only to the lines' (a re-plan on a smart-slot change had turned a charge into a sale 2 minutes after it began, live on 13 Oct) | `execute._inertia_ok`, called from `_pick_now` |
+| Every journal row names the settings profile in use (a hold at 08:27 could not be tied to a profile) | `engine.EngineV2.profile` |
+| The history shows what ran to the second, not the mode that ran longest in each half-hour | `v2history.runs_of` (`runs` on `sensor.pe_v2_history` and `sensor.pe_v2_recent`) |

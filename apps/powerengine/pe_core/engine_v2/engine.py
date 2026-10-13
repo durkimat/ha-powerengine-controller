@@ -61,7 +61,7 @@ class EngineV2:
         self.last_export_p: float | None = st.get("last_export_p")
         self.errors: dict = dict(st.get("errors") or {})     # day -> count
         self._settings_dirty = False
-        self.profile: str | None = None            # the settings profile in use (set by the app), stamped on journal rows
+        self.profile: str | None = None            # the settings profile in use (set by the app), on journal rows
         self._forced_reason: str | None = None
         self._retry_at: float | None = None
 
