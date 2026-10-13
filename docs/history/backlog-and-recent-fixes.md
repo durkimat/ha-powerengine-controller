@@ -4,6 +4,18 @@ Moved out of CLAUDE.md (Oct 2026) to keep every session's context small. Read th
 
 ## Backlog
 
+- **Engine 2.2 beta: what still needs testing (owner asked for this list, 13 Oct 2026; plan: `docs/plans/engine-v2-2-beta.md`).** The profile was chosen on three real days (7 to 9 Oct) and four synthetic days, so every figure is rough. To do, roughly in order:
+  (1) **Live results**: run it for a week or two and compare with "2.1 beta" and v1 on flips, mode changes, re-plans, and cost from the nightly same-day comparison and the health sensor's counts; decide the success test before judging (the sim's cost differences were within noise, so the case is steadiness, not savings).
+  (2) **More days**: re-run the sim scoreboard as the archive grows (11 Oct onwards; only complete days run) and on any synthetic days with a free session, a car charge, a grid event and a rainy day.
+  (3) **Free-power arbitrage is untested**: no day in the archive has a free session, so `free_arbitrage` (on in the profile) has only unit tests. Check what the inverter does with Charge and Export in a session (it was forced charge before), the 100% ceiling, and that selling during a free session pays.
+  (4) **The dead zone**: with Hold banned, Self-use is the neutral mode between the buy and sell lines. Revisit whether a short Hold there (or a lower cost to stay in Self-use) is better.
+  (5) **Remaining chatter** (about 8 short flips on real days, 3 on synthetic): sales that start and stop within minutes (20 Aug 12:00 on a synthetic day: Self-use, sale for 2 to 4 minutes, Self-use). Hypothesis, not tested: the live sell floor from the lines stops the sale above where the plan's sale ends; fix would be to let a running sale carry on to its corridor edge as a charge does. Probe the decision first (`tools/sim` and the decision probe in the session notes).
+  (6) **Levy values**: 4 and 4 came from two sweeps (reversal plateaus from 4 to 12; re-entry saturates at 4); the cost swings between neighbouring values on synthetic days are about 0.4 GBP, so retest on more days. The re-entry window (10 minutes, `execute.REENTRY_WINDOW_S`) was never swept.
+  (7) **Ablation leftovers**: `price_band_p` 1 and `level_band_pct` 1 made real days steadier but dearer and (level band) much worse on synthetic days; `min_dwell_s` 300 likewise. Retest on more days. `prefer_self_use` does nothing with the profile on.
+  (8) **Settings sensor**: now just under its 15,000-byte test limit. A structural fix (a second sensor for advanced settings, with the card reading both) needs a card change and a `MIN_CARD_VERSION` bump.
+  (9) **Calculation time on a real host**: the sim shows about 40% less than baseline on real days but more than the corridor alone; not timed on a Pi.
+  (10) **Option A (time slack on charges and sales)** is parked on branch `time-margin` (`observe.BAND_SLACK_MIN`); alone it cut re-plans 38% and was dearer on synthetic days; with the corridor it added nothing clear.
+  (11) **Sim fidelity**: Hold now sells spare sun; taper, BMS and cold limits are still not modelled. The scoreboard's "peak kWh" column was not checked for what it measures.
 - **Manual rates provider (own item; designed 5 Oct 2026, not built).** For homes with no tariff integration: `site.tariff: manual`, a new tariff adapter (`pe_core/adapters/manual.py`,
   registered like `kraken.py`, so `site_choices()` and the Your system picker list it) that builds the `Window` list for today and tomorrow from the config instead of from entities.
   The owner's decisions: rates entered as **bands** (from, to, p/kWh) that expand to 48 half-hour slots, **weekday and weekend patterns from the start**, plus a flat export rate and a
