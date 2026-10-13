@@ -579,3 +579,19 @@ def test_a_reversal_levy_makes_turning_a_charge_into_a_sale_or_back_need_a_bette
         assert ex._can_charge(lim, buy, 50.0, staying=False) and ex._can_export(lim, sell, 70.0, staying=False)
         ex.mode = CHARGE
         assert ex._can_charge(lim, buy, 50.0, staying=True)          # carrying on is free
+
+
+def test_a_re_entry_levy_makes_restarting_a_run_that_has_just_ended_need_a_better_price(monkeypatch):
+    from pe_core.engine_v2 import execute
+    lim = limits(allowed=NORMAL | {EXPORT})
+    ex = Executor(s0(price_band_p=0.0, level_band_pct=0.0))
+    buy = lines(7.8, imp=7.0, target=88.0)
+    sell = lines(14.0, exp=15.0, floor=40.0)
+    monkeypatch.setattr(execute, "REENTRY_LEVY_P", 1.0)
+    ex.mode, ex._ts = SELF_USE, 1000.0
+    ex.changes = [[900.0, CHARGE, SELF_USE]]               # a charge ended 100 s ago
+    assert not ex._can_charge(lim, buy, 50.0, staying=False)
+    assert ex._can_charge(lim, lines(9.0, imp=7.0, target=88.0), 50.0, staying=False)
+    assert ex._can_export(lim, sell, 70.0, staying=False)   # a sale is not a charge that ended
+    ex._ts = 1000.0 + execute.REENTRY_WINDOW_S
+    assert ex._can_charge(lim, buy, 50.0, staying=False)    # long enough ago

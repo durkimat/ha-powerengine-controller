@@ -48,6 +48,8 @@ FLIP_FLOP_S = 600
 LEVEL_EPS = 0.1               # points: a mode that runs "until" a level is done within this of it. The filtered level
                               # only approaches a reading (99.999...% at 100%), so a bare `level < target` never ends it
 
+REENTRY_LEVY_P = 0.0               # p per kWh more the value must be past the line to restart a run that ended
+REENTRY_WINDOW_S = 600             # ... within this long ago
 REVERSAL_LEVY_P = 0.0              # p per kWh the value must be past the line to turn a charge into a sale or back
 
 
@@ -117,6 +119,7 @@ class Executor:
         self._edge_mode: str | None = None                           # ... and the mode it is the edge of
         self._edge_key: tuple | None = None                          # ... and which run of which plan (mode, end, made)
         self._reached: tuple | None = None                           # the run that ended at its edge: not restarted
+        self._ts = 0.0                                               # the step's time (for the re-entry levy)
         self._urgent = False                                         # an urgent event is being handled this step
         self.last_decision: v1d.Decision | None = None
 
@@ -139,6 +142,7 @@ class Executor:
         self._plan_sell = self._plan_leg_end(vr, now, EXPORT)
 
         edge_before = (self._edge_mode, self._edge, self._edge_key)
+        self._ts = ts
         pick = self._pick_now(now, obs, lim, ln, vr, level, facts)
         cur = self.mode
         lines_executor = self.s.executor != "plan"                   # "plan": the mode is the plan's (`_candidate`)
@@ -472,6 +476,11 @@ class Executor:
             target = self._plan_target if target is None else max(target, self._plan_target)
         return None if target is None else min(target, lim.ceiling_soc)
 
+    def _just_left(self, mode: str) -> bool:
+        """`mode` (a charge or a sale) was running and ended within REENTRY_WINDOW_S: restarting it must earn a levy."""
+        last = self.changes[-1] if self.changes else None
+        return last is not None and last[1] == mode and self.mode != mode and self._ts - last[0] < REENTRY_WINDOW_S
+
     def _can_charge(self, lim, ln, level, staying: bool) -> bool:
         if CHARGE not in lim.allowed:
             return False
@@ -481,6 +490,8 @@ class Executor:
         band = self.s.price_band_p
         if not staying and self.mode == EXPORT:
             band += REVERSAL_LEVY_P                      # turning a sale round into a charge: a levy
+        if not staying and self._just_left(CHARGE):
+            band += REENTRY_LEVY_P                       # a charge that has just ended restarts only for a margin
         # charge_now: the plan charges in this stretch at one price, so the charge starts now rather than at its end
         # (the same cost, and room left if the charge runs slower than modelled); the value test covers the rest
         if not (ln.charge_now or ln.value_p > ln.buy_line_p + (-band if staying else band)):
@@ -504,6 +515,8 @@ class Executor:
         band = self.s.price_band_p
         if not staying and self.mode == CHARGE:
             band += REVERSAL_LEVY_P                      # turning a charge round into a sale: a levy
+        if not staying and self._just_left(EXPORT):
+            band += REENTRY_LEVY_P                       # a sale that has just ended restarts only for a margin
         if not ln.value_p < ln.sell_line_p + (band if staying else -band):
             return False
         floor = self._sell_floor(lim, ln, staying)
