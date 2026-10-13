@@ -26,7 +26,7 @@ SETTINGS: dict[str, tuple] = {
                "Act on grid events (<<event>>): export at full power while one runs."),
     "late_events": ('bool', True, None, None, '', 'Be prepared for a late grid event',
                  'Plan as if a grid event (<<event>>) could be announced at short notice: a full battery sells at the '
-                 'event rate, so stored energy is valued a little more.'),
+                 'event rate.'),
     "late_events_per_week": ('number', 1.5, 0, 14, 'per week', 'Late grid events expected',
                  'How many grid events a week you expect at short notice. 0: off.'),
     "late_event_hours": ('number', 1.0, 0.5, 4, 'h', 'How long a late grid event lasts',
@@ -35,12 +35,12 @@ SETTINGS: dict[str, tuple] = {
                           "The supplier's export rate is paid on top of the grid event's own rate."),
     "free_power": ("bool", True, None, None, "", "Free-power sessions", "Charge to 100% during a free-power session."),
     "free_arbitrage": ("bool", False, None, None, "", "Free power: charge or sell",
-                       "A free-power session may also sell what is stored, as the plan decides, not only charge."),
+                       "A free-power session may also sell what is stored, as the plan decides."),
     "hold_only_car_reserve": ("bool", False, None, None, "", "Hold only for car and reserve",
-                              "Hold is kept for the car charging and the reserve; elsewhere charge, sell or self-use."),
+                              "Hold only while the car charges or at the reserve; else charge, sell or self-use."),
     "prefer_self_use": ('bool', True, None, None, '', 'Prefer Self-use to Hold by day',
-                 'By day the battery runs the house and stores spare sun; Hold is kept for cheap-rate times, the car, '
-                 'the reserve and overrides. Off: v2 may hold by day to export spare sun.'),
+                 'By day the battery runs the house and stores spare sun; Hold is for cheap-rate times, the car and '
+                 'the reserve.'),
     "preview_when_v1": ('bool', True, None, None, '', 'Preview while engine v1 is in control',
                  'Work out and show what engine v2 would do while v1 is in control. Nothing is sent.'),
     "charge_ceiling_soc": ('number', 100, 10, 100, '%', 'Highest grid charge',
@@ -49,7 +49,7 @@ SETTINGS: dict[str, tuple] = {
     "reserve_soc": ('number', 12, 0, 100, '%', 'Your reserve',
                  'Kept back in normal running. Grid events may go below it (never below the hard floor).'),
     "hard_floor_margin_pct": ('number', 1, 0, 10, 'points', 'Grid event margin above the hard floor',
-                 "A grid event stops this far above the battery's hard floor, so its cut-off never ends it."),
+                 "A grid event stops this far above the battery's hard floor."),
     # --- value and costs ---------------------------------------------------------------------------------------
     "wear_house_p": ('number', 0.0, 0, 20, 'p/kWh', 'Wear: battery supplying the house',
                  'Cost per kWh the battery supplies to the house. 0: the battery is a sunk cost.'),
@@ -58,8 +58,8 @@ SETTINGS: dict[str, tuple] = {
     "event_value_p": ("number", 100.0, 0, 500, "p/kWh", "Grid event pays",
                       "What a grid event pays per kWh exported, before any export rate on top."),
     "terminal_value": ('choice', 'refill', ('refill', 'fixed'), None, '', 'Energy left at the end of the look-ahead',
-                 'Refill: the cheapest import price after losses, for what could be bought back before the next dear '
-                 'stretch; below that, what the house will need. Fixed: the figure below.'),
+                 'Refill: the cheapest import price after losses for what could be bought back, else what the '
+                 'house will need. Fixed: the figure below.'),
     "terminal_value_p": ("number", 10.0, 0, 100, "p/kWh", "Fixed value of energy left",
                          "Used when the energy left at the end is set to Fixed."),
     # --- comfort band ------------------------------------------------------------------------------------------
@@ -68,14 +68,13 @@ SETTINGS: dict[str, tuple] = {
     "comfort_high_soc": ('number', 90, 0, 100, '%', 'Comfort band: upper edge',
                  'Above this the battery pays the comfort cost for each hour there.'),
     "comfort_cost_p": ('number', 0.3, 0, 10, 'p per kWh per hour', 'Comfort cost',
-                 'The price of each kWh held outside the band for an hour: a soft guide, not a limit. 0: off.'),
+                 'The price of each kWh held an hour outside the band: a soft guide. 0: off.'),
     "top_up_cost_p": ('number', 5.0, 0, 20, 'p/kWh', 'Grid charging above the comfort band',
-                 "What each kWh charged from the grid above the band's top counts as costing. It keeps cycling under "
-                 'the top, yet a last fill before a dear stretch still happens. 0: off.'),
+                 "What each kWh charged from the grid above the band's top counts as costing, so it cycles under the "
+                 'top. 0: off.'),
     # --- following the plan and the top and bottom of the battery (engine 2.1 beta) -----------------------------
     "executor": ('choice', 'lines', ('lines', 'plan'), None, '', 'How the mode is chosen',
-                 "Lines: compare live prices with a stored kWh's value, plus v2's rules. Plan: take the plan's mode "
-                 'for now (2.1 beta).'),
+                 "Lines: live prices against a stored kWh's value. Plan: the plan's mode (2.1 beta)."),
     "replan_on_level": ('bool', False, None, None, '', 'Re-plan when a charge or sale ends',
                  'Re-plan as soon as a charge or sale reaches its target.'),
     "level_top_start_soc": ("number", 90, 50, 100, "%", "Top: where the cost starts",
@@ -102,7 +101,7 @@ SETTINGS: dict[str, tuple] = {
     "load_mid_pct": ("number", 50, 0, 100, "%", "House load: weight of the middle figure", W0),
     "load_high_pct": ("number", 25, 0, 100, "%", "House load: weight of the high figure", W0),
     "learn_scenario_weights": ('bool', True, None, None, '', 'Learn the weights from experience',
-                 'Move the weights towards how often the sun and house came in low, middle or high.'),
+                 'Move the weights towards how often the sun and house came in low, mid or high.'),
     "scenario_half_life_days": ("number", 14, 1, 60, "days", "Learning: half-life",
                                 "How quickly old days stop counting."),
     "scenario_prior_days": ('number', 7, 0, 60, 'days', 'Learning: weight of the starting values',
@@ -115,20 +114,19 @@ SETTINGS: dict[str, tuple] = {
     "reversal_levy_p": ("number", 0.0, 0, 20, "p/kWh", "Levy to turn a charge into a sale",
                         "Turning a charge into a sale, or back, needs the price this far past the line."),
     "reentry_levy_p": ("number", 0.0, 0, 20, "p/kWh", "Levy to restart a run that just ended",
-                       "A charge or sale that ended in the last 10 minutes restarts only this much further past."),
+                       "A charge or sale that ended in the last 10 min restarts only this much further past."),
     "corridor_cost_p": ("number", 0.5, 0, 5, "p", "Corridor width",
                         "A charge or sale stops anywhere that costs within this of the best stop."),
     "price_band_p": ('number', 0.5, 0, 5, 'p/kWh', 'Price band',
-                 'A mode starts only when better by this much, and stops only when worse by this much.'),
+                 'A mode starts when better by this much, and stops when worse by this much.'),
     "level_band_pct": ('number', 1.0, 0, 5, 'points', 'Level band',
-                 'A charge that reached its target restarts only this far below it (and a sale likewise).'),
+                 'A charge that reached its target restarts only this far below it; a sale likewise.'),
     "switch_cost_p": ('number', 2.0, 0, 20, 'p per change', 'Cost of a mode change',
-                 'What each change of mode counts as costing, in the plan and when deciding. Every change costs the '
-                 'same, so resting in Hold between a charge and a sale never saves it.'),
+                 'What each change of mode counts as costing, in the plan and when deciding.'),
     "min_dwell_s": ("int", 120, 0, 3600, "s", "Shortest time in a mode",
-                    "No change of mode sooner than this after the last one, except for safety events."),
+                    "No change of mode sooner than this after the last, except for safety events."),
     "deadline_grace_min": ('number', 10, 1, 60, 'min', 'Deadline grace',
-                 'How long a charge or sale may run past its expected end before the engine looks again.'),
+                 'How long a charge or sale may run past its expected end before a re-plan.'),
     "debounce_s": ("int", 20, 0, 300, "s", "Reading debounce", "A changed reading must last this long to count."),
     "car_start_debounce_s": ('int', 60, 0, 600, 's', 'Car start debounce',
                  'The car must report charging this long before it counts (wake-ups last 15 to 70 s).'),
@@ -443,7 +441,13 @@ def catalogue(current: V2Settings | None = None, profile: str | None = None,
     rows = []
     for key, (kind, default, lo, hi, unit, label, help_) in SETTINGS.items():
         default = base.get(key, default)
-        row = {"key": key, "kind": kind, "default": default, "unit": unit, "label": fill(label), "help": fill(help_)}
+        # This sensor is near HA's size limit: a setting with no unit shows none, and one with no kind is a number
+        # (the card reads both that way).
+        row = {"key": key, "default": default, "label": fill(label), "help": fill(help_)}
+        if kind != "number":
+            row["kind"] = kind
+        if unit:
+            row["unit"] = unit
         if kind == "choice":
             row["options"] = list(lo)
         elif kind != "bool":
