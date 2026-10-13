@@ -134,7 +134,7 @@ def test_the_attributes_pair_ran_with_expected_and_flag_previews(tmp_path):
     assert h.attributes(date(2026, 9, 1), DAY, None)["series"] == []                   # a day with no file
 
 
-def test_the_sensor_attributes_stay_under_12kb_on_the_busiest_day(tmp_path):
+def test_the_sensor_attributes_stay_under_15kb_on_the_busiest_day(tmp_path):
     h = V2History(str(tmp_path), LON)
     pth = path_from(t(0, 0, 5))
     h.tick(t(0, 0, 5), mode="hold", path=pth)
@@ -149,7 +149,7 @@ def test_the_sensor_attributes_stay_under_12kb_on_the_busiest_day(tmp_path):
     assert len(data["changes"]) == v2history.CHANGES_CAP and len(data["ran"]) >= 46
     a = h.attributes(DAY, DAY, "v2", True, )
     size = len(json.dumps(a, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
-    assert size <= 12_000, size
+    assert size <= v2history.ATTR_LIMIT, size                  # the runs may go past the 12 KB target
     assert len(a["series"]) == 48 and a["changes"]                                   # the whole day, the latest changes
     assert a["changes"][-1]["at"] == data["changes"][-1]["at"]
 
@@ -297,3 +297,21 @@ def test_the_comparison_names_the_profile_the_day_ran_on():
     ok = {"status": "ok", "in_control": "v2", "live": True, "v1": {}, "v2": {}, "profile": "2.1 beta"}
     assert day_row(__import__("datetime").date(2026, 10, 9), ok, True)["profile"] == "2.1 beta"
     assert "profile" not in day_row(__import__("datetime").date(2026, 10, 9), {**ok, "profile": None}, True)
+
+
+def test_runs_are_the_day_as_it_ran_to_the_second(tmp_path):
+    h = V2History(str(tmp_path), LON)
+    pth = path_from(t(0, 0, 5))
+    start = t(10, 0, 0)
+    steps = (("charge", 50.0), ("charge", 55.0), ("export", 60.2), ("export", 55.0), ("self_use", 50.4))
+    for i, (mode, level) in enumerate(steps):
+        h.tick(start + timedelta(minutes=7 * i + 1), mode=mode, level=level, sent=i != 4, preview=i == 4, path=pth)
+    a = h.attributes(DAY, DAY, "v2", True)
+    assert [r[1] for r in a["runs"]] == ["charge", "export", "self_use"]
+    assert a["runs"][0][0] == (start + timedelta(minutes=1)).astimezone(LON).isoformat(timespec="seconds")
+    assert a["runs"][1][2] == 60.2 and a["runs"][2][3] == 1 and a["runs"][0][3] == 0     # level at the start, preview
+    assert a["runs_until"] is None                                                # today's: the card's clock
+    rec = h.recent_attributes(start + timedelta(minutes=30))
+    assert [r[1] for r in rec["runs"]] == ["charge", "export", "self_use"] and rec["runs_until"] is None
+    later = h.recent_attributes(start + timedelta(hours=3), hours=1)  # the run going on then is first
+    assert [r[1] for r in later["runs"]] == ["self_use"]

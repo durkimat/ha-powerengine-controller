@@ -822,6 +822,7 @@ class PowerEngine(hass.Hass):
             self._v2, self._v2_saved = eng, datetime.now(timezone.utc)
         elif eng.s != self.cfg.engine_v2:
             eng.update_settings(self.cfg.engine_v2)
+        eng.profile = self.cfg.v2_profile
         return eng
 
     def _save_engine_state(self, now=None):

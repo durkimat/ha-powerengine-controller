@@ -203,6 +203,8 @@ class Executor:
             return _Pick(SELF_USE, "no_lines", "The live comparison could not be made: the battery stays on self-use",
                          forced=True)
         mode = self._plan_candidate(lim, level, vr, now) if self.s.executor == "plan" else None
+        if mode in (CHARGE, EXPORT) and mode != self.mode and not self._urgent and not self._inertia_ok(mode, ln):
+            mode = None                                   # the plan's turn-round or restart has not cleared its levy
         if mode is None:
             mode = self._candidate(lim, ln, level, vr, now)
         return self._pick_for(mode, lim, ln, level, facts, vr)
@@ -471,6 +473,21 @@ class Executor:
         """`mode` (a charge or a sale) was running and ended within REENTRY_WINDOW_S: restarting it must earn a levy."""
         last = self.changes[-1] if self.changes else None
         return last is not None and last[1] == mode and self.mode != mode and self._ts - last[0] < REENTRY_WINDOW_S
+
+    def _inertia_ok(self, mode: str, ln: Lines) -> bool:
+        """The plan asks to start a charge or a sale that is not the mode now. Turning a run round (charge to sale or
+        back) or restarting one that just ended costs a levy, and the value must clear its line by that much. The
+        plan's own steps are in the value already; the levy is the margin against a re-plan that reverses a leg."""
+        levy = 0.0
+        if self.mode == (EXPORT if mode == CHARGE else CHARGE):
+            levy += self.s.reversal_levy_p
+        if self._just_left(mode):
+            levy += self.s.reentry_levy_p
+        if levy <= 0:
+            return True
+        if mode == CHARGE:
+            return ln.value_p > ln.buy_line_p + self.s.price_band_p + levy
+        return ln.value_p < ln.sell_line_p - self.s.price_band_p - levy
 
     def _can_charge(self, lim, ln, level, staying: bool) -> bool:
         if CHARGE not in lim.allowed:

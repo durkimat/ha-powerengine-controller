@@ -87,6 +87,13 @@ def test_the_first_tick_works_the_values_out_and_chooses_a_mode(stubs):
     assert "start" in [e.kind for e in out.events]
 
 
+def test_every_journal_row_names_the_settings_profile_in_use(stubs):
+    eng = EngineV2(V2Settings())
+    eng.profile = "2.2 beta"
+    out = tick(eng, 0, battery_soc=50.0)
+    assert out.journal and all(r["profile"] == "2.2 beta" for r in out.journal)
+
+
 def test_without_a_value_result_yet_it_is_self_use_and_starting(stubs):
     f, v = stubs
     f.fail = True

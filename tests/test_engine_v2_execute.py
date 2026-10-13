@@ -592,3 +592,21 @@ def test_a_re_entry_levy_makes_restarting_a_run_that_has_just_ended_need_a_bette
     assert ex._can_export(lim, sell, 70.0, staying=False)   # a sale is not a charge that ended
     ex._ts = 1000.0 + execute.REENTRY_WINDOW_S
     assert ex._can_charge(lim, buy, 50.0, staying=False)    # long enough ago
+
+
+def test_the_levies_also_gate_a_start_the_plan_asks_for():
+    """The plan executor's picks do not go through `_can_charge` / `_can_export`; a re-plan that turns a leg round
+    still has to clear the levy."""
+    ex = Executor(s0(price_band_p=0.0, reversal_levy_p=4.0, reentry_levy_p=4.0))
+    thin_buy = lines(10.6, imp=7.0, target=88.0)           # buy line 7.37p: 3.2p over, under the 4p levy
+    fat_buy = lines(12.0, imp=7.0, target=88.0)
+    ex.mode, ex._ts = EXPORT, 1000.0
+    assert not ex._inertia_ok(CHARGE, thin_buy) and ex._inertia_ok(CHARGE, fat_buy)
+    ex.mode = SELF_USE
+    assert ex._inertia_ok(CHARGE, thin_buy)                # nothing was turned round, nothing just ended
+    ex.changes = [[900.0, CHARGE, SELF_USE]]
+    assert not ex._inertia_ok(CHARGE, thin_buy)            # a charge that just ended
+    ex.changes = []
+    ex.mode = CHARGE
+    thin_sell = lines(11.0, exp=15.0, floor=40.0)          # sell line 14.25p: 3.25p under
+    assert not ex._inertia_ok(EXPORT, thin_sell) and ex._inertia_ok(EXPORT, lines(9.0, exp=15.0, floor=40.0))

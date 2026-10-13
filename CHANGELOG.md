@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.140 (beta)
+
+### Behaviour changes
+
+- **The 2.2 beta levies now apply to the plan's own choices.** Turning a charge into a sale (or the reverse), or restarting a charge or sale that ended in the last 10 minutes, now has to clear the margin even when it is the plan that asks for it. Before, only the live price comparison was held back, so a re-plan (a smart-slot change, for example) could turn a run round a couple of minutes after it began. In the simulator this cut flip-flops from 20 to 13 on real days and from 15 to 8 on synthetic ones, at a cost inside the noise. It only applies where the levies are above 0 ("2.2 beta"); other profiles are unchanged.
+- **The history shows what happened to the second.** The Engine v2 history and the plan chart's hours already run now draw each mode where it started and ended, with the battery level where each change happened, instead of the mode that ran longest in each half-hour. Prices and the value of a stored kWh stay by half-hour. Needs this card release to be drawn (an older card keeps the half-hours).
+- **Every journal row names the settings profile in use**, so a mode can be tied to the profile that chose it.
+
+### Behind the scenes
+
+- `sensor.pe_v2_history` and `sensor.pe_v2_recent` gain `runs`: `[at, mode, level at the start, 1 if only previewed]` per mode change, and `runs_until` (empty for today, where the card's clock ends the last run). The history file's `changes` now carry `level` and `preview`. The history sensor can reach 15,000 bytes on a very busy day (the limit is 16,000).
+- `execute._inertia_ok`, called from `_pick_now`; `EngineV2.profile`.
+
 ## 0.9.139 (beta)
 
 ### Behaviour changes

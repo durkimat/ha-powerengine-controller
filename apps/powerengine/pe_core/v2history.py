@@ -6,13 +6,16 @@
                   "hours": {"HH:00": [[iso, level], ...]}},              # and the first one seen in each hour
      "ran": [{"start": iso, "mode": "self_use", "level_end": 54.2, "import_p": 7.0, "export_p": 15.0,
               "value_p": 9.55, "sent": true, "preview": false}],        # one per half-hour, written as it ends
-     "changes": [{"at": iso, "mode": "grid_charge", "reason": "..."}]}   # capped at 200 a day
+     "changes": [{"at": iso, "mode": "grid_charge", "reason": "...", "level": 54.2, "preview": true}]}   # 200 a day
 
 The expected points are the engine's expected level at each half-hour boundary of the day (00:00 to 24:00, the ones
 the timeline covers). A series row for the half-hour starting at t compares the level at its end with the expected
 level at t + 30 minutes. Recorded whenever engine v2 is stepped, in control or preview (`sent` / `preview` say which).
-`attributes` builds the sensor.pe_v2_history attributes (under 12 KB). `recent` builds sensor.pe_v2_recent: the last
-RECENT_HOURS of the same half-hours whatever day the picker shows, for the plan chart's scrollback.
+`attributes` builds the sensor.pe_v2_history attributes (under 12 KB). `runs` is the day as it ran, to the second: one
+row [at, mode, level at the start (or null), 1 when only previewed] per mode change, each lasting to the next one's `at`
+(the last to `runs_until`; today's has none, as it would change every tick, so the card uses its clock); the half-hour
+series stays for the prices, the value and the level at each half-hour's end. `recent` builds sensor.pe_v2_recent:
+the last RECENT_HOURS of the same half-hours whatever day the picker shows, for the plan chart's scrollback.
 """
 
 from __future__ import annotations
@@ -27,12 +30,15 @@ CHANGES_CAP = 200
 CHANGES_SHOWN = 60
 REASON_MAX = 90
 ATTR_TARGET = 12_000
+ATTR_LIMIT = 15_000          # what the runs may take the sensor up to (HA skips attributes over 16 KB)
 MAX_GAP_S = 120.0            # a longer gap between ticks counts as this much in a half-hour's mix
 HALF = timedelta(minutes=30)
+RUNS_CAP = 120               # the most runs published for a day (a day's file keeps up to CHANGES_CAP)
 RECENT_HOURS = 18            # how far back sensor.pe_v2_recent reaches (the plan chart's scrollback)
 
-NOTE = ("What engine v2 did, half-hour by half-hour, against the level it expected at the start of the day. "
-        "Half-hours marked preview were worked out but nothing was sent.")
+NOTE = ("What engine v2 did against the level it expected at the start of the day: the modes as they ran, the prices "
+        "and the value of a stored kWh half-hour by half-hour. Parts marked preview were worked out but nothing was "
+        "sent.")
 
 
 def _write_json(path: str, data) -> None:
@@ -192,8 +198,12 @@ class V2History:
         dirty = False
         last = data["changes"][-1]["mode"] if data["changes"] else None
         if mode != last and len(data["changes"]) < CHANGES_CAP:       # the day's opening mode counts as a change
-            data["changes"].append({"at": local.isoformat(timespec="seconds"), "mode": mode,
-                                    "reason": (why or "")[:REASON_MAX * 2]})
+            row = {"at": local.isoformat(timespec="seconds"), "mode": mode, "reason": (why or "")[:REASON_MAX * 2]}
+            if level is not None:
+                row["level"] = round(float(level), 1)
+            if preview:
+                row["preview"] = True
+            data["changes"].append(row)
             dirty = True
         if path:
             pts = None
@@ -238,6 +248,30 @@ class V2History:
         return attributes(data, day, today, self.tz, in_control, live, days[0] if days else None)
 
 
+def runs_of(changes: list[dict], since: datetime | None = None) -> list[list]:
+    """The day as it ran from its mode changes: [at, mode, level, preview] each, in order, at most RUNS_CAP (the
+    latest).
+    With `since`, the run that was going on then is the first row (its `at` is its real start, before `since`)."""
+    rows = []
+    for c in changes:
+        try:
+            at = datetime.fromisoformat(c["at"])
+        except (KeyError, ValueError):
+            continue
+        rows.append((at, c))
+    if since is not None:
+        first = max((i for i, (at, _c) in enumerate(rows) if at <= since), default=0)
+        rows = rows[first:]
+    return [[c["at"], c["mode"], c.get("level"), 1 if c.get("preview") else 0] for _at, c in rows][-RUNS_CAP:]
+
+
+def _until(ran: list[dict]) -> str | None:
+    """Where the last run ends: the end of the last recorded half-hour (a past day's)."""
+    if ran:
+        return (datetime.fromisoformat(max(x["start"] for x in ran)) + HALF).isoformat(timespec="seconds")
+    return None
+
+
 def attributes(data: dict, day: date, today: date, tz, in_control: str | None, live: bool | None = None,
                earliest: str | None = None) -> dict:
     """The attributes of sensor.pe_v2_history for one day, under ATTR_TARGET bytes."""
@@ -263,11 +297,15 @@ def attributes(data: dict, day: date, today: date, tz, in_control: str | None, l
     attrs = {"date": day.isoformat(), "earliest": min(earliest, day.isoformat()) if earliest else day.isoformat(),
              "latest": today.isoformat(), "in_control": in_control, "live": live,
              "preview_only": bool(ran) and all(x.get("preview") for x in ran.values()),
-             "series": series, "changes": changes, "note": NOTE}
+             "series": series, "runs": runs_of(data.get("changes", [])),
+             "runs_until": None if day == today else _until(data.get("ran", [])),
+             "changes": changes, "note": NOTE}
     for width, keep in ((60, CHANGES_SHOWN), (40, CHANGES_SHOWN), (40, 40), (30, 30), (20, 20), (10, 10), (0, 5)):
         if _size(attrs) <= ATTR_TARGET:
             break
         attrs["changes"] = [{**c, "reason": c["reason"][:width]} for c in attrs["changes"][-keep:]]
+    while _size(attrs) > ATTR_LIMIT and len(attrs["runs"]) > 20:
+        attrs["runs"] = attrs["runs"][len(attrs["runs"]) // 4:]       # a very busy day: the oldest runs go first
     return attrs
 
 
@@ -292,8 +330,11 @@ def recent(rows_by_day: dict[str, dict], now: datetime, tz, hours: int = RECENT_
                     row["preview"] = True
                 out.append(row)
     out.sort(key=lambda r: datetime.fromisoformat(r["t"]))
+    changes = sorted((c for d in rows_by_day.values() for c in (d or {}).get("changes", []) if c.get("at")),
+                     key=lambda c: c["at"])
     return {"hours": hours, "step_min": 30, "since": since.isoformat(timespec="seconds"),
-            "until": stop.isoformat(timespec="seconds"), "series": out}
+            "until": stop.isoformat(timespec="seconds"), "series": out, "runs": runs_of(changes, since=since),
+            "runs_until": None}
 
 
 def _size(attrs: dict) -> int:

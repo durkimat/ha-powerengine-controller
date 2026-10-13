@@ -61,6 +61,7 @@ class EngineV2:
         self.last_export_p: float | None = st.get("last_export_p")
         self.errors: dict = dict(st.get("errors") or {})     # day -> count
         self._settings_dirty = False
+        self.profile: str | None = None            # the settings profile in use (set by the app), on journal rows
         self._forced_reason: str | None = None
         self._retry_at: float | None = None
 
@@ -159,6 +160,7 @@ class EngineV2:
             rows.append(self._mode_row(now, mode, obs, ln, level, imp, exp))
         self.triggers.note(now, tuple(events), revalued, changed, calc_s, flip_flop=self.executor.flip_flop_now)
         for row in rows:
+            row.setdefault("profile", self.profile)
             self.journal_rows.append(row)
         return StepOutput(decision=decision, mode=mode, value=self.vr, observation=obs, events=tuple(events),
                           revalued=revalued, mode_changed=changed, journal=tuple(rows))
