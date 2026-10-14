@@ -80,12 +80,13 @@ def test_the_catalogue_lists_the_profiles_and_defaults_follow_the_one_in_use():
     assert len(json.dumps(profiles_catalogue("x", {f"p{i}": {} for i in range(10)}))) < 4000
 
 
-def test_the_2_2_beta_profile_is_2_1_beta_plus_the_five_new_settings_and_they_are_neutral_elsewhere():
+def test_the_2_2_beta_profile_is_2_1_beta_plus_the_new_settings_and_they_are_neutral_elsewhere():
     from pe_core.engine_v2.settings import BETA22_PROFILE, BETA_PROFILE, BUILTIN_PROFILES, V2Settings
-    new = {"hold_only_car_reserve", "free_arbitrage", "reversal_levy_p", "reentry_levy_p"}
+    new = {"hold_only_car_reserve", "free_arbitrage", "reversal_levy_p", "reentry_levy_p", "charge_max_import_p"}
     p22, p21 = BUILTIN_PROFILES[BETA22_PROFILE], BUILTIN_PROFILES[BETA_PROFILE]
     assert {k: v for k, v in p22.items() if k not in new} == p21
     assert new <= set(p22) and p22["reversal_levy_p"] == p22["reentry_levy_p"] == 4.0
+    assert p22["charge_max_import_p"] == 15.0
     d = V2Settings()
-    assert (d.hold_only_car_reserve, d.free_arbitrage, d.reversal_levy_p, d.reentry_levy_p, d.corridor_cost_p) == \
-        (False, False, 0.0, 0.0, 0.5)
+    assert (d.hold_only_car_reserve, d.free_arbitrage, d.reversal_levy_p, d.reentry_levy_p, d.corridor_cost_p,
+            d.charge_max_import_p) == (False, False, 0.0, 0.0, 0.5, 0.0)

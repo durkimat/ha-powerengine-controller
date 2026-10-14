@@ -63,11 +63,6 @@ def caps(facts: BatteryFacts, charge_factor: float = 1.0, house_kw: float | None
             d if d is not None and d < facts.max_discharge_kw - 1e-9 else None)
 
 
-# No grid charge while the import price (the cheapest a smart slot could bring) is above this, p/kWh; 0: off.
-# A module constant while it is tried in the simulator; becomes a setting if it stays.
-CHARGE_MAX_IMPORT_P = 0.0
-
-
 def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str | None, free: bool, car: bool,
           level: float | None, charge_factor: float, house_kw: float | None, solar_kw: float | None, car_kw: float,
           reserve_latched: bool = False, override_text: str = "", cheap: bool = True,
@@ -101,7 +96,7 @@ def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str
         reason = "Free-power session: the battery charges, or sells what it holds if that pays more"
     if s.hold_only_car_reserve:
         allowed.discard(HOLD)                       # back for the car and the reserve below
-    if rule == "normal" and CHARGE_MAX_IMPORT_P > 0 and price_p is not None and price_p > CHARGE_MAX_IMPORT_P:
+    if rule == "normal" and s.charge_max_import_p > 0 and price_p is not None and price_p > s.charge_max_import_p:
         allowed.discard(CHARGE)                     # no grid charge at a dear rate (a free session is its own rule)
     if car:
         allowed = (allowed & {CHARGE}) | {HOLD}
