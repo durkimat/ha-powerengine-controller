@@ -109,6 +109,18 @@ def _day_max(rates, t: datetime, tz) -> float | None:
     return max(vals) if vals else None
 
 
+def _standard_rate(rates, t: datetime, tz, price_pounds: float | None) -> float | None:
+    """The standard rate a smart slot replaces: the highest rate of its day. A day with the dispatch on every
+    half-hour has no standard rate of its own (all its rates are the cheap one), so the highest rate of the other
+    days known stands (tomorrow's), and a slot there is still a chance, not a sure price."""
+    day = _day_max(rates, t, tz)
+    if day is not None and (price_pounds is None or day > price_pounds + 1e-9):
+        return day
+    vals = [w.value for w in rates if w.value is not None]
+    best = max(vals) if vals else None
+    return best if best is not None and (price_pounds is None or best > price_pounds + 1e-9) else day
+
+
 def _cuts(now: datetime, end: datetime, windows: list[Window], max_min: float) -> list[datetime]:
     """Segment boundaries: now, every half-hour, the exact ends of every window, split to at most max_min."""
     pts = {now, end}
@@ -180,7 +192,7 @@ def build(inp: StepInput, settings: V2Settings, learned: dict | None = None) -> 
         export_p = slot.export * 100 if slot.export is not None else export_default
         disp = next((w for w in dispatches if _in(w, mid_t)), None)
         flagged = slot.smart_slot and not slot.overnight
-        std = _day_max(rates, a, tz_)
+        std = _standard_rate(rates, a, tz_, slot.price)
         std = std * 100 if std is not None else price
         import_p, slot_import, prob = price, None, None
         if flagged and price < std - 1e-6:
