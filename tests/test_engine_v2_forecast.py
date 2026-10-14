@@ -281,3 +281,19 @@ def test_gbp_to_pence_and_empty_prices():
     inp.readings.rates, inp.readings.import_rate = [], None
     seg = F.build(inp, ST).segments[0]
     assert seg.import_p == F.FALLBACK_IMPORT_P
+
+
+def test_a_day_that_is_cheap_all_through_still_has_a_standard_rate_for_its_smart_slots():
+    """The tariff shows every half-hour of today at the cheap rate once a dispatch covers most of it: the standard rate
+    those slots replace is then the highest rate known (tomorrow's), and the half-hours still to come are a chance."""
+    now = at(14, 20)
+    inp = make(now)
+    inp.readings.rates = rate_windows(2, cheap=set(range(48)))
+    inp.readings.dispatches = [Window(at(12, 0), at(3, 0, day=1), 0.0)]
+    inp.slot_certainty = lambda start, seen: 0.2
+    inp.slot_hold = lambda: 0.8
+    fc = F.build(inp, ST)
+    inside = [s for s in fc.segments if s.slot_prob is not None]
+    assert inside and inside[0].start == now and inside[0].slot_prob == 1.0
+    assert all(s.slot_prob == pytest.approx(0.8) for s in inside[1:])
+    assert all(s.slot_import_p == pytest.approx(6.99) and s.import_p == pytest.approx(30.28) for s in inside[1:])
