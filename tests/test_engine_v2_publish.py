@@ -393,7 +393,7 @@ def test_the_shown_path_follows_the_shown_items_not_the_plans_own_clock():
     knots = [(0, 58), (14, 64), (30, 64), (52, 73), (60, 73), (90, 60), (120, 60)]
 
     def raw(m):
-        for (a, x), (b, y) in zip(knots, knots[1:]):
+        for (a, x), (b, y) in zip(knots, knots[1:], strict=False):
             if a <= m <= b:
                 return x + (y - x) * (m - a) / (b - a)
     pts = [round(raw(15 * i), 3) for i in range(9)]
