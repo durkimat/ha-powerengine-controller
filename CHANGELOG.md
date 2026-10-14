@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.143 (beta)
+
+### Behaviour changes
+
+- **A smart slot is still a chance on a day the dispatch covers entirely.** EDF shows a half-hour at the cheap rate as soon as a dispatch is planned, so on 14 Oct, with a dispatch from 15:00 to 03:00, every half-hour of the day read 6.66p. The engine finds the standard rate a slot replaces by taking the day's highest rate, and that day had none: nothing counted as a smart slot that might not come, so the plan priced the whole window at the cheap rate as certain, and the forecast stopped dashing it. The standard rate now falls back to the highest rate known on the other days (tomorrow's 28.84p), so the half-hours still to come are a chance again (priced at the expected price, shown dashed), as on the days that still had a dearer half-hour. This also changes the plan on such days: the cheap energy is worth a little less, so the battery's arbitrage band can move.
+
+### Behind the scenes
+
+- `forecast._standard_rate` replaces `_day_max` for the standard rate; the day's own highest rate is used whenever it is above the slot's price, so days with a dearer half-hour are unchanged.
+
 ## 0.9.142 (beta)
 
 ### Behaviour changes
