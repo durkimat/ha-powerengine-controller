@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+from bisect import bisect_right
 from dataclasses import replace
 from datetime import datetime, timedelta
 
@@ -213,18 +214,17 @@ def _thin_sun(a: dict) -> None:
     sun["step_min"] *= 2
 
 
-def as_run(vr: ValueResult, settings: V2Settings) -> list[TimelineItem]:
-    """The plan's timeline as the plan executor will run it, for display only (the plan itself is not changed). The
-    plan ends a charge or sale part-way through a segment and fills the rest with a hold (`remainder`), a way of saying
-    how much; the executor never rests there: a run follows the plan by level, and the next step starts as soon as the
-    run is done wherever the prices are those of now (`Executor._plan_candidate`). Where they differ the clock stands
-    and the battery does what the rules allow in between (a hold only where one is allowed, else self-use)."""
+def _as_run(vr: ValueResult, settings: V2Settings) -> tuple[list[TimelineItem], list[tuple[float, float]]]:
+    """`as_run`'s items, and the anchors that map the time they are shown at to the plan's own clock:
+    (shown, plan) in seconds, in step with both clocks."""
     idle = HOLD if not settings.hold_only_car_reserve else SELF_USE
     out: list[TimelineItem] = []
+    anchors: list[tuple[float, float]] = []
     cursor = None
     for it in vr.timeline:
         if it.remainder:
             continue
+        plan_start, plan_end = it.start, it.end
         if cursor is not None and cursor < it.start:
             if Executor._same_prices(vr, cursor, it.start):         # the next step starts as soon as the run is done
                 span = it.end - it.start
@@ -236,6 +236,8 @@ def as_run(vr: ValueResult, settings: V2Settings) -> list[TimelineItem]:
                     mode=idle, start=cursor, end=it.start, level_start=level, level_end=level,
                     until=f"until {it.start:%H:%M}", remainder=True,
                     reason="The run has reached its target; the battery waits for the next step."))
+        anchors.append((it.start.timestamp(), plan_start.timestamp()))
+        anchors.append((it.end.timestamp(), plan_end.timestamp()))
         if out and out[-1].mode == it.mode and out[-1].end == it.start and it.mode in (CHARGE, EXPORT):
             last = out[-1]
             out[-1] = replace(last, end=it.end, level_end=it.level_end, until=it.until, level_lo=it.level_lo,
@@ -243,19 +245,68 @@ def as_run(vr: ValueResult, settings: V2Settings) -> list[TimelineItem]:
         else:
             out.append(it)
         cursor = out[-1].end
+    return out, anchors
+
+
+def as_run(vr: ValueResult, settings: V2Settings) -> list[TimelineItem]:
+    """The plan's timeline as the plan executor will run it, for display only (the plan itself is not changed). The
+    plan ends a charge or sale part-way through a segment and fills the rest with a hold (`remainder`), a way of saying
+    how much; the executor never rests there: a run follows the plan by level, and the next step starts as soon as the
+    run is done wherever the prices are those of now (`Executor._plan_candidate`). Where they differ the clock stands
+    and the battery does what the rules allow in between (a hold only where one is allowed, else self-use)."""
+    return _as_run(vr, settings)[0]
+
+
+def _path_as_run(path: dict, anchors: list[tuple[float, float]]) -> dict:
+    """The level path on the clock the items are shown at. The plan's own path runs on the plan's clock, where each
+    run ends at its segment's end; the items are shown pulled forward (`as_run`), so a path left as it is draws a
+    battery that is still selling where the items say it waits. Each path point is read at the plan's time that the
+    shown time maps to (linear between the anchors, the same shift as the items)."""
+    start = datetime.fromisoformat(path["start"]).timestamp()
+    step = path["step_min"] * 60.0
+    if not anchors:
+        return path
+    xs, ys = [], []
+    for shown, plan in anchors:                       # shown time must not go back; the plan's time must not either
+        if xs and shown < xs[-1]:
+            shown = xs[-1]
+        if ys and plan < ys[-1]:
+            plan = ys[-1]
+        xs.append(shown)
+        ys.append(plan)
+    out = dict(path)
+    for k in ("mid", "low", "high"):
+        series = path.get(k) or []
+        if len(series) < 2:
+            continue
+        vals = []
+        for i in range(len(series)):
+            t = start + i * step
+            if t <= xs[0] or t >= xs[-1]:                 # before the first run, or past the last: the plan's own time
+                plan_t = t if t <= xs[0] else t - xs[-1] + ys[-1]
+            else:
+                j = bisect_right(xs, t)
+                x0, x1, y0, y1 = xs[j - 1], xs[j], ys[j - 1], ys[j]
+                plan_t = y0 + (y1 - y0) * ((t - x0) / (x1 - x0) if x1 > x0 else 0.0)
+            f = min(len(series) - 1.0, max(0.0, (plan_t - start) / step))
+            lo = int(f)
+            hi = min(lo + 1, len(series) - 1)
+            vals.append(series[lo] + (series[hi] - series[lo]) * (f - lo))
+        out[k] = vals
     return out
 
 
 def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, tz) -> tuple[str, dict]:
     if vr is None:
         return "unknown", {}
-    p = vr.path or {}
+    items_run, anchors = _as_run(vr, settings)
+    p = _path_as_run(vr.path, anchors) if vr.path and vr.path.get("start") else (vr.path or {})
     cut = _cutoff(vr)
     step_min = p.get("step_min", 15)
     keep = int(DISPLAY_H * 60 // step_min) + 1                    # path points up to the end of what is shown
     path = {k: [_r(x, 1) for x in p.get(k, [])][:keep] for k in ("mid", "low", "high")}
     items = []
-    for it in as_run(vr, settings):
+    for it in items_run:
         if it.start >= cut:
             break
         end, level_end = it.end, it.level_end
