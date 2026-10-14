@@ -380,3 +380,28 @@ def test_the_displayed_plan_keeps_the_clock_across_a_price_change_and_fills_the_
     assert shown[1].start == now + timedelta(minutes=14) and shown[1].end == now + timedelta(minutes=30)
     held = publish.as_run(_run_plan(plan, segs, now), V2Settings(hold_only_car_reserve=False))
     assert HOLD in [i.mode for i in held]
+
+
+def test_the_shown_path_follows_the_shown_items_not_the_plans_own_clock():
+    """The items are shown pulled forward (the next run starts as soon as one is done); a path left on the plan's clock
+    drew a battery still selling where the items said it waited (14 Oct, 21:52)."""
+    now = T0
+    segs = [segment(now + timedelta(minutes=30 * i), import_p=8.88, export_p=15.0) for i in range(4)]
+    plan = [_item(CHARGE, 0, 14, 58, 64, now), _item(HOLD, 14, 30, 64, 64, now, True),
+            _item(CHARGE, 30, 52, 64, 73, now), _item(HOLD, 52, 60, 73, 73, now, True),
+            _item(EXPORT, 60, 90, 73, 60, now)]
+    knots = [(0, 58), (14, 64), (30, 64), (52, 73), (60, 73), (90, 60), (120, 60)]
+
+    def raw(m):
+        for (a, x), (b, y) in zip(knots, knots[1:], strict=False):
+            if a <= m <= b:
+                return x + (y - x) * (m - a) / (b - a)
+    pts = [round(raw(15 * i), 3) for i in range(9)]
+    path = {"start": now.isoformat(), "step_min": 15, "mid": pts, "low": pts, "high": pts}
+    vr = _with(_run_plan(plan, segs, now), path=path)
+    _, a = publish._timeline(vr, V2Settings(hold_only_car_reserve=True), 12.0, LOCAL)
+    assert [(i["mode"], i["level_end"]) for i in a["items"]] == [("charge", 73), ("export", 60)]
+    mid = a["path"]["mid"]
+    assert raw(60) == 73 and mid[4] == pytest.approx(62.6, abs=0.3)      # shown: selling since 36 min, not still at 73
+    assert mid[2] == pytest.approx(70.4, abs=0.3) and mid[8] == pytest.approx(60.0, abs=0.3)
+    assert mid[3] == pytest.approx(73 - 13 * 9 / 30, abs=0.3)

@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.144 (beta)
+
+### Behaviour changes
+
+- **The battery graph follows the plan as the engine runs it.** Since 0.9.141 the mode strip shows each charge or sale pulled forward, starting as soon as the one before it is done, but the battery line was still drawn on the plan's own clock, with every run ending at the end of its segment. Later in the day the two were up to an hour apart: the strip said the battery was waiting on self-use, while the line still showed it selling (14 Oct, 21:52). The line, and the likely-range lines around it, are now re-timed the same way as the strip. This changes only what is drawn: the plan, its levels and what the engine does are as in 0.9.143.
+
+### Behind the scenes
+
+- `publish._path_as_run` maps each path point through the anchors `_as_run` records (shown time to the plan's time). The engine's own comparison of the level against the plan still reads the unchanged `vr.path`.
+
 ## 0.9.143 (beta)
 
 ### Behaviour changes
