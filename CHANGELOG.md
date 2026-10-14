@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.142 (beta)
+
+### Behaviour changes
+
+- **A charge or a sale now runs a minimum length, taken from your level bands.** In the 2.1 and 2.2 beta profiles the top band starts at 90% and the bottom at 70%, so a charge or a sale now runs the 20 points between them before the engine may stop it or turn it round. Near the edge of a band it runs only as far as the band: a charge that starts at 85% needs to reach only 90%, and the sale after it then runs the full 20 points. This is meant to end the bursts of short charges and sales near the top of the battery (13 Oct, 16:30 and 21:40), where each action ended on the far side of the steep drop in value between about 90% and 93% and the next re-plan turned it round. The plan carries the same rule: a charge or sale that is running keeps its minimum in the plan's first steps, and the plan's later charges and sales are walked with it, so the plan and the engine agree. Safety limits, forced modes (free power, events, overrides) and urgent events still end a leg at once. There is no new setting: it applies wherever both level bands are on (the top and bottom rates above zero), and not at all where they are off.
+- On the seven days 7 to 13 Oct, replayed with the same prices: mode changes fell from 293 to 205, flip-flops from 36 to 17, and legs shorter than 3 points from 19 to 4, at a cost of about 1p over the week. The battery did not reach 100%. This replay does not reproduce the 21:40 burst, so that one is the thing to watch live.
+
+### Behind the scenes
+
+- `value.leg_band` and `value.leg_need` give the rule; `_walk` and `solve(leg_from=...)` carry it in the plan, and `Executor.leg_from` (saved in the state) holds the live leg. The backward value pass is unchanged: the rule is applied when the plan is walked forward, not priced into the value curve.
+
 ## 0.9.141 (beta)
 
 ### Behaviour changes
