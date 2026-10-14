@@ -734,3 +734,31 @@ def test_a_wider_cost_tolerance_widens_the_corridor():
     wide = solve(segs, soc=12.0, settings=replace(NO_COMFORT, corridor_cost_p=5.0)).timeline[0]
     assert wide.level_hi - wide.level_lo > narrow.level_hi - narrow.level_lo
     assert wide.level_lo <= narrow.level_lo + 1e-6 and wide.level_hi >= narrow.level_hi - 1e-6
+
+
+# --- a charge or a sale runs a minimum length between the level bands ---------------------------------------------
+BANDS = replace(NO_COMFORT, level_top_start_soc=90, level_top_rate_p=200.0, level_bot_start_soc=70, level_bot_rate_p=10.0)
+
+
+def test_a_leg_runs_the_span_between_the_bands_or_to_the_edge_of_a_band():
+    band = V.leg_band(BANDS)
+    assert band == (70, 90)
+    assert V.leg_need(band, CHARGE, 60) == 20 and V.leg_need(band, CHARGE, 85) == 5
+    assert V.leg_need(band, CHARGE, 93) == 0
+    assert V.leg_need(band, EXPORT, 95) == 20 and V.leg_need(band, EXPORT, 75) == 5 and V.leg_need(band, EXPORT, 60) == 0
+    assert V.leg_band(NO_COMFORT) is None                 # no bands in use: no minimum
+
+
+def test_the_plan_carries_a_running_charge_on_for_its_length():
+    segs = [seg(i, imp=30.28) for i in range(8)]          # dear all day: nothing here is worth charging
+    free = solve(segs, soc=62.0, settings=BANDS)
+    assert free.timeline[0].mode != CHARGE
+    held = V.solve(fc_of(segs), 62.0, FACTS, BANDS, limits_for, segs[0].start, "test", UTC, running=CHARGE,
+                   leg_from=60.0)
+    first = held.timeline[0]
+    assert first.mode == CHARGE and first.level_end == pytest.approx(80.0, abs=1.0)   # 60% + the 20-point span
+    assert held.timeline[1].mode != CHARGE                                           # then the plan's own choice
+    # a leg that began near the top need only reach the band's edge
+    near = V.solve(fc_of(segs), 86.0, FACTS, BANDS, limits_for, segs[0].start, "test", UTC, running=CHARGE,
+                   leg_from=85.0)
+    assert near.timeline[0].mode != CHARGE or near.timeline[0].level_end <= 91.0

@@ -179,7 +179,7 @@ class EngineV2:
                 return rules.limits_for(seg, inp.facts, self.s, house_load_includes_ev=house_ev)
 
             vr = value.solve(fc, level, inp.facts, self.s, limits_for, now, reason, inp.tz,
-                            running=self.executor.mode)
+                            running=self.executor.mode, leg_from=self.executor.leg_from)
         except Exception as exc:
             rows.append(self._error_row(now, "revalue", exc, because=reason))
             self._retry_at = now.timestamp() + RETRY_S
