@@ -1136,7 +1136,8 @@ def _timeline(core: _Core, recs: list[dict], lam: tuple, step: float, now: datet
 
 # --- public --------------------------------------------------------------------------------------------------------
 def solve(forecast: Forecast, start_soc: float, facts: BatteryFacts, settings: V2Settings, limits_for,
-          now: datetime, because: str, tz=None, running: str | None = None, leg_from: float | None = None) -> ValueResult:
+          now: datetime, because: str, tz=None, running: str | None = None,
+          leg_from: float | None = None) -> ValueResult:
     """Work out the value curve for the forecast, then the expected timeline from `start_soc` (percent). `limits_for`
     gives each segment's allowed modes, floors and caps (layer 4). `running` is the mode now (layer 5's): the expected
     timeline starts from it, so its first step is the programme's own choice from there, as `choice_now` gives.

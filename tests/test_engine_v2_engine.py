@@ -32,7 +32,7 @@ class StubValue:
         self.value_p, self.target, self.floor = 30.0, 88.0, None
         self.solves, self.fail_solve, self.fail_lines, self.because = 0, False, False, []
 
-    def solve(self, fc, start_soc, facts, settings, limits_for, now, because, tz=None, running=None):
+    def solve(self, fc, start_soc, facts, settings, limits_for, now, because, tz=None, running=None, leg_from=None):
         self.solves += 1
         self.because.append(because)
         self.running = getattr(self, "running", []) + [running]

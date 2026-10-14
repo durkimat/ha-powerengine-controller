@@ -737,7 +737,8 @@ def test_a_wider_cost_tolerance_widens_the_corridor():
 
 
 # --- a charge or a sale runs a minimum length between the level bands ---------------------------------------------
-BANDS = replace(NO_COMFORT, level_top_start_soc=90, level_top_rate_p=200.0, level_bot_start_soc=70, level_bot_rate_p=10.0)
+BANDS = replace(NO_COMFORT, level_top_start_soc=90, level_top_rate_p=200.0, level_bot_start_soc=70,
+                level_bot_rate_p=10.0)
 
 
 def test_a_leg_runs_the_span_between_the_bands_or_to_the_edge_of_a_band():
@@ -745,7 +746,8 @@ def test_a_leg_runs_the_span_between_the_bands_or_to_the_edge_of_a_band():
     assert band == (70, 90)
     assert V.leg_need(band, CHARGE, 60) == 20 and V.leg_need(band, CHARGE, 85) == 5
     assert V.leg_need(band, CHARGE, 93) == 0
-    assert V.leg_need(band, EXPORT, 95) == 20 and V.leg_need(band, EXPORT, 75) == 5 and V.leg_need(band, EXPORT, 60) == 0
+    assert V.leg_need(band, EXPORT, 95) == 20 and V.leg_need(band, EXPORT, 75) == 5
+    assert V.leg_need(band, EXPORT, 60) == 0
     assert V.leg_band(NO_COMFORT) is None                 # no bands in use: no minimum
 
 
