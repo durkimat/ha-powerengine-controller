@@ -610,3 +610,19 @@ def test_the_levies_also_gate_a_start_the_plan_asks_for():
     ex.mode = CHARGE
     thin_sell = lines(11.0, exp=15.0, floor=40.0)          # sell line 14.25p: 3.25p under
     assert not ex._inertia_ok(EXPORT, thin_sell) and ex._inertia_ok(EXPORT, lines(9.0, exp=15.0, floor=40.0))
+
+
+def test_a_charge_runs_its_length_between_the_bands_before_it_can_stop():
+    st = s0(level_top_start_soc=90, level_top_rate_p=200.0, level_bot_start_soc=70, level_bot_rate_p=10.0)
+    ex = Executor(st)
+    ms, *_ = step(ex, 0, level=60, ln=lines(30.0, imp=6.99, target=88.0))
+    assert ms.mode == CHARGE and ex.leg_from == 60
+    ms, *_ = step(ex, 60, level=64, ln=lines(5.0, imp=6.99))               # the value has fallen: it would stop
+    assert ms.mode == CHARGE and ms.target_soc >= 80.0
+    assert Executor(st, ex.state()).leg_from == 60                         # kept across a restart
+    ms, *_ = step(ex, 120, level=81, ln=lines(5.0, imp=6.99))              # 20 points done: free to stop
+    assert ms.mode != CHARGE
+    ex2 = Executor(st)                                                     # begun at 85%: only to the band's edge
+    step(ex2, 0, level=85, ln=lines(30.0, imp=6.99, target=95.0))
+    ms, *_ = step(ex2, 60, level=90.5, ln=lines(5.0, imp=6.99))
+    assert ms.mode != CHARGE

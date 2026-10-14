@@ -42,7 +42,7 @@ from .types import (
     Observation,
     ValueResult,
 )
-from .value import KIND, choice_now, switch_cost
+from .value import KIND, choice_now, leg_band, leg_need, switch_cost
 
 FLIP_FLOP_S = 600
 LEVEL_EPS = 0.1               # points: a mode that runs "until" a level is done within this of it. The filtered level
@@ -87,6 +87,7 @@ class Executor:
         st = dict(state or {})
         self.mode: str | None = st.get("mode")
         self.since: float | None = st.get("since")
+        self.leg_from: float | None = st.get("leg_from")           # the level the charge or sale running now began at
         self.why: str = st.get("why", "")
         self.rule: str = st.get("rule", "")
         self.chosen_by: str = st.get("chosen_by", "start")
@@ -150,6 +151,21 @@ class Executor:
                                                                                             facts, obs):
             pick = self._pick_for(cur, lim, ln, level, facts, vr)        # a change must pay for itself
 
+        band = leg_band(self.s)
+        if band is not None and cur in (CHARGE, EXPORT) and pick.mode != cur and not pick.forced and not urgent \
+                and level is not None and self.leg_from is not None and cur in lim.allowed:
+            need = leg_need(band, cur, self.leg_from)
+            moved = level - self.leg_from if cur == CHARGE else self.leg_from - level
+            hard = level >= lim.ceiling_soc - LEVEL_EPS if cur == CHARGE else level <= lim.floor_soc + LEVEL_EPS
+            if moved < need and not hard:                           # a leg runs its length (the plan's walk does too)
+                held = self._pick_for(cur, lim, ln, level, facts, vr)
+                if cur == CHARGE:
+                    held.target_soc = max(held.target_soc or 0.0, min(self.leg_from + need, lim.ceiling_soc))
+                else:
+                    held.target_soc = min(100.0 if held.target_soc is None else held.target_soc,
+                                          max(self.leg_from - need, lim.floor_soc))
+                pick = held
+
         changed = cur != pick.mode
         if changed:
             chosen_by = pick.chosen_by or self._cause(events, cur, level, lim, ln)
@@ -167,6 +183,7 @@ class Executor:
                 if edge_before[0] == cur and edge_before[2] is not None:
                     self._reached = edge_before[2]
             self.mode, self.since, self.chosen_by = pick.mode, ts, chosen_by
+            self.leg_from = level if pick.mode in (CHARGE, EXPORT) else None
             self.deadline_fired = False
             self.dl_key = None
         self.why, self.rule = pick.why, "v2_" + pick.rule
@@ -729,7 +746,7 @@ class Executor:
                          deadline=deadline, lines=self.lines)
 
     def state(self) -> dict:
-        return {"mode": self.mode, "since": self.since, "why": self.why, "rule": self.rule,
+        return {"mode": self.mode, "since": self.since, "leg_from": self.leg_from, "why": self.why, "rule": self.rule,
                 "chosen_by": self.chosen_by, "target_soc": self.target_soc, "power_w": self.power_w,
                 "deadline": self.deadline, "deadline_fired": self.deadline_fired, "dl_key": self.dl_key,
                 "sun_spare": self.sun_spare, "reserve_latched": self.reserve_latched,
