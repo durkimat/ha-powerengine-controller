@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.146 (beta)
+
+### Behaviour changes
+
+- **The value of a stored kWh no longer jumps up and down.** While the battery drained steadily the number moved up and down every few seconds, and the stored-value chart looked like random blocks of colour. The value is now read as a curve that never rises with the battery level (more in the battery is never worth more per kWh), with single spikes removed first. It applies to the live value, to when a charge or a sale stops, and to the value chart; the plan itself is worked out as before. On the 7-14 Oct days in the simulator the adjusted cost was £0.15 better (-£22.07 against -£21.92), with 13 fewer mode changes (234 against 247) and no more flip-flops. On 14 Oct the live value changed direction 8 times in the day against 271. One cost: the battery sits a little lower, 52 hours below 60% in the eight days against 43.
+- **The 2.2 beta profile's "Slots: bottom multiplier" is 30, not 300.** The 300 wall inside smart slots was dearer by £0.37 over those eight days with 12 more mode changes. If you already saved a value of your own it is used, as before.
+- **The penalty table is read between its entries.** The level curves were looked up at the nearest of 100 entries per kWh, which made the value step at every entry. A small gain on its own (£0.25 over the eight days).
+
+### Behind the scenes
+
+- `value.read_row(row, floor_pct)` does the median and the pooling, `value.floor_pct_at` gives the floor of a segment; `value_at`, `value.lines` and `publish._curve` read through it. Constants `MONOTONE_LINES` (on) and `MONOTONE_MEDIAN` (5) in `value.py`; no setting, because the settings sensor has no room for one.
+- Cause found by running one day through 0.9.113 to 0.9.144 and the profiles: the value curve is smooth with the defaults profile and rough with the beta profiles' `late_events` off (91p of total rise per curve alone, 315p with the level curves on, 15p with `late_events` back on). `late_events` is not changed here. See `docs/plans/engine-v2-level-penalty.md`.
+- Tests: `tests/test_stored_value_smooth.py`, an interpolation test in `tests/test_level_penalty.py`.
+
 ## 0.9.145 (beta)
 
 ### Behaviour changes
