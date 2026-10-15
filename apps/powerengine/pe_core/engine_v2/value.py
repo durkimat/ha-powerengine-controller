@@ -138,16 +138,23 @@ def _level_penalty(cap: float, slot: bool, s: V2Settings) -> _Pen | None:
     return pen
 
 
+def _interp(t: list[float], x: float) -> float:
+    """`t` at the fractional index `x`, straight between the two entries around it (the nearest entry made the value
+    of stored power step at every table line, and the plan with it)."""
+    if x <= 0.0:
+        return t[0]
+    i = int(x)
+    if i + 1 >= len(t):
+        return t[-1]
+    return t[i] + (x - i) * (t[i + 1] - t[i])
+
+
 def _phi(P: _Pen, e: float) -> float:
-    i = int(e * P.res + 0.5)
-    t = P.phi
-    return t[i] if i < len(t) else t[-1]
+    return _interp(P.phi, e * P.res)
 
 
 def _dphi(P: _Pen, e: float) -> float:
-    i = int(e * P.res + 0.5)
-    t = P.dphi
-    return t[i] if i < len(t) else t[-1]
+    return _interp(P.dphi, e * P.res)
 
 
 def _pen_partial(P: _Pen, dt: float, e0: float, ef: float, f: float) -> float:
