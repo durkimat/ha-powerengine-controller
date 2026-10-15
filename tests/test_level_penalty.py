@@ -159,3 +159,15 @@ def test_only_a_slot_segment_uses_the_slot_curve():
     plain = value._make(seg(), BatteryFacts(), s, LIM)
     slotted = value._make(seg(slot=0.9), BatteryFacts(), s, LIM)
     assert value._phys(plain, kwh(50), "hold", 0.3, 10.0)[10] < value._phys(slotted, kwh(50), "hold", 0.3, 10.0)[10]
+
+
+def test_the_table_is_read_between_its_entries_not_at_the_nearest_one():
+    pen = value._level_penalty(18.0, False, V2Settings(level_top_rate_p=200.0, level_top_start_soc=90,
+                                                       level_top_doubling_pts=3.0))
+    e = 17.5
+    x = e * pen.res
+    lo, hi = int(x), int(x) + 1
+    mid = (lo + 0.5) / pen.res
+    assert value._phi(pen, mid) == pytest.approx((pen.phi[lo] + pen.phi[hi]) / 2)
+    assert value._dphi(pen, mid) == pytest.approx((pen.dphi[lo] + pen.dphi[hi]) / 2)
+    assert value._phi(pen, 99.0) == pen.phi[-1] and value._phi(pen, -1.0) == pen.phi[0]   # off the ends: the end entry

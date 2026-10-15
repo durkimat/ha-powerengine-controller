@@ -238,7 +238,8 @@ def test_a_sunny_day_ahead_lowers_the_night_charge():
     assert t_sunny is None or t_sunny < t_dull - 20
 
 
-def test_a_grid_event_raises_the_value_before_it():
+def test_a_grid_event_raises_the_value_before_it(monkeypatch):
+    monkeypatch.setattr(V, "MONOTONE_LINES", False)             # the raw curve: the smoothing has its own tests
     base = [seg(i, imp=15.0) for i in range(30)]
     ev = [seg(i, imp=15.0) if not 20 <= i < 26 else seg(i, imp=15.0, event=True, event_p=115.0) for i in range(30)]
     before = t(10)

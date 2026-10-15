@@ -23,7 +23,7 @@ cost per hour at level s = (capacity / 100) * the integral of rate over the laye
 | `level_bot_start_soc` | 70 / 70 | where the bottom curve starts |
 | `level_bot_rate_p` | 0 (off) / 10 | rate at your reserve, p per kWh per hour |
 | `level_bot_doubling_pts` | 5 / 5 | points per doubling |
-| `slot_bot_factor` | 1 / 300 | inside a smart slot the bottom rate is multiplied by this |
+| `slot_bot_factor` | 1 / 30 (300 until 0.9.145) | inside a smart slot the bottom rate is multiplied by this |
 | `slot_bot_start_soc` | 0 (as usual) / 80 | inside a smart slot the bottom curve starts here |
 
 They are engine v2 settings (they were numeric constants in the experiments, until engine 2.1 beta, 0.9.136). The bottom curve's rate
@@ -150,3 +150,27 @@ day):
 - Tuning the top and bottom curves together (and a stronger bottom rate).
 - Splitting hold hours into daytime sun export and overnight ties, to say how much of Hold is a decision and how much a tie.
 - Turning the constants into settings once the shape is chosen.
+
+## Update, 0.9.146: the value curve is read non-increasing
+
+The value a stored kWh is worth is read from the plan's value curve at the filtered level, every tick, and the card draws
+the same curve. The curve is not smooth: the DP leaves a sawtooth of a few pence in it, and with `late_events` off (as the
+2.1 and 2.2 beta profiles have it) and the level curves on it grows to tens of pence with spikes. Read raw, the value rose
+and fell while the battery drained steadily (14 Oct: 271 reversals in a day, 86 of 86 curves not monotone), and the chart
+showed blocks of colour. A stored kWh is never worth more when there is more in the battery, so 0.9.146 reads the curve
+(`value.read_row`): a median over 5 levels to drop single spikes, then pooling of neighbouring levels until the row never
+rises with level (pool-adjacent-violators), from the floor up (levels under the floor are not reachable and are left
+alone). It applies to the live lines, the buy and sell crossings and the published curve, never to the plan itself.
+Switch off with `value.MONOTONE_LINES = False` (simulator `--set engine_v2.value.MONOTONE_LINES=false`).
+
+Found by a regression run of one day through 0.9.113 to 0.9.144: the defaults profile is smooth on every release, the
+roughness arrived with the beta profile's `late_events=False` (alone 91p of total rise per curve, 315p with the level
+curves, 15p with it back on). Not the table lookup (now interpolated, a small gain), the slot wall, the bands, the comfort
+cost or `prefer_self_use`. Why the beta profile turns `late_events` off, and whether to turn it back on, is open.
+
+Simulator, 7-14 Oct, 2.2 beta: adjusted cost -22.07 against -21.92, mode changes 234 against 247, flip-flops 21 against 22,
+charging at dear rates 0.0 level points either way, live-value reversals on 14 Oct 271 down to 8. One cost: the battery
+sits lower, 52 hours below 60% in the eight days against 43. `slot_bot_factor` is 30 in the profile (it was 300; 30 was
+£0.37 cheaper over the eight days with 12 fewer mode changes). `charge_max_import_p` stays: with it off, 50 to 95 level
+points are still bought at dear rates and the eight days cost about £2.4 to £4.3 more, with or without the smoothing.
+

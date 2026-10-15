@@ -75,7 +75,7 @@ _ORDER = (SELF_USE, HOLD, CHARGE, EXPORT)
 # cost of the level itself, so it enters the value curve and the live lines with no rule. Inside a smart slot the
 # bottom rate is multiplied by `slot_bot_factor` and the curve may start higher (`slot_bot_start_soc`).
 PEN_RES = 100                 # table entries per kWh
-MONOTONE_MEDIAN = 1              # samples of the median taken first, to drop spikes (1: none)
+MONOTONE_MEDIAN = 5              # samples of the median taken first, to drop spikes (1: none)
 MONOTONE_LINES = True         # the live value and the published curve are read non-increasing in level
 
 
