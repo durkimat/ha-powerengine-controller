@@ -75,6 +75,7 @@ _ORDER = (SELF_USE, HOLD, CHARGE, EXPORT)
 # cost of the level itself, so it enters the value curve and the live lines with no rule. Inside a smart slot the
 # bottom rate is multiplied by `slot_bot_factor` and the curve may start higher (`slot_bot_start_soc`).
 PEN_RES = 100                 # table entries per kWh
+MONOTONE_LINES = False        # the live value of a stored kWh is read from the value curve made non-increasing in level
 
 
 # --- the level penalty ---------------------------------------------------------------------------------------------
@@ -1192,6 +1193,23 @@ def _segment_index(vr: ValueResult, t: datetime) -> int:
     return max(0, min(len(starts) - 1, bisect_right(starts, t) - 1))
 
 
+def _monotone(row):
+    """The row made non-increasing in level by pooling adjacent levels that break the order (the closest such curve in
+    least squares). A stored kWh is never worth more when there is more in the battery; the wiggles the plan's
+    arithmetic leaves in the curve showed up as the live value rising and falling while the battery drained steadily."""
+    blocks: list[list[float]] = []                 # [sum, count] of each pooled block, in level order
+    for v in row:
+        blocks.append([v, 1.0])
+        while len(blocks) > 1 and blocks[-2][0] / blocks[-2][1] < blocks[-1][0] / blocks[-1][1]:
+            a = blocks.pop()
+            blocks[-1][0] += a[0]
+            blocks[-1][1] += a[1]
+    out: list[float] = []
+    for total, n in blocks:
+        out.extend([total / n] * int(n))
+    return out
+
+
 def _row_at(row, step: float, e: float) -> float:
     x = min(len(row) - 1.0, max(0.0, e / step))
     j = int(x)
@@ -1204,6 +1222,8 @@ def value_at(vr: ValueResult, t: datetime, soc: float) -> float:
     if not vr.lam:
         return 0.0
     row = _end_row(vr.lam, _segment_index(vr, t))
+    if MONOTONE_LINES:
+        row = _monotone(row)
     cap = vr.step_kwh * (len(row) - 1)
     return _row_at(row, vr.step_kwh, soc / 100 * cap)
 
@@ -1305,6 +1325,8 @@ def lines(vr: ValueResult, t: datetime, soc: float, import_p: float, export_p: f
         buy += top
     if vr.lam:
         row = _end_row(vr.lam, _segment_index(vr, t))
+        if MONOTONE_LINES:
+            row = _monotone(row)
         step = vr.step_kwh
         cap = step * (len(row) - 1)
         e = soc / 100 * cap
