@@ -27,7 +27,7 @@ def test_the_profile_fills_what_the_config_does_not_set():
     s = parse_v2({}, profile=profile_values("2.1 beta"))
     for key, value in BUILTIN_PROFILES["2.1 beta"].items():
         assert getattr(s, key) == value
-    assert s.executor == "plan" and s.replan_on_level and s.level_top_rate_p == 200.0 and s.slot_bot_factor == 300.0
+    assert s.executor == "plan" and s.replan_on_level and s.level_top_rate_p == 200.0 and s.slot_bot_factor == 30.0
     assert s.late_events is False and s.prefer_self_use is False and s.top_up_cost_p == 0.0
 
 
