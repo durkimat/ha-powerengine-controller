@@ -215,3 +215,31 @@ def test_free_arbitrage_lets_a_free_session_charge_or_sell_and_off_still_forces_
     assert lim.forced is None and lim.allowed == {CHARGE, EXPORT} and lim.ceiling_soc == 100.0 and lim.rule == "free"
     assert _core(s, free=True, car=True, car_kw=7.0).allowed == {HOLD, CHARGE}
     assert _core(replace(s, arbitrage=False), free=True).allowed == {CHARGE}
+
+
+# --- no grid charge at a dear rate (charge_max_import_p) ---------------------------------------------------------
+CAP15 = V2Settings(charge_max_import_p=15.0)
+
+
+def test_no_grid_charge_above_the_price_limit_in_the_plan_and_now():
+    dear = segment(T0, import_p=28.84)
+    assert CHARGE not in rules.limits_for(dear, BatteryFacts(), CAP15).allowed
+    assert CHARGE not in now_limits(settings=CAP15, seg=dear).allowed
+    assert CHARGE in rules.limits_for(segment(T0, import_p=6.66), BatteryFacts(), CAP15).allowed
+    assert CHARGE in rules.limits_for(dear, BatteryFacts(), V2Settings()).allowed          # 0: off
+
+
+def test_a_smart_slot_that_may_happen_keeps_charging_allowed():
+    slot = segment(T0, import_p=28.84, slot_prob=0.3, slot_import_p=6.66)
+    assert CHARGE in rules.limits_for(slot, BatteryFacts(), CAP15).allowed
+    assert CHARGE in now_limits(settings=CAP15, seg=slot).allowed
+
+
+def test_the_price_limit_leaves_free_power_events_and_overrides_alone():
+    dear = segment(T0, import_p=28.84)
+    free = rules.limits_for(replace(dear, free=True), BatteryFacts(), replace(CAP15, free_arbitrage=True))
+    assert CHARGE in free.allowed and free.rule == "free"
+    assert rules.limits_for(replace(dear, event=True), BatteryFacts(), CAP15).forced == EVENT
+    sit = Situation(active=True, override=Override("grid_charge", T0 + timedelta(hours=1), T0))
+    assert now_limits(situation=sit, settings=CAP15, seg=dear).forced == CHARGE
+    assert now_limits(car=True, settings=CAP15, seg=dear).allowed == {HOLD}   # the car holds the battery

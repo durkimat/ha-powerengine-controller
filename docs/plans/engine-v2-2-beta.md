@@ -5,7 +5,7 @@ authority for what it does now.
 
 ## What it is
 
-A new built-in profile, "2.2 beta" (`settings.BETA22_PROFILE`). It is "2.1 beta" plus five settings, all neutral in every
+A new built-in profile, "2.2 beta" (`settings.BETA22_PROFILE`). It is "2.1 beta" plus six settings, all neutral in every
 other profile:
 
 | Setting | 2.2 beta | Neutral | What it does |
@@ -15,6 +15,7 @@ other profile:
 | `reversal_levy_p` | 4 | 0 | Turning a charge into a sale, or back, needs the value this many p/kWh further past the line. |
 | `reentry_levy_p` | 4 | 0 | A charge or sale that ended in the last 10 minutes restarts only when the value is this much further past the line. |
 | `corridor_cost_p` | 0.5 | 0.5 | A charge or sale may stop anywhere whose expected cost is within this of the best stop. |
+| `charge_max_import_p` | 15 | 0 (off) | No grid charge while the import price (the cheapest a smart slot could bring) is above this, in the plan and in the engine alike (`rules._core`). Free power, grid events and overrides are not held back. Added 0.9.145: on 7-13 Oct it cut charging at dear rates from 39 level points to 3 and the week's adjusted cost by 1.44 GBP, for about 20 more mode changes. |
 
 Under `executor = plan` (2.1 beta and 2.2 beta) the engine also does the following. None of it is a setting, and the default
 executor is unchanged:

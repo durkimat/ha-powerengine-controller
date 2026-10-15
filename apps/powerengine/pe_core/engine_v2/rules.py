@@ -65,7 +65,8 @@ def caps(facts: BatteryFacts, charge_factor: float = 1.0, house_kw: float | None
 
 def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str | None, free: bool, car: bool,
           level: float | None, charge_factor: float, house_kw: float | None, solar_kw: float | None, car_kw: float,
-          reserve_latched: bool = False, override_text: str = "", cheap: bool = True) -> Limits:
+          reserve_latched: bool = False, override_text: str = "", cheap: bool = True,
+          price_p: float | None = None) -> Limits:
     s = settings
     floor = normal_floor(facts, s)
     ceiling = float(s.charge_ceiling_soc)
@@ -95,6 +96,8 @@ def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str
         reason = "Free-power session: the battery charges, or sells what it holds if that pays more"
     if s.hold_only_car_reserve:
         allowed.discard(HOLD)                       # back for the car and the reserve below
+    if rule == "normal" and s.charge_max_import_p > 0 and price_p is not None and price_p > s.charge_max_import_p:
+        allowed.discard(CHARGE)                     # no grid charge at a dear rate (a free session is its own rule)
     if car:
         allowed = (allowed & {CHARGE}) | {HOLD}
         rule, reason = "car", "The car is charging: the battery holds so it never feeds the car"
@@ -118,6 +121,14 @@ def _cheap(seg: Segment | None) -> bool:
     return seg is None or seg.overnight or seg.slot_prob is not None
 
 
+def _cheapest_p(seg: Segment | None) -> float | None:
+    """The lowest import price the segment could bring (a smart slot's price counts when a slot may happen), p/kWh;
+    None with no segment, so a missing forecast never blocks a charge."""
+    if seg is None:
+        return None
+    return min(seg.import_p, seg.slot_import_p) if seg.slot_prob and seg.slot_import_p is not None else seg.import_p
+
+
 def limits_now(situation: Situation, obs: Observation, seg: Segment | None, facts: BatteryFacts,
                settings: V2Settings, readings, *, reserve_latched: bool = False) -> Limits:
     """The rules now, from the live readings. `reserve_latched` (the executor's memory of being held at the reserve)
@@ -138,7 +149,7 @@ def limits_now(situation: Situation, obs: Observation, seg: Segment | None, fact
                  charge_factor=seg.charge_factor if seg is not None else 1.0,
                  house_kw=(r.house_power or 0.0) / 1000.0 if r.house_power is not None else None,
                  solar_kw=(r.solar_power or 0.0) / 1000.0, car_kw=car_kw,
-                 reserve_latched=reserve_latched, override_text=text, cheap=_cheap(seg))
+                 reserve_latched=reserve_latched, override_text=text, cheap=_cheap(seg), price_p=_cheapest_p(seg))
 
 
 def limits_for(seg: Segment, facts: BatteryFacts, settings: V2Settings, *,
@@ -148,4 +159,4 @@ def limits_for(seg: Segment, facts: BatteryFacts, settings: V2Settings, *,
     return _core(settings, facts, event=seg.event, manual=seg.manual, free=seg.free,
                  car=seg.car_kw > 0 and house_load_includes_ev, level=None, charge_factor=seg.charge_factor,
                  house_kw=seg.load_kwh.mid / hours, solar_kw=seg.solar_kwh.mid / hours, car_kw=seg.car_kw,
-                 cheap=_cheap(seg))
+                 cheap=_cheap(seg), price_p=_cheapest_p(seg))
