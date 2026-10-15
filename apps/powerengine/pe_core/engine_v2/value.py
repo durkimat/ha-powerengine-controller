@@ -75,7 +75,8 @@ _ORDER = (SELF_USE, HOLD, CHARGE, EXPORT)
 # cost of the level itself, so it enters the value curve and the live lines with no rule. Inside a smart slot the
 # bottom rate is multiplied by `slot_bot_factor` and the curve may start higher (`slot_bot_start_soc`).
 PEN_RES = 100                 # table entries per kWh
-MONOTONE_LINES = False        # the live value of a stored kWh is read from the value curve made non-increasing in level
+MONOTONE_MEDIAN = 1              # samples of the median taken first, to drop spikes (1: none)
+MONOTONE_LINES = True         # the live value and the published curve are read non-increasing in level
 
 
 # --- the level penalty ---------------------------------------------------------------------------------------------
@@ -1193,7 +1194,7 @@ def _segment_index(vr: ValueResult, t: datetime) -> int:
     return max(0, min(len(starts) - 1, bisect_right(starts, t) - 1))
 
 
-def _monotone(row):
+def monotone(row):
     """The row made non-increasing in level by pooling adjacent levels that break the order (the closest such curve in
     least squares). A stored kWh is never worth more when there is more in the battery; the wiggles the plan's
     arithmetic leaves in the curve showed up as the live value rising and falling while the battery drained steadily."""
@@ -1210,6 +1211,27 @@ def _monotone(row):
     return out
 
 
+def read_row(row, floor_pct: float = 0.0):
+    """A value row as it is read live and published: non-increasing in level from the floor up (`MONOTONE_LINES`).
+    Levels under the floor can't be reached and carry no meaning, so they are left alone and never pooled in."""
+    if not MONOTONE_LINES:
+        return row
+    lo = min(len(row) - 1, max(0, math.ceil(floor_pct / 100.0 * (len(row) - 1) - 1e-9)))
+    part = list(row[lo:])
+    w = MONOTONE_MEDIAN
+    if w > 1:
+        h, n = w // 2, len(part)
+        part = [sorted(part[max(0, i - h):i + h + 1])[(min(n, i + h + 1) - max(0, i - h)) // 2] for i in range(n)]
+    return list(row[:lo]) + monotone(part)
+
+
+def floor_pct_at(vr: ValueResult, k: int) -> float:
+    """The floor (percent) the plan was solved with at segment k: the lowest level a stored kWh is read from."""
+    if len(vr.limits) == len(vr.forecast.segments) and 0 <= k < len(vr.limits):
+        return float(vr.limits[k].floor_soc)
+    return 0.0
+
+
 def _row_at(row, step: float, e: float) -> float:
     x = min(len(row) - 1.0, max(0.0, e / step))
     j = int(x)
@@ -1221,9 +1243,8 @@ def value_at(vr: ValueResult, t: datetime, soc: float) -> float:
     segment holding t (see `_end_row`), read at the level. Zero when there is no value curve."""
     if not vr.lam:
         return 0.0
-    row = _end_row(vr.lam, _segment_index(vr, t))
-    if MONOTONE_LINES:
-        row = _monotone(row)
+    k = _segment_index(vr, t)
+    row = read_row(_end_row(vr.lam, k), floor_pct_at(vr, k))
     cap = vr.step_kwh * (len(row) - 1)
     return _row_at(row, vr.step_kwh, soc / 100 * cap)
 
@@ -1324,9 +1345,8 @@ def lines(vr: ValueResult, t: datetime, soc: float, import_p: float, export_p: f
     if soc >= settings.comfort_high_soc:                 # energy charged above the band's top costs the top-up more
         buy += top
     if vr.lam:
-        row = _end_row(vr.lam, _segment_index(vr, t))
-        if MONOTONE_LINES:
-            row = _monotone(row)
+        k = _segment_index(vr, t)
+        row = read_row(_end_row(vr.lam, k), floor_pct_at(vr, k))
         step = vr.step_kwh
         cap = step * (len(row) - 1)
         e = soc / 100 * cap

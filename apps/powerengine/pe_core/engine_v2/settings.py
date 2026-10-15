@@ -318,7 +318,7 @@ BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
         "prefer_self_use": False, "late_events": False,
         "level_top_start_soc": 90, "level_top_rate_p": 200.0, "level_top_doubling_pts": 3.0,
         "level_bot_start_soc": 70, "level_bot_rate_p": 10.0, "level_bot_doubling_pts": 5.0,
-        "slot_bot_factor": 300.0, "slot_bot_start_soc": 80,
+        "slot_bot_factor": 30.0, "slot_bot_start_soc": 80,
     },
 }
 BUILTIN_PROFILES[BETA22_PROFILE] = {**BUILTIN_PROFILES[BETA_PROFILE], "hold_only_car_reserve": True,
