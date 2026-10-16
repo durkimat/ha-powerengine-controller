@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.150 (beta)
+
+### Behaviour changes
+
+- **The plan and history charts can show more.** The app now records, for each half-hour, the buy and sell lines (the stored-kWh value above which it charges and below which it sells), the energy imported from and exported to the grid, and the energy the car took. It also records when the plan was worked out again. The recent-hours data the plan chart scrolls back over now carries the value of a stored kWh as well. Nothing the controller does changes. These figures start from the moment you update, so earlier hours and days show none of them.
+
+### Behind the scenes
+
+- `v2history`: the half-hour record gains `buy_line_p`, `sell_line_p`, `grid_in_kwh`, `grid_out_kwh` and `car_kwh`; the day file gains `replans`. Both sensors publish them under short names (`buy_p`, `sell_p`, `grid_in`, `grid_out`, `car`, `replans`). An older record without them publishes without them.
+- Tests: two in `tests/test_v2history.py`.
+
 ## 0.9.149 (beta)
 
 ### Behaviour changes

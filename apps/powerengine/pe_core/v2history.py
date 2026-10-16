@@ -34,6 +34,8 @@ ATTR_LIMIT = 15_000          # what the runs may take the sensor up to (HA skips
 MAX_GAP_S = 120.0            # a longer gap between ticks counts as this much in a half-hour's mix
 HALF = timedelta(minutes=30)
 RUNS_CAP = 120               # the most runs published for a day (a day's file keeps up to CHANGES_CAP)
+REPLANS_CAP = 150            # replans kept per day
+REPLANS_SHOWN = 60           # and published
 RECENT_HOURS = 18            # how far back sensor.pe_v2_recent reaches (the plan chart's scrollback)
 
 NOTE = ("What engine v2 did against the level it expected at the start of the day: the modes as they ran, the prices "
@@ -109,9 +111,11 @@ class _Acc:
         self.start = start
         self.modes: dict[str, float] = {}
         self.sent = self.preview = self.total = 0.0
-        self.level = self.import_p = self.export_p = self.value_p = None
+        self.level = self.import_p = self.export_p = self.value_p = self.buy_p = self.sell_p = None
+        self.grid_in = self.grid_out = self.car = None            # kWh over the half-hour; None: never read
 
-    def add(self, dt: float, mode: str, sent: bool, preview: bool, level, imp, exp, val) -> None:
+    def add(self, dt: float, mode: str, sent: bool, preview: bool, level, imp, exp, val, buy=None, sell=None,
+            grid_w=None, car_w=None) -> None:
         self.modes[mode] = self.modes.get(mode, 0.0) + dt
         self.total += dt
         self.sent += dt if sent else 0.0
@@ -122,13 +126,28 @@ class _Acc:
             self.import_p, self.export_p = imp, exp
         if val is not None:
             self.value_p = val
+        if buy is not None:
+            self.buy_p = buy
+        if sell is not None:
+            self.sell_p = sell
+        if grid_w is not None:                                   # W, + importing
+            self.grid_in = (self.grid_in or 0.0) + max(0.0, grid_w) * dt / 3.6e6
+            self.grid_out = (self.grid_out or 0.0) + max(0.0, -grid_w) * dt / 3.6e6
+        if car_w is not None:
+            self.car = (self.car or 0.0) + max(0.0, car_w) * dt / 3.6e6
 
     def record(self) -> dict:
         mode = max(self.modes.items(), key=lambda kv: kv[1])[0]
         half = self.total / 2
-        return {"start": self.start.isoformat(timespec="seconds"), "mode": mode, "level_end": _r(self.level, 1),
-                "import_p": _r(self.import_p), "export_p": _r(self.export_p), "value_p": _r(self.value_p),
-                "sent": self.sent > half, "preview": self.preview > half}
+        rec = {"start": self.start.isoformat(timespec="seconds"), "mode": mode, "level_end": _r(self.level, 1),
+               "import_p": _r(self.import_p), "export_p": _r(self.export_p), "value_p": _r(self.value_p),
+               "sent": self.sent > half, "preview": self.preview > half}
+        for key, val, n in (("buy_line_p", self.buy_p, 2), ("sell_line_p", self.sell_p, 2),
+                            ("grid_in_kwh", self.grid_in, 3), ("grid_out_kwh", self.grid_out, 3),
+                            ("car_kwh", self.car, 3)):
+            if val is not None:
+                rec[key] = _r(val, n)
+        return rec
 
 
 class V2History:
@@ -181,7 +200,8 @@ class V2History:
 
     # --- recording ----------------------------------------
     def tick(self, now: datetime, *, mode: str, why: str = "", level=None, import_p=None, export_p=None,
-             value_p=None, sent: bool = False, preview: bool = False, path: dict | None = None) -> bool:
+             value_p=None, sent: bool = False, preview: bool = False, path: dict | None = None, buy_line_p=None,
+             sell_line_p=None, grid_w=None, car_w=None, replanned: bool = False) -> bool:
         """One engine step. Returns True when a file was written."""
         local = now.astimezone(self.tz)
         day = local.date()
@@ -193,9 +213,13 @@ class V2History:
             self._acc = _Acc(start)
         dt = 0.0 if self._last_t is None else min(MAX_GAP_S, max(0.0, (now - self._last_t).total_seconds()))
         self._last_t = now
-        self._acc.add(dt or 1.0, mode, sent, preview, level, import_p, export_p, value_p)
+        self._acc.add(dt or 1.0, mode, sent, preview, level, import_p, export_p, value_p, buy_line_p, sell_line_p,
+                      grid_w, car_w)
         data = self.load(day)
         dirty = False
+        if replanned and len(data.setdefault("replans", [])) < REPLANS_CAP:        # when the plan was worked out again
+            data["replans"].append(local.isoformat(timespec="seconds"))
+            dirty = True
         last = data["changes"][-1]["mode"] if data["changes"] else None
         if mode != last and len(data["changes"]) < CHANGES_CAP:       # the day's opening mode counts as a change
             row = {"at": local.isoformat(timespec="seconds"), "mode": mode, "reason": (why or "")[:REASON_MAX * 2]}
@@ -265,6 +289,14 @@ def runs_of(changes: list[dict], since: datetime | None = None) -> list[list]:
     return [[c["at"], c["mode"], c.get("level"), 1 if c.get("preview") else 0] for _at, c in rows][-RUNS_CAP:]
 
 
+def _extras(x: dict) -> dict:
+    """The optional figures of a recorded half-hour, under the short names the sensors publish: the buy and sell
+    lines (p) and the grid and car energy (kWh). Left out when never read (an older record)."""
+    names = (("buy_line_p", "buy_p", 1), ("sell_line_p", "sell_p", 1), ("grid_in_kwh", "grid_in", 2),
+             ("grid_out_kwh", "grid_out", 2), ("car_kwh", "car", 2))
+    return {short: round(x[key], n) for key, short, n in names if x.get(key) is not None}
+
+
 def _until(ran: list[dict]) -> str | None:
     """Where the last run ends: the end of the last recorded half-hour (a past day's)."""
     if ran:
@@ -291,6 +323,8 @@ def attributes(data: dict, day: date, today: date, tz, in_control: str | None, l
                "sent": bool(x["sent"]) if x else False}
         if x and x.get("preview"):
             row["preview"] = True
+        if x:
+            row.update(_extras(x))
         series.append(row)
     changes = [{"at": c["at"], "mode": c["mode"], "reason": (c.get("reason") or "")[:REASON_MAX]}
                for c in data.get("changes", [])][-CHANGES_SHOWN:]
@@ -299,7 +333,7 @@ def attributes(data: dict, day: date, today: date, tz, in_control: str | None, l
              "preview_only": bool(ran) and all(x.get("preview") for x in ran.values()),
              "series": series, "runs": runs_of(data.get("changes", [])),
              "runs_until": None if day == today else _until(data.get("ran", [])),
-             "changes": changes, "note": NOTE}
+             "replans": list(data.get("replans", []))[-REPLANS_SHOWN:], "changes": changes, "note": NOTE}
     for width, keep in ((60, CHANGES_SHOWN), (40, CHANGES_SHOWN), (40, 40), (30, 30), (20, 20), (10, 10), (0, 5)):
         if _size(attrs) <= ATTR_TARGET:
             break
@@ -326,14 +360,20 @@ def recent(rows_by_day: dict[str, dict], now: datetime, tz, hours: int = RECENT_
             if since <= t < stop:
                 row = {"t": x["start"], "mode": x.get("mode"), "level": x.get("level_end"),
                        "import_p": x.get("import_p"), "export_p": x.get("export_p"), "sent": bool(x.get("sent"))}
+                if x.get("value_p") is not None:
+                    row["value_p"] = x["value_p"]
+                row.update(_extras(x))
                 if x.get("preview"):
                     row["preview"] = True
                 out.append(row)
     out.sort(key=lambda r: datetime.fromisoformat(r["t"]))
     changes = sorted((c for d in rows_by_day.values() for c in (d or {}).get("changes", []) if c.get("at")),
                      key=lambda c: c["at"])
+    replans = sorted(t for d in rows_by_day.values() for t in (d or {}).get("replans", [])
+                     if datetime.fromisoformat(t) >= since)
     return {"hours": hours, "step_min": 30, "since": since.isoformat(timespec="seconds"),
-            "until": stop.isoformat(timespec="seconds"), "series": out, "runs": runs_of(changes, since=since),
+            "until": stop.isoformat(timespec="seconds"), "series": out,
+            "replans": replans[-REPLANS_SHOWN:], "runs": runs_of(changes, since=since),
             "runs_until": None}
 
 
