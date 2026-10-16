@@ -8,7 +8,7 @@ import pytest
 from test_engine_v2_observe import T0, forecast, inp, segment, value_result
 
 from pe_core.engine_v2 import engine as engine_mod
-from pe_core.engine_v2 import publish, value
+from pe_core.engine_v2 import publish
 from pe_core.engine_v2.engine import EngineV2
 from pe_core.engine_v2.settings import SETTINGS, V2Settings
 from pe_core.engine_v2.types import CHARGE, EXPORT, HOLD, SELF_USE, Lines, TimelineItem
@@ -223,7 +223,7 @@ def test_the_value_curve_is_eleven_levels_for_each_hour(made):
     assert set(a) == {"start", "step_min", "levels", "values", "unit"}
     assert a["levels"] == [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100] and a["step_min"] == 60 and a["unit"] == "p/kWh"
     assert 40 <= len(a["values"]) <= 48 and all(len(r) == 11 for r in a["values"])
-    first = value.read_row(out.value.lam[0], value.floor_pct_at(out.value, 0))   # read as the live value is
+    first = out.value.lam[0]
     assert a["values"][0][0] == round(first[0], 2) and a["values"][0][10] == round(first[-1], 2)
     assert a["values"][0][5] == round(first[90], 2)
     assert size(a) < 6000

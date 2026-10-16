@@ -151,26 +151,26 @@ day):
 - Splitting hold hours into daytime sun export and overnight ties, to say how much of Hold is a decision and how much a tie.
 - Turning the constants into settings once the shape is chosen.
 
-## Update, 0.9.146: the value curve is read non-increasing
+## Update, 0.9.146 and after: the value curve and its sawtooth
 
 The value a stored kWh is worth is read from the plan's value curve at the filtered level, every tick, and the card draws
-the same curve. The curve is not smooth: the DP leaves a sawtooth of a few pence in it, and with `late_events` off (as the
-2.1 and 2.2 beta profiles have it) and the level curves on it grows to tens of pence with spikes. Read raw, the value rose
-and fell while the battery drained steadily (14 Oct: 271 reversals in a day, 86 of 86 curves not monotone), and the chart
-showed blocks of colour. A stored kWh is never worth more when there is more in the battery, so 0.9.146 reads the curve
-(`value.read_row`): a median over 5 levels to drop single spikes, then pooling of neighbouring levels until the row never
-rises with level (pool-adjacent-violators), from the floor up (levels under the floor are not reachable and are left
-alone). It applies to the live lines, the buy and sell crossings and the published curve, never to the plan itself.
-Switch off with `value.MONOTONE_LINES = False` (simulator `--set engine_v2.value.MONOTONE_LINES=false`).
+the same curve. 0.9.146 found it was not smooth: with the 2.1 and 2.2 beta profiles' `late_events` off and the level
+curves on, the value rose and fell while the battery drained steadily (14 Oct: 271 reversals in a day, 86 of 86 curves
+not monotone), and the chart showed blocks of colour. 0.9.146 hid it by reading the curve non-increasing (a median, then
+pooling). The cause is the planner's: a segment is one mode (a charge or sale may stop part-way and rest in Hold), so the
+cost of the energy left in the battery has gaps where no mix of modes reaches a level. Each gap is a concave kink in the
+cost-to-go, the segment before copies it back, and the kinks build into a comb with the period of one segment's energy
+move. The value is the slope, so every kink shows as a rise. It was worse with Hold banned (the beta profile) because
+the rest of a part-way stop was still modelled as Hold, and with the steep level curves, which widen the gaps. The grid
+made it worse as it got finer (62p of rise at 0.2 kWh, 366p at 0.1, 575p at 0.05) because the comb is real, not
+rounding. The same mechanism is in the storage-planning literature (value functions that are not concave where modes
+switch; the remedy is a convexification step at each stage).
 
-Found by a regression run of one day through 0.9.113 to 0.9.144: the defaults profile is smooth on every release, the
-roughness arrived with the beta profile's `late_events=False` (alone 91p of total rise per curve, 315p with the level
-curves, 15p with it back on). Not the table lookup (now interpolated, a small gain), the slot wall, the bands, the comfort
-cost or `prefer_self_use`. Why the beta profile turns `late_events` off, and whether to turn it back on, is open.
-
-Simulator, 7-14 Oct, 2.2 beta: adjusted cost -22.07 against -21.92, mode changes 234 against 247, flip-flops 21 against 22,
-charging at dear rates 0.0 level points either way, live-value reversals on 14 Oct 271 down to 8. One cost: the battery
-sits lower, 52 hours below 60% in the eight days against 43. `slot_bot_factor` is 30 in the profile (it was 300; 30 was
-£0.37 cheaper over the eight days with 12 fewer mode changes). `charge_max_import_p` stays: with it off, 50 to 95 level
-points are still bought at dear rates and the eight days cost about £2.4 to £4.3 more, with or without the smoothing.
-
+Since 0.9.147 each segment's cost-to-go is replaced by its lower convex envelope from the floor up
+(`value.CONVEX_COST_TO_GO`, `_convex_from`). Over a half-hour the controller can share time between modes, and the
+envelope is what that costs. The value of a stored kWh then never rises with the level, the plan no longer depends on the
+level step (66.8p at 0.1 and 0.05 kWh on the test day, against 95 and 67 before), and the read-out smoothing and the
+moving average that `late_events` brought with it are gone. Seven to 14 Oct on the beta profile: adjusted cost
+-22.05 against -21.92 (0.9.145) and -22.07 (0.9.146), 232 mode changes against 247 and 234, hours below 60% 42.9 against
+43.4 and 52.0. A kWh bought above 15p: 0.9 level points in the eight days (none before). The level-curve settings were
+tuned on the jagged curve and want re-testing.

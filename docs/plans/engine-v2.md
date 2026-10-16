@@ -1051,8 +1051,7 @@ assumes an event could arrive. In `value._backward` every future, unforced segme
 probability `late_p` = per week / 7 x hours / 24 (scaled up for the sales' average size) of being inside an event no one has announced. In that
 outcome the mode is forced to EVENT at the known-event price (`event_value_p`, plus the export rate when paid on top) with no choice and no
 change cost. The sale comes in four sizes (a quarter, half, three quarters and all of the full power, `LATE_SHARES`), because one size puts the
-sale's limit at the same level in every segment and the value curve fills with dips. The value curve is also averaged over half a kWh either
-side when this is on (`_smoothed`): the programme's choices snap to the level grid and show up as dips of several pence per kWh otherwise. Stored
+sale's limit at the same level in every segment and the value curve fills with dips. Stored
 energy is therefore worth a little more at times an event could come, and a charge target follows without any rule. The expected path and cost
 (timeline) stay the no-event path. Costs about twice the calculation time (0.5 to 1 s here). **Limits seen:** an event sells at most about 2.4
 kWh a half hour, so the option only values energy the battery would not have anyway; with a light load and a sunny day the fill moves a few

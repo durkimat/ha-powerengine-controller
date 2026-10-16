@@ -75,8 +75,7 @@ _ORDER = (SELF_USE, HOLD, CHARGE, EXPORT)
 # cost of the level itself, so it enters the value curve and the live lines with no rule. Inside a smart slot the
 # bottom rate is multiplied by `slot_bot_factor` and the curve may start higher (`slot_bot_start_soc`).
 PEN_RES = 100                 # table entries per kWh
-MONOTONE_MEDIAN = 5              # samples of the median taken first, to drop spikes (1: none)
-MONOTONE_LINES = True         # the live value and the published curve are read non-increasing in level
+CONVEX_COST_TO_GO = True      # the cost-to-go of every segment is made convex in the level, from the floor up
 
 
 # --- the level penalty ---------------------------------------------------------------------------------------------
@@ -740,10 +739,35 @@ def _backward(fc: Forecast, facts: BatteryFacts, settings: V2Settings, limits_fo
                     tot[kind] += g
             for kind in KINDS:
                 rows[kind].append(tot[kind])
+        if CONVEX_COST_TO_GO:
+            lo = min(n, max(0, math.ceil(S.floor / step - 1e-9)))
+            rows = {kind: _convex_from(rows[kind], lo) for kind in KINDS}
         VK[k] = {kind: _Arr(rows[kind], step) for kind in KINDS}
     core.VK = VK
     core.V = [d[NONE_K] for d in VK]
     return core
+
+
+def _convex_from(v: list[float], lo: int) -> list[float]:
+    """The greatest convex function at or below the points from index `lo` up (the lower hull); the levels under `lo`,
+    which can't be reached, are left as they are. A segment is all one mode, or a mode and a rest in Hold, so the cost
+    of the energy left in the battery can have gaps where no mix of modes reaches a level; each gap is a concave kink,
+    and the segment before copies it back, so a comb builds up and shows as the value of a stored kWh going up and
+    down. Time-sharing between modes over the half-hour would fill the gap with a straight line: the hull is that."""
+    hull: list[int] = []
+    for i in range(lo, len(v)):
+        while len(hull) >= 2:
+            a, b = hull[-2], hull[-1]
+            if (v[b] - v[a]) * (i - a) >= (v[i] - v[a]) * (b - a):      # b is on or above the chord a-i
+                hull.pop()
+            else:
+                break
+        hull.append(i)
+    out = list(v)
+    for a, b in zip(hull, hull[1:], strict=False):
+        for i in range(a + 1, b):
+            out[i] = v[a] + (v[b] - v[a]) * (i - a) / (b - a)
+    return out
 
 
 def _lam_row(a: _Arr) -> list[float]:
@@ -757,26 +781,8 @@ def _lam_row(a: _Arr) -> list[float]:
     return out
 
 
-LATE_SMOOTH_KWH = 0.5
-
-
-def _smoothed(row: list[float], step: float) -> list[float]:
-    """Each level's value averaged with its neighbours within `LATE_SMOOTH_KWH` either side. The programme's choices
-    snap to the level grid, and with a late event in the plan the snapping shows as dips of several pence in the value
-    of a stored kWh from one level to the next; a half kWh is far less than a decision is made on."""
-    k = max(1, int(round(LATE_SMOOTH_KWH / step)))
-    n = len(row)
-    out = []
-    for i in range(n):
-        lo, hi = max(0, i - k), min(n, i + k + 1)
-        out.append(sum(row[lo:hi]) / (hi - lo))
-    return out
-
-
-def _fine_lam(a: _Arr, n: int, step: float, smooth: bool = False) -> tuple[float, ...]:
+def _fine_lam(a: _Arr, n: int, step: float) -> tuple[float, ...]:
     row = _lam_row(a)
-    if smooth:
-        row = _smoothed(row, a.step)
     if a.n == n:
         return tuple(row)
     lam = _Arr(row, a.step)
@@ -1162,8 +1168,7 @@ def solve(forecast: Forecast, start_soc: float, facts: BatteryFacts, settings: V
     cap = facts.capacity_kwh
     core = _backward(forecast, facts, settings, limits_for, now, settings.level_step_kwh, COARSE_STEP_KWH)
     n_fine, step = _grid(cap, settings.level_step_kwh)
-    late = bool(settings.late_events and settings.events and settings.late_events_per_week > 0)
-    lam = tuple(_fine_lam(core.V[k], n_fine, step, late) for k in range(len(core.segs)))
+    lam = tuple(_fine_lam(core.V[k], n_fine, step) for k in range(len(core.segs)))
     e0 = min(cap, max(0.0, start_soc / 100 * cap))
     leg, band = None, leg_band(settings)
     if band is not None and running in (CHARGE, EXPORT) and leg_from is not None:
@@ -1194,44 +1199,6 @@ def _segment_index(vr: ValueResult, t: datetime) -> int:
     return max(0, min(len(starts) - 1, bisect_right(starts, t) - 1))
 
 
-def monotone(row):
-    """The row made non-increasing in level by pooling adjacent levels that break the order (the closest such curve in
-    least squares). A stored kWh is never worth more when there is more in the battery; the wiggles the plan's
-    arithmetic leaves in the curve showed up as the live value rising and falling while the battery drained steadily."""
-    blocks: list[list[float]] = []                 # [sum, count] of each pooled block, in level order
-    for v in row:
-        blocks.append([v, 1.0])
-        while len(blocks) > 1 and blocks[-2][0] / blocks[-2][1] < blocks[-1][0] / blocks[-1][1]:
-            a = blocks.pop()
-            blocks[-1][0] += a[0]
-            blocks[-1][1] += a[1]
-    out: list[float] = []
-    for total, n in blocks:
-        out.extend([total / n] * int(n))
-    return out
-
-
-def read_row(row, floor_pct: float = 0.0):
-    """A value row as it is read live and published: non-increasing in level from the floor up (`MONOTONE_LINES`).
-    Levels under the floor can't be reached and carry no meaning, so they are left alone and never pooled in."""
-    if not MONOTONE_LINES:
-        return row
-    lo = min(len(row) - 1, max(0, math.ceil(floor_pct / 100.0 * (len(row) - 1) - 1e-9)))
-    part = list(row[lo:])
-    w = MONOTONE_MEDIAN
-    if w > 1:
-        h, n = w // 2, len(part)
-        part = [sorted(part[max(0, i - h):i + h + 1])[(min(n, i + h + 1) - max(0, i - h)) // 2] for i in range(n)]
-    return list(row[:lo]) + monotone(part)
-
-
-def floor_pct_at(vr: ValueResult, k: int) -> float:
-    """The floor (percent) the plan was solved with at segment k: the lowest level a stored kWh is read from."""
-    if len(vr.limits) == len(vr.forecast.segments) and 0 <= k < len(vr.limits):
-        return float(vr.limits[k].floor_soc)
-    return 0.0
-
-
 def _row_at(row, step: float, e: float) -> float:
     x = min(len(row) - 1.0, max(0.0, e / step))
     j = int(x)
@@ -1244,7 +1211,7 @@ def value_at(vr: ValueResult, t: datetime, soc: float) -> float:
     if not vr.lam:
         return 0.0
     k = _segment_index(vr, t)
-    row = read_row(_end_row(vr.lam, k), floor_pct_at(vr, k))
+    row = _end_row(vr.lam, k)
     cap = vr.step_kwh * (len(row) - 1)
     return _row_at(row, vr.step_kwh, soc / 100 * cap)
 
@@ -1346,7 +1313,7 @@ def lines(vr: ValueResult, t: datetime, soc: float, import_p: float, export_p: f
         buy += top
     if vr.lam:
         k = _segment_index(vr, t)
-        row = read_row(_end_row(vr.lam, k), floor_pct_at(vr, k))
+        row = _end_row(vr.lam, k)
         step = vr.step_kwh
         cap = step * (len(row) - 1)
         e = soc / 100 * cap

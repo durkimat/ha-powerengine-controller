@@ -17,7 +17,6 @@ from .execute import Executor
 from .forecast import DISPLAY_H
 from .settings import SETTINGS, V2Settings, catalogue, profiles_catalogue
 from .types import CHARGE, EXPORT, HOLD, MODE_LABEL, SELF_USE, ModeState, StepOutput, TimelineItem, ValueResult
-from .value import floor_pct_at, read_row
 
 LIMIT = 14_500                       # below the app's 15,000 byte warning
 CURVE_PCTS = tuple(range(0, 101, 10))
@@ -344,7 +343,6 @@ def _curve(vr: ValueResult | None, tz) -> tuple[str, dict]:
             break
         k = next(j for j, g in enumerate(segs) if g.start <= t < g.end)
         row = vr.lam[k]
-        row = read_row(row, floor_pct_at(vr, k))
         n = len(row)
         values.append([_r(row[min(n - 1, int(round(p / 100 * (n - 1))))], 2) for p in CURVE_PCTS])
     attrs = {"start": _iso(start, tz), "step_min": 60, "levels": list(CURVE_PCTS), "values": values,
