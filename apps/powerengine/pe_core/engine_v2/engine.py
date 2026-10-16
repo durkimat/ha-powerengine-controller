@@ -16,7 +16,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from .. import decide as v1d
-from . import rules
+from . import eventcharge, rules
 from .execute import Executor
 from .learning import Learner
 from .observe import Observer
@@ -51,6 +51,7 @@ class EngineV2:
         self.journal_rows: deque = deque(st.get("journal") or [], maxlen=JOURNAL_ROWS)
         self.vr: ValueResult | None = None                  # not saved: the first tick works the values out again
         self.fc = None
+        self.event_wins: dict = {}                      # event start -> when the highest-price rule steps aside
         self.last_value_at: datetime | None = None
         self.last_facts = None
         self.last_output: StepOutput | None = None
@@ -180,6 +181,15 @@ class EngineV2:
 
             vr = value.solve(fc, level, inp.facts, self.s, limits_for, now, reason, inp.tz,
                             running=self.executor.mode, leg_from=self.executor.leg_from)
+            if self.s.events and self.s.charge_max_import_p > 0 and any(sg.event for sg in fc.segments):
+                found = eventcharge.windows(fc, vr.path, now, inp.facts, rules.event_floor(inp.facts, self.s),
+                                            float(self.s.charge_ceiling_soc))
+                wins = eventcharge.latch(found, self.event_wins, now)
+                if wins:                                        # an announced event the plan would reach short of
+                    fc = eventcharge.mark(fc, wins)
+                    vr = value.solve(fc, level, inp.facts, self.s, limits_for, now, reason, inp.tz,
+                                    running=self.executor.mode, leg_from=self.executor.leg_from)
+                self.event_wins = wins
         except Exception as exc:
             rows.append(self._error_row(now, "revalue", exc, because=reason))
             self._retry_at = now.timestamp() + RETRY_S

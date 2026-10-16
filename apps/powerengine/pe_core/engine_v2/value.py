@@ -217,7 +217,7 @@ class _Seg:
     __slots__ = ("seg", "lim", "dt", "cap", "eta_c", "eta_d", "taper", "dtaper", "max_chg", "max_dis", "chg_f",
                  "chg_cap", "dis_cap", "export_limit", "fuse", "floor", "ceil", "car", "export_p", "event_p",
                  "wear_h", "wear_s", "ccost", "topup", "sw", "lo", "hi", "allowed", "forced", "outcomes", "scen",
-                 "mid", "late_p", "pen", "fcap", "corr", "leg")
+                 "mid", "pen", "fcap", "corr", "leg")
 
 
 def _groups(solar: Spread, load: Spread) -> list[tuple[float, float, float]]:
@@ -284,7 +284,6 @@ def leg_need(band: tuple[float, float], mode: str, start: float) -> float:
 def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) -> _Seg:
     S = _Seg()
     S.seg, S.lim = seg, lim
-    S.late_p = 0.0
     S.dt = seg.hours
     S.cap = facts.capacity_kwh
     S.eta_c, S.eta_d = facts.eta_charge, facts.eta_discharge
@@ -556,19 +555,18 @@ def switch_cost(prev: str, new: str, cost_p: float) -> float:
 
 
 def _candidates(S: _Seg, e: float, scen: list, imp_p: float, Vk: dict,
-                force: str | None = None, dscale: float = 1.0,
                 corridors: dict | None = None) -> list[tuple[float, str, float]]:
     """Every choice in one segment at level e for one price outcome, as (expected cost-to-go, mode, f), before the
     cost of changing mode. f is the share of the segment the mode runs (1 for everything but a charge or sale that
     stops part-way). The cost-to-go of a mode is read from the next segment's curve for the kind of that mode.
     `corridors`, when given, is filled with {mode: (f_lo, f_hi)} for the part-way stops (see `_partial`)."""
     ckw, dkw = _chg_kw(S, e), _dis_kw(S, e)
-    forced = force or S.forced
+    forced = S.forced
     if forced:
         Vn = Vk[KIND[forced]]
         g = 0.0
         for p, _so, _ho, net in scen:
-            r = _phys(S, e, forced, net, imp_p, ckw, dkw * dscale)
+            r = _phys(S, e, forced, net, imp_p, ckw, dkw)
             g += p * (r[1] + _val(Vn, r[0]))
         return [(g, forced, 1.0)]
     out: list[tuple[float, str, float]] = []
@@ -679,27 +677,6 @@ def _terminal_curve(fc: Forecast, facts: BatteryFacts, settings: V2Settings, ste
     return above, [-(below * min(k * step, knee) + above * max(0.0, k * step - knee)) for k in range(n + 1)]
 
 
-# An event may start or end part-way through a segment, so it sells at a quarter, a half, three quarters or all of the
-# full power (four sizes, not one, so the kink the sale's limit puts in the value is not at the same level every time).
-LATE_SHARES = (0.25, 0.5, 0.75, 1.0)
-LATE_NOTICE_S = 30 * 60        # an event starting within this is already announced, so it is not a late one
-
-
-def _late_events(segs: list, settings: V2Settings, now: datetime) -> None:
-    """Give each future, unforced segment the chance that a grid event no one has announced yet is running in it
-    (`S.late_p`): events a week / 7 x hours each / 24, the share of time spent inside one. The event pays what a known
-    one does (`event_value_p`, plus the export rate when paid on top) and sells down to the segment's floor."""
-    q = 0.0
-    if settings.late_events and settings.events and settings.late_events_per_week > 0:
-        q = min(0.5, settings.late_events_per_week / 7.0 * settings.late_event_hours / 24.0
-                / (sum(LATE_SHARES) / len(LATE_SHARES)))       # the sales' average size is under the full power
-    for S in segs:
-        S.late_p = 0.0
-        if q and not S.forced and (S.seg.start - now).total_seconds() >= LATE_NOTICE_S and S.event_p == 0.0:
-            S.late_p = q
-            S.event_p = settings.event_value_p + (S.export_p if settings.event_plus_export else 0.0)
-
-
 def _backward(fc: Forecast, facts: BatteryFacts, settings: V2Settings, limits_for, now: datetime,
               fine: float, coarse: float) -> _Core:
     """The value curves, backwards. The state is the level and the kind of the mode before (so a change of mode costs
@@ -709,7 +686,6 @@ def _backward(fc: Forecast, facts: BatteryFacts, settings: V2Settings, limits_fo
     core = _Core()
     core.cap = cap
     core.segs = [_make(s, facts, settings, limits_for(s)) for s in fc.segments]
-    _late_events(core.segs, settings, now)
     nf, sf = _grid(cap, fine)
     nc, sc = _grid(cap, max(coarse, fine))
     core.step, core.fine_step = sf, sf
@@ -724,19 +700,14 @@ def _backward(fc: Forecast, facts: BatteryFacts, settings: V2Settings, limits_fo
         n, step = (nf, sf) if fine_here else (nc, sc)
         Vk = VK[k + 1]
         rows = {kind: [] for kind in KINDS}
-        outcomes, scen, q = S.outcomes, S.scen, S.late_p
+        outcomes, scen = S.outcomes, S.scen
         for i in range(n + 1):
             e = i * step
             tot = dict.fromkeys(KINDS, 0.0)
             for pw, ip in outcomes:
                 cands = _candidates(S, e, scen, ip, Vk)
                 for kind in KINDS:
-                    tot[kind] += pw * (1.0 - q) * _pick(cands, kind, cost_p)
-            if q:                                   # a late grid event: a forced sale, no choice, no change cost
-                g = sum(_candidates(S, e, scen, _outcome_price(S), Vk, force=EVENT, dscale=f)[0][0]
-                        for f in LATE_SHARES) * q / len(LATE_SHARES)
-                for kind in KINDS:
-                    tot[kind] += g
+                    tot[kind] += pw * _pick(cands, kind, cost_p)
             for kind in KINDS:
                 rows[kind].append(tot[kind])
         if CONVEX_COST_TO_GO:

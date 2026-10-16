@@ -175,9 +175,9 @@ filters readings; **LEARN** learns a correction that feeds the forecast or filte
 |---|---|---|---|---|---|
 | `arbitrage` | off |  | LIMIT | rules.py | Whether Export is a mode at all. Off: the plan and the live decision can never sell for profit; only grid events sell. |
 | `events` | on |  | LIMIT | rules.py, forecast.py, value.py | Whether grid events are acted on. On: a running event forces the Event mode (sell to the floor); the plan prices known events and the late-event chance. |
-| `late_events` | on |  | MODEL | value.py `_late_events` | Treats every future unforced stretch as having a small chance that an unannounced grid event is running. That makes a stored kWh worth more in the plan (a full battery would be sold at the event rate), so the plan fills up at the end of a cheap window and keeps more. |
-| `late_events_per_week` | 1.5 per week |  | MODEL | value.py | How often such events are expected. With the hours below it sets the chance (about events/week / 7 x hours / 24). 0 turns late events off. |
-| `late_event_hours` | 1.0 h |  | MODEL | value.py | How long each late event is assumed to last. |
+| `late_events` | on |  | REMOVED 0.9.148 | value.py `_late_events` | Treats every future unforced stretch as having a small chance that an unannounced grid event is running. That makes a stored kWh worth more in the plan (a full battery would be sold at the event rate), so the plan fills up at the end of a cheap window and keeps more. |
+| `late_events_per_week` | 1.5 per week |  | REMOVED 0.9.148 | value.py | How often such events are expected. With the hours below it sets the chance (about events/week / 7 x hours / 24). 0 turns late events off. |
+| `late_event_hours` | 1.0 h |  | REMOVED 0.9.148 | value.py | How long each late event is assumed to last. |
 | `event_plus_export` | on |  | MODEL | forecast.py, value.py (the live sentence in execute.py quotes it) | Whether the export rate is paid on top of an event's own rate. It changes what the plan thinks an event pays; the live event itself is forced either way. |
 | `free_power` | on |  | LIMIT | rules.py, forecast.py | Whether free-power sessions are acted on (forced Free mode, charge to 100%). |
 | `charge_ceiling_soc` | 100 % |  | LIMIT | rules.py | The highest level a charge may reach; the plan's physics and the live charge target both stop here. Sun can still fill past it. |

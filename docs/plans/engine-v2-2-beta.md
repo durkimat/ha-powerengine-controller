@@ -15,7 +15,7 @@ other profile:
 | `reversal_levy_p` | 4 | 0 | Turning a charge into a sale, or back, needs the value this many p/kWh further past the line. |
 | `reentry_levy_p` | 4 | 0 | A charge or sale that ended in the last 10 minutes restarts only when the value is this much further past the line. |
 | `corridor_cost_p` | 0.5 | 0.5 | A charge or sale may stop anywhere whose expected cost is within this of the best stop. |
-| `charge_max_import_p` | 15 | 0 (off) | No grid charge while the import price (the cheapest a smart slot could bring) is above this, in the plan and in the engine alike (`rules._core`). Free power, grid events and overrides are not held back. Added 0.9.145: on 7-13 Oct it cut charging at dear rates from 39 level points to 3 and the week's adjusted cost by 1.44 GBP, for about 20 more mode changes. |
+| `charge_max_import_p` | 15 | 0 (off) | No grid charge while the import price (the cheapest a smart slot could bring) is above this, in the plan and in the engine alike (`rules._core`). Free power, grid events and overrides are not held back. Before an announced grid event that the plan would reach short of, the rule steps aside for a calculated stretch (see "The rule and an announced grid event" below). Added 0.9.145: on 7-13 Oct it cut charging at dear rates from 39 level points to 3 and the week's adjusted cost by 1.44 GBP, for about 20 more mode changes. |
 
 Under `executor = plan` (2.1 beta and 2.2 beta) the engine also does the following. None of it is a setting, and the default
 executor is unchanged:
@@ -70,6 +70,24 @@ and 33 down to 3).
 | `level_band_pct` 1 | steadier on real days, much worse on synthetic days (121 modes, 42 flips) |
 
 Only `prefer_self_use` is redundant; the profile leaves it as 2.1 beta has it.
+
+## The rule and an announced grid event
+
+`charge_max_import_p` would keep the battery from being filled for an announced event: on winter-like days (dull sun, no
+daytime slots, house load x1.4) the plan bought nothing and the battery, run down to 12-42% by 17:00, sold what little it
+had. An event pays `event_value_p` plus the export rate (115p) against about 34p to put a kWh in and take it out. So
+`eventcharge.py` lifts the rule for the stretch in which the charge has to happen, worked out at every revalue from the
+plan made with the rule in force: what the event takes from the battery (sale power x hours / discharge efficiency), the
+level it needs (event floor + that + 5 points, `EVENT_MARGIN_PTS`), the level the plan reaches at its start, and the
+charger's rate (85% of full power). The window opens 30 minutes before the latest safe start and the charge may not go
+above the needed level (`Segment.event_charge_to`, a ceiling for those segments). Once open it stays open (`latch`). No
+setting. A fixed six-hour window charged as soon as the event was announced and ran the house through the charger.
+
+Seven winter-like days (6 usable), adjusted cost: one-hour event 17:00 announced 13:00: 2.22 (rule in force), -5.51 (six hours),
+-6.76 (calculated window and cap); dear-rate charge 0 / 50.9 / 17.6 kWh. Two-hour event: -1.94 / -24.45 / -24.71, dear charge
+0 / 54.3 / 40.8 kWh. Eight October days with an event added every evening (the battery already full): 20:00-21:30 -66.64
+against -66.17, 17:00-18:30 -64.35 against -64.42. An unannounced event is not planned for: buying at about 34p against a
+15-30% chance of 108p loses on average (`late_events`, tested in October 2026, was dearer in every run).
 
 ## Not tested (backlog item "Engine 2.2 beta: what still needs testing")
 
