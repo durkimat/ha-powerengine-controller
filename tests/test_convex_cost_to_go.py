@@ -9,10 +9,10 @@ level step."""
 import math
 
 import pytest
+from test_engine_v2_value import cheap_then_peak, solve
 
 from pe_core.engine_v2 import value as V
 from pe_core.engine_v2.settings import V2Settings
-from test_engine_v2_value import cheap_then_peak, solve
 
 
 def test_the_envelope_fills_a_gap_with_a_straight_line_and_never_rises_above_the_points():
