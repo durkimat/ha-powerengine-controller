@@ -42,7 +42,7 @@ from .types import (
     Observation,
     ValueResult,
 )
-from .value import KIND, choice_now, leg_band, leg_need, switch_cost
+from .value import KIND, _segment_index, choice_now, leg_band, leg_need, lines, switch_cost
 
 FLIP_FLOP_S = 600
 LEVEL_EPS = 0.1               # points: a mode that runs "until" a level is done within this of it. The filtered level
@@ -752,3 +752,28 @@ class Executor:
                 "sun_spare": self.sun_spare, "reserve_latched": self.reserve_latched,
                 "event_floor_hit": self.event_floor_hit, "prev_rule": self.prev_rule, "changes": list(self.changes),
                 "exits": json.loads(json.dumps(self.exits)), "lines": asdict(self.lines) if self.lines else None}
+
+
+def idle_action(vr: ValueResult, t: datetime, level: float, settings: V2Settings, facts) -> tuple[str, float] | None:
+    """What the executor does at `t`, at `level`, in a stretch where the plan has no run to start and a hold is not
+    allowed: the lines decide (`Executor._candidate`: a charge where the value is over the buy line, a sale where it is
+    under the sell line, from rest, with no run going and no levy), else it idles on self-use. (mode, level it runs to),
+    or None when it idles (or the plan, not the lines, would say: both pay, a forced segment, no curves). For the
+    displayed plan only: nothing here decides a mode."""
+    segs = vr.forecast.segments
+    if not vr.lam or len(vr.limits) != len(segs) or not segs or t >= segs[-1].end:
+        return None
+    k = _segment_index(vr, t)
+    lim, seg = vr.limits[k], segs[k]
+    if lim.forced is not None or HOLD in lim.allowed:
+        return None
+    ln = lines(vr, t, level, seg.import_p, seg.export_p, facts, settings)
+    band, edge = settings.price_band_p, settings.level_band_pct
+    target = None if ln.charge_target_soc is None else min(ln.charge_target_soc, lim.ceiling_soc)
+    can_c = (CHARGE in lim.allowed and target is not None
+             and (ln.charge_now or ln.value_p > ln.buy_line_p + band) and level < target - edge)
+    floor = max(ln.sell_floor_soc if ln.sell_floor_soc is not None else lim.floor_soc, lim.floor_soc)
+    can_e = EXPORT in lim.allowed and ln.value_p < ln.sell_line_p - band and level > floor + edge
+    if can_c == can_e:
+        return None
+    return (CHARGE, target) if can_c else (EXPORT, floor)
