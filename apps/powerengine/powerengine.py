@@ -945,7 +945,7 @@ class PowerEngine(hass.Hass):
                 if key == "state_engine":                      # it also names the choice (v2 or 2.1 beta)
                     attrs = {**attrs, "choice": self._engine_choice(), "profile": self._engine_profile()}
                 self._publish_if_changed(key, state, attrs)
-            self._record_v2_history(r.now, out, send, preview)
+            self._record_v2_history(r.now, out, send, preview, r)
             if not preview:
                 if send:
                     self._note_command(out.decision)
@@ -1868,7 +1868,7 @@ class PowerEngine(hass.Hass):
                 info["profile"] = self._engine_profile()
         return info
 
-    def _record_v2_history(self, now, out, send, preview):
+    def _record_v2_history(self, now, out, send, preview, readings=None):
         h = self.__dict__.get("_v2hist")
         if h is None:
             return
@@ -1878,7 +1878,10 @@ class PowerEngine(hass.Hass):
             wrote = h.tick(now, mode=out.mode.mode, why=out.mode.why, level=level,
                            import_p=ln.import_p if ln else None, export_p=ln.export_p if ln else None,
                            value_p=ln.value_p if ln else None, sent=bool(send), preview=bool(preview),
-                           path=out.value.path if out.value is not None else None)
+                           path=out.value.path if out.value is not None else None,
+                           buy_line_p=ln.buy_line_p if ln else None, sell_line_p=ln.sell_line_p if ln else None,
+                           grid_w=getattr(readings, "grid_power", None), car_w=getattr(readings, "ev_power", None),
+                           replanned=bool(out.revalued))
             if wrote:
                 self._publish_v2_history()
         except Exception as err:

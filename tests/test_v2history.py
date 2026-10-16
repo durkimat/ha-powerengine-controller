@@ -261,7 +261,7 @@ def test_recent_crosses_midnight_and_leaves_out_the_half_hour_now(tmp_path):
     assert got["hours"] == 18 and got["step_min"] == 30 and got["until"] == t(8, 0).isoformat()
     row = got["series"][-1]
     assert row == {"t": t(7, 30).isoformat(), "mode": "self_use", "level": 67.0, "import_p": 7.0, "export_p": 15.0,
-                   "sent": True}
+                   "value_p": 9.0, "sent": True}
     assert len(json.dumps(got, separators=(",", ":")).encode("utf-8")) < 6_000
 
 
@@ -315,3 +315,32 @@ def test_runs_are_the_day_as_it_ran_to_the_second(tmp_path):
     assert [r[1] for r in rec["runs"]] == ["charge", "export", "self_use"] and rec["runs_until"] is None
     later = h.recent_attributes(start + timedelta(hours=3), hours=1)  # the run going on then is first
     assert [r[1] for r in later["runs"]] == ["self_use"]
+
+
+def test_a_half_hour_keeps_lines_grid_and_car_energy_and_the_day_its_replans(tmp_path):
+    h = V2History(str(tmp_path), LON)
+    for i in range(0, 1800, 10):             # 30 min in 10 s ticks: 2 kW in, then 1 kW out, car 7 kW
+        now = t(8, 0) + timedelta(seconds=i)
+        h.tick(now, mode="grid_charge", level=50.0, import_p=7.0, export_p=15.0, value_p=9.0, buy_line_p=7.4,
+               sell_line_p=14.2, grid_w=2000 if i < 900 else -1000, car_w=7000, replanned=(i == 600))
+    h.tick(t(8, 30), mode="grid_charge", level=51.0)             # closes the half-hour
+    rec = h.load(date(2026, 10, 7))["ran"][0]
+    assert rec["buy_line_p"] == 7.4 and rec["sell_line_p"] == 14.2
+    assert abs(rec["grid_in_kwh"] - 0.5) < 0.01 and abs(rec["grid_out_kwh"] - 0.25) < 0.01
+    assert abs(rec["car_kwh"] - 3.5) < 0.05
+    attrs = h.attributes(date(2026, 10, 7), date(2026, 10, 7), "v2")
+    row = attrs["series"][0]
+    assert row["buy_p"] == 7.4 and row["sell_p"] == 14.2 and abs(row["car"] - 3.5) < 0.05
+    assert abs(row["grid_in"] - 0.5) < 0.03 and abs(row["grid_out"] - 0.25) < 0.03
+    assert attrs["replans"] == [t(8, 10).isoformat()]
+    rec_attrs = h.recent_attributes(t(9, 0), 18)
+    assert rec_attrs["replans"] == [t(8, 10).isoformat()] and rec_attrs["series"][0]["value_p"] == 9.0
+    assert rec_attrs["series"][0]["buy_p"] == 7.4
+
+
+def test_an_older_record_without_the_new_figures_publishes_without_them(tmp_path):
+    h = V2History(str(tmp_path), LON)
+    h.load(date(2026, 10, 7))["ran"] = [_ran(t(7, 30))]
+    row = h.attributes(date(2026, 10, 7), date(2026, 10, 7), "v2")["series"][0]
+    assert "buy_p" not in row and "car" not in row
+    assert h.attributes(date(2026, 10, 7), date(2026, 10, 7), "v2")["replans"] == []
