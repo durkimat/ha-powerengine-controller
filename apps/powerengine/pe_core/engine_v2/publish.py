@@ -17,7 +17,7 @@ from .execute import Executor, idle_action
 from .forecast import DISPLAY_H
 from .settings import SETTINGS, V2Settings, catalogue, profiles_catalogue
 from .types import CHARGE, EXPORT, HOLD, MODE_LABEL, SELF_USE, ModeState, StepOutput, TimelineItem, ValueResult
-from .value import _segment_index, lines
+from .value import _segment_index, lines, value_at
 
 LIMIT = 14_500                       # below the app's 15,000 byte warning
 CURVE_PCTS = tuple(range(0, 101, 10))
@@ -148,8 +148,9 @@ def _prices(vr: ValueResult, tz) -> list[dict]:
 
 def _thin_path(a: dict) -> None:
     p = a["path"]
-    for k in ("mid", "low", "high"):
-        p[k] = p[k][::2]
+    for k in ("mid", "low", "high", "value"):
+        if k in p:
+            p[k] = p[k][::2]
     p["step_min"] = p["step_min"] * 2
 
 
@@ -365,6 +366,16 @@ def _path_after_moves(path: dict, moves: list[tuple[float, ...]]) -> dict:
     return out
 
 
+def _path_value(vr: ValueResult, p: dict, mid: list) -> list[float]:
+    """What a stored kWh is worth (p/kWh) at each point of the shown level path: `value_at`, the figure the controller
+    reads at the battery's level, so the chart shows that and not a coarser copy of the curve. Empty with no curve."""
+    if not vr.lam or not mid or not p.get("start"):
+        return []
+    start = datetime.fromisoformat(p["start"])
+    step = timedelta(minutes=p.get("step_min", 15))
+    return [_r(value_at(vr, start + i * step, lvl), 1) for i, lvl in enumerate(mid)]
+
+
 def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, tz,
               facts=None) -> tuple[str, dict]:
     if vr is None:
@@ -377,6 +388,9 @@ def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, t
     step_min = p.get("step_min", 15)
     keep = int(DISPLAY_H * 60 // step_min) + 1                    # path points up to the end of what is shown
     path = {k: [_r(x, 1) for x in p.get(k, [])][:keep] for k in ("mid", "low", "high")}
+    value = _path_value(vr, p, path["mid"])
+    if value:
+        path["value"] = value
     items = []
     for it in items_run:
         if it.start >= cut:
