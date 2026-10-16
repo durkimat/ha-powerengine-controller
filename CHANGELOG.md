@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.147 (beta)
+
+### Behaviour changes
+
+- **The stored value no longer jumps because the plan itself is fixed, not smoothed.** The jumps in the value of a stored kWh came from the planner: a half-hour is planned as one mode, so some battery levels could not be reached by any mix and left kinks in the cost-to-go that each earlier half-hour copied back into a comb. The planner now fills those gaps (it takes the lowest convex curve from the reserve floor up, as if the half-hour could be shared between modes, which the live controller can do). The value of a stored kWh never rises with the battery level, and the plan no longer depends on the level step.
+- **The 0.9.146 read-out smoothing is gone,** and so is the moving average that turning `late_events` on used to bring with it. With the planner fixed they changed nothing (identical results with and without).
+- On the 7-14 Oct days in the simulator (2.2 beta profile): adjusted cost -£22.05, against -£21.92 on 0.9.145 and -£22.07 on 0.9.146; 232 mode changes (247 and 234); 42.9 hours below 60% (43.4 and 52.0, so the battery stays higher than in 0.9.146). A kWh bought above the 15p limit: 0.9 level points in the eight days, none before. On 14 Oct no stored-value curve rises with the level (86 of 86 did before).
+- The level-curve settings were tuned on the jagged curve and are being retested on this planner; none are changed here.
+
+### Behind the scenes
+
+- `value.CONVEX_COST_TO_GO` and `_convex_from` in `_backward`; removed `MONOTONE_LINES`, `MONOTONE_MEDIAN`, `read_row`, `floor_pct_at`, `_smoothed`.
+- Tests: `tests/test_convex_cost_to_go.py` replaces `tests/test_stored_value_smooth.py`; three value tests loosened (grid-event value, end of a look-ahead in a cheap window, holds in an arbitrage window).
+- Cause and the way it was found: `docs/plans/engine-v2-level-penalty.md`.
+
 ## 0.9.146 (beta)
 
 ### Behaviour changes
