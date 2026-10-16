@@ -13,10 +13,11 @@ from bisect import bisect_right
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from .execute import Executor
+from .execute import Executor, idle_action
 from .forecast import DISPLAY_H
 from .settings import SETTINGS, V2Settings, catalogue, profiles_catalogue
 from .types import CHARGE, EXPORT, HOLD, MODE_LABEL, SELF_USE, ModeState, StepOutput, TimelineItem, ValueResult
+from .value import _segment_index, lines
 
 LIMIT = 14_500                       # below the app's 15,000 byte warning
 CURVE_PCTS = tuple(range(0, 101, 10))
@@ -214,17 +215,41 @@ def _thin_sun(a: dict) -> None:
     sun["step_min"] *= 2
 
 
-def _as_run(vr: ValueResult, settings: V2Settings) -> tuple[list[TimelineItem], list[tuple[float, float]]]:
-    """`as_run`'s items, and the anchors that map the time they are shown at to the plan's own clock:
-    (shown, plan) in seconds, in step with both clocks."""
+def _hhmm(t: datetime, tz=None) -> str:
+    return (t.astimezone(tz) if tz else t).strftime("%H:%M")
+
+
+def _clamp(x: float) -> float:
+    return max(0.0, min(100.0, x))
+
+
+def _run_reason(mode: str, ln_value: float | None, level_end: float) -> str:
+    if mode == EXPORT:
+        return (f"Sell: the plan has no run here, and a stored kWh is worth {ln_value:.1f}p, under what a sale "
+                f"brings: the battery sells down to {level_end:.0f}% before the next step.")
+    return (f"Charge: the plan has no run here, and a stored kWh is worth {ln_value:.1f}p, over the import price: "
+            f"the battery charges to {level_end:.0f}% before the next step.")
+
+
+def _as_run(vr: ValueResult, settings: V2Settings, tz=None,
+            facts=None) -> tuple[list[TimelineItem], list[tuple[float, float]], list[tuple[float, ...]]]:
+    """`as_run`'s items, the anchors that map the time they are shown at to the plan's own clock: (shown, plan) in
+    seconds, in step with both clocks, and the moves: (start, end, level before, level after) in seconds and percent
+    for a run the lines start where the plan has none (`idle_action`), which shifts the levels after it."""
     idle = HOLD if not settings.hold_only_car_reserve else SELF_USE
     out: list[TimelineItem] = []
     anchors: list[tuple[float, float]] = []
+    moves: list[tuple[float, ...]] = []
     cursor = None
+    shift = 0.0
     for it in vr.timeline:
         if it.remainder:
             continue
         plan_start, plan_end = it.start, it.end
+        if shift:
+            it = replace(it, level_start=_clamp(it.level_start + shift), level_end=_clamp(it.level_end + shift),
+                         level_lo=None if it.level_lo is None else _clamp(it.level_lo + shift),
+                         level_hi=None if it.level_hi is None else _clamp(it.level_hi + shift))
         if cursor is not None and cursor < it.start:
             if Executor._same_prices(vr, cursor, it.start):         # the next step starts as soon as the run is done
                 span = it.end - it.start
@@ -232,10 +257,35 @@ def _as_run(vr: ValueResult, settings: V2Settings) -> tuple[list[TimelineItem], 
                     else replace(it, start=cursor)
             else:                                                   # the clock stands: the rest is what fills the wait
                 level = out[-1].level_end if out else it.level_start
-                out.append(TimelineItem(
-                    mode=idle, start=cursor, end=it.start, level_start=level, level_end=level,
-                    until=f"until {it.start:%H:%M}", remainder=True,
-                    reason="The run has reached its target; the battery waits for the next step."))
+                at = cursor
+                act = idle_action(vr, cursor, level, settings, facts) if facts is not None and idle == SELF_USE \
+                    else None
+                if act is not None:                                 # no run in the plan, but the lines start one
+                    mode, goal = act
+                    seg = vr.limits[_segment_index(vr, cursor)]
+                    kw = (seg.charge_cap_kw if mode == CHARGE else seg.discharge_cap_kw)
+                    kw = kw if kw is not None else (facts.max_charge_kw if mode == CHARGE else facts.max_discharge_kw)
+                    rate = max(kw, 0.1) / max(facts.capacity_kwh, 1.0) * 100.0 \
+                        * (facts.eta_charge if mode == CHARGE else 1.0)     # percent an hour
+                    hours = abs(goal - level) / rate
+                    run_end = min(it.start, cursor + timedelta(hours=hours))
+                    reached = level + (rate if mode == CHARGE else -rate) * (run_end - cursor).total_seconds() / 3600
+                    reached = _clamp(min(reached, goal) if mode == CHARGE else max(reached, goal))
+                    seg_k = vr.forecast.segments[_segment_index(vr, cursor)]
+                    ln = lines(vr, cursor, level, seg_k.import_p, seg_k.export_p, facts, settings)
+                    out.append(TimelineItem(mode=mode, start=cursor, end=run_end, level_start=level,
+                                            level_end=reached, until=f"until {reached:.0f}%",
+                                            reason=_run_reason(mode, ln.value_p, reached)))
+                    moves.append((cursor.timestamp(), run_end.timestamp(), level, reached))
+                    shift += reached - level
+                    it = replace(it, level_start=_clamp(it.level_start + reached - level),
+                                 level_end=_clamp(it.level_end + reached - level))
+                    level, at = reached, run_end
+                if at < it.start:
+                    out.append(TimelineItem(
+                        mode=idle, start=at, end=it.start, level_start=level, level_end=level,
+                        until=f"until {_hhmm(it.start, tz)}", remainder=True,
+                        reason="The run has reached its target; the battery waits for the next step."))
         anchors.append((it.start.timestamp(), plan_start.timestamp()))
         anchors.append((it.end.timestamp(), plan_end.timestamp()))
         if out and out[-1].mode == it.mode and out[-1].end == it.start and it.mode in (CHARGE, EXPORT):
@@ -245,16 +295,16 @@ def _as_run(vr: ValueResult, settings: V2Settings) -> tuple[list[TimelineItem], 
         else:
             out.append(it)
         cursor = out[-1].end
-    return out, anchors
+    return out, anchors, moves
 
 
-def as_run(vr: ValueResult, settings: V2Settings) -> list[TimelineItem]:
+def as_run(vr: ValueResult, settings: V2Settings, tz=None, facts=None) -> list[TimelineItem]:
     """The plan's timeline as the plan executor will run it, for display only (the plan itself is not changed). The
     plan ends a charge or sale part-way through a segment and fills the rest with a hold (`remainder`), a way of saying
     how much; the executor never rests there: a run follows the plan by level, and the next step starts as soon as the
     run is done wherever the prices are those of now (`Executor._plan_candidate`). Where they differ the clock stands
     and the battery does what the rules allow in between (a hold only where one is allowed, else self-use)."""
-    return _as_run(vr, settings)[0]
+    return _as_run(vr, settings, tz, facts)[0]
 
 
 def _path_as_run(path: dict, anchors: list[tuple[float, float]]) -> dict:
@@ -296,11 +346,33 @@ def _path_as_run(path: dict, anchors: list[tuple[float, float]]) -> dict:
     return out
 
 
-def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, tz) -> tuple[str, dict]:
+def _path_after_moves(path: dict, moves: list[tuple[float, ...]]) -> dict:
+    """The level path with the runs the lines start where the plan has none: the points inside a run lie on its ramp,
+    the points after it are lifted or lowered by what it moved (the plan's own path stays flat there)."""
+    start = datetime.fromisoformat(path["start"]).timestamp()
+    step = path["step_min"] * 60.0
+    out = dict(path)
+    for k in ("mid", "low", "high"):
+        series = list(path.get(k) or [])
+        for s0, e0, before, after in moves:
+            for i in range(len(series)):
+                t = start + i * step
+                if s0 <= t < e0:
+                    series[i] = before + (after - before) * (t - s0) / max(e0 - s0, 1.0)
+                elif t >= e0:
+                    series[i] = _clamp(series[i] + after - before)
+        out[k] = series
+    return out
+
+
+def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, tz,
+              facts=None) -> tuple[str, dict]:
     if vr is None:
         return "unknown", {}
-    items_run, anchors = _as_run(vr, settings)
+    items_run, anchors, moves = _as_run(vr, settings, tz, facts)
     p = _path_as_run(vr.path, anchors) if vr.path and vr.path.get("start") else (vr.path or {})
+    if moves and p.get("start"):
+        p = _path_after_moves(p, moves)
     cut = _cutoff(vr)
     step_min = p.get("step_min", 15)
     keep = int(DISPLAY_H * 60 // step_min) + 1                    # path points up to the end of what is shown
@@ -374,7 +446,8 @@ def entity_states(out: StepOutput, engine, settings: V2Settings, tz,
     floor = engine.last_facts.hard_floor_soc if engine.last_facts is not None else 12.0
     res = {"state_engine": ("v2", {"v2_available": True}),
            "v2_mode": _mode(out, engine, tz, preview), "v2_value": _value(out),
-           "v2_timeline": _timeline(out.value, settings, floor, tz), "v2_value_curve": _curve(out.value, tz),
+           "v2_timeline": _timeline(out.value, settings, floor, tz, engine.last_facts),
+           "v2_value_curve": _curve(out.value, tz),
            "v2_triggers": _triggers(out, engine), "diag_v2": _diag(out, engine)}
     if preview:
         res.pop("state_engine")

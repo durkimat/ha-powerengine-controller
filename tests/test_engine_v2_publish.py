@@ -11,7 +11,7 @@ from pe_core.engine_v2 import engine as engine_mod
 from pe_core.engine_v2 import publish
 from pe_core.engine_v2.engine import EngineV2
 from pe_core.engine_v2.settings import SETTINGS, V2Settings
-from pe_core.engine_v2.types import CHARGE, EXPORT, HOLD, SELF_USE, Lines, TimelineItem
+from pe_core.engine_v2.types import CHARGE, EXPORT, HOLD, SELF_USE, BatteryFacts, Limits, Lines, TimelineItem
 
 LOCAL = timezone(timedelta(hours=1))
 LIMIT = 15_000
@@ -382,6 +382,19 @@ def test_the_displayed_plan_keeps_the_clock_across_a_price_change_and_fills_the_
     assert HOLD in [i.mode for i in held]
 
 
+def test_the_wait_between_two_runs_says_until_the_local_time_it_ends():
+    """`until` of the filled wait was the UTC clock: an item ending at 10:00 in summer time read "until 09:00"."""
+    from zoneinfo import ZoneInfo
+    now = T0
+    segs = [segment(now, import_p=8.88, export_p=15.0), segment(now + timedelta(minutes=30), import_p=28.84,
+                                                                  export_p=15.0)]
+    plan = [_item(CHARGE, 0, 14, 58, 64, now), _item(HOLD, 14, 30, 64, 64, now, True),
+            _item(SELF_USE, 30, 60, 64, 60, now)]
+    tz = ZoneInfo("Europe/London")
+    wait = publish.as_run(_run_plan(plan, segs, now), V2Settings(hold_only_car_reserve=True), tz)[1]
+    assert wait.until == f"until {(now + timedelta(minutes=30)).astimezone(tz):%H:%M}"
+
+
 def test_the_shown_path_follows_the_shown_items_not_the_plans_own_clock():
     """The items are shown pulled forward (the next run starts as soon as one is done); a path left on the plan's clock
     drew a battery still selling where the items said it waited (14 Oct, 21:52)."""
@@ -405,3 +418,43 @@ def test_the_shown_path_follows_the_shown_items_not_the_plans_own_clock():
     assert raw(60) == 73 and mid[4] == pytest.approx(62.6, abs=0.3)      # shown: selling since 36 min, not still at 73
     assert mid[2] == pytest.approx(70.4, abs=0.3) and mid[8] == pytest.approx(60.0, abs=0.3)
     assert mid[3] == pytest.approx(73 - 13 * 9 / 30, abs=0.3)
+
+
+def _flat_curves(value_p, n_segs, rows=37):
+    return tuple(tuple([value_p] * rows) for _ in range(n_segs + 1))
+
+
+def _idle_run_plan(value_p, now):
+    """A charge that stops at 85% a quarter-hour short of a price change, the plan filling the rest with a hold."""
+    segs = [segment(now, import_p=8.88, export_p=15.0), segment(now + timedelta(minutes=30), import_p=28.84,
+                                                                  export_p=15.0)]
+    plan = [_item(CHARGE, 0, 14, 70, 85, now), _item(HOLD, 14, 30, 85, 85, now, True),
+            _item(SELF_USE, 30, 60, 85, 83, now)]
+    lim = Limits(allowed=frozenset({CHARGE, EXPORT, SELF_USE}))
+    return value_result(now, forecast(now, segs), timeline=tuple(plan), lam=_flat_curves(value_p, 2),
+                        limits=(lim, lim))
+
+
+def test_a_wait_the_lines_would_sell_in_is_shown_as_the_sale():
+    """A stored kWh worth far under the sell line: the executor (no hold allowed) sells in the wait, the plan's rest
+    was only a way of saying how much; the levels after it follow the sale."""
+    now = T0
+    shown = publish.as_run(_idle_run_plan(5.0, now), V2Settings(hold_only_car_reserve=True), None, BatteryFacts())
+    assert [i.mode for i in shown] == [CHARGE, EXPORT, SELF_USE]
+    sale = shown[1]
+    assert sale.start == now + timedelta(minutes=14) and sale.end <= now + timedelta(minutes=30)
+    assert sale.level_start == 85 and sale.level_end < 92
+    assert shown[2].level_start == sale.level_end                    # what follows starts from where the sale left it
+
+
+def test_a_wait_between_the_buy_and_sell_lines_stays_a_wait():
+    now = T0
+    shown = publish.as_run(_idle_run_plan(11.0, now), V2Settings(hold_only_car_reserve=True), None, BatteryFacts())
+    assert [i.mode for i in shown] == [CHARGE, SELF_USE, SELF_USE]
+    assert shown[1].remainder and shown[2].level_start == 85
+
+
+def test_a_wait_is_left_alone_where_a_hold_is_allowed():
+    now = T0
+    shown = publish.as_run(_idle_run_plan(5.0, now), V2Settings(hold_only_car_reserve=False), None, BatteryFacts())
+    assert [i.mode for i in shown] == [CHARGE, HOLD, SELF_USE]
