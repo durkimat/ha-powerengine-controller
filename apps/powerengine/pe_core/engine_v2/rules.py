@@ -66,7 +66,7 @@ def caps(facts: BatteryFacts, charge_factor: float = 1.0, house_kw: float | None
 def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str | None, free: bool, car: bool,
           level: float | None, charge_factor: float, house_kw: float | None, solar_kw: float | None, car_kw: float,
           reserve_latched: bool = False, override_text: str = "", cheap: bool = True,
-          price_p: float | None = None) -> Limits:
+          price_p: float | None = None, event_charge_to: float | None = None) -> Limits:
     s = settings
     floor = normal_floor(facts, s)
     ceiling = float(s.charge_ceiling_soc)
@@ -86,6 +86,8 @@ def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str
     if free and s.free_power and not s.free_arbitrage:
         return Limits(allowed=frozenset(), forced=FREE, floor_soc=floor, ceiling_soc=100.0, rule="free",
                       reason="Free-power session: the battery charges to 100%", **common)
+    if event_charge_to is not None:                 # a dear charge for an announced event, up to the level it needs
+        ceiling = max(floor, min(ceiling, event_charge_to))
     allowed = {SELF_USE, HOLD, CHARGE}
     if s.arbitrage:
         allowed.add(EXPORT)
@@ -96,7 +98,8 @@ def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str
         reason = "Free-power session: the battery charges, or sells what it holds if that pays more"
     if s.hold_only_car_reserve:
         allowed.discard(HOLD)                       # back for the car and the reserve below
-    if rule == "normal" and s.charge_max_import_p > 0 and price_p is not None and price_p > s.charge_max_import_p:
+    if rule == "normal" and s.charge_max_import_p > 0 and price_p is not None and price_p > s.charge_max_import_p \
+            and event_charge_to is None:
         allowed.discard(CHARGE)                     # no grid charge at a dear rate (a free session is its own rule)
     if car:
         allowed = (allowed & {CHARGE}) | {HOLD}
@@ -149,7 +152,8 @@ def limits_now(situation: Situation, obs: Observation, seg: Segment | None, fact
                  charge_factor=seg.charge_factor if seg is not None else 1.0,
                  house_kw=(r.house_power or 0.0) / 1000.0 if r.house_power is not None else None,
                  solar_kw=(r.solar_power or 0.0) / 1000.0, car_kw=car_kw,
-                 reserve_latched=reserve_latched, override_text=text, cheap=_cheap(seg), price_p=_cheapest_p(seg))
+                 reserve_latched=reserve_latched, override_text=text, cheap=_cheap(seg), price_p=_cheapest_p(seg),
+                 event_charge_to=seg.event_charge_to if seg is not None else None)
 
 
 def limits_for(seg: Segment, facts: BatteryFacts, settings: V2Settings, *,
@@ -159,4 +163,4 @@ def limits_for(seg: Segment, facts: BatteryFacts, settings: V2Settings, *,
     return _core(settings, facts, event=seg.event, manual=seg.manual, free=seg.free,
                  car=seg.car_kw > 0 and house_load_includes_ev, level=None, charge_factor=seg.charge_factor,
                  house_kw=seg.load_kwh.mid / hours, solar_kw=seg.solar_kwh.mid / hours, car_kw=seg.car_kw,
-                 cheap=_cheap(seg), price_p=_cheapest_p(seg))
+                 cheap=_cheap(seg), price_p=_cheapest_p(seg), event_charge_to=seg.event_charge_to)

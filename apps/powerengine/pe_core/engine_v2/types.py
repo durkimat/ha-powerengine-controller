@@ -86,6 +86,7 @@ class Segment:
     price_estimated: bool = False         # beyond the published prices
     charge_factor: float = 1.0            # cold caution
     manual: str | None = None             # an override fixes this segment's mode (a v2 mode key)
+    event_charge_to: float | None = None  # before an announced event: a dear charge may pass, up to this %
 
     @property
     def hours(self) -> float:
