@@ -382,6 +382,19 @@ def test_the_displayed_plan_keeps_the_clock_across_a_price_change_and_fills_the_
     assert HOLD in [i.mode for i in held]
 
 
+def test_the_wait_between_two_runs_says_until_the_local_time_it_ends():
+    """`until` of the filled wait was the UTC clock: an item ending at 10:00 in summer time read "until 09:00"."""
+    from zoneinfo import ZoneInfo
+    now = T0
+    segs = [segment(now, import_p=8.88, export_p=15.0), segment(now + timedelta(minutes=30), import_p=28.84,
+                                                                  export_p=15.0)]
+    plan = [_item(CHARGE, 0, 14, 58, 64, now), _item(HOLD, 14, 30, 64, 64, now, True),
+            _item(SELF_USE, 30, 60, 64, 60, now)]
+    tz = ZoneInfo("Europe/London")
+    wait = publish.as_run(_run_plan(plan, segs, now), V2Settings(hold_only_car_reserve=True), tz)[1]
+    assert wait.until == f"until {(now + timedelta(minutes=30)).astimezone(tz):%H:%M}"
+
+
 def test_the_shown_path_follows_the_shown_items_not_the_plans_own_clock():
     """The items are shown pulled forward (the next run starts as soon as one is done); a path left on the plan's clock
     drew a battery still selling where the items said it waited (14 Oct, 21:52)."""

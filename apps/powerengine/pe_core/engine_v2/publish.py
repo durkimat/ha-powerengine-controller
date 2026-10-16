@@ -214,7 +214,12 @@ def _thin_sun(a: dict) -> None:
     sun["step_min"] *= 2
 
 
-def _as_run(vr: ValueResult, settings: V2Settings) -> tuple[list[TimelineItem], list[tuple[float, float]]]:
+def _hhmm(t: datetime, tz=None) -> str:
+    return (t.astimezone(tz) if tz else t).strftime("%H:%M")
+
+
+def _as_run(vr: ValueResult, settings: V2Settings,
+            tz=None) -> tuple[list[TimelineItem], list[tuple[float, float]]]:
     """`as_run`'s items, and the anchors that map the time they are shown at to the plan's own clock:
     (shown, plan) in seconds, in step with both clocks."""
     idle = HOLD if not settings.hold_only_car_reserve else SELF_USE
@@ -234,7 +239,7 @@ def _as_run(vr: ValueResult, settings: V2Settings) -> tuple[list[TimelineItem], 
                 level = out[-1].level_end if out else it.level_start
                 out.append(TimelineItem(
                     mode=idle, start=cursor, end=it.start, level_start=level, level_end=level,
-                    until=f"until {it.start:%H:%M}", remainder=True,
+                    until=f"until {_hhmm(it.start, tz)}", remainder=True,
                     reason="The run has reached its target; the battery waits for the next step."))
         anchors.append((it.start.timestamp(), plan_start.timestamp()))
         anchors.append((it.end.timestamp(), plan_end.timestamp()))
@@ -248,13 +253,13 @@ def _as_run(vr: ValueResult, settings: V2Settings) -> tuple[list[TimelineItem], 
     return out, anchors
 
 
-def as_run(vr: ValueResult, settings: V2Settings) -> list[TimelineItem]:
+def as_run(vr: ValueResult, settings: V2Settings, tz=None) -> list[TimelineItem]:
     """The plan's timeline as the plan executor will run it, for display only (the plan itself is not changed). The
     plan ends a charge or sale part-way through a segment and fills the rest with a hold (`remainder`), a way of saying
     how much; the executor never rests there: a run follows the plan by level, and the next step starts as soon as the
     run is done wherever the prices are those of now (`Executor._plan_candidate`). Where they differ the clock stands
     and the battery does what the rules allow in between (a hold only where one is allowed, else self-use)."""
-    return _as_run(vr, settings)[0]
+    return _as_run(vr, settings, tz)[0]
 
 
 def _path_as_run(path: dict, anchors: list[tuple[float, float]]) -> dict:
@@ -299,7 +304,7 @@ def _path_as_run(path: dict, anchors: list[tuple[float, float]]) -> dict:
 def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, tz) -> tuple[str, dict]:
     if vr is None:
         return "unknown", {}
-    items_run, anchors = _as_run(vr, settings)
+    items_run, anchors = _as_run(vr, settings, tz)
     p = _path_as_run(vr.path, anchors) if vr.path and vr.path.get("start") else (vr.path or {})
     cut = _cutoff(vr)
     step_min = p.get("step_min", 15)
