@@ -12,6 +12,7 @@ from pe_core.engine_v2 import publish
 from pe_core.engine_v2.engine import EngineV2
 from pe_core.engine_v2.settings import SETTINGS, V2Settings
 from pe_core.engine_v2.types import CHARGE, EXPORT, HOLD, SELF_USE, BatteryFacts, Limits, Lines, TimelineItem
+from pe_core.engine_v2.value import value_at
 
 LOCAL = timezone(timedelta(hours=1))
 LIMIT = 15_000
@@ -174,7 +175,7 @@ def test_the_timeline_sensor_has_the_contract_attributes(made):
     assert set(a) == {"now", "because", "floor_soc", "reserve_soc", "items", "path", "prices", "sun",
                       "cost_expected", "cost_selfuse", "comfort_given_up", "calc_s"}
     assert set(a["items"][0]) == {"mode", "start", "end", "level_start", "level_end", "until", "reason"}
-    assert set(a["path"]) == {"start", "step_min", "mid", "low", "high"}
+    assert set(a["path"]) == {"start", "step_min", "mid", "low", "high", "value"}
     assert set(a["prices"][0]) >= {"start", "end", "import_p", "export_p", "slot_prob", "event", "free", "estimated"}
     assert a["cost_expected"] == 1.23 and a["cost_selfuse"] == 2.35 and a["comfort_given_up"] == 0.06
     assert a["floor_soc"] == 12.0 and a["reserve_soc"] == 12.0 and a["calc_s"] == 1.83
@@ -458,3 +459,26 @@ def test_a_wait_is_left_alone_where_a_hold_is_allowed():
     now = T0
     shown = publish.as_run(_idle_run_plan(5.0, now), V2Settings(hold_only_car_reserve=False), None, BatteryFacts())
     assert [i.mode for i in shown] == [CHARGE, HOLD, SELF_USE]
+
+
+def test_the_timeline_path_carries_the_value_the_controller_reads_at_each_point():
+    now = T0
+    vr = _idle_run_plan(7.0, now)
+    rows = tuple(tuple(5.0 + 0.5 * i for i in range(37)) for _ in range(3))
+    vr = _with(vr, lam=rows, path={"start": now.isoformat(), "step_min": 15, "mid": [20.0, 50.0, 80.0, 50.0],
+                                   "low": [20.0] * 4, "high": [20.0] * 4})
+    _, a = publish._timeline(vr, V2Settings(hold_only_car_reserve=True), 12.0, LOCAL)
+    path = a["path"]
+    assert len(path["value"]) == len(path["mid"])
+    for i, (lvl, val) in enumerate(zip(path["mid"], path["value"], strict=True)):
+        want = value_at(vr, now + timedelta(minutes=15 * i), lvl)
+        assert abs(val - want) < 0.06
+    assert path["value"][0] < path["value"][1] < path["value"][2]      # a fuller battery is worth more on this curve
+
+
+def test_a_plan_with_no_value_curve_publishes_no_path_value():
+    now = T0
+    vr = _with(_idle_run_plan(7.0, now), lam=(), path={"start": now.isoformat(), "step_min": 15, "mid": [50.0],
+                                                      "low": [50.0], "high": [50.0]})
+    _, a = publish._timeline(vr, V2Settings(hold_only_car_reserve=True), 12.0, LOCAL)
+    assert "value" not in a["path"]
