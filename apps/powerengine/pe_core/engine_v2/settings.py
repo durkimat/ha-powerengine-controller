@@ -24,12 +24,6 @@ SETTINGS: dict[str, tuple] = {
                  'Sell stored energy outside grid events when that pays more than keeping it.'),
     "events": ("bool", True, None, None, "", "Grid events",
                "Act on grid events (<<event>>): export at full power while one runs."),
-    "late_events": ('bool', True, None, None, '', 'Be prepared for a late grid event',
-                 'Plan as if a grid event (<<event>>) could come at short notice: a full battery sells at its rate.'),
-    "late_events_per_week": ('number', 1.5, 0, 14, 'per week', 'Late grid events expected',
-                 'How many grid events a week you expect at short notice. 0: off.'),
-    "late_event_hours": ('number', 1.0, 0.5, 4, 'h', 'How long a late grid event lasts',
-                 'How long the plan assumes one lasts.'),
     "event_plus_export": ("bool", True, None, None, "", "Export rate paid on top of a grid event",
                           "The export rate is paid on top of the event's rate."),
     "free_power": ("bool", True, None, None, "", "Free-power sessions", "Charge to 100% during a free-power session."),
@@ -157,7 +151,7 @@ SETTINGS: dict[str, tuple] = {
 # config-page sections, in display order: (key, label, settings)
 SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("allowed", "What engine v2 may do",
-     ("arbitrage", "events", "late_events", "late_events_per_week", "late_event_hours", "event_plus_export",
+     ("arbitrage", "events", "event_plus_export",
       "free_power", "free_arbitrage", "hold_only_car_reserve", "charge_ceiling_soc",
       "charge_max_import_p", "prefer_self_use", "preview_when_v1")),
     ("floors", "Floors", ("reserve_soc", "hard_floor_margin_pct")),
@@ -198,9 +192,6 @@ class SettingsError(ValueError):
 class V2Settings:
     arbitrage: bool = False
     events: bool = True
-    late_events: bool = True
-    late_events_per_week: float = 1.5
-    late_event_hours: float = 1.0
     event_plus_export: bool = True
     free_power: bool = True
     free_arbitrage: bool = False
@@ -315,7 +306,7 @@ BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
     BETA_PROFILE: {
         "executor": "plan", "replan_on_level": True,
         "price_band_p": 0.0, "level_band_pct": 0.0, "min_dwell_s": 120, "comfort_cost_p": 0.0, "top_up_cost_p": 0.0,
-        "prefer_self_use": False, "late_events": False,
+        "prefer_self_use": False,
         "level_top_start_soc": 90, "level_top_rate_p": 200.0, "level_top_doubling_pts": 3.0,
         "level_bot_start_soc": 70, "level_bot_rate_p": 10.0, "level_bot_doubling_pts": 5.0,
         "slot_bot_factor": 30.0, "slot_bot_start_soc": 80,
@@ -393,7 +384,8 @@ def profile_of(engine: str | None) -> str | None:
 
 
 # Settings an earlier release had and a saved config may still hold: dropped quietly, never an error.
-RETIRED = frozenset({"reversal_cost_p"})   # 0.9.129: one cost for every change (switch_cost_p)
+RETIRED = frozenset({"reversal_cost_p",     # 0.9.129: one cost for every change (switch_cost_p)
+                     "late_events", "late_events_per_week", "late_event_hours"})   # 0.9.148: unannounced events
 
 
 def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None,

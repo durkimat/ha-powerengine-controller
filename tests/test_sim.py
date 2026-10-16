@@ -331,7 +331,6 @@ def test_catalogue_offers_settings_by_section_constants_layers_and_presets():
     assert (
         set(mvp["settings"]) <= set(s.SETTINGS) and "switch_cost_p" not in mvp["settings"]
     )  # the plan's own cost stays
-    assert mvp["settings"]["late_events"] is False
     assert len(mvp["consts"]) == 3 and len(by_id["mvp_programme_choice"]["consts"]) == 2
 
 

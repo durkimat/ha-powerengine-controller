@@ -47,7 +47,6 @@ OFF_VALUES = {
     "comfort_cost_p": 0,
     "top_up_cost_p": 0,
     "prefer_self_use": False,
-    "late_events": False,
     "switch_cost_p": 0,
     "wear_house_p": 0,
     "wear_sale_p": 0,

@@ -1046,7 +1046,7 @@ Self-use. It costs the sun-sale arbitrage: on the synthetic sunny day the expect
 then fills to 100% by 05:30. Off restores the earlier behaviour. The diagnostics export's `engine_v2` section also carries `mode`, `value`,
 `value_curve` and `learning` (the other v2 sensors), and the timeline now has the `sun` series.
 
-**Built (0.9.115): `late_events`** (default on; `late_events_per_week` 1.5, `late_event_hours` 1.0). The owner's decision: no overrides, the plan itself
+**Built (0.9.115), removed 0.9.148: `late_events`** (a saved value is ignored now; see `docs/plans/engine-v2-2-beta.md`, "The rule and an announced grid event", for why; default on; `late_events_per_week` 1.5, `late_event_hours` 1.0). The owner's decision: no overrides, the plan itself
 assumes an event could arrive. In `value._backward` every future, unforced segment starting at least 30 minutes ahead (`LATE_NOTICE_S`) gets a
 probability `late_p` = per week / 7 x hours / 24 (scaled up for the sales' average size) of being inside an event no one has announced. In that
 outcome the mode is forced to EVENT at the known-event price (`event_value_p`, plus the export rate when paid on top) with no choice and no

@@ -87,3 +87,9 @@ def test_the_highest_price_rule_lets_a_charge_through_only_where_marked():
     assert "charge" not in rules.limits_for(plain, FACTS, st).allowed
     marked = rules.limits_for(replace(plain, event_charge_to=50.0), FACTS, st)
     assert "charge" in marked.allowed and marked.ceiling_soc == 50.0      # and only up to the level the event needs
+
+
+def test_a_saved_late_events_setting_is_ignored_not_an_error():
+    from pe_core.engine_v2.settings import parse_v2
+    s = parse_v2({"late_events": True, "late_events_per_week": 3, "late_event_hours": 2, "reserve_soc": 15}, {}, {}, None)
+    assert s.reserve_soc == 15 and not hasattr(s, "late_events")
