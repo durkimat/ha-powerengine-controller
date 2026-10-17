@@ -2,6 +2,12 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.153 (beta)
+
+### Behaviour changes
+
+None. The app is unchanged; this release carries the card update (the value map's "off the scale" label).
+
 ## 0.9.152 (beta)
 
 ### Behaviour changes
