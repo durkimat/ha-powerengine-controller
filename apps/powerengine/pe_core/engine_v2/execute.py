@@ -39,10 +39,10 @@ from .types import (
     Observation,
     ValueResult,
 )
-from .value import MAX_PIECES, decide
+from .value import LEVEL_TOL_PCT, MAX_PIECES, decide
 
 FLIP_FLOP_S = 600
-LEVEL_EPS = 0.1               # points: a mode that runs "until" a level is done within this of it. The filtered level
+LEVEL_EPS = LEVEL_TOL_PCT     # points: a mode that runs "until" a level is done within this of it. The filtered level
                               # only approaches a reading (99.999...% at 100%), so a bare `level < target` never ends it
 
 DEADLINE_GRACE_MIN = 10            # how long a run may pass its expected end before a re-plan

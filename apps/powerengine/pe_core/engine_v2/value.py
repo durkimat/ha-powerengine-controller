@@ -943,7 +943,7 @@ def _choose(stretch: list[_Seg], vks: list, e: float, kind: str, prev: str | Non
         going = False
         if leg is not None and leg[0] in S.allowed:
             lm, frm, need = leg
-            going = (e - frm if lm == CHARGE else frm - e) < need - 1e-9 \
+            going = (e - frm if lm == CHARGE else frm - e) < need - S.cap * LEVEL_TOL_PCT / 100 \
                 and (e < S.ceil - 1e-9 if lm == CHARGE else e > S.floor + 1e-9)
             if going:
                 goal = min(frm + need, S.ceil) if lm == CHARGE else max(frm - need, S.floor)
@@ -968,6 +968,7 @@ def _next_leg(S: _Seg, mode: str, e: float, leg: tuple | None) -> tuple | None:
 
 
 LIVE_RATES = True       # the executor prices now at the live rates where they differ from the forecast's (experiment)
+LEVEL_TOL_PCT = 0.1     # points: a run is at its level within this (the executor's own test, `execute.LEVEL_EPS`)
 RESTART_PCT = 1.0       # a run that reached its level starts again only to go at least this much further (points)
 DWELL_S = 0.0           # seconds a mode lasts at least once it starts (experiment; 0: off)
 SLIVER_S = 60           # less than this left of a segment: the executor decides for the next one
