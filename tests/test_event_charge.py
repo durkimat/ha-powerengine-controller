@@ -94,3 +94,13 @@ def test_a_saved_late_events_setting_is_ignored_not_an_error():
     saved = {"late_events": True, "late_events_per_week": 3, "late_event_hours": 2, "reserve_soc": 15}
     s = parse_v2(saved, {}, {}, None)
     assert s.reserve_soc == 15 and not hasattr(s, "late_events")
+
+
+def test_settings_retired_in_0_9_156_are_ignored_not_an_error():
+    from pe_core.engine_v2.settings import RETIRED, SETTINGS, parse_v2
+    gone = ("replan_on_level", "terminal_value", "terminal_value_p", "reentry_levy_p", "corridor_cost_p",
+            "max_segment_min", "forecast_change_pct", "drift_kwh", "band_exit_min", "revalue_coalesce_s",
+            "max_value_age_min", "deadline_grace_min", "debounce_s", "level_step_kwh")
+    assert set(gone) <= RETIRED and not set(gone) & set(SETTINGS)
+    s = parse_v2({**{k: 1 for k in gone}, "reserve_soc": 15})
+    assert s.reserve_soc == 15 and not any(hasattr(s, k) for k in gone)

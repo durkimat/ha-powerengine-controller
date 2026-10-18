@@ -74,6 +74,10 @@ _ORDER = (SELF_USE, HOLD, CHARGE, EXPORT)
 # `level_bot_anchor_soc`. A rate of 0 switches a curve off (both off: the plan is exactly as without them). It is a
 # cost of the level itself, so it enters the value curve and the live lines with no rule. Inside a smart slot the
 # bottom rate is multiplied by `slot_bot_factor` and the curve may start higher (`slot_bot_start_soc`).
+LEVEL_STEP_KWH = 0.1            # the battery-level grid the values are worked out on (kWh)
+CORRIDOR_COST_P = 0.5           # a charge or sale may stop anywhere that costs within this of the best stop (p)
+TERMINAL_FALLBACK_P = 10.0      # the value of a kWh left at the end when the last day has no usable price (p)
+TERMINAL_FIXED_P = None         # tests and the simulator: a fixed value for the energy left at the end (None: refill)
 PEN_RES = 100                 # table entries per kWh
 CONVEX_COST_TO_GO = True      # the cost-to-go of every segment is made convex in the level, from the floor up
 
@@ -305,7 +309,7 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     S.sw = settings.switch_cost_p
     S.lo, S.hi = settings.comfort_low_soc / 100 * S.cap, settings.comfort_high_soc / 100 * S.cap
     S.pen = _level_penalty(S.cap, seg.slot_prob is not None, settings)
-    S.corr = settings.corridor_cost_p
+    S.corr = CORRIDOR_COST_P
     band = leg_band(settings)
     S.leg = None if band is None else (band[0] / 100 * S.cap, band[1] / 100 * S.cap)     # (bottom, top) in kWh
     S.fcap = S.hi if (S.ccost or S.topup) else S.cap          # where charging early stops being free (see `_walk`)
@@ -449,7 +453,7 @@ def _partial(scen: list, full: list, hold: list, Vn: _Arr, S: _Seg | None = None
     """The best stop inside a charge (or a sale): the share f of the segment (0 < f < 1) spent on the mode, the rest
     held. The expected cost is convex in f, so the smallest f whose slope reaches zero is found by bisection, then
     snapped to the grid levels either side of it. Returns (expected cost-to-go, f) or None when full or none is best.
-    With `corridor`, also the range of f whose cost is within the corridor width (`corridor_cost_p`) of the best (the
+    With `corridor`, also the range of f whose cost is within the corridor width (`CORRIDOR_COST_P`) of the best (the
     cost is convex, so it is one stretch): (cost, f, (f_lo, f_hi)). A stop anywhere in it is as good as the best one to
     within that tolerance.
     The cost of a part-way charge is the hold cost plus f of the difference, except the top-up (`_top_up`), which only
@@ -611,14 +615,14 @@ class _Core:
 def _terminal_p(fc: Forecast, facts: BatteryFacts, settings: V2Settings) -> float:
     """The flat price of a kWh left at the end of the look-ahead: what refilling it costs, from the cheapest import
     price in the last 24 hours (or the fixed figure)."""
-    if settings.terminal_value == "fixed":
-        return settings.terminal_value_p
+    if TERMINAL_FIXED_P is not None:
+        return TERMINAL_FIXED_P
     segs = fc.segments
     cut = segs[-1].end.timestamp() - 24 * 3600
     prices = [s.import_p for s in segs if not s.free and s.end.timestamp() > cut]
     prices = prices or [s.import_p for s in segs if not s.free]
     if not prices:
-        return settings.terminal_value_p
+        return TERMINAL_FALLBACK_P
     return min(prices) / facts.eta_charge
 
 
@@ -641,7 +645,7 @@ def _terminal_curve(fc: Forecast, facts: BatteryFacts, settings: V2Settings, ste
     refill = _terminal_p(fc, facts, settings)
     flat = [-refill * i * step for i in range(n + 1)]
     segs = fc.segments
-    if settings.terminal_value == "fixed" or not segs:
+    if TERMINAL_FIXED_P is not None or not segs:
         return refill, flat
     cut = segs[-1].end - timedelta(hours=24)
     ghost = [g for g in segs if g.end > cut and not g.free]
@@ -1137,8 +1141,8 @@ def solve(forecast: Forecast, start_soc: float, facts: BatteryFacts, settings: V
                            cost_expected_p=0.0, cost_selfuse_p=0.0, comfort_given_up_p=None,
                            calc_s=time.perf_counter() - t_start)
     cap = facts.capacity_kwh
-    core = _backward(forecast, facts, settings, limits_for, now, settings.level_step_kwh, COARSE_STEP_KWH)
-    n_fine, step = _grid(cap, settings.level_step_kwh)
+    core = _backward(forecast, facts, settings, limits_for, now, LEVEL_STEP_KWH, COARSE_STEP_KWH)
+    n_fine, step = _grid(cap, LEVEL_STEP_KWH)
     lam = tuple(_fine_lam(core.V[k], n_fine, step) for k in range(len(core.segs)))
     e0 = min(cap, max(0.0, start_soc / 100 * cap))
     leg, band = None, leg_band(settings)

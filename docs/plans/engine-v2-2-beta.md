@@ -13,15 +13,13 @@ other profile:
 | `hold_only_car_reserve` | on | off | Hold is allowed only while the car charges or the battery is at its reserve. Elsewhere: charge, sell or self-use. |
 | `free_arbitrage` | on | off | A free-power session may also sell what is stored (Charge or Export, up to 100%) instead of being forced to charge. |
 | `reversal_levy_p` | 4 | 0 | Turning a charge into a sale, or back, needs the value this many p/kWh further past the line. |
-| `reentry_levy_p` | 4 | 0 | A charge or sale that ended in the last 10 minutes restarts only when the value is this much further past the line. |
-| `corridor_cost_p` | 0.5 | 0.5 | A charge or sale may stop anywhere whose expected cost is within this of the best stop. |
 | `charge_max_import_p` | 15 | 0 (off) | No grid charge while the import price (the cheapest a smart slot could bring) is above this, in the plan and in the engine alike (`rules._core`). Free power, grid events and overrides are not held back. Before an announced grid event that the plan would reach short of, the rule steps aside for a calculated stretch (see "The rule and an announced grid event" below). Added 0.9.145: on 7-13 Oct it cut charging at dear rates from 39 level points to 3 and the week's adjusted cost by 1.44 GBP, for about 20 more mode changes. |
 
 Under `executor = plan` (2.1 beta and 2.2 beta) the engine also does the following. None of it is a setting, and the default
 executor is unchanged:
 
 - **A corridor in the plan.** A charge or sale that stops part-way through a segment carries the range of stop levels
-  (`TimelineItem.level_lo`, `level_hi`) whose expected cost is within `corridor_cost_p` of the best. The hold that fills
+  (`TimelineItem.level_lo`, `level_hi`) whose expected cost is within `CORRIDOR_COST_P` (a constant since 0.9.156) of the best. The hold that fills
   the rest of the segment is marked `remainder`: it says how much, and is not a decision to hold.
 - **Following the plan by level.** A charge or sale runs until its level reaches the edge of its corridor, however early or
   late that is against the plan's clock. A remainder is skipped, so the next action starts at once.

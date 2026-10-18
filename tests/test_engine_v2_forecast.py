@@ -265,10 +265,11 @@ def test_override_marks_segments_except_events():
     assert all(s.manual == "hold" for s in F.build(inp, ST).segments if not s.event)
 
 
-def test_max_segment_splits_long_runs_and_charge_factor():
+def test_max_segment_splits_long_runs_and_charge_factor(monkeypatch):
+    monkeypatch.setattr(F, "MAX_SEGMENT_MIN", 10)
     inp = make(at(10, 0))
     inp.facts = replace(inp.facts, charge_factor=0.6)
-    fc = F.build(inp, replace(ST, max_segment_min=10))
+    fc = F.build(inp, ST)
     assert all(s.hours <= 10 / 60 + 1e-9 for s in fc.segments)
     assert all(s.charge_factor == 0.6 for s in fc.segments)
     assert fc.segments[0].end == at(10, 10) or fc.segments[0].hours <= 10 / 60 + 1e-9

@@ -108,8 +108,8 @@ want to change or remove a rule, read its row first: the incident is what the ru
 |---|---|
 | Hold is for the car and the reserve only; elsewhere charge, sell or Self-use (Self-use is the neutral mode between the buy and sell lines, for now) | `rules._core` (`hold_only_car_reserve`) |
 | A free-power session may charge or sell (arbitrage), not only charge | `rules._core` (`free_arbitrage`) |
-| Carrying on with a charge or sale costs nothing; turning one round, or restarting one that just ended, needs a margin | `execute._can_charge`, `_can_export` (`reversal_levy_p`, `reentry_levy_p`) |
-| The plan executor follows the plan by level, with a corridor of stop levels | `execute._plan_candidate`, `value._partial` (`corridor_cost_p`) |
+| Carrying on with a charge or sale costs nothing; turning one round needs a margin | `execute._can_charge`, `_can_export` (`reversal_levy_p`; the restart levy was removed in 0.9.156, it changed nothing) |
+| The plan executor follows the plan by level, with a corridor of stop levels | `execute._plan_candidate`, `value._partial` (`CORRIDOR_COST_P`, a constant since 0.9.156) |
 | The new behaviour ships as a profile, "2.2 beta", and nobody is moved to it | `settings.BUILTIN_PROFILES` |
 | The margin applies to the plan's own picks too, not only to the lines' (a re-plan on a smart-slot change had turned a charge into a sale 2 minutes after it began, live on 13 Oct) | `execute._inertia_ok`, called from `_pick_now` |
 | Every journal row names the settings profile in use (a hold at 08:27 could not be tied to a profile) | `engine.EngineV2.profile` |

@@ -2,8 +2,8 @@
 
 Two reactions at very different costs: a re-check (layer 5 against the values already worked out; every tick does it)
 and a revalue (layers 2 and 3; seconds). `Triggers.due` says when a revalue should run: at once for an urgent event,
-otherwise `revalue_coalesce_s` after the first request so a burst runs once, and as a backstop when no revalue has run
-for `max_value_age_min`. It also keeps the day's counts and the last events for the health sensor.
+otherwise `REVALUE_COALESCE_S` after the first request so a burst runs once, and as a backstop when no revalue has run
+for `MAX_VALUE_AGE_MIN`. It also keeps the day's counts and the last events for the health sensor.
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ from .settings import V2Settings
 from .types import Event
 
 RECENT = 30
+REVALUE_COALESCE_S = 10          # reasons to re-plan arriving this close together run once
+MAX_VALUE_AGE_MIN = 120          # work the values out at least this often, in case a trigger was missed
 TEXT_MAX = 120
 HELD_KINDS = ("slots_changed", "prices_published")     # re-plan kinds that wait `price_churn_hold_s` for each other
 # what a revalue reads as in "values worked out because ..."
@@ -82,9 +84,8 @@ class Triggers:
         self.tz = None
 
     def _revalues(self, e: Event) -> bool:
-        """Does this event ask for a re-plan? Its kind says so, and a charge or sale reaching its level does too when
-        the engine is set to re-plan there (engine 2.1 beta)."""
-        return e.revalue or (e.kind == "level" and self.s.replan_on_level)
+        """Does this event ask for a re-plan? Its kind says so."""
+        return e.revalue
 
     # ---- when -----------------------------------------------------------------------------------
     def due(self, now: datetime, events: tuple[Event, ...], last_value_at: datetime | None) -> str | None:
@@ -105,10 +106,10 @@ class Triggers:
         # then the other): they wait `price_churn_hold_s` from the first so one re-plan sees both. Anything else keeps
         # the short batching window, and takes whatever is waiting with it.
         held = self.hold_since is not None and ts - self.hold_since >= self.s.price_churn_hold_s
-        batched = self.pending_since is not None and ts - self.pending_since >= self.s.revalue_coalesce_s
+        batched = self.pending_since is not None and ts - self.pending_since >= REVALUE_COALESCE_S
         if self.pending and (urgent or batched or held):
             return self._take()
-        if last_value_at is not None and now - last_value_at >= timedelta(minutes=self.s.max_value_age_min):
+        if last_value_at is not None and now - last_value_at >= timedelta(minutes=MAX_VALUE_AGE_MIN):
             self.pending.append(["backstop", ""])
             return self._take()
         return None

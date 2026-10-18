@@ -290,3 +290,18 @@ def test_savings_breakdown_folds_and_adds_up_to_the_powerengine_step():
     env.globals["state_attr"] = lambda _e, k: [{"date": "x", "complete": True, "scenarios": {"none": 1}}] \
         if k == "days" else None
     assert "details" not in env.from_string(card["content"]).render()
+
+
+def test_one_engine_tab_is_written_for_the_engine_in_use():
+    from pe_core.dashboard import render
+    text = open(SOURCE, encoding="utf-8").read()
+
+    def titles(out):
+        return [v["title"] for v in yaml.safe_load(out)["views"]]
+    assert {"Engine v1", "Engine v2"} <= set(titles(render(text)))                 # no engine given: both pages
+    v2, v1 = titles(render(text, engine="v2")), titles(render(text, engine="v1"))
+    assert "Engine v2" in v2 and "Engine v1" not in v2
+    assert "Engine v1" in v1 and "Engine v2" not in v1
+    other = lambda ts: [t for t in ts if not t.startswith("Engine")]    # noqa: E731
+    assert other(v2) == other(v1)                                          # the rest of the pages is the same
+    assert "powerengine-v2-plan-card" not in render(text, engine="v1")

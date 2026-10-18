@@ -3769,7 +3769,8 @@ class PowerEngine(hass.Hass):
             targets.append(os.path.join(self._real_dir(), "dashboard.yaml"))    # shows the demo
         for target in targets:
             try:
-                if sync_dashboard(target, card=self._energy_flow_card(), names=self._names()):
+                engine = self._engine_name() if self.cfg is not None and not self._demo else None
+                if sync_dashboard(target, card=self._energy_flow_card(), names=self._names(), engine=engine):
                     self.log(f"Dashboard updated: {target} (refresh the PowerEngine dashboard to see it)")
             except OSError as err:
                 self.log(f"Could not write the dashboard file {target}: {err}", level="WARNING")

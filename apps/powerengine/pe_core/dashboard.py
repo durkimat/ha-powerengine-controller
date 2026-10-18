@@ -17,6 +17,7 @@ SOURCE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dashboard", "
 
 BEGIN_MARKER = "# BEGIN energy-flow (generated from your configuration; edits here are replaced)"
 END_MARKER = "# END energy-flow"
+VIEW_MARKS = ("# BEGIN view-engine-", "# END view-engine-")      # round an engine page; never written out
 
 # Sunsynk Power Flow Card entity keys
 PV_KEYS = ("pv1_power_186", "pv2_power_187", "pv3_power_111", "pv4_power_112", "pv5_power_113")
@@ -106,21 +107,36 @@ def _splice(text: str, card: str) -> str:
     return "\n".join(lines[:begin_i + 1] + card_lines + lines[end_i:])
 
 
-def render(text: str, card: str | None = None, names: dict[str, str] | None = None) -> str:
+def _without_view(text: str, engine: str) -> str:
+    """The dashboard without the page of engine `engine` ("v1" or "v2"): the lines between its two marker comments."""
+    begin, end = f"# BEGIN view-engine-{engine}", f"# END view-engine-{engine}"
+    lines = text.split("\n")
+    b = next(i for i, ln in enumerate(lines) if ln.strip().startswith(begin))
+    e = next(i for i, ln in enumerate(lines) if ln.strip() == end)
+    return "\n".join(lines[:b] + lines[e + 1:])
+
+
+def render(text: str, card: str | None = None, names: dict[str, str] | None = None,
+           engine: str | None = None) -> str:
     """The shipped dashboard as written to HA: the Energy flow card spliced in, then every `<<term>>` placeholder
-    replaced by the user's supplier or device name (an unknown placeholder raises, so it can't ship)."""
+    replaced by the user's supplier or device name (an unknown placeholder raises, so it can't ship). With `engine`
+    ("v1" or "v2": the one in use) the other engine's page is left out, so there is one Engine tab."""
     if card is not None:
         text = _splice(text, card)
+    if engine in ("v1", "v2"):
+        text = _without_view(text, "v2" if engine == "v1" else "v1")
+    text = "\n".join(ln for ln in text.split("\n") if not ln.strip().startswith(VIEW_MARKS))
     return fill(text, names)
 
 
 def sync_dashboard(target: str, source: str = SOURCE, card: str | None = None,
-                   names: dict[str, str] | None = None) -> bool:
+                   names: dict[str, str] | None = None, engine: str | None = None) -> bool:
     """Copy the shipped dashboard to `target` if it differs. With `card` (the Energy flow card's YAML, from
     `energy_flow_card`), the text between the markers is replaced with it first; `<<term>>` placeholders are filled
-    from `names` (the current names map by default). Returns True if written."""
+    from `names` (the current names map by default); with `engine`, only that engine's page is kept. Returns True if
+    written."""
     with open(source, encoding="utf-8") as fh:
-        wanted = render(fh.read(), card, names)
+        wanted = render(fh.read(), card, names, engine)
     try:
         with open(target, encoding="utf-8") as fh:
             if fh.read() == wanted:

@@ -52,11 +52,6 @@ SETTINGS: dict[str, tuple] = {
                     "Cost counted per kWh the battery sells (exports and grid events)."),
     "event_value_p": ("number", 100.0, 0, 500, "p/kWh", "Grid event pays",
                       "What a grid event pays per kWh, before any export rate on top."),
-    "terminal_value": ('choice', 'refill', ('refill', 'fixed'), None, '', 'Energy left at the end of the look-ahead',
-                 'Refill: the cheapest import price after losses, else what the house will need. Fixed: the figure '
-                 'below.'),
-    "terminal_value_p": ("number", 10.0, 0, 100, "p/kWh", "Fixed value of energy left",
-                         "Used when the energy left at the end is set to Fixed."),
     # --- comfort band ------------------------------------------------------------------------------------------
     "comfort_low_soc": ('number', 20, 0, 100, '%', 'Comfort band: lower edge',
                  'Below this the battery pays the comfort cost for each hour there.'),
@@ -69,8 +64,6 @@ SETTINGS: dict[str, tuple] = {
     # --- following the plan and the top and bottom of the battery (engine 2.1 beta) -----------------------------
     "executor": ('choice', 'lines', ('lines', 'plan'), None, '', 'How the mode is chosen',
                  "Lines: live prices against a stored kWh's value. Plan: the plan's mode (2.1 beta)."),
-    "replan_on_level": ('bool', False, None, None, '', 'Re-plan when a charge or sale ends',
-                 'Re-plan as soon as a charge or sale reaches its target.'),
     "level_top_start_soc": ("number", 90, 50, 100, "%", "Top: where the cost starts",
                             "Above this level each stored kWh costs a rate per hour."),
     "level_top_rate_p": ('number', 0.0, 0, 1000, 'p/kWh/h', 'Top: rate at 100%',
@@ -107,10 +100,6 @@ SETTINGS: dict[str, tuple] = {
     # --- responsiveness ----------------------------------------------------------------------------------------
     "reversal_levy_p": ("number", 0.0, 0, 20, "p/kWh", "Levy to turn a charge into a sale",
                         "Turning a charge into a sale, or back, needs the price this far past."),
-    "reentry_levy_p": ("number", 0.0, 0, 20, "p/kWh", "Levy to restart a run that just ended",
-                       "A run that ended in the last 10 min restarts only this much further past."),
-    "corridor_cost_p": ("number", 0.5, 0, 5, "p", "Corridor width",
-                        "A charge or sale stops anywhere that costs within this of the best stop."),
     "price_band_p": ('number', 0.5, 0, 5, 'p/kWh', 'Price band',
                  'A mode starts when better by this much, and stops when worse by this much.'),
     "level_band_pct": ('number', 1.0, 0, 5, 'points', 'Level band',
@@ -119,9 +108,6 @@ SETTINGS: dict[str, tuple] = {
                  'What each change of mode counts as costing, in the plan and when deciding.'),
     "min_dwell_s": ("int", 120, 0, 3600, "s", "Shortest time in a mode",
                     "No change of mode sooner than this, except for safety events."),
-    "deadline_grace_min": ('number', 10, 1, 60, 'min', 'Deadline grace',
-                 'How long a run may pass its expected end before a re-plan.'),
-    "debounce_s": ("int", 20, 0, 300, "s", "Reading debounce", "A changed reading must last this long to count."),
     "car_start_debounce_s": ('int', 60, 0, 600, 's', 'Car start debounce',
                  'The car must report charging this long before it counts.'),
     "car_stop_debounce_s": ("int", 30, 0, 600, "s", "Car stop debounce",
@@ -130,24 +116,11 @@ SETTINGS: dict[str, tuple] = {
                       "A required reading missing for this long counts as missing data."),
     "soc_filter_gain": ('number', 0.05, 0.001, 1, '', 'Battery level filter gain',
                  'How fast the filtered battery level follows the reading.'),
-    "drift_kwh": ('number', 0.75, 0.1, 5, 'kWh', 'Forecast drift',
-                 'Re-plan when what happened differs from the forecast by this much.'),
-    "band_exit_min": ('number', 10, 1, 60, 'min', 'Outside the expected range',
-                 'Re-plan when the battery is outside its expected range this long.'),
-    "forecast_change_pct": ('number', 10, 1, 100, '%', 'Solar forecast change',
-                 'Re-plan when a forecast update moves the rest of the day by this much.'),
-    "revalue_coalesce_s": ('int', 10, 0, 120, 's', 'Batch window',
-                 'Reasons to re-plan arriving this close together run once.'),
     "price_churn_hold_s": ('int', 60, 0, 300, 's', 'Price churn hold',
                  'A smart-slot change and a price change wait this long for each other, so one re-plan sees both.'),
-    "max_value_age_min": ('int', 120, 10, 720, 'min', 'Backstop',
-                 'Work the values out at least this often, in case a trigger was missed.'),
     "sample_s": ("int", 10, 5, 60, "s", "Sample interval",
                  "How often the readings are checked against the conditions."),
     # --- model -------------------------------------------------------------------------------------------------
-    "level_step_kwh": ("number", 0.1, 0.05, 0.5, "kWh", "Level resolution",
-                       "Step of the battery-level grid the values are worked out on."),
-    "max_segment_min": ("int", 30, 5, 60, "min", "Longest step", "No step of the look-ahead is longer than this."),
 }
 
 # config-page sections, in display order: (key, label, settings)
@@ -159,21 +132,18 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("floors", "Floors", ("reserve_soc", "hard_floor_margin_pct")),
     ("comfort", "Comfort band", ("comfort_low_soc", "comfort_high_soc", "comfort_cost_p", "top_up_cost_p")),
     ("levels", "Plan-following and battery limits",
-     ("executor", "replan_on_level", "reversal_levy_p", "reentry_levy_p", "corridor_cost_p",
+     ("executor", "reversal_levy_p",
       "level_top_start_soc", "level_top_rate_p", "level_top_doubling_pts",
       "level_bot_start_soc", "level_bot_rate_p", "level_bot_doubling_pts", "slot_bot_factor", "slot_bot_start_soc")),
     ("value", "Value and costs",
-     ("wear_house_p", "wear_sale_p", "event_value_p", "terminal_value", "terminal_value_p")),
+     ("wear_house_p", "wear_sale_p", "event_value_p")),
     ("forecast", "Forecast caution and learning",
      ("solar_low_pct", "solar_mid_pct", "solar_high_pct", "load_low_pct", "load_mid_pct", "load_high_pct",
       "learn_scenario_weights", "scenario_half_life_days", "scenario_prior_days", "learn_solar_bias",
       "learn_soc_offset")),
     ("response", "Responsiveness",
-     ("price_band_p", "level_band_pct", "switch_cost_p", "min_dwell_s", "deadline_grace_min",
-      "debounce_s", "car_start_debounce_s", "car_stop_debounce_s", "stale_after_s", "soc_filter_gain", "drift_kwh",
-      "band_exit_min", "forecast_change_pct", "revalue_coalesce_s", "price_churn_hold_s", "max_value_age_min",
-      "sample_s")),
-    ("model", "Model", ("level_step_kwh", "max_segment_min")),
+     ("price_band_p", "level_band_pct", "switch_cost_p", "min_dwell_s", "car_start_debounce_s",
+      "car_stop_debounce_s", "stale_after_s", "soc_filter_gain", "price_churn_hold_s", "sample_s")),
 )
 
 # v2 key -> (v1 config part, v1 key): where a missing v2 setting takes its first value from
@@ -208,10 +178,7 @@ class V2Settings:
     wear_house_p: float = 0.0
     wear_sale_p: float = 0.0
     event_value_p: float = 100.0
-    terminal_value: str = "refill"
-    terminal_value_p: float = 10.0
     executor: str = "lines"
-    replan_on_level: bool = False
     level_top_start_soc: float = 90
     level_top_rate_p: float = 0.0
     level_top_doubling_pts: float = 2.0
@@ -236,27 +203,16 @@ class V2Settings:
     learn_solar_bias: bool = True
     learn_soc_offset: bool = True
     reversal_levy_p: float = 0.0
-    reentry_levy_p: float = 0.0
-    corridor_cost_p: float = 0.5
     price_band_p: float = 0.5
     level_band_pct: float = 1.0
     switch_cost_p: float = 2.0
     min_dwell_s: int = 120
-    deadline_grace_min: float = 10
-    debounce_s: int = 20
     car_start_debounce_s: int = 60
     car_stop_debounce_s: int = 30
     stale_after_s: int = 180
     soc_filter_gain: float = 0.05
-    drift_kwh: float = 0.75
-    band_exit_min: float = 10
-    forecast_change_pct: float = 10
-    revalue_coalesce_s: int = 10
     price_churn_hold_s: int = 60
-    max_value_age_min: int = 120
     sample_s: int = 10
-    level_step_kwh: float = 0.1
-    max_segment_min: int = 30
 
     def as_dict(self) -> dict[str, Any]:
         return {f.name: getattr(self, f.name) for f in fields(self)}
@@ -308,7 +264,7 @@ BETA22_PROFILE = "2.2 beta"
 BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
     DEFAULT_PROFILE: {},
     BETA_PROFILE: {
-        "executor": "plan", "replan_on_level": True,
+        "executor": "plan",
         "price_band_p": 0.0, "level_band_pct": 0.0, "min_dwell_s": 120, "comfort_cost_p": 0.0, "top_up_cost_p": 0.0,
         "prefer_self_use": False,
         "level_top_start_soc": 90, "level_top_rate_p": 200.0, "level_top_doubling_pts": 3.0,
@@ -317,15 +273,14 @@ BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
     },
 }
 BUILTIN_PROFILES[BETA22_PROFILE] = {**BUILTIN_PROFILES[BETA_PROFILE], "hold_only_car_reserve": True,
-                                    "free_arbitrage": True, "reversal_levy_p": 4.0, "reentry_levy_p": 4.0,
+                                    "free_arbitrage": True, "reversal_levy_p": 4.0,
                                     "charge_max_import_p": 15.0}
 BUILTIN_NOTES = {
     DEFAULT_PROFILE: "Engine v2's own defaults.",
     BETA_PROFILE: "Engine v2 following its own plan, with a smooth cost keeping the battery off the very top and "
                   "bottom. Beta.",
-    BETA22_PROFILE: "2.1 beta, and Hold only for the car and the reserve, free power that may also sell, levies "
-                    "against turning a run round or restarting one that just ended, and no grid charge above "
-                    "15p. Beta.",
+    BETA22_PROFILE: "2.1 beta, and Hold only for the car and the reserve, free power that may also sell, a levy "
+                    "against turning a run round, and no grid charge above 15p. Beta.",
 }
 # Settings that belong to the house, not to a way of tuning the engine: a profile never holds or changes them.
 SITE_KEYS = frozenset({
@@ -389,7 +344,12 @@ def profile_of(engine: str | None) -> str | None:
 
 # Settings an earlier release had and a saved config may still hold: dropped quietly, never an error.
 RETIRED = frozenset({"reversal_cost_p",     # 0.9.129: one cost for every change (switch_cost_p)
-                     "late_events", "late_events_per_week", "late_event_hours"})   # 0.9.148: unannounced events
+                     "late_events", "late_events_per_week", "late_event_hours",   # 0.9.148: unannounced events
+                     # 0.9.156: settings that changed nothing measurable in the replays of 8 to 15 Oct; the first four
+                     # are gone, the rest are constants now (the module that uses each names it)
+                     "replan_on_level", "terminal_value", "terminal_value_p", "reentry_levy_p",
+                     "corridor_cost_p", "max_segment_min", "forecast_change_pct", "drift_kwh", "band_exit_min",
+                     "revalue_coalesce_s", "max_value_age_min", "deadline_grace_min", "debounce_s", "level_step_kwh"})
 
 
 def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None,

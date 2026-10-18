@@ -37,6 +37,7 @@ LOW_FACTOR, HIGH_FACTOR = 0.7, 1.2          # sun band when the forecast gives n
 LOAD_LOW_FACTOR, LOAD_HIGH_FACTOR = 0.8, 1.3  # house band when nothing is learned (of the profile)
 FALLBACK_IMPORT_P = 30.0                    # no price at all: assume dear, never cheap
 BIAS_RANGE = (0.5, 1.5)
+MAX_SEGMENT_MIN = 30      # no step of the look-ahead is longer than this
 HORIZON_H = 48          # always solved this far (prices past the last published ones are estimated)
 DISPLAY_H = 36          # what the timeline shows: the last hours before the end of the look-ahead are where the
                         # value of the energy left over bends the plan, so they are solved but not shown (0.9.122)
@@ -162,7 +163,7 @@ def build(inp: StepInput, settings: V2Settings, learned: dict | None = None) -> 
     free = Window(r.free_start, r.free_end) if r.free_start and r.free_end else None
     dispatches = sorted(r.dispatches, key=lambda w: w.start)
     windows = list(dispatches) + [w for w in (axle, free) if w]
-    cuts = _cuts(now, end, windows, settings.max_segment_min)
+    cuts = _cuts(now, end, windows, MAX_SEGMENT_MIN)
 
     rates = sorted(r.rates, key=lambda w: w.start)
     hh_end = slot_start(now) + SLOT

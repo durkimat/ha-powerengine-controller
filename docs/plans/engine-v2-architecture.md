@@ -207,8 +207,6 @@ filters readings; **LEARN** learns a correction that feeds the forecast or filte
 | `wear_house_p` | 0.0 p/kWh |  | MODEL + LIVE | value.py, lines() | Cost per kWh the battery supplies to the house. It lowers the 'use line' (the battery covering the house is worth less). |
 | `wear_sale_p` | 0.0 p/kWh | **0** | MODEL + LIVE | value.py, lines() | Cost per kWh the battery sells. It lowers the 'sell line'. |
 | `event_value_p` | 100.0 p/kWh |  | MODEL | forecast.py, value.py (the live sentence quotes it) | What a grid event pays per kWh exported (plus the export rate if on top). Used by the plan, including the late-event chance. |
-| `terminal_value` | refill |  | MODEL | value.py `_terminal_curve` | How energy left at the end of the 48-hour look-ahead is valued: 'refill' (the default) values it at the cheapest import price after losses, but only as much as could still be bought back before the next dear stretch; below that the plan keeps what the house will need then. 'fixed' uses the figure below. |
-| `terminal_value_p` | 10.0 p/kWh |  | MODEL | value.py | The fixed value of a kWh left at the end, used when the setting above is Fixed. |
 
 ### Forecast caution and learning
 
@@ -234,26 +232,41 @@ filters readings; **LEARN** learns a correction that feeds the forecast or filte
 | `level_band_pct` | 1.0 points |  | LIVE (+ limits, + trigger) | execute.py; rules.py; value.py `lines`; observe.py | Several jobs, all 'a margin in level points': a charge or sale that reached its target restarts only this far from it; after the reserve is reached the level must rise this far before discharging resumes; the plan's run counts as 'charge now' only if it is this far above the level; and the 'expected range' used to trigger a re-plan is widened by it. |
 | `switch_cost_p` | 2.0 p per change | **4** | MODEL + LIVE | value.py `switch_cost`; execute.py `_worth_the_change`; `choice_now` | The one price of changing mode, in pence per change. In the plan it is added to any step that changes mode (so the plan is calm by construction). Live, `choice_now` reuses the plan's own comparison, and `_worth_the_change` charges twice this for a change the plan did not ask for. |
 | `min_dwell_s` | 120 s |  | LIVE | execute.py `step` | No change of mode sooner than this after the last one, unless the mode cannot go on (a limit forces it, a charge reached its end) or an urgent event arrived. |
-| `deadline_grace_min` | 10 min | **5** | WHEN | execute.py `_deadline` | How long a charge or sale may run past the plan's expected end before the engine asks for a new plan. |
-| `debounce_s` | 20 s |  | DATA | observe.py | A changed reading (the sun/shortfall state, a grid event's times, a forecast move) must last this long to count. |
 | `car_start_debounce_s` | 60 s |  | DATA | observe.py | The car must report charging this long before it counts (car wake-ups blink). |
 | `car_stop_debounce_s` | 30 s |  | DATA | observe.py | The car must report not charging this long before it counts as stopped. |
 | `stale_after_s` | 180 s |  | DATA | observe.py | A required reading missing this long counts as missing data; the engine then hands the battery back to the inverter's self-use until it returns. |
 | `soc_filter_gain` | 0.05 |  | DATA | observe.py | How strongly the filtered battery level is pulled to the reading each sample. The filter counts the energy flowing and nudges towards the reading, so a one-point wobble does not move it. |
-| `drift_kwh` | 0.75 kWh |  | WHEN | observe.py `_drift` | Asks for a new plan when the energy the house really used differs from the forecast by this much since the last plan. |
-| `band_exit_min` | 10 min |  | WHEN | observe.py | Asks for a new plan when the battery has been outside the plan's expected low-to-high range this long. |
-| `forecast_change_pct` | 10 % |  | WHEN | observe.py | Asks for a new plan when a forecast update moves the rest of today's sun by this much. |
-| `revalue_coalesce_s` | 10 s |  | WHEN | triggers.py | Reasons for a new plan that arrive this close together run once. |
 | `price_churn_hold_s` | 60 s |  | WHEN | triggers.py | A smart-slot change and a price change wait this long (from the first) for each other, so one new plan sees both. |
-| `max_value_age_min` | 120 min |  | WHEN | triggers.py | A new plan at least this often, in case a trigger was missed. |
 | `sample_s` | 10 s |  | APP | powerengine.py, observe.py | How often the engine ticks (reads the inputs and re-checks). Also the time unit of the level filter. |
 
 ### Model
 
 | Setting | Default | Your config | Kind | Where it is applied | What it does |
 |---|---|---|---|---|---|
-| `level_step_kwh` | 0.1 kWh |  | MODEL | value.py | The resolution of the battery-level grid the plan is solved on (smaller is finer and slower). |
-| `max_segment_min` | 30 min |  | MODEL | forecast.py | No step of the 48-hour look-ahead is longer than this. |
+
+
+### Constants since 0.9.156 (no longer settings)
+
+Replays of 8 to 15 Oct 2026 showed these settings changed nothing measurable, so they are no longer settings: a saved value is
+ignored, and the number lives in the module named below (the simulator can still change it as `engine_v2.<module>.<NAME>`).
+
+| Constant | Value | What it does |
+|---|---|---|
+| value.py `CORRIDOR_COST_P` | 0.5 p | A charge or sale may stop anywhere that costs within this of the best stop. |
+| forecast.py `MAX_SEGMENT_MIN` | 30 min | No step of the look-ahead is longer than this (above 30 changes nothing: steps are already half-hours). |
+| observe.py `FORECAST_CHANGE_PCT` | 10 % | A forecast update that moves the rest of today's sun by this much asks for a new plan. |
+| observe.py `DRIFT_KWH` | 0.75 kWh | The house differing from the forecast by this much asks for a new plan. |
+| observe.py `BAND_EXIT_MIN` | 10 min | The battery outside the plan's expected range this long asks for a new plan. |
+| triggers.py `REVALUE_COALESCE_S` | 10 s | Reasons for a new plan that arrive this close together run once. |
+| triggers.py `MAX_VALUE_AGE_MIN` | 120 min | A new plan at least this often, in case a trigger was missed. |
+| execute.py `DEADLINE_GRACE_MIN` | 10 min | How long a run may pass its expected end before a new plan. |
+| observe.py `DEBOUNCE_S` | 20 s | A changed reading must last this long to count. |
+| value.py `LEVEL_STEP_KWH` | 0.1 kWh | The battery-level grid the values are worked out on. |
+
+Removed outright (their code is gone): `replan_on_level` (a charge or sale reaching its level no longer asks for a re-plan; the
+results were identical), `reentry_levy_p` (the 10-minute restart levy changed two days and no mode changes), and `terminal_value` /
+`terminal_value_p` (the energy left at the end is always valued by the refill rule; `value.TERMINAL_FIXED_P` stays only so tests and
+the simulator can fix it).
 
 ## The rules that are code (no setting)
 
@@ -275,7 +288,7 @@ sensors, the history and the control path are the same. What differs:
 |---|---|---|
 | Which mode now | the lines against the live prices, then `_with_the_programmes_choice`, `_leg_going`, the price and level bands, `_worth_the_change` | the mode the plan's timeline has for now, if the limits allow it; otherwise the lines |
 | Minimum dwell | on (120 s) | on (120 s): the only adjustment kept |
-| Re-plan at a target | no | yes (`replan_on_level`) |
+| Re-plan at a target | no | no (removed in 0.9.156: it changed nothing) |
 | Top and bottom of the battery | the comfort band and the top-up cost | exponential curves in the plan (`level_top_*`, `level_bot_*`), sharper bottom inside smart slots (`slot_bot_*`) |
 
 It has no separate settings block: it **uses the `engine_v2:` settings**, and a profile (`PROFILES["2.1"]` in `settings.py`) supplies the
@@ -286,7 +299,6 @@ Selecting engine v2 again restores v2's own starting values for what was not sav
 | Setting | Kind | Where applied | What it does |
 |---|---|---|---|
 | `executor` | LIVE | `execute.py` | `lines` or `plan`: how the mode is chosen each tick |
-| `replan_on_level` | WHEN | `triggers.py` | a charge or sale reaching its target asks for a re-plan |
 | `level_top_start_soc`, `level_top_rate_p`, `level_top_doubling_pts` | MODEL | `value.py` | the top curve ([details](engine-v2-level-penalty.md)) |
 | `level_bot_start_soc`, `level_bot_rate_p`, `level_bot_doubling_pts` | MODEL | `value.py` | the bottom curve, its rate set at your reserve |
 | `slot_bot_factor`, `slot_bot_start_soc` | MODEL | `value.py` | the bottom curve inside a smart slot (the factor multiplies its rate; the start level replaces the usual one) |

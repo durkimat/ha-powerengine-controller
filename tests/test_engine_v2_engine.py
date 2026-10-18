@@ -166,7 +166,7 @@ def test_asking_for_a_replan_revalues_at_once_and_only_once(stubs):
 def test_the_backstop_revalues_after_the_maximum_age(stubs):
     f, v = stubs
     v.value_p = 3.0                                          # self-use: no charge with a deadline in the way
-    eng = EngineV2(V2Settings(max_value_age_min=120))
+    eng = EngineV2(V2Settings())
     tick(eng, 0)
     out = tick(eng, 119 * 60)
     assert not out.revalued
@@ -177,7 +177,7 @@ def test_the_backstop_revalues_after_the_maximum_age(stubs):
 
 def test_a_deadline_revalues_and_the_charge_carries_on(stubs):                           # B22
     f, v = stubs
-    eng = EngineV2(V2Settings(deadline_grace_min=10))
+    eng = EngineV2(V2Settings())
     out = tick(eng, 0)
     assert out.mode.mode == CHARGE and out.mode.deadline == T0 + timedelta(minutes=70)
     out = tick(eng, 71 * 60, battery_soc=70.0)

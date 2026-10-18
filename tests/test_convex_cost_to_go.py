@@ -56,6 +56,7 @@ def test_the_plan_cost_does_not_depend_on_the_level_step(monkeypatch):
     segs = cheap_then_peak(20, 4, 4)
     cost = {}
     for step in (0.1, 0.05):
-        st = V2Settings(level_step_kwh=step)
+        monkeypatch.setattr(V, "LEVEL_STEP_KWH", step)
+        st = V2Settings()
         cost[step] = solve(segs, 40.0, settings=st).cost_expected_p
     assert cost[0.1] == pytest.approx(cost[0.05], rel=0.03)

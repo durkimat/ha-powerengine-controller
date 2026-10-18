@@ -1,5 +1,7 @@
 # Engine v2: build plan
 
+> **0.9.156:** several settings named below are gone or are constants now (`replan_on_level`, `reentry_levy_p`, `terminal_value`, `terminal_value_p`, and the tuning of triggers and the model); see [engine-v2-architecture.md](engine-v2-architecture.md), "Constants since 0.9.156". This page is the original design and is not edited line by line.
+
 > **Status (5 Oct 2026): built for 0.9.106.** Packages A to E built by sub-agents and reviewed; F (release) prepared. Additions
 > beyond this page: `Lines.charge_now`/`run_target_soc` and `value.run_target` (charge at the start of a cheap stretch),
 > `ValueResult.limits`, `StepInput.slots_whole_house`.
