@@ -244,6 +244,7 @@ filters readings; **LEARN** learns a correction that feeds the forecast or filte
 | `band_exit_min` | 10 min |  | WHEN | observe.py | Asks for a new plan when the battery has been outside the plan's expected low-to-high range this long. |
 | `forecast_change_pct` | 10 % |  | WHEN | observe.py | Asks for a new plan when a forecast update moves the rest of today's sun by this much. |
 | `revalue_coalesce_s` | 10 s |  | WHEN | triggers.py | Reasons for a new plan that arrive this close together run once. |
+| `price_churn_hold_s` | 60 s |  | WHEN | triggers.py | A smart-slot change and a price change wait this long (from the first) for each other, so one new plan sees both. |
 | `max_value_age_min` | 120 min |  | WHEN | triggers.py | A new plan at least this often, in case a trigger was missed. |
 | `sample_s` | 10 s |  | APP | powerengine.py, observe.py | How often the engine ticks (reads the inputs and re-checks). Also the time unit of the level filter. |
 

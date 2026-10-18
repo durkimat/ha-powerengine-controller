@@ -138,6 +138,8 @@ SETTINGS: dict[str, tuple] = {
                  'Re-plan when a forecast update moves the rest of the day by this much.'),
     "revalue_coalesce_s": ('int', 10, 0, 120, 's', 'Batch window',
                  'Reasons to re-plan arriving this close together run once.'),
+    "price_churn_hold_s": ('int', 60, 0, 300, 's', 'Price churn hold',
+                 'A smart-slot change and a price change wait this long for each other, so one re-plan sees both.'),
     "max_value_age_min": ('int', 120, 10, 720, 'min', 'Backstop',
                  'Work the values out at least this often, in case a trigger was missed.'),
     "sample_s": ("int", 10, 5, 60, "s", "Sample interval",
@@ -169,7 +171,8 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("response", "Responsiveness",
      ("price_band_p", "level_band_pct", "switch_cost_p", "min_dwell_s", "deadline_grace_min",
       "debounce_s", "car_start_debounce_s", "car_stop_debounce_s", "stale_after_s", "soc_filter_gain", "drift_kwh",
-      "band_exit_min", "forecast_change_pct", "revalue_coalesce_s", "max_value_age_min", "sample_s")),
+      "band_exit_min", "forecast_change_pct", "revalue_coalesce_s", "price_churn_hold_s", "max_value_age_min",
+      "sample_s")),
     ("model", "Model", ("level_step_kwh", "max_segment_min")),
 )
 
@@ -249,6 +252,7 @@ class V2Settings:
     band_exit_min: float = 10
     forecast_change_pct: float = 10
     revalue_coalesce_s: int = 10
+    price_churn_hold_s: int = 60
     max_value_age_min: int = 120
     sample_s: int = 10
     level_step_kwh: float = 0.1
