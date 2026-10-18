@@ -895,7 +895,8 @@ def _choose(stretch: list[_Seg], vks: list, e: float, kind: str, prev: str | Non
 
     * a run the programme starts now goes to where its run ends, however many segments that takes;
     * where the programme would idle now and start a run later in the stretch, that run starts now and the idle time
-      comes after it (`done`, the run that has just reached its level, is not the one started again): the forecast
+      comes after it (`done`, the run that has just reached its level, starts again only to go `RESTART_PCT` further,
+      so it never creeps on in slivers): the forecast
       moves (smart slots come and go), so what pays at today's prices is done while they hold;
     * a charge anywhere in the stretch starts now, at full power, to the level the programme reaches by the stretch's
       end (late is risky: the rate tapers, a slot is withdrawn); only up to the top of the free range (the comfort
@@ -930,7 +931,9 @@ def _choose(stretch: list[_Seg], vks: list, e: float, kind: str, prev: str | Non
                 mode, target = CHARGE, min(reach, S.ceil)
         if mode is None:
             first = sub[0]["pieces"][0][0]
-            nxt = next(((m, t) for m, t in runs if m != done and (t > e + 1e-6 if m == CHARGE else t < e - 1e-6)),
+            again = S.cap * RESTART_PCT / 100                       # how far a run that just ended must still go
+            nxt = next(((m, t) for m, t in runs
+                        if (t > e + 1e-6 if m == CHARGE else t < e - 1e-6) and (m != done or abs(t - e) >= again)),
                        None)
             if nxt is not None:                                      # the first run of the stretch, now
                 mode, target = nxt
@@ -965,6 +968,7 @@ def _next_leg(S: _Seg, mode: str, e: float, leg: tuple | None) -> tuple | None:
 
 
 LIVE_RATES = True       # the executor prices now at the live rates where they differ from the forecast's (experiment)
+RESTART_PCT = 1.0       # a run that reached its level starts again only to go at least this much further (points)
 DWELL_S = 0.0           # seconds a mode lasts at least once it starts (experiment; 0: off)
 SLIVER_S = 60           # less than this left of a segment: the executor decides for the next one
 MAX_PIECES = 4          # modes in one segment at most (a safety bound: runs go to levels, not to segment ends)
@@ -1008,8 +1012,9 @@ def _walk(segs: list[_Seg], e0: float, kind: str, front: bool = True, prev: str 
                 mode, target = active[0], active[1]
             else:
                 mode, target = _choose([cur] + tail, vst, e, kind, prev_mode, leg, front, stopped)
-                if stopped is not None and mode == stopped:      # the run reached its level: not started again
-                    mode, target = idle, None
+                if stopped is not None and mode == stopped and (target is None
+                                                                or abs(target - e) < S.cap * RESTART_PCT / 100):
+                    mode, target = idle, None                    # the run reached its level: not started again
                 if front and kind != "self" and mode in (CHARGE, EXPORT) and target is not None:
                     active = (mode, target, end_i)
             hold_for = None
