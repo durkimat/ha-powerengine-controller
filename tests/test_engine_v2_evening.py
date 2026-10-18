@@ -67,10 +67,8 @@ def test_the_night_costs_no_more_than_a_few_pence_extra(run):
     # real cash from the simulated meter (the plan's own expected cost is not comparable with the old one: it now
     # includes the top-up and the comfort cost, which are not money)
     assert run["cash_p"] - BEFORE["cash_p"] <= 10.0, run["cash_p"]
+    # full when the slot ends (0.9.157: after it, at 28.84p, the battery covers the house instead of holding at 100%)
     assert run["end_level"] >= 97.0
-    # suspected consequence of the one decision (RESTART_PCT): ended at 98.2%, was 99+ before
-    assert run["end_level"] >= 99.0 or pytest.xfail("the battery ends this night at 98.2%, not 99%: a run that reached "
-                                                    "its level restarts only to go a point further")
 
 
 def test_the_plan_never_cycles_above_the_top_except_for_the_last_fill(run):

@@ -109,6 +109,7 @@ class Executor:
         self.lines: Lines | None = Lines(**lines) if lines else None
         self.flip_flop_now = False                                   # the last step was an A to B to A change
         self._tz = None
+        self._ended = False                                          # this step's run reached its level
         self.last_decision: v1d.Decision | None = None
 
     # ---- the step -------------------------------------------------------------------------------
@@ -161,6 +162,7 @@ class Executor:
 
     # ---- which mode now -------------------------------------------------------------------------
     def _pick_now(self, now, obs, lim, ln, vr, level, facts) -> _Pick:
+        self._ended = False
         if not obs.data_ok or level is None:
             miss = ", ".join(obs.missing) or "the battery level"
             self.dec = None
@@ -220,6 +222,7 @@ class Executor:
             if short and not d["reached"]:
                 return mode, edge
             d["reached"] = True
+            self._ended = True
             idle = {"mode": d["rest"], "stop": None, "until": seg.end.timestamp()}
             if d["used"] + 1 >= MAX_PIECES - 1:                # the segment's last mode: the rest of it idles
                 self.dec = {**d, **idle, "used": d["used"] + 1, "reached": False}
@@ -325,8 +328,7 @@ class Executor:
                 return e.kind
         if events:
             return events[0].kind
-        if cur == CHARGE and ln is not None and level is not None and ln.charge_target_soc is not None \
-                and level >= min(ln.charge_target_soc, lim.ceiling_soc) - 1e-9:
+        if self._ended:                                    # the run reached its level
             return "level"
         return "price"
 

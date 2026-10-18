@@ -108,10 +108,21 @@ want to change or remove a rule, read its row first: the incident is what the ru
 |---|---|
 | Hold is for the car and the reserve only; elsewhere charge, sell or Self-use (Self-use is the neutral mode between the buy and sell lines, for now) | `rules._core` (`hold_only_car_reserve`) |
 | A free-power session may charge or sell (arbitrage), not only charge | `rules._core` (`free_arbitrage`) |
-| Carrying on with a charge or sale costs nothing; turning one round needs a margin | `execute._can_charge`, `_can_export` (`reversal_levy_p`; the restart levy was removed in 0.9.156, it changed nothing) |
-| The plan executor follows the plan by level, with a corridor of stop levels | `execute._plan_candidate`, `value._partial` (`CORRIDOR_COST_P`, a constant since 0.9.156) |
+| Carrying on with a charge or sale costs nothing; turning one round needs a margin | superseded 0.9.157 (8.9): `reversal_levy_p` retired |
+| The plan executor follows the plan by level, with a corridor of stop levels | superseded 0.9.157 (8.9): runs go to their level in the plan itself |
 | The new behaviour ships as a profile, "2.2 beta", and nobody is moved to it | `settings.BUILTIN_PROFILES` |
-| The margin applies to the plan's own picks too, not only to the lines' (a re-plan on a smart-slot change had turned a charge into a sale 2 minutes after it began, live on 13 Oct) | `execute._inertia_ok`, called from `_pick_now` |
+| The margin applies to the plan's own picks too, not only to the lines' (a re-plan on a smart-slot change had turned a charge into a sale 2 minutes after it began, live on 13 Oct) | superseded 0.9.157 (8.9) |
 | Every journal row names the settings profile in use (a hold at 08:27 could not be tied to a profile) | `engine.EngineV2.profile` |
 | The history shows what ran to the second, not the mode that ran longest in each half-hour | `v2history.runs_of` (`runs` on `sensor.pe_v2_history` and `sensor.pe_v2_recent`) |
-| The published forecast shows the plan as the executor runs it (a part-way run is followed at once by the next step where prices match; the wait is self-use, not a hold, where Hold is not allowed). Display only: the plan and the engine are unchanged | `publish.as_run` |
+| The published forecast shows the plan as the executor runs it (a part-way run is followed at once by the next step where prices match; the wait is self-use, not a hold, where Hold is not allowed). Display only: the plan and the engine are unchanged | superseded 0.9.157 (8.9): the plan is what the executor runs, nothing to adjust |
+
+## 8.9 Owner decisions on one decision for plan and battery (18 Oct 2026, 0.9.157)
+
+| Decision | Where |
+|---|---|
+| The code and settings that decide in real time are the same as those that build the plan; only the inputs differ. The plan's timeline is the decision stepped forward; the executor makes the same call from the live level, rates, limits and mode | `value._choose`, `value._walk`, `value.decide`, `execute._follow` |
+| Plans run to targets, not fixed lengths of time: a charge or sale goes on across half-hours until its level (or until its price stretch ends), and reaching the level brings the next decision at once; only idle time is looked at again each half-hour (the inputs come in half-hours) | `value._walk`, `execute._follow` |
+| At one price the order is free, so the stretch's next run starts now and the idle time comes after it (the forecast moves; what pays at today's prices is done while they hold) | `value._choose` |
+| Now is priced at the live rates, without slot odds (a slot running now is certain) | `value.decide` |
+| Inertia: a time-based minimum (2, 5, 10 min) and a turn-round price (5, 10p), each tried inside the shared decision, all cost money in the replays of 8 to 16 Oct; neither is used. The calm comes from runs that go to a level, the leg bands and the switch cost | (simulator runs, 18 Oct) |
+| Retired with the second set of live rules: `executor`, `price_band_p`, `level_band_pct`, `min_dwell_s`, `reversal_levy_p` | `settings.RETIRED` |
