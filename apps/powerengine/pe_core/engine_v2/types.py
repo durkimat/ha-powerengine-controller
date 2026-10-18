@@ -139,10 +139,7 @@ class TimelineItem:
     level_end: float
     until: str                            # the condition that ends it, in words ("until 88%", "until 05:30")
     reason: str                           # plain words naming the prices
-    level_lo: float | None = None         # a charge or sale may end anywhere in this corridor (percent):
-    level_hi: float | None = None         # as good as level_end within CORRIDOR_COST_P (value.py); None: a point
-    remainder: bool = False               # a hold that only fills out the rest of a segment after a stop part-way: a
-                                          # way of saying how much, not a decision to hold
+    remainder: bool = False               # the idle rest of a segment after a run reached its level there
 
 
 @dataclass(frozen=True)

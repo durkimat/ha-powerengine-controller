@@ -176,14 +176,11 @@ class EngineV2:
             fc = forecast.build(inp, self.s, self.learner.learned())
             house_ev = inp.situation.house_load_includes_ev
 
-            held = None if self.executor.since is None else now.timestamp() - self.executor.since
-
             def limits_for(seg):
                 return rules.limits_for(seg, inp.facts, self.s, house_load_includes_ev=house_ev)
 
             vr = value.solve(fc, level, inp.facts, self.s, limits_for, now, reason, inp.tz,
-                            running=self.executor.mode, leg_from=self.executor.leg_from,
-                            held_s=held)
+                            running=self.executor.mode, leg_from=self.executor.leg_from)
             if self.s.events and self.s.charge_max_import_p > 0 and any(sg.event for sg in fc.segments):
                 found = eventcharge.windows(fc, vr.path, now, inp.facts, rules.event_floor(inp.facts, self.s),
                                             float(self.s.charge_ceiling_soc))
@@ -191,8 +188,7 @@ class EngineV2:
                 if wins:                                        # an announced event the plan would reach short of
                     fc = eventcharge.mark(fc, wins)
                     vr = value.solve(fc, level, inp.facts, self.s, limits_for, now, reason, inp.tz,
-                                    running=self.executor.mode, leg_from=self.executor.leg_from,
-                                    held_s=held)
+                                    running=self.executor.mode, leg_from=self.executor.leg_from)
                 self.event_wins = wins
         except Exception as exc:
             rows.append(self._error_row(now, "revalue", exc, because=reason))

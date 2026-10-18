@@ -197,8 +197,7 @@ class Executor:
         if d is None or d.get("key") != key or ts >= d["until"]:
             running = self.mode if self.mode in (CHARGE, EXPORT) else None
             d = decide(vr, now, level, lim, facts, self.s, self.mode, self.leg_from if running else None,
-                       import_p=ln.import_p, export_p=ln.export_p,
-                       held_s=None if self.since is None else ts - self.since)
+                       import_p=ln.import_p, export_p=ln.export_p)
             if d is None:
                 self.dec = None
                 return self._fallback(lim), None

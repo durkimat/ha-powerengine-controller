@@ -379,8 +379,6 @@ class Observer:
         pts = []
         for it in items[a:b + 1]:
             pts += [it.level_start, it.level_end]
-            if it.level_lo is not None and it.level_hi is not None:
-                pts += [it.level_lo, it.level_hi]
         return min(pts), max(pts)
 
     def _rest_of_day(self, inp: StepInput) -> dict:
