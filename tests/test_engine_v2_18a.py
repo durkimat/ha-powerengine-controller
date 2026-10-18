@@ -1,112 +1,25 @@
-"""Engine v2, change after the first live evening (docs/plans/engine-v2.md section 18a): the price of grid charging
-above the comfort band's top, the cost of reversing, a leg running to its step's end, and "learned" revaluing only when
-it matters. The closed-loop check of the evening is in test_engine_v2_evening.py."""
-
-from dataclasses import replace
+"""Engine v2, change after the first live evening (docs/plans/engine-v2.md section 18a): the cost of reversing, a leg
+running to its step's end, and "learned" revaluing only when it matters. The closed-loop check of the evening is in
+test_engine_v2_evening.py."""
 
 import pytest
-from test_engine_v2_value import FACTS, NO_COMFORT, cheap_then_peak, limits_for, seg, solve
-from test_engine_v2_value import step as vstep
 
 from pe_core.engine_v2 import triggers, value
-from pe_core.engine_v2.settings import SECTIONS, SETTINGS, SettingsError, catalogue, parse_v2
-from pe_core.engine_v2.types import CHARGE, EXPORT, HOLD
+from pe_core.engine_v2.settings import SECTIONS, SETTINGS, catalogue, parse_v2
+from pe_core.engine_v2.types import CHARGE, EXPORT
 from pe_core.engine_v2.value import CHARGE_K, DISCHARGE_K, HOLD_K, NONE_K, switch_cost
 
-TOP = replace(NO_COMFORT, top_up_cost_p=2.0)             # 90% top, 2p per kWh charged above it, no other cost
 
-
-# ---- 1. the top-up price ------------------------------------------------------------------------
+# ---- 1. the settings in the catalogue ------------------------------------------------------------
 def test_the_settings_exist_in_the_catalogue_and_their_sections():
     cat = catalogue()
     rows = {r["key"]: r for r in cat["settings"]}
-    assert rows["top_up_cost_p"]["default"] == 5.0 and (rows["top_up_cost_p"]["min"], rows["top_up_cost_p"]["max"]) \
-        == (0, 20)
-    assert rows["top_up_cost_p"]["unit"] == "p/kWh" and rows["top_up_cost_p"]["label"] == \
-        "Grid charging above the comfort band"
-    assert "reversal_cost_p" not in rows and rows["switch_cost_p"]["default"] == 2.0
+    assert "reversal_cost_p" not in rows and "top_up_cost_p" not in rows and rows["switch_cost_p"]["default"] == 2.0
     sections = {s["key"]: s["keys"] for s in cat["sections"]}
-    assert "top_up_cost_p" in sections["comfort"] and "switch_cost_p" in sections["response"]
-    assert cat["values"]["top_up_cost_p"] == 5.0 and cat["values"]["switch_cost_p"] == 2.0
+    assert "switch_cost_p" in sections["trading"]
+    assert cat["values"]["switch_cost_p"] == 2.0
     listed = [k for _, _, keys in SECTIONS for k in keys]
     assert sorted(listed) == sorted(SETTINGS) and len(listed) == len(set(listed))     # every setting in one section
-
-
-def test_the_comfort_top_is_seeded_from_v1s_arbitrage_top_until_saved():
-    assert parse_v2({}, safety={"arbitrage_max_soc": 85}).comfort_high_soc == 85
-    assert parse_v2({"comfort_high_soc": 92}, safety={"arbitrage_max_soc": 85}).comfort_high_soc == 92
-    assert parse_v2({}, safety={}).comfort_high_soc == 90
-    with pytest.raises(SettingsError):                                 # the band must stay valid (low below high)
-        parse_v2({}, safety={"arbitrage_max_soc": 10})
-
-
-def test_a_charge_pays_the_top_up_only_on_the_grid_energy_above_the_top():
-    cap = FACTS.capacity_kwh
-    # from 85%: a half-hour at 4.8 kW stores 2.28 kWh (12.7 points), 7.7 of them above 90%
-    e0 = 0.85 * cap
-    end, cost, fl = vstep(e0, CHARGE, settings=TOP, load=0.0, imp=6.99)
-    above = end - 0.9 * cap
-    assert above == pytest.approx(0.0767 * cap, rel=0.01)
-    assert fl["comfort_p"] == pytest.approx(2.0 * above / 0.95)             # grid kWh drawn for the part above
-    assert cost == pytest.approx(fl["cash_p"] + fl["comfort_p"])
-    # entirely below the top: nothing; entirely above: every kWh drawn
-    assert vstep(0.6 * cap, CHARGE, settings=TOP, load=0.0, imp=6.99)[2]["comfort_p"] == 0.0
-    e_hi = 0.92 * cap
-    end, _, fl = vstep(e_hi, CHARGE, settings=TOP, load=0.0, imp=6.99)
-    assert fl["comfort_p"] == pytest.approx(2.0 * (end - e_hi) / 0.95)
-    # no top-up when the price is 0, on a sale, on a hold
-    assert vstep(e0, CHARGE, settings=NO_COMFORT, load=0.0, imp=6.99)[2]["comfort_p"] == 0.0
-    for mode in (HOLD, EXPORT):
-        assert vstep(0.95 * cap, mode, settings=TOP, load=0.0)[2]["comfort_p"] == 0.0
-
-
-def test_the_top_up_is_not_charged_on_sun():
-    cap = FACTS.capacity_kwh
-    e0 = 0.91 * cap
-    _, _, plain = vstep(e0, CHARGE, settings=TOP, load=0.0, imp=6.99)
-    _, _, sunny = vstep(e0, CHARGE, settings=TOP, solar=1.0, load=0.0, imp=6.99)
-    share = sunny["grid_to_battery_kwh"] / plain["grid_to_battery_kwh"]
-    assert 0.3 < share < 0.6                                           # 1 kWh of what goes in is sun
-    assert sunny["comfort_p"] == pytest.approx(plain["comfort_p"] * share, rel=0.01)
-
-
-def test_a_charge_that_stops_at_the_top_pays_no_top_up():
-    cap = FACTS.capacity_kwh
-    e0 = 0.85 * cap
-    _, _, fl = vstep(e0, CHARGE, settings=TOP, load=0.0, imp=6.99, end_kwh=0.9 * cap)
-    assert fl["comfort_p"] == pytest.approx(0.0, abs=1e-9) and fl["share_of_segment"] < 1.0
-    _, _, half = vstep(e0, CHARGE, settings=TOP, load=0.0, imp=6.99, end_kwh=0.95 * cap)
-    assert half["comfort_p"] == pytest.approx(2.0 * 0.05 * cap / 0.95, rel=0.01)    # priced from where it ends
-
-
-def test_the_top_up_keeps_a_charge_at_the_top_unless_it_saves_more_than_it_costs():
-    # a cheap stretch, then a dear one that needs more than the battery holds: every kWh is used
-    segs = [seg(i, imp=6.99) for i in range(8)] + [seg(8 + i, imp=20.0, load=2.2) for i in range(8)]
-
-    def peak(settings, soc=30.0):
-        vr = solve(segs, soc, settings=settings)
-        return max((it.level_end for it in vr.timeline if it.mode == CHARGE), default=soc)
-
-    assert peak(NO_COMFORT) > 99                                        # nothing against filling up
-    assert peak(TOP) > 99                                               # 2p a kWh: the last fill still saves ~11p
-    assert peak(replace(NO_COMFORT, top_up_cost_p=20.0)) <= 90.5        # 20p a kWh up there costs more than it saves
-
-
-def test_the_top_up_is_part_of_the_comfort_figure():
-    segs = cheap_then_peak(n_cheap=6, n_peak=3, n_after=2)
-    vr = solve(segs, 60.0, settings=replace(NO_COMFORT, top_up_cost_p=2.0))
-    assert vr.comfort_given_up_p is not None and vr.comfort_given_up_p >= 0.0
-    assert solve(segs, 60.0, settings=NO_COMFORT).comfort_given_up_p is None
-
-
-def test_a_buy_line_above_the_top_includes_the_top_up():
-    segs = [seg(i, imp=6.99) for i in range(6)] + [seg(6 + i, imp=30.28, load=1.2) for i in range(6)]
-    vr = solve(segs, 85.0, settings=TOP, lim=limits_for)
-    at = segs[0].start
-    low = value.lines(vr, at, 60.0, 6.99, 15.0, FACTS, TOP)
-    high = value.lines(vr, at, 92.0, 6.99, 15.0, FACTS, TOP)
-    assert low.buy_line_p == pytest.approx(6.99 / 0.95)
-    assert high.buy_line_p == pytest.approx((6.99 + 2.0) / 0.95)
 
 
 # ---- 2. the cost of changing mode -----------------------------------------------------------------------------------
@@ -126,9 +39,8 @@ def test_a_detour_through_hold_never_costs_less_than_the_direct_change():
 
 
 def test_a_saved_reversal_setting_from_an_earlier_release_is_ignored_not_an_error():
-    from pe_core.engine_v2.settings import parse_v2
     s = parse_v2({"reversal_cost_p": 0.6, "top_up_cost_p": 4})
-    assert s.switch_cost_p == 2.0 and s.top_up_cost_p == 4
+    assert s.switch_cost_p == 2.0 and not hasattr(s, "top_up_cost_p")
 
 
 def test_the_programme_adds_the_change_cost_to_a_turn_from_a_charge_to_a_sale():

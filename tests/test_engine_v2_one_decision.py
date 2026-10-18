@@ -29,7 +29,7 @@ from pe_core.engine_v2.types import (
 UTC = timezone.utc
 T0 = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
 FACTS = BatteryFacts()                      # 18 kWh, 95% each way, 4.8 kW, floor 12%
-NO_COMFORT = V2Settings(comfort_cost_p=0.0, top_up_cost_p=0.0, switch_cost_p=0.0)
+NO_COMFORT = V2Settings(range_firmness="off", switch_cost_p=0.0)
 
 
 @pytest.fixture(autouse=True)
@@ -219,8 +219,7 @@ def test_a_run_that_just_reached_its_level_is_not_started_again_in_the_same_segm
 
 # ---- a charge keeps a minimum length between the level bands --------------------------------------------------------
 def test_a_leg_runs_its_length_in_the_executors_call_too():
-    bands = replace(NO_COMFORT, level_top_start_soc=90, level_top_rate_p=200.0, level_bot_start_soc=70,
-                    level_bot_rate_p=10.0)
+    bands = replace(NO_COMFORT, range_low_soc=70, range_high_soc=90, range_firmness="firm", min_run_pct=20)
     segs = [seg(i, imp=30.28) for i in range(8)]                            # dear all day: nothing is worth charging
     vr = solve(segs, 62.0, settings=bands, running=CHARGE, leg_from=60.0)
     going = V.decide(vr, t(0), 62.0, vr.limits[0], FACTS, bands, CHARGE, leg_from=60.0)
@@ -238,9 +237,9 @@ def test_the_retired_settings_in_a_saved_block_are_ignored_without_error():
     assert set(RETIRED_NOW) <= RETIRED
     assert not set(RETIRED_NOW) & set(SETTINGS)
     saved = {"executor": "plan", "price_band_p": 1.5, "level_band_pct": 2.0, "min_dwell_s": 120,
-             "reversal_levy_p": 3.0, "top_up_cost_p": 4}
+             "reversal_levy_p": 3.0, "reserve_soc": 15}
     got = parse_v2(saved)
-    assert got == parse_v2({"top_up_cost_p": 4}) and got.top_up_cost_p == 4
+    assert got == parse_v2({"reserve_soc": 15}) and got.reserve_soc == 15
     for key in RETIRED_NOW:
         assert not hasattr(got, key)
         with pytest.raises(TypeError):
@@ -251,7 +250,7 @@ def test_the_retired_settings_in_a_saved_block_are_ignored_without_error():
 def test_the_retired_settings_in_a_whole_config_are_dropped_too():
     raw = {"operation": {"mode": "passive"}, "system": {"engine": "v2", "control_method": "ram_remote"},
            "engine_v2": {"executor": "lines", "min_dwell_s": 60, "reserve_soc": 20},
-           "v2_profiles": {"mine": {"price_band_p": 1.0, "reversal_levy_p": 2.0, "top_up_cost_p": 2}}}
+           "v2_profiles": {"mine": {"price_band_p": 1.0, "reversal_levy_p": 2.0, "switch_cost_p": 2}}}
     cfg = parse_config(raw)
-    assert cfg.engine_v2.reserve_soc == 20 and cfg.v2_profiles == {"mine": {"top_up_cost_p": 2}}
+    assert cfg.engine_v2.reserve_soc == 20 and cfg.v2_profiles == {"mine": {"switch_cost_p": 2}}
     assert not any(hasattr(cfg.engine_v2, k) for k in RETIRED_NOW)

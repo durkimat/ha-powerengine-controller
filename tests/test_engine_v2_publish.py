@@ -365,7 +365,7 @@ def test_the_shown_items_and_path_are_the_plans_own():
     pts = [58.0, 64.0, 70.0, 73.0, 73.0, 69.0, 60.0, 60.0, 60.0]
     path = {"start": now.isoformat(), "step_min": 15, "mid": pts, "low": pts, "high": pts}
     vr = _with(_run_plan(plan, segs, now), path=path)
-    _, a = publish._timeline(vr, V2Settings(hold_only_car_reserve=True), 12.0, LOCAL)
+    _, a = publish._timeline(vr, V2Settings(hold_use="car and reserve"), 12.0, LOCAL)
     assert [(i["mode"], i["level_end"]) for i in a["items"]][:3] == [("charge", 73), ("hold", 73), ("export", 60)]
     assert a["path"]["mid"] == pts
 
@@ -391,7 +391,7 @@ def test_the_timeline_path_carries_the_value_the_controller_reads_at_each_point(
     rows = tuple(tuple(5.0 + 0.5 * i for i in range(37)) for _ in range(3))
     vr = _with(vr, lam=rows, path={"start": now.isoformat(), "step_min": 15, "mid": [20.0, 50.0, 80.0, 50.0],
                                    "low": [20.0] * 4, "high": [20.0] * 4})
-    _, a = publish._timeline(vr, V2Settings(hold_only_car_reserve=True), 12.0, LOCAL)
+    _, a = publish._timeline(vr, V2Settings(hold_use="car and reserve"), 12.0, LOCAL)
     path = a["path"]
     assert len(path["value"]) == len(path["mid"])
     raw = [value_at(vr, now + timedelta(minutes=15 * i), lvl) for i, lvl in enumerate(path["mid"])]
@@ -404,7 +404,7 @@ def test_a_plan_with_no_value_curve_publishes_no_path_value():
     now = T0
     vr = _with(_idle_run_plan(7.0, now), lam=(), path={"start": now.isoformat(), "step_min": 15, "mid": [50.0],
                                                       "low": [50.0], "high": [50.0]})
-    _, a = publish._timeline(vr, V2Settings(hold_only_car_reserve=True), 12.0, LOCAL)
+    _, a = publish._timeline(vr, V2Settings(hold_use="car and reserve"), 12.0, LOCAL)
     assert "value" not in a["path"]
 
 

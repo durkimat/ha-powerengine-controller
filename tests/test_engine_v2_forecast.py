@@ -218,7 +218,7 @@ def test_sun_spread_bands_and_bias():
     segs = F.build(inp, ST, learned).segments
     assert next(s for s in segs if s.start == at(11, 0)).solar_kwh.mid == pytest.approx(0.8)
     assert next(s for s in segs if s.start == at(12, 0)).solar_kwh.mid == pytest.approx(1.5)
-    off = F.build(inp, replace(ST, learn_solar_bias=False), learned).segments
+    off = F.build(inp, replace(ST, learn=False), learned).segments
     assert next(s for s in off if s.start == at(11, 0)).solar_kwh.mid == pytest.approx(1.0)
 
 
@@ -234,8 +234,9 @@ def test_weights_start_from_settings_and_follow_what_is_learned():
     assert am.solar_kwh.w == pytest.approx((0.25, 0.25, 0.5))
     pm = next(s for s in segs if s.start == at(16, 0))
     assert pm.solar_kwh.w == pytest.approx((0.25, 0.5, 0.25))          # no learned afternoon weights: the start
-    custom = F.build(inp, replace(ST, solar_low_pct=50, solar_mid_pct=50, solar_high_pct=0)).segments[3]
-    assert custom.solar_kwh.w == pytest.approx((0.5, 0.5, 0.0))
+    custom = F.build(inp, replace(ST, forecast_caution="optimistic")).segments[3]
+    assert custom.solar_kwh.w == pytest.approx((0.15, 0.45, 0.40))
+    assert custom.load_kwh.w == pytest.approx((0.40, 0.45, 0.15))
 
 
 def test_house_spread_default_and_learned():

@@ -155,12 +155,12 @@ def test_a_settings_change_revalues_and_reaches_every_layer(stubs):
     f, v = stubs
     eng = EngineV2(V2Settings())
     tick(eng, 0)
-    new = V2Settings(top_up_cost_p=1.5, reserve_soc=30.0)
+    new = V2Settings(min_run_pct=15.0, reserve_soc=30.0)
     eng.update_settings(new)
     out = tick(eng, 10)
     assert out.revalued and v.because[-1] == "The settings were saved"
-    assert eng.s.top_up_cost_p == 1.5 and eng.executor.s.reserve_soc == 30.0 and eng.observer.s.top_up_cost_p == 1.5
-    assert eng.learner.s.top_up_cost_p == 1.5 and eng.triggers.s.top_up_cost_p == 1.5
+    assert eng.s.min_run_pct == 15.0 and eng.executor.s.reserve_soc == 30.0 and eng.observer.s.min_run_pct == 15.0
+    assert eng.learner.s.min_run_pct == 15.0 and eng.triggers.s.min_run_pct == 15.0
 
 
 def test_asking_for_a_replan_revalues_at_once_and_only_once(stubs):

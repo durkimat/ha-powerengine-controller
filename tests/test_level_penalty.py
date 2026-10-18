@@ -1,26 +1,25 @@
 """The smooth level penalty in the plan's value calculation (engine_v2/value.py, engine-v2-level-penalty.md)."""
 
 import math
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from pe_core.engine_v2 import value
+from pe_core.engine_v2 import settings, value
 from pe_core.engine_v2.settings import V2Settings
 from pe_core.engine_v2.types import BatteryFacts, Limits, Segment, Spread
 
 CAP = 18.0
 # The curves as the docs describe them: top from 90% (rate 10p/kWh/h at 100%, doubling every 2 points), bottom from 70%
 # (rate 2p at 15%, doubling every 5).
-ON = V2Settings(
-    level_top_start_soc=90,
-    level_top_rate_p=10.0,
-    level_top_doubling_pts=2.0,
-    level_bot_start_soc=70,
-    level_bot_rate_p=2.0,
-    reserve_soc=15,
-    level_bot_doubling_pts=5.0,
-)
+ON = V2Settings(range_high_soc=90, range_low_soc=70, range_firmness="firm", reserve_soc=15)
+
+
+@pytest.fixture(autouse=True)
+def _curves(monkeypatch):
+    """The test's own numbers for "firm": top 10p at 100% doubling every 2 points, bottom 2p at the reserve every 5."""
+    monkeypatch.setitem(settings.FIRMNESS_CURVES, "firm", (10.0, 2.0, 2.0, 5.0))
 
 
 @pytest.fixture(autouse=True)
@@ -38,8 +37,8 @@ def kwh(pct):
     return pct / 100 * CAP
 
 
-def test_off_by_default():
-    assert pen(V2Settings()) is None
+def test_off_when_the_range_is_off():
+    assert pen(V2Settings(range_firmness="off")) is None
 
 
 def test_rate_is_zero_in_the_middle_and_hits_its_anchors():
@@ -110,21 +109,20 @@ LIM = Limits(
 
 
 def test_a_segment_prices_the_penalty_in_its_comfort_figure():
-    s = V2Settings(**{**ON.as_dict(), "comfort_cost_p": 0.0, "top_up_cost_p": 0.0})
-    S = value._make(seg(), BatteryFacts(), s, LIM)
+    S = value._make(seg(), BatteryFacts(), ON, LIM)
     assert S.pen is not None
     held_low = value._phys(S, kwh(80), "hold", 0.3, 10.0)
     held_high = value._phys(S, kwh(97), "hold", 0.3, 10.0)
-    assert held_low[10] == 0.0 and held_high[10] > 0.0
-    assert held_high[2] == pytest.approx(held_high[10])  # comfort = the penalty alone
-    assert held_high[1] == pytest.approx(held_low[1] + held_high[10])  # same cash, plus the penalty
+    assert held_low[9] == 0.0 and held_high[9] > 0.0
+    assert held_high[2] == pytest.approx(held_high[9])  # the level cost = the penalty alone
+    assert held_high[1] == pytest.approx(held_low[1] + held_high[9])  # same cash, plus the penalty
 
 
 def test_off_leaves_the_physics_untouched():
-    S = value._make(seg(), BatteryFacts(), V2Settings(), LIM)
+    S = value._make(seg(), BatteryFacts(), V2Settings(range_firmness="off"), LIM)
     assert S.pen is None
     res = value._phys(S, kwh(95), "charge", 0.3, 10.0)
-    assert res[10] == 0.0 and len(res) == 11
+    assert res[9] == 0.0 and len(res) == 10
     assert math.isfinite(res[1])
 
 
@@ -143,27 +141,24 @@ def test_the_slope_used_for_a_part_way_stop_matches_the_cost(monkeypatch):
 
 
 def test_the_bottom_curve_is_sharper_only_inside_a_smart_slot():
-    assert pen(ON, True) is pen(ON, False)  # the same tables with the dials at rest
-    s = V2Settings(**{**ON.as_dict(), "slot_bot_factor": 10.0})
+    assert pen(ON, True) is pen(ON, False)  # no slot floor: the same tables
+    s = replace(ON, slot_floor_soc=80)
     plain, slot = pen(s, False), pen(s, True)
-    assert abs(value._dphi(slot, kwh(15))) == pytest.approx(10 * abs(value._dphi(plain, kwh(15))), rel=0.02)
+    f = settings.SLOT_BOT_FACTOR
+    assert abs(value._dphi(slot, kwh(15))) == pytest.approx(f * 2.0, rel=0.02)  # anchored: 2p x factor at the reserve
     assert value._dphi(slot, kwh(95)) == value._dphi(plain, kwh(95))  # the top curve is the same in both
-    s2 = V2Settings(**{**s.as_dict(), "slot_bot_start_soc": 80})
-    slot2 = pen(s2, True)
-    assert value._dphi(slot2, kwh(75)) < 0.0 == value._dphi(pen(s2, False), kwh(75))  # reaches higher up inside a slot
-    assert abs(value._dphi(slot2, kwh(15))) == pytest.approx(20.0, rel=0.02)  # anchored: 2p x 10 at the reserve
+    assert value._dphi(slot, kwh(75)) < 0.0 == value._dphi(plain, kwh(75))  # reaches higher up inside a slot
 
 
 def test_only_a_slot_segment_uses_the_slot_curve():
-    s = V2Settings(**{**ON.as_dict(), "slot_bot_factor": 10.0, "comfort_cost_p": 0.0, "top_up_cost_p": 0.0})
+    s = replace(ON, slot_floor_soc=80)
     plain = value._make(seg(), BatteryFacts(), s, LIM)
     slotted = value._make(seg(slot=0.9), BatteryFacts(), s, LIM)
-    assert value._phys(plain, kwh(50), "hold", 0.3, 10.0)[10] < value._phys(slotted, kwh(50), "hold", 0.3, 10.0)[10]
+    assert value._phys(plain, kwh(50), "hold", 0.3, 10.0)[9] < value._phys(slotted, kwh(50), "hold", 0.3, 10.0)[9]
 
 
 def test_the_table_is_read_between_its_entries_not_at_the_nearest_one():
-    pen = value._level_penalty(18.0, False, V2Settings(level_top_rate_p=200.0, level_top_start_soc=90,
-                                                       level_top_doubling_pts=3.0))
+    pen = value._level_penalty(18.0, False, V2Settings(range_firmness="firm", range_high_soc=90))
     e = 17.5
     x = e * pen.res
     lo, hi = int(x), int(x) + 1

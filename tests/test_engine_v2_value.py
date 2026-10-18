@@ -32,7 +32,7 @@ from pe_core.readings import Readings, Window
 UTC = timezone.utc
 T0 = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
 FACTS = BatteryFacts()                      # 18 kWh, 95% each way, 4.8 kW, floor 12%
-NO_COMFORT = V2Settings(comfort_cost_p=0.0, top_up_cost_p=0.0, switch_cost_p=0.0)
+NO_COMFORT = V2Settings(range_firmness="off", switch_cost_p=0.0)
 
 
 @pytest.fixture(autouse=True)
@@ -119,12 +119,12 @@ def test_export_and_event_pay_what_they_pay():
 
 
 def test_wear_counts_house_and_sales():
-    st = replace(NO_COMFORT, wear_house_p=2.0, wear_sale_p=3.0)
+    st = replace(NO_COMFORT, wear_p=2.0)
     _, cost, _ = step(9.0, SELF_USE, settings=st, load=0.5)
     assert cost == pytest.approx(2.0 * 0.5)
     _, cost, fl = step(9.0, EXPORT, settings=st, load=0.5)
     out = 2.4
-    assert cost == pytest.approx(-(out - 0.5) * 15.0 + 2.0 * 0.5 + 3.0 * (out - 0.5))
+    assert cost == pytest.approx(-(out - 0.5) * 15.0 + 2.0 * 0.5 + 2.0 * (out - 0.5))
 
 
 def test_physics_stays_between_floor_and_ceiling():
@@ -176,22 +176,6 @@ def test_partial_charge_stops_at_the_end_level():
     assert end == pytest.approx(8.5)
     end, _, _ = step(5.0, CHARGE, load=0.0, end_kwh=99.0)
     assert end == pytest.approx(5.0 + 2.4 * 0.95)
-
-
-def test_comfort_cost_is_per_kwh_per_hour_outside_the_band():
-    st = replace(NO_COMFORT, comfort_cost_p=0.3)
-    sg = seg(0)
-    lim = limits_for(sg)
-    _, short, fl = V.segment_step(17.0, HOLD, sg, 0.0, 0.0, 30.28, FACTS, st, lim)     # 94.4%: 17 - 16.2 = 0.8 kWh over
-    assert fl["comfort_p"] == pytest.approx(0.3 * 0.5 * 0.8)
-    long = Segment(start=T0, end=T0 + timedelta(hours=8), import_p=30.28, export_p=15.0, solar_kwh=spread(0),
-                   load_kwh=spread(0))
-    _, long_cost, lf = V.segment_step(17.0, HOLD, long, 0.0, 0.0, 30.28, FACTS, st, lim)
-    assert lf["comfort_p"] == pytest.approx(16 * fl["comfort_p"])                  # eight hours cost sixteen times
-    _, _, inside = V.segment_step(10.0, HOLD, sg, 0.0, 0.0, 30.28, FACTS, st, lim)
-    assert inside["comfort_p"] == 0.0
-    _, _, low = V.segment_step(2.0, HOLD, sg, 0.0, 0.0, 30.28, FACTS, st, lim)      # 11%: 3.6 - 2.0 below the band
-    assert low["comfort_p"] == pytest.approx(0.3 * 0.5 * 1.6)
 
 
 # --- the value curve -----------------------------------------------------------------------------------------------
@@ -308,7 +292,7 @@ def test_lam_falls_with_level_in_normal_cases():
 
 def test_lam_with_spreads_and_slots_falls_almost_everywhere():
     # the mode is chosen before the sun and the house are known, so the curve may rise a little here and there
-    vr = solve(day_segments(sun_spread=True, slot=True), 40.0, settings=V2Settings())
+    vr = solve(day_segments(sun_spread=True, slot=True), 40.0, settings=V2Settings(range_firmness="off"))
     assert mostly_falls(vr, share=0.08)
     assert all(v == v and abs(v) < 500 for row in vr.lam for v in row)
 
@@ -339,37 +323,6 @@ def test_a_long_uncertain_window_does_not_pay_for_selling_down_to_refill():
     first_sale = next((it for it in half.timeline if it.mode == EXPORT), None)
     assert first_sale is None or first_sale.start >= t(22)              # at 50% it waits for the dear stretch
     assert V.value_at(half, t(0), soc) >= 15.0 * 0.95 - 0.05           # worth what a sale brings, or more
-
-
-def test_comfort_cost_lowers_the_value_near_the_top_and_raises_it_near_the_bottom():
-    segs = [seg(i, imp=20.0, load=0.4) for i in range(30)]       # needs about 82%: the top is never used
-    on = solve(segs, 50.0, settings=replace(NO_COMFORT, comfort_cost_p=0.3))
-    off = solve(segs, 50.0, settings=NO_COMFORT)
-    assert V.value_at(off, t(0), 97.0) == pytest.approx(0.0, abs=0.01)
-    assert V.value_at(on, t(0), 97.0) < -0.3                       # a kWh held up there costs something
-    assert V.value_at(on, t(0), 15.0) > V.value_at(off, t(0), 15.0) + 0.3
-    assert V.value_at(on, t(0), 55.0) == pytest.approx(V.value_at(off, t(0), 55.0), abs=0.5)
-
-
-def test_a_short_stay_above_the_band_is_not_paid_for():
-    # the battery is needed full within the hour: 7 half-hours of 2.2 kWh need 16.2 kWh stored above the floor, so
-    # the target is above the 90% comfort edge, and the comfort cost (paid only for the short stay) does not stop it
-    segs = [seg(0, imp=6.99), seg(1, imp=6.99), seg(2, imp=6.99)]
-    segs += [seg(3 + i, imp=30.28, load=2.2) for i in range(7)] + [seg(10, imp=30.28, load=0.1)]
-    st = replace(NO_COMFORT, comfort_cost_p=0.3)
-    vr = solve(segs, 60.0, settings=st)
-    peak = max(it.level_end for it in vr.timeline if it.mode == CHARGE)
-    assert peak > 94.0
-    assert vr.comfort_given_up_p is not None and 0.0 <= vr.comfort_given_up_p < 5.0
-    assert solve(segs, 60.0, settings=NO_COMFORT).comfort_given_up_p is None
-
-
-def test_comfort_given_up_is_the_cash_difference():
-    # a cheap, sunny stretch that would fill the battery above the band for a long time
-    segs = [seg(i, imp=7.0, load=0.2) for i in range(30)] + [seg(30 + i, imp=30.0, load=1.0) for i in range(6)]
-    st = replace(NO_COMFORT, comfort_cost_p=2.0, comfort_high_soc=70.0)
-    vr = solve(segs, 40.0, settings=st)
-    assert vr.comfort_given_up_p is not None and vr.comfort_given_up_p >= 0.0
 
 
 def test_forced_modes_are_the_only_choice_and_manual_override_fixes_the_mode():
@@ -458,7 +411,7 @@ def test_a_48_hour_solve_is_fast_enough():
     elapsed = time.perf_counter() - started
     assert elapsed < 6.0, f"48 h solve took {elapsed:.1f} s"
     assert vr.calc_s == pytest.approx(elapsed, abs=0.3)
-    assert vr.timeline and vr.comfort_given_up_p is not None
+    assert vr.timeline and vr.comfort_given_up_p is None
     ln = V.lines(vr, now, 40.0, 30.28, 15.0, FACTS, st)
     assert ln.value_p > 0 and V.value_at(vr, now + timedelta(hours=30), 50.0) > 0
 
@@ -643,7 +596,7 @@ def test_the_value_of_energy_left_never_rises_with_the_level_and_a_flat_tariff_k
 
 
 # --- the plan's first step follows a sale that is running (8 Oct 2026) ------------------------------------
-RUNNING_SETTINGS = V2Settings(top_up_cost_p=4.0, reserve_soc=15.0)          # the owner's: reversal 3p, comfort band
+RUNNING_SETTINGS = V2Settings(reserve_soc=15.0)          # the defaults: a gentle range
 
 
 def _cheap_night_then_dear():
@@ -701,18 +654,18 @@ def test_a_charge_that_stops_part_way_is_followed_by_a_remainder_hold():
 
 
 # --- a charge or a sale runs a minimum length between the level bands ---------------------------------------------
-BANDS = replace(NO_COMFORT, level_top_start_soc=90, level_top_rate_p=200.0, level_bot_start_soc=70,
-                level_bot_rate_p=10.0)
+BANDS = replace(NO_COMFORT, range_low_soc=70, range_high_soc=90, range_firmness="firm", min_run_pct=20)
 
 
 def test_a_leg_runs_the_span_between_the_bands_or_to_the_edge_of_a_band():
     band = V.leg_band(BANDS)
-    assert band == (70, 90)
+    assert band == (70, 90, 20)
     assert V.leg_need(band, CHARGE, 60) == 20 and V.leg_need(band, CHARGE, 85) == 5
     assert V.leg_need(band, CHARGE, 93) == 0
     assert V.leg_need(band, EXPORT, 95) == 20 and V.leg_need(band, EXPORT, 75) == 5
     assert V.leg_need(band, EXPORT, 60) == 0
-    assert V.leg_band(NO_COMFORT) is None                 # no bands in use: no minimum
+    assert V.leg_band(NO_COMFORT) is None                 # no shortest run set: no minimum
+    assert V.leg_band(replace(BANDS, min_run_pct=0)) is None
 
 
 def test_the_plan_carries_a_running_charge_on_for_its_length():
