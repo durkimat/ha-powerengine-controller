@@ -22,6 +22,7 @@ from .value import _segment_index, lines, value_at
 LIMIT = 14_500                       # below the app's 15,000 byte warning
 CURVE_PCTS = tuple(range(0, 101, 10))
 CURVE_MAX_ROWS = 48
+PATH_VALUE_SMOOTH = 2        # points either side averaged in the value along the path (15 min each)
 REASON_MAX = 220
 
 
@@ -373,7 +374,20 @@ def _path_value(vr: ValueResult, p: dict, mid: list) -> list[float]:
         return []
     start = datetime.fromisoformat(p["start"])
     step = timedelta(minutes=p.get("step_min", 15))
-    return [_r(value_at(vr, start + i * step, lvl), 1) for i, lvl in enumerate(mid)]
+    raw = [value_at(vr, start + i * step, lvl) for i, lvl in enumerate(mid)]
+    return [_r(x, 1) for x in _smoothed(raw)]
+
+
+def _smoothed(xs: list[float], half: int = PATH_VALUE_SMOOTH) -> list[float]:
+    """A centred moving average over 2 * half + 1 points (fewer at the two ends). The plan holds the battery on the
+    edge of a step in the value (just enough for the evening peak, or the end of a charge it can only just finish), so
+    the value read at the path flips between the two sides of the step from one point to the next; the average shows
+    where it sits."""
+    out = []
+    for i in range(len(xs)):
+        w = xs[max(0, i - half): i + half + 1]
+        out.append(sum(w) / len(w))
+    return out
 
 
 def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, tz,
