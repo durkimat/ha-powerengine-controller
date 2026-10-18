@@ -470,10 +470,10 @@ def test_the_timeline_path_carries_the_value_the_controller_reads_at_each_point(
     _, a = publish._timeline(vr, V2Settings(hold_only_car_reserve=True), 12.0, LOCAL)
     path = a["path"]
     assert len(path["value"]) == len(path["mid"])
-    for i, (lvl, val) in enumerate(zip(path["mid"], path["value"], strict=True)):
-        want = value_at(vr, now + timedelta(minutes=15 * i), lvl)
-        assert abs(val - want) < 0.06
-    assert path["value"][0] < path["value"][1] < path["value"][2]      # a fuller battery is worth more on this curve
+    raw = [value_at(vr, now + timedelta(minutes=15 * i), lvl) for i, lvl in enumerate(path["mid"])]
+    for val, want in zip(path["value"], publish._smoothed(raw), strict=True):
+        assert abs(val - want) < 0.06            # the controller's figure, averaged along the path
+    assert all(v is not None for v in path["value"])
 
 
 def test_a_plan_with_no_value_curve_publishes_no_path_value():
@@ -482,3 +482,14 @@ def test_a_plan_with_no_value_curve_publishes_no_path_value():
                                                       "low": [50.0], "high": [50.0]})
     _, a = publish._timeline(vr, V2Settings(hold_only_car_reserve=True), 12.0, LOCAL)
     assert "value" not in a["path"]
+
+
+def test_the_value_along_the_path_is_averaged_so_a_step_it_sits_on_does_not_show_as_a_zigzag():
+    flat = publish._smoothed([10.0] * 7)
+    assert flat == [10.0] * 7
+    zig = publish._smoothed([14.4, 9.9] * 8)
+    middle = zig[4:-4]
+    assert max(middle) - min(middle) < 1.2 and max(zig) - min(zig) < 2.5          # was 4.5 point to point
+    assert abs(sum(middle) / len(middle) - 12.15) < 0.7
+    step = publish._smoothed([10.0] * 6 + [30.0] * 6)
+    assert step[0] == 10.0 and step[-1] == 30.0 and 10.0 < step[6] < 30.0       # a real change still shows

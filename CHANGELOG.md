@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.154 (beta)
+
+### Behaviour changes
+
+- **The value line on the expected timeline is steadier.** The plan holds the battery right on the edge of a step in the value of a stored kWh (just enough for the evening peak, or the end of a charge it can only just finish), so the value read at the path flipped between the two sides of the step every 15 minutes and drew a zigzag. The app now averages the value along the path over about an hour. A real change still shows; the 15-minute flip-flop does not. Nothing the controller does changes; only the display. Works with the card you already have.
+
+### Behind the scenes
+
+- `publish._smoothed` (5-point centred moving average, `PATH_VALUE_SMOOTH`) over `_path_value`. Test in `tests/test_engine_v2_publish.py`.
+
 ## 0.9.153 (beta)
 
 ### Behaviour changes
