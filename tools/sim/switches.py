@@ -41,9 +41,6 @@ LAYERS = [
 
 # setting -> the value at which it has no effect (ablation 1 and 2). Not offered for a setting not listed.
 OFF_VALUES = {
-    "price_band_p": 0,
-    "level_band_pct": 0,
-    "min_dwell_s": 0,
     "comfort_cost_p": 0,
     "top_up_cost_p": 0,
     "prefer_self_use": False,

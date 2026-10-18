@@ -353,9 +353,7 @@ def perfect_bound(sc: Scenario, facts, settings) -> dict:
                                           for i in vr.timeline]}
     try:                                                      # the forward run's own records: cash without the credit
         core = value._backward(fc, facts, settings, limits_for, t0, value.LEVEL_STEP_KWH, value.COARSE_STEP_KWH)
-        n_fine, step = value._grid(facts.capacity_kwh, value.LEVEL_STEP_KWH)
-        lam = tuple(value._fine_lam(core.V[k], n_fine, step) for k in range(len(core.segs)))
-        recs, total = value._forward(core, lam, step, soc0 / 100 * facts.capacity_kwh, "mid", settings.price_band_p)
+        recs, total = value._forward(core, soc0 / 100 * facts.capacity_kwh, "mid")
         cash = 0.0
         peak = 0.0
         for rec in recs:

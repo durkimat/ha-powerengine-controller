@@ -558,6 +558,12 @@ def switch_cost(prev: str, new: str, cost_p: float) -> float:
     return 0.0 if prev == new else cost_p
 
 
+def _idle(S: _Seg) -> str:
+    """What the battery does for the rest of a segment once a charge or a sale stops part-way: Hold where it is
+    allowed, else Self-use. The executor does the same, so the plan never counts on a mode the rules forbid."""
+    return HOLD if HOLD in S.allowed else SELF_USE
+
+
 def _candidates(S: _Seg, e: float, scen: list, imp_p: float, Vk: dict,
                 corridors: dict | None = None) -> list[tuple[float, str, float]]:
     """Every choice in one segment at level e for one price outcome, as (expected cost-to-go, mode, f), before the
@@ -575,14 +581,15 @@ def _candidates(S: _Seg, e: float, scen: list, imp_p: float, Vk: dict,
         return [(g, forced, 1.0)]
     out: list[tuple[float, str, float]] = []
     hold = None
+    idle = _idle(S)
     for mode in S.allowed:
         Vn = Vk[KIND[mode]]
         res = [_phys(S, e, mode, s[3], imp_p, ckw, dkw) for s in scen]
-        if mode == HOLD:
+        if mode == idle:
             hold = res
         elif mode in (CHARGE, EXPORT):
             if hold is None:
-                hold = [_phys(S, e, HOLD, s[3], imp_p) for s in scen]
+                hold = [_phys(S, e, idle, s[3], imp_p) for s in scen]
             part = _partial(scen, res, hold, Vn, S, corridors is not None)
             if part is not None:
                 out.append((part[0], mode, part[1]))
@@ -805,35 +812,6 @@ def _end_row(lam, k: int):
     return lam[min(k + 1, len(lam) - 1)]
 
 
-def _policy(S: _Seg, row, step: float, e: float, imp_p: float, net: float, prev: str | None,
-            band: float) -> tuple[str, float | None]:
-    """The mode layer 5 would be in at level e for this segment, by the value curve alone (the lines, with the price
-    band as hysteresis: entering a mode needs the band, staying tolerates it): (mode, the level a charge or a sale
-    stops at). Used for the expected timeline and the path."""
-    if S.forced:
-        return S.forced, None
-    value = _row_at(row, step, e)
-    ec, ed = S.eta_c, S.eta_d
-    buy, sell = imp_p / ec, S.export_p * ed - S.wear_s
-    use, store = imp_p * ed - S.wear_h, S.export_p / ec
-    bc, bd = band / ec, band * ed
-    top = S.topup / ec
-    if CHARGE in S.allowed and e < S.ceil - 1e-9 \
-            and value > buy + (top if e >= S.hi else 0.0) + (-bc if prev == CHARGE else bc):
-        return CHARGE, min(S.ceil, _charge_cross(row, step, e, buy, top, S.hi, LINE_TOL / ec))
-    if EXPORT in S.allowed and e > S.floor + 1e-9 and value < sell + (bd if prev == EXPORT else -bd):
-        return EXPORT, max(S.floor, _cross(row, step, e, sell - LINE_TOL, False))
-    if net > 0:
-        edge = use + (bd if prev == SELF_USE else -bd if prev == HOLD else 0.0)
-        want = SELF_USE if value < edge else HOLD
-    else:
-        edge = store + (-bc if prev == SELF_USE else bc if prev == HOLD else 0.0)
-        want = SELF_USE if value > edge else HOLD
-    if want in S.allowed:
-        return want, None
-    return (S.allowed[0] if S.allowed else SELF_USE), None
-
-
 def _stretch_ends(segs: list[_Seg]) -> list[int]:
     """For each segment, the index of the last segment of its stretch: the run of unforced segments with the same
     effective import price (within 0.01p). A forced segment is a stretch of its own."""
@@ -861,109 +839,121 @@ def _dp_choice(S: _Seg, e: float, imp_p: float, vk_next: dict, prev: str | None,
     return pick[0], pick[1], (corridors.get(pick[0]) if pick[1] < 1.0 else None)
 
 
-def _walk(segs: list[_Seg], rows: list, step: float, e0: float, kind: str, band: float, front: bool = True,
-          prev: str | None = None, first: int = 0, vks: list | None = None,
-          leg: tuple[str, float, float] | None = None) -> list[dict]:
-    """Run forward over `segs` from level e0 kWh; `rows[i]` is the value curve segment i compares against. kind: "mid"
-    (middle sun, middle house), "low" / "high" (the low / high net-load group), "self" (Self-use wherever nothing is
-    forced). The mode in each segment is what layer 5 would choose from the value curve at that level and those
-    prices (`_policy`); a charge or sale stops where the curve says.
+def _net(S: _Seg, kind: str) -> float:
+    """House plus car minus sun (kWh) in the segment for the walk's scenario."""
+    if kind == "mid":
+        so, ho = S.mid
+        return ho + S.car - so
+    return (S.scen[-1] if kind == "high" else S.scen[0])[3]
 
-    `front`: within a stretch of one import price, charging costs the same early or late, and late is risky (the rate
-    tapers, a slot is withdrawn, the forecast is wrong). So if the policy charges anywhere in the stretch, the same
-    charge is moved to the start of the stretch: full power from the first segment until the level the policy would
-    have reached by the stretch's end, then the policy's own choice. Only up to the comfort band's top: above it a
-    kWh held costs per hour and a kWh charged costs the top-up, so early and late are no longer the same cost and
-    the programme's own timing (late) stands: the early charge takes whole steps up to the top, and the step that
-    would cross it is the programme's own choice.
 
-    `prev` is the mode running now. A sale running at the start (`prev` is Export and the programme itself goes on
-    selling) is not turned round by the stretch's early charge: the executor goes on with the sale (`choice_now`), so a
-    plan that opened with "charge now" was one nothing followed, and every revaluation opened with it again.
+def _choose(segs: list[_Seg], vks: list, i: int, e: float, kind: str, prev: str | None,
+            leg: tuple[str, float, float] | None, front: bool, end: int | None = None,
+            ) -> tuple[str, float | None, tuple | None]:
+    """THE decision: the mode for segment i of `segs` at level e (kWh), coming from the mode `prev` with the charge or
+    sale `leg` running. (mode, the level the mode stops at inside the segment or None, the corridor of that stop or
+    None.) The expected timeline is this decision stepped forward over the forecast (`_walk`); the executor makes the
+    same call from the live level and the mode actually running (`decide`). Nothing else chooses a mode.
 
-    `leg` is the charge or sale running now: (mode, kWh it began at, kWh it must run). A charge or a sale runs at
-    least `leg_need` between the level bands before the policy may stop or turn it round (the executor holds it the
-    same way): the walk carries the leg on, and starts one whenever the policy begins a charge or a sale."""
-    ends = _stretch_ends(segs)
+    `segs` from i to the end of its stretch must be there (the stretch is the run of one import price, `_stretch_ends`;
+    `end` is the index of its last segment when the caller knows it).
+    Within a stretch, charging costs the same early or late, and late is risky (the rate tapers, a slot is withdrawn,
+    the forecast is wrong). So if the policy charges anywhere in what is left of the stretch, the same charge starts
+    now: full power until the level the policy would reach by the stretch's end, then the policy's own choice. Only up
+    to the top of the free range (the comfort band's top or where the top curve starts): above it a kWh held costs per
+    hour, so early and late are no longer the same cost and the programme's own timing stands. A sale running now
+    (`prev` is Export, and the programme itself goes on selling) is not turned round by the early charge.
+
+    `leg` is (mode, kWh it began at, kWh it must run): a charge or a sale runs at least `leg_need` between the level
+    bands before it may stop or turn round."""
+    S = segs[i]
+    if kind == "self":
+        return S.forced or SELF_USE, None, None
+    net = _net(S, kind)
+    imp_p = _outcome_price(S)
+    mode = stop = corridor = None
+    if front and not S.forced and CHARGE in S.allowed:
+        if end is None:
+            end = _stretch_ends(segs[i:])[0] + i
+        sub = _walk(segs[i:end + 1], e, kind, front=False, prev=prev, vks=vks[i:end + 1], leg=leg)
+        reach = sub[-1]["e1"]
+        sale_goes_on = prev == EXPORT and sub[0]["mode"] == EXPORT
+        capped = bool((S.ccost or S.topup or S.pen is not None) and reach > S.fcap)
+        if capped:                                  # early is free only inside the band: above its top the hours cost
+            reach = S.fcap
+        if any(r["mode"] == CHARGE for r in sub) and reach > e + 1e-9 and not sale_goes_on \
+                and e < S.ceil - 1e-9 and not (capped and _phys(S, e, CHARGE, net, imp_p)[0] > reach + 1e-9):
+            mode, stop = CHARGE, min(reach, S.ceil)
+            if not capped:                          # where the stretch's own charge stops: the same corridor
+                corridor = next((r["corridor"] for r in reversed(sub) if r["mode"] == CHARGE and r["corridor"]), None)
+    if mode is None:
+        mode, share, span = _dp_choice(S, e, imp_p, vks[i], prev)
+        if share < 1.0:                             # a charge or sale that stops part-way: where it stops
+            lo, hi = _phys(S, e, _idle(S), net, imp_p)[0], _phys(S, e, mode, net, imp_p)[0]
+            stop = lo + share * (hi - lo)
+            if span is not None:                    # the levels as good as that to within a tolerance
+                corridor = (lo + span[0] * (hi - lo), lo + span[1] * (hi - lo))
+    if S.leg is not None and leg is not None and not S.forced:
+        lm, frm, need = leg
+        if (e - frm if lm == CHARGE else frm - e) < need - 1e-9 and lm in S.allowed \
+                and (e < S.ceil - 1e-9 if lm == CHARGE else e > S.floor + 1e-9):
+            goal = min(frm + need, S.ceil) if lm == CHARGE else max(frm - need, S.floor)
+            if mode != lm:
+                mode, stop, corridor = lm, goal, None            # a leg runs its length: no stop, no turn-round
+            elif stop is not None:
+                stop = max(stop, goal) if lm == CHARGE else min(stop, goal)
+    return mode, stop, corridor
+
+
+def _next_leg(S: _Seg, mode: str, e: float, leg: tuple | None) -> tuple | None:
+    """The charge or sale running once segment S starts in `mode` at level e (see `_choose`): a new one when a charge
+    or a sale begins, none when the mode is anything else (as the executor forgets `leg_from`)."""
+    if S.leg is None or S.forced or mode not in (CHARGE, EXPORT):
+        return None
+    if leg is None or leg[0] != mode:
+        return (mode, e, leg_need(S.leg, mode, e))
+    return leg
+
+
+def _walk(segs: list[_Seg], e0: float, kind: str, front: bool = True, prev: str | None = None, first: int = 0,
+          vks: list | None = None, leg: tuple[str, float, float] | None = None) -> list[dict]:
+    """Step the decision (`_choose`) forward over `segs` from level e0 kWh, coming from the mode `prev` with the leg
+    `leg` running; `vks[i]` is the cost-to-go curves at the end of segment i. kind: "mid" (middle sun, middle house),
+    "low" / "high" (the low / high net-load group), "self" (Self-use wherever nothing is forced). A charge or a sale
+    that stops part-way spends the rest of its segment in the idle mode (`_idle`), as the executor does."""
     recs, e, prev_mode = [], e0, prev
-    target, target_to, capped, target_corridor = None, -1, False, None
+    ends = _stretch_ends(segs) if front else None
     for i, S in enumerate(segs):
-        corridor = None
-        if kind == "mid":
-            so, ho = S.mid
-            net = ho + S.car - so
-        else:
-            _, so, ho, net = S.scen[-1] if kind == "high" else S.scen[0]
+        net = _net(S, kind)
         imp_p = _outcome_price(S)
-        if front and kind != "self" and not S.forced and i > target_to and (i == 0 or ends[i - 1] < i):
-            sub = _walk(segs[i:ends[i] + 1], rows[i:ends[i] + 1], step, e, kind, band, False, prev_mode,
-                        vks=None if vks is None else vks[i:ends[i] + 1], leg=leg)
-            reach = sub[-1]["e1"]
-            sale_goes_on = i == 0 and prev == EXPORT and sub[0]["mode"] == EXPORT
-            capped = bool((S.ccost or S.topup or S.pen is not None) and reach > S.fcap)
-            if capped:                              # early is free only inside the band: above its top the hours cost
-                reach = S.fcap
-            target = reach if (any(r["mode"] == CHARGE for r in sub) and reach > e + 1e-9
-                               and not sale_goes_on) else None
-            target_to = ends[i]
-            target_corridor = None if capped else next(
-                (r["corridor"] for r in reversed(sub) if r["mode"] == CHARGE and r["corridor"]), None)
-        if kind == "self":
-            mode, stop = S.forced or SELF_USE, None
-        elif (front and target is not None and i <= target_to and not S.forced and CHARGE in S.allowed
-              and e < target - 1e-9 and e < S.ceil - 1e-9
-              and not (capped and _phys(S, e, CHARGE, net, imp_p)[0] > target + 1e-9)):
-            mode, stop = CHARGE, min(target, S.ceil)
-            corridor = target_corridor        # where the stretch's own charge stops: the same corridor
-        elif vks is not None:
-            mode, share, span = _dp_choice(S, e, imp_p, vks[i], prev_mode)
-            stop = None
-            if share < 1.0:                                  # a charge or sale that stops part-way: where it stops
-                lo, hi = _phys(S, e, HOLD, net, imp_p)[0], _phys(S, e, mode, net, imp_p)[0]
-                stop = lo + share * (hi - lo)
-                if span is not None:                         # the levels as good as that to within a tolerance
-                    corridor = (lo + span[0] * (hi - lo), lo + span[1] * (hi - lo))
-        else:
-            mode, stop = _policy(S, rows[i], step, e, imp_p, net, prev_mode, band)
-        if S.leg is not None and kind != "self" and leg is not None and not S.forced:
-            lm, frm, need = leg
-            if (e - frm if lm == CHARGE else frm - e) < need - 1e-9 and lm in S.allowed \
-                    and (e < S.ceil - 1e-9 if lm == CHARGE else e > S.floor + 1e-9):
-                goal = min(frm + need, S.ceil) if lm == CHARGE else max(frm - need, S.floor)
-                if mode != lm:
-                    mode, stop, corridor = lm, goal, None            # a leg runs its length: no stop, no turn-round
-                elif stop is not None:
-                    stop = max(stop, goal) if lm == CHARGE else min(stop, goal)
-        if S.leg is not None and kind != "self":
-            if S.forced or mode not in (CHARGE, EXPORT):
-                if leg is not None and (S.forced or (e - leg[1] if leg[0] == CHARGE else leg[1] - e) >= leg[2] - 1e-9):
-                    leg = None
-            elif leg is None or leg[0] != mode:
-                leg = (mode, e, leg_need(S.leg, mode, e))
+        mode, stop, corridor = _choose(segs, vks, i, e, kind, prev_mode, leg, front, ends[i] if ends else None)
+        if kind != "self":
+            leg = _next_leg(S, mode, e, leg)
+        idle = _idle(S)
         full = _phys(S, e, mode, net, imp_p)
         res, e_hold, f = full, e, 1.0
         if stop is not None:
-            hold = _phys(S, e, HOLD, net, imp_p)
+            hold = _phys(S, e, idle, net, imp_p)
             span = full[0] - hold[0]
             f = min(1.0, max(0.0, (stop - hold[0]) / span)) if abs(span) > 1e-9 else 1.0
             if f < 1.0:
                 res, e_hold = _mix(full, hold, f, S), hold[0]
         change = switch_cost(KIND[prev_mode], KIND[mode], S.sw) if prev_mode is not None else 0.0
-        prev_mode = HOLD if f < 1.0 else mode
-        recs.append({"k": first + i, "mode": mode, "f": f, "e0": e, "e1": res[0], "e_full": full[0], "e_hold": e_hold,
-                     "cost": res[1] + change, "comfort": res[2], "imp": res[3], "exp": res[4], "evx": res[5],
-                     "house": res[6], "sold": res[7], "gtb": res[8], "imp_p": imp_p,
+        prev_mode = idle if f < 1.0 else mode
+        if f < 1.0:
+            leg = None
+        recs.append({"k": first + i, "mode": mode, "f": f, "rest": idle, "e0": e, "e1": res[0], "e_full": full[0],
+                     "e_hold": e_hold, "cost": res[1] + change, "comfort": res[2], "imp": res[3], "exp": res[4],
+                     "evx": res[5], "house": res[6], "sold": res[7], "gtb": res[8], "imp_p": imp_p,
                      "corridor": corridor})
         e = res[0]
     return recs
 
 
-def _forward(core: _Core, lam: tuple, step: float, e0: float, kind: str, band: float,
-             prev: str | None = None, leg: tuple[str, float, float] | None = None) -> tuple[list[dict], float]:
+def _forward(core: _Core, e0: float, kind: str, prev: str | None = None,
+             leg: tuple[str, float, float] | None = None) -> tuple[list[dict], float]:
     """`_walk` over the whole forecast. Returns (records, cost including the credit for the energy left at the end)."""
-    rows = [_end_row(lam, k) for k in range(len(core.segs))]
-    recs = _walk(core.segs, rows, step, e0, kind, band, prev=prev, vks=[core.VK[k + 1] for k in range(len(core.segs))],
-                 leg=leg)
+    recs = _walk(core.segs, e0, kind, prev=prev, vks=[core.VK[k + 1] for k in range(len(core.segs))], leg=leg)
     return recs, sum(r["cost"] for r in recs) + _val(core.tail, recs[-1]["e1"])
 
 
@@ -1075,7 +1065,7 @@ def _timeline(core: _Core, recs: list[dict], lam: tuple, step: float, now: datet
             e_cut = _level_at(rec, rec["f"])
             lo, hi = rec.get("corridor") or (e_cut, e_cut)
             pieces.append((rec["mode"], seg.start, cut, rec["e0"], e_cut, rec["k"], True, False, lo, hi))
-            pieces.append((HOLD, cut, seg.end, e_cut, rec["e1"], rec["k"], True, True, rec["e1"], rec["e1"]))
+            pieces.append((rec["rest"], cut, seg.end, e_cut, rec["e1"], rec["k"], True, True, rec["e1"], rec["e1"]))
         else:
             pieces.append((rec["mode"], seg.start, seg.end, rec["e0"], rec["e1"], rec["k"], False, False,
                            rec["e1"], rec["e1"]))
@@ -1086,7 +1076,7 @@ def _timeline(core: _Core, recs: list[dict], lam: tuple, step: float, now: datet
         if merged and merged[-1][0] == p[0]:
             m = merged[-1]
             m[2], m[4], m[6] = p[2], p[4], p[6]
-            m[7], m[8], m[9] = m[7] and p[7], p[8], p[9]            # a hold is a remainder only if every part is
+            m[7], m[8], m[9] = m[7] and p[7], p[8], p[9]            # the rest of a segment only if every part is
             m[10] = p[5]
         else:
             merged.append(list(p) + [p[5]])
@@ -1130,7 +1120,7 @@ def solve(forecast: Forecast, start_soc: float, facts: BatteryFacts, settings: V
           leg_from: float | None = None) -> ValueResult:
     """Work out the value curve for the forecast, then the expected timeline from `start_soc` (percent). `limits_for`
     gives each segment's allowed modes, floors and caps (layer 4). `running` is the mode now (layer 5's): the expected
-    timeline starts from it, so its first step is the programme's own choice from there, as `choice_now` gives.
+    timeline starts from it, so its first step is the decision the executor makes from there (`decide`).
     `leg_from` is the level (percent) the charge or sale running now began at: it has its minimum length still to run
     (`leg_need`)."""
     t_start = time.perf_counter()
@@ -1148,17 +1138,16 @@ def solve(forecast: Forecast, start_soc: float, facts: BatteryFacts, settings: V
     leg, band = None, leg_band(settings)
     if band is not None and running in (CHARGE, EXPORT) and leg_from is not None:
         leg = (running, leg_from / 100 * cap, leg_need(band, running, leg_from) / 100 * cap)
-    mid, cost_mid = _forward(core, lam, step, e0, "mid", settings.price_band_p, running, leg)
-    low, _ = _forward(core, lam, step, e0, "low", settings.price_band_p, running, leg)
-    high, _ = _forward(core, lam, step, e0, "high", settings.price_band_p, running, leg)
-    _, cost_self = _forward(core, lam, step, e0, "self", settings.price_band_p)
+    mid, cost_mid = _forward(core, e0, "mid", running, leg)
+    low, _ = _forward(core, e0, "low", running, leg)
+    high, _ = _forward(core, e0, "high", running, leg)
+    _, cost_self = _forward(core, e0, "self")
     given_up = None
     if settings.comfort_cost_p > 0 or settings.top_up_cost_p > 0:      # the top-up is part of the comfort figure
         plain = replace(settings, comfort_cost_p=0.0, top_up_cost_p=0.0)
         core0 = _backward(forecast, facts, plain, limits_for, now, COARSE_STEP_KWH, COARSE_STEP_KWH)
         n0, step0 = _grid(cap, COARSE_STEP_KWH)
-        lam0 = tuple(_fine_lam(core0.V[k], n0, step0) for k in range(len(core0.segs)))
-        _, cost0 = _forward(core0, lam0, step0, e0, "mid", settings.price_band_p)
+        _, cost0 = _forward(core0, e0, "mid")
         cash_a = cost_mid - sum(r["comfort"] for r in mid)
         given_up = max(0.0, cash_a - cost0)
     path = _path(core, now, {"mid": mid, "low": low, "high": high})
@@ -1191,66 +1180,42 @@ def value_at(vr: ValueResult, t: datetime, soc: float) -> float:
     return _row_at(row, vr.step_kwh, soc / 100 * cap)
 
 
-def run_target(vr: ValueResult, t: datetime, soc: float, import_p: float, facts: BatteryFacts,
-               settings: V2Settings) -> float | None:
-    """Run the policy (middle scenario) from level `soc` (percent) at time t to the end of the stretch of one import
-    price that holds t (the price within 0.01p of `import_p`). If it charges anywhere in the stretch, the level
-    (percent) it reaches by the stretch's end, else None. No new solve: it reuses the value curves and the limits the
-    result was made with, and walks only the segments of the stretch."""
-    if not vr.lam or len(vr.limits) != len(vr.forecast.segments):
-        return None
-    k0 = _segment_index(vr, t)
-    segs = vr.forecast.segments
-    if t >= segs[-1].end or abs(_effective_price(segs[k0]) - import_p) >= 0.01:
-        return None
-    k1 = k0
-    while (k1 + 1 < len(segs) and not _forced_of(segs[k1 + 1], vr.limits[k1 + 1])
-           and abs(_effective_price(segs[k1 + 1]) - import_p) < 0.01):
-        k1 += 1
-    if _forced_of(segs[k0], vr.limits[k0]):
-        return None
-    cut = []
-    for k in range(k0, k1 + 1):
-        sg = segs[k]
-        if k == k0 and t > sg.start:                  # only what is left of the segment now running
-            frac = (sg.end - t).total_seconds() / (sg.end - sg.start).total_seconds()
-            sg = replace(sg, start=t, solar_kwh=_scaled(sg.solar_kwh, frac), load_kwh=_scaled(sg.load_kwh, frac))
-        cut.append(_make(sg, facts, settings, vr.limits[k]))
-    rows = [_end_row(vr.lam, k) for k in range(k0, k1 + 1)]
-    cap = vr.step_kwh * (len(vr.lam[0]) - 1)
-    vks = [vr.vk[k] for k in range(k0, k1 + 1)] if len(vr.vk) == len(segs) else None
-    recs = _walk(cut, rows, vr.step_kwh, min(cap, max(0.0, soc / 100 * cap)), "mid", settings.price_band_p, False,
-                 None, k0, vks)
-    if not any(r["mode"] == CHARGE for r in recs):
-        return None
-    reach = recs[-1]["e1"] / cap * 100
-    top_pct = settings.comfort_high_soc if (settings.comfort_cost_p > 0 or settings.top_up_cost_p > 0) else 100.0
-    if settings.level_top_rate_p > 0.0:
-        top_pct = min(top_pct, settings.level_top_start_soc)
-    if top_pct < 100.0:                                               # early only up to the band's top (see `_walk`)
-        reach = min(reach, top_pct)
-    return reach
+def decide(vr: ValueResult, t: datetime, soc: float, lim: Limits, facts: BatteryFacts, settings: V2Settings,
+           prev: str | None, leg_from: float | None = None) -> dict | None:
+    """The executor's decision: what the plan's own decision (`_choose`) says for what is left of the segment holding
+    `t`, from the live level `soc` (percent), the live limits `lim` and the mode actually running `prev` (with the level
+    `leg_from` its charge or sale began at). The expected timeline is the same call stepped forward over the forecast,
+    so the two differ only where the inputs do. No new solve: it reuses the cost-to-go curves of `vr`.
 
-
-def choice_now(vr: ValueResult, t: datetime, soc: float, import_p: float, facts: BatteryFacts,
-               settings: V2Settings, prev: str | None) -> tuple[str, float] | None:
-    """The mode the programme itself chooses for the segment running at `t`, at level `soc` (percent) and the live
-    import price, coming from the mode `prev`: (mode, share of the segment it runs). It is the backward pass's own
-    choice (same candidates, same cost of a change), so what the live decision does can't disagree with the plan about
-    a sale or a charge that only looks good one step at a time. None when it can't say (no curves, a forced segment)."""
+    Returns {"mode", "stop", "rest", "end"}: the mode; for a charge or a sale that stops inside the segment, the level
+    (percent) it stops at, else None; the idle mode for the rest of the segment once it stops; the level expected at
+    the segment's end. None when it can't say (no curves, `t` outside the forecast)."""
     segs = vr.forecast.segments
-    if not vr.lam or len(vr.vk) != len(segs) or len(vr.limits) != len(segs) or not segs or t >= segs[-1].end:
+    if not vr.lam or len(vr.vk) != len(segs) or len(vr.limits) != len(segs) or not segs \
+            or t >= segs[-1].end or t < segs[0].start:
         return None
     k0 = _segment_index(vr, t)
     sg = segs[k0]
-    if _forced_of(sg, vr.limits[k0]):
-        return None
     if t > sg.start:                                    # only what is left of the segment now running
         frac = (sg.end - t).total_seconds() / (sg.end - sg.start).total_seconds()
         sg = replace(sg, start=t, solar_kwh=_scaled(sg.solar_kwh, frac), load_kwh=_scaled(sg.load_kwh, frac))
-    S = _make(sg, facts, settings, vr.limits[k0])
-    cap = vr.step_kwh * (len(vr.lam[0]) - 1)
-    return _dp_choice(S, min(cap, max(0.0, soc / 100 * cap)), import_p, vr.vk[k0], prev)[:2]
+    cut = [_make(sg, facts, settings, lim)]
+    k = k0
+    while k + 1 < len(segs):                            # the rest of the stretch: the early charge looks across it
+        nxt = _make(segs[k + 1], facts, settings, vr.limits[k + 1])
+        if cut[-1].forced or nxt.forced or abs(_outcome_price(cut[-1]) - _outcome_price(nxt)) >= 0.01:
+            break
+        cut.append(nxt)
+        k += 1
+    cap = facts.capacity_kwh
+    e = min(cap, max(0.0, soc / 100 * cap))
+    leg, band = None, leg_band(settings)
+    if band is not None and prev in (CHARGE, EXPORT) and leg_from is not None:
+        leg = (prev, leg_from / 100 * cap, leg_need(band, prev, leg_from) / 100 * cap)
+    vks = [vr.vk[j] for j in range(k0, k + 1)]
+    r = _walk(cut, e, "mid", prev=prev, first=k0, vks=vks, leg=leg)[0]
+    stop = _level_at(r, r["f"]) / cap * 100 if r["f"] < 1.0 else None
+    return {"mode": r["mode"], "stop": stop, "rest": r["rest"], "end": r["e1"] / cap * 100}
 
 
 def _forced_of(sg: Segment, lim: Limits) -> str | None:
@@ -1274,10 +1239,7 @@ def lines(vr: ValueResult, t: datetime, soc: float, import_p: float, export_p: f
     worth more than the import price after charging losses (None when it is not above it at `soc`, ties included);
     `sell_floor_soc` is where, going down from `soc`, a stored kWh stops being worth less than a sale brings.
 
-    Charging is also asked about as a run: `run_target_soc` is the level the policy reaches by the end of the stretch
-    of this import price (`run_target`). When that is more than the level band above `soc`, `charge_now` is true even
-    where the value alone is on the buy line (charging early costs the same as late and leaves room for surprises),
-    and `charge_target_soc` is at least that level. `charge_now` is also true when the value says to buy."""
+    For the display and the sentences only: the mode is the plan's decision (`decide`), not these lines."""
     ec, ed = facts.eta_charge, facts.eta_discharge
     buy, sell = import_p / ec, export_p * ed - settings.wear_sale_p
     use, store = import_p * ed - settings.wear_house_p, export_p / ec
@@ -1297,14 +1259,8 @@ def lines(vr: ValueResult, t: datetime, soc: float, import_p: float, export_p: f
             target = _charge_cross(row, step, e, import_p / ec, top, hi, LINE_TOL / ec) / cap * 100
         if value < sell - LINE_TOL:
             floor = _cross(row, step, e, sell - LINE_TOL, False) / cap * 100
-    run = run_target(vr, t, soc, import_p, facts, settings)
-    now_charge = target is not None
-    if run is not None and run > soc + settings.level_band_pct:
-        now_charge = True
-        target = max(target if target is not None else soc, run)
     return Lines(value_p=value, buy_line_p=buy, sell_line_p=sell, use_line_p=use, store_sun_line_p=store,
-                 import_p=import_p, export_p=export_p, charge_target_soc=target, sell_floor_soc=floor,
-                 charge_now=now_charge, run_target_soc=run)
+                 import_p=import_p, export_p=export_p, charge_target_soc=target, sell_floor_soc=floor)
 
 
 def segment_step(e_kwh: float, mode: str, seg: Segment, solar_kwh: float, load_kwh: float, import_p: float,

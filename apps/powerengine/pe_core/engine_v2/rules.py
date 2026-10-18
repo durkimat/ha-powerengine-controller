@@ -35,6 +35,8 @@ from .types import (
     Situation,
 )
 
+LEVEL_BAND_PCT = 1.0          # points: the reserve, once reached, holds until the level is this far above it
+
 # v1's override modes (decide.py action words) -> v2 modes
 OVERRIDE_MODE = {"self_use": SELF_USE, "hold": HOLD, "grid_charge": CHARGE, "export": EXPORT}
 
@@ -106,7 +108,7 @@ def _core(settings: V2Settings, facts: BatteryFacts, *, event: bool, manual: str
         rule, reason = "car", "The car is charging: the battery holds so it never feeds the car"
     if s.prefer_self_use and not cheap and rule == "normal":
         allowed.discard(HOLD)                       # by day the battery runs the house and stores spare sun
-    held_below = floor + (s.level_band_pct if reserve_latched else 0.0)
+    held_below = floor + (LEVEL_BAND_PCT if reserve_latched else 0.0)
     if level is not None and level <= held_below:
         allowed -= {SELF_USE, EXPORT}
         allowed.add(HOLD)
