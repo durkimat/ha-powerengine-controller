@@ -1,11 +1,16 @@
-"""Engine v2, layer 5: the mode automaton (docs/plans/engine-v2.md section 8)."""
+"""Engine v2, layer 5: the mode automaton (docs/plans/engine-v2.md section 8). The decision itself is the plan's
+(`value.decide`, tested in test_engine_v2_value.py and test_engine_v2_one_decision.py); here it is replaced by a fixed
+answer, so these tests are about what the executor does with it: carry it out to its level, the sentence, the forced
+modes, the limits, the deadline and the exits."""
 
 import json
 from datetime import timedelta
 
+import pytest
 from test_engine_v2_observe import T0, forecast, segment, value_result
 
 from pe_core import decide as v1d
+from pe_core.engine_v2 import execute
 from pe_core.engine_v2.execute import Executor
 from pe_core.engine_v2.settings import V2Settings
 from pe_core.engine_v2.types import (
@@ -54,9 +59,33 @@ def step(ex, sec, level=50.0, ln=None, lim=None, vr="default", events=(), **ob):
     return ex.step(t, obs_at(t, level, **ob), lim or limits(), ln, vr, tuple(events), FACTS)
 
 
-def s0(**kw):
-    """No minimum time and no cost of changing: the automaton's own rules, tested alone."""
-    return V2Settings(**{"min_dwell_s": 0, "switch_cost_p": 0.0, **kw})
+class Decides:
+    """Stands in for `value.decide`: `answer` is a decision dict, or a function of the call's keyword arguments
+    (`soc`, `prev`, `last_run`, `import_p`, ...) returning one; it is asked again when the executor asks again."""
+
+    def __init__(self):
+        self.answer = {"mode": SELF_USE}
+        self.calls = []
+
+    def set(self, mode, stop=None, rest=SELF_USE):
+        self.answer = {"mode": mode, "stop": stop, "rest": rest}
+
+    def __call__(self, vr, t, soc, lim, facts, settings, prev, leg_from=None, used=0, last_run=None, import_p=None,
+                 export_p=None):
+        kw = dict(t=t, soc=soc, prev=prev, leg_from=leg_from, used=used, last_run=last_run, import_p=import_p,
+                  export_p=export_p)
+        self.calls.append(kw)
+        got = self.answer(**kw) if callable(self.answer) else self.answer
+        if isinstance(got, str):
+            got = {"mode": got}
+        return {"stop": None, "rest": SELF_USE, "until": (T0 + timedelta(hours=2)).timestamp(), "end": soc, **got}
+
+
+@pytest.fixture(autouse=True)
+def decides(monkeypatch):
+    d = Decides()
+    monkeypatch.setattr(execute, "decide", d)
+    return d
 
 
 def ev(kind, sec=0, text="x"):
@@ -64,144 +93,148 @@ def ev(kind, sec=0, text="x"):
 
 
 # ---- charging ----------------------------------------------------------------------------------
-def test_charges_when_a_stored_kwh_is_worth_more_than_the_buy_line_up_to_the_target():
+def test_carries_out_the_decisions_charge_to_its_level_and_says_why(decides):
+    decides.set(CHARGE, 88.0)
     ex = Executor(V2Settings())
-    ms, dec, new, changed = step(ex, 0, level=50, ln=lines(30.0, imp=6.99, target=88.0))
+    ms, dec, new, changed = step(ex, 0, level=50, ln=lines(30.0, imp=6.99))
     assert changed and ms.mode == CHARGE and ms.target_soc == 88.0 and ms.rule == "v2_value"
     assert dec.action == v1d.GRID_CHARGE and dec.rule == "v2_value" and dec.target_soc == 88.0
     assert dec.label_target_soc == 88.0 and dec.details["engine"] == "v2" and "reached" not in dec.details
     assert "6.99p" in ms.why and "30.0p" in ms.why and "88%" in ms.why
     assert dec.reason[0].islower()                       # reads as v1's sentences do
     assert dec.sentence(passive=True).startswith("Would grid-charge to 88%")
+    assert decides.calls[0]["prev"] is None and decides.calls[0]["import_p"] == 6.99     # the live rate goes in
 
 
-def test_never_charges_unless_the_value_beats_the_import_price_after_losses():
-    for imp in [5.0 + 0.5 * i for i in range(60)]:
-        for value in [0.0 + 1.5 * j for j in range(45)]:
-            ex = Executor(V2Settings())
-            ms, *_ = step(ex, 0, level=50, ln=lines(value, imp=imp, target=90.0))
-            if ms.mode == CHARGE:
-                assert value > imp / 0.95 + 0.5 - 1e-9, (imp, value)
+def test_the_decision_stands_until_something_changes_and_is_asked_again_when_it_does(decides):
+    decides.set(CHARGE, 88.0)
+    ex = Executor(V2Settings())
+    ln = lines(30.0, imp=6.99)
+    step(ex, 0, level=50, ln=ln)
+    step(ex, 10, level=51, ln=ln)
+    step(ex, 20, level=52, ln=ln)
+    assert len(decides.calls) == 1                       # nothing changed: it is carried out, not decided again
+    step(ex, 30, level=53, ln=lines(30.0, imp=7.5))      # a new live rate
+    assert len(decides.calls) == 2 and decides.calls[1]["import_p"] == 7.5 and decides.calls[1]["prev"] == CHARGE
+    step(ex, 40, level=54, ln=lines(30.0, imp=7.5), lim=limits(ceiling=90.0))             # new limits
+    assert len(decides.calls) == 3
+    step(ex, 50, level=55, ln=lines(30.0, imp=7.5), lim=limits(ceiling=90.0),
+         vr=value_result(T0 + timedelta(seconds=50), vr_default().forecast))              # a new plan
+    assert len(decides.calls) == 4
+    step(ex, 3600 * 3, level=56, ln=lines(30.0, imp=7.5), lim=limits(ceiling=90.0),
+         vr=value_result(T0 + timedelta(seconds=50), vr_default().forecast))              # its "until" has passed
+    assert len(decides.calls) == 5
 
 
-def test_no_charge_without_a_target_even_when_the_value_is_high():
-    ms, *_ = step(Executor(V2Settings()), 0, ln=lines(30.0, target=None))
-    assert ms.mode != CHARGE
-
-
-def test_reaching_the_target_ends_the_charge_at_once_and_the_dip_does_not_restart_it():       # B3
+def test_reaching_the_level_ends_the_charge_at_once_and_asks_for_the_next_decision(decides):       # B3
+    def answer(last_run=None, **kw):
+        return {"mode": SELF_USE} if last_run == CHARGE else {"mode": CHARGE, "stop": 88.0}
+    decides.answer = answer
     ex = Executor(V2Settings())
     ln = lines(30.0, target=88.0)
     step(ex, 0, level=80, ln=ln)
     ms, dec, new, changed = step(ex, 10, level=87.8, ln=ln)
     assert ms.mode == CHARGE and not changed                      # still short of it
-    ms, dec, new, changed = step(ex, 20, level=88.0, ln=ln)       # within the minimum time: the level exit is not held
+    ms, dec, new, changed = step(ex, 20, level=88.0, ln=ln)
     assert changed and ms.mode != CHARGE
-    assert [e.kind for e in new] == ["level"] and ms.chosen_by == "level"
-    for sec, level in ((200, 87.5), (210, 87.2)):                  # the reading dips a point: no restart
+    assert [e.kind for e in new] == ["level_edge"] and ms.chosen_by == "level"
+    last = decides.calls[-1]
+    assert last["last_run"] == CHARGE and last["used"] == 1 and last["prev"] == CHARGE   # the plan's next step, now
+    for sec, level in ((200, 87.5), (210, 86.0)):                  # the reading dips: the decision stands
         ms, *_ = step(ex, sec, level=level, ln=ln)
         assert ms.mode != CHARGE
-    ms, *_ = step(ex, 220, level=86.9, ln=ln)                      # a point below the target: it may restart
+
+
+def test_a_level_within_the_tolerance_of_the_target_counts_as_reached(decides):
+    """The filter closes on the reading but never reaches it: 99.99999999% at a target of 100% used to keep the charge
+    going for hours (dull day, 00:02 to 09:30)."""
+    decides.answer = lambda last_run=None, **kw: {"mode": SELF_USE if last_run else CHARGE, "stop": 100.0}
+    ex = Executor(V2Settings())
+    ms, *_ = step(ex, 0, level=90, ln=lines(30.0))
     assert ms.mode == CHARGE
+    ms, dec, new, changed = step(ex, 600, level=99.99999999, ln=lines(30.0))
+    assert changed and ms.mode != CHARGE and [e.kind for e in new] == ["level_edge"]
 
 
-def test_a_charge_whose_price_is_no_longer_worth_it_ends_at_once():
-    ex = Executor(V2Settings())
-    step(ex, 0, level=50, ln=lines(30.0, imp=6.99, target=88.0))
-    ms, dec, new, changed = step(ex, 15, level=51, ln=lines(30.0, imp=40.0, target=88.0))
-    assert changed and ms.mode != CHARGE
-
-
-def test_the_charge_target_is_held_at_the_ceiling():
-    ex = Executor(V2Settings())
-    ms, *_ = step(ex, 0, level=50, ln=lines(30.0, target=95.0), lim=limits(ceiling=90.0))
+def test_the_charge_target_is_held_at_the_ceiling(decides):
+    decides.set(CHARGE, 95.0)
+    ms, *_ = step(Executor(V2Settings()), 0, level=50, ln=lines(30.0), lim=limits(ceiling=90.0))
     assert ms.mode == CHARGE and ms.target_soc == 90.0
 
 
-def test_charge_power_is_the_cap_in_watts_when_below_the_batterys_limit():
+def test_charge_power_is_the_cap_in_watts_when_below_the_batterys_limit(decides):
+    decides.set(CHARGE, 88.0)
     ex = Executor(V2Settings())
-    ms, dec, *_ = step(ex, 0, level=50, ln=lines(30.0, target=88.0), lim=limits(charge_cap_kw=2.4))
+    ms, dec, *_ = step(ex, 0, level=50, ln=lines(30.0), lim=limits(charge_cap_kw=2.4))
     assert ms.power_w == 2400.0 and dec.power_w == 2400.0 and "2.4 kW" in ms.why
-    ms, dec, *_ = step(Executor(V2Settings()), 0, ln=lines(30.0, target=88.0))
+    ms, dec, *_ = step(Executor(V2Settings()), 0, ln=lines(30.0))
     assert dec.power_w is None
 
 
-# ---- hysteresis and minimum time (B10) ---------------------------------------------------------
-def test_price_band_is_a_dead_zone_either_side_of_the_use_line():
-    ex = Executor(s0())
-    # use line 6.65p, band 0.5: Self-use starts below 6.15 and stops above 7.15
-    assert step(ex, 0, ln=lines(6.4))[0].mode == HOLD
-    assert step(ex, 10, ln=lines(6.0))[0].mode == SELF_USE
-    assert step(ex, 20, ln=lines(6.9))[0].mode == SELF_USE
-    assert step(ex, 30, ln=lines(7.3))[0].mode == HOLD
-    assert step(ex, 40, ln=lines(6.9))[0].mode == HOLD
+# ---- idle time, limits and flip-flops ---------------------------------------------------------
+def test_idle_time_is_the_idle_mode_the_decision_names(decides):
+    decides.set(HOLD)
+    ms, *_ = step(Executor(V2Settings()), 0, ln=lines(9.0))
+    assert ms.mode == HOLD and "the grid runs the house" in ms.why
+    decides.set(SELF_USE)
+    ms, *_ = step(Executor(V2Settings()), 0, ln=lines(5.0))
+    assert ms.mode == SELF_USE and "covers the house" in ms.why
 
 
-def test_minimum_time_blocks_an_opportunity_change_until_it_has_passed():
-    ex = Executor(V2Settings(min_dwell_s=120, switch_cost_p=0.0))
-    assert step(ex, 0, ln=lines(6.0))[0].mode == SELF_USE
-    ms, dec, new, changed = step(ex, 60, ln=lines(9.0))           # Hold is better, but too soon
-    assert ms.mode == SELF_USE and not changed
-    assert step(ex, 119, ln=lines(9.0))[0].mode == SELF_USE
-    ms, dec, new, changed = step(ex, 121, ln=lines(9.0))
-    assert ms.mode == HOLD and changed
-
-
-def test_an_urgent_event_is_never_held_back_by_the_minimum_time():
-    ex = Executor(V2Settings(min_dwell_s=120))
-    assert step(ex, 0, ln=lines(6.0))[0].mode == SELF_USE
-    ms, *_ = step(ex, 30, ln=lines(30.0, target=88.0), events=[ev("car_start", 30)])
-    assert ms.mode == CHARGE and ms.chosen_by == "car_start"
-
-
-def test_a_non_urgent_event_is_held_back():
-    ex = Executor(V2Settings(min_dwell_s=120))
-    step(ex, 0, ln=lines(6.0))
-    ms, *_ = step(ex, 30, ln=lines(30.0, target=88.0), events=[ev("price", 30)])
-    assert ms.mode == SELF_USE
-
-
-def test_a_mode_no_longer_allowed_ends_at_once():
-    ex = Executor(V2Settings(min_dwell_s=120))
+def test_a_mode_no_longer_allowed_ends_at_once(decides):
+    decides.set(SELF_USE)
+    ex = Executor(V2Settings())
     step(ex, 0, ln=lines(6.0))
     ms, *_ = step(ex, 10, ln=lines(6.0), lim=limits(allowed={HOLD, CHARGE}, rule="car"))
     assert ms.mode == HOLD
 
 
-def test_flip_flops_are_counted_inside_ten_minutes_only():
-    ex = Executor(s0())
-    step(ex, 0, ln=lines(6.0))
-    step(ex, 60, ln=lines(9.0))
+def test_a_decision_for_a_mode_the_rules_do_not_allow_falls_back_to_the_idle_mode(decides):
+    decides.set(EXPORT, 40.0, rest=HOLD)
+    ms, *_ = step(Executor(V2Settings()), 0, level=70, ln=lines(5.0, floor=40.0))      # export is not allowed
+    assert ms.mode == HOLD
+    decides.set(EXPORT, 40.0, rest=SELF_USE)
+    ms, *_ = step(Executor(V2Settings()), 0, level=70, ln=lines(5.0, floor=40.0), lim=limits({SELF_USE, CHARGE}))
+    assert ms.mode == SELF_USE
+
+
+def test_flip_flops_are_counted_inside_ten_minutes_only(decides):
+    decides.answer = lambda import_p=None, **kw: HOLD if import_p > 8 else SELF_USE
+    ex = Executor(V2Settings())
+    step(ex, 0, ln=lines(6.0, imp=7.0))
+    step(ex, 60, ln=lines(9.0, imp=9.0))
     assert not ex.flip_flop_now
-    step(ex, 120, ln=lines(6.0))
+    step(ex, 120, ln=lines(6.0, imp=7.0))
     assert ex.flip_flop_now
-    step(ex, 1000, ln=lines(9.0))
-    step(ex, 2000, ln=lines(6.0))
+    step(ex, 1000, ln=lines(9.0, imp=9.0))
+    step(ex, 2000, ln=lines(6.0, imp=7.0))
     assert not ex.flip_flop_now
 
 
 # ---- sun ---------------------------------------------------------------------------------------
-def test_spare_sun_is_stored_when_the_battery_is_worth_more_than_exporting_it():          # B17
-    ex = Executor(s0())
-    ms, *_ = step(ex, 0, ln=lines(20.0), events=[ev("short_to_sun")])
+def test_spare_sun_is_said_to_be_stored_in_self_use(decides):          # B17
+    decides.set(SELF_USE)
+    ms, *_ = step(Executor(V2Settings()), 0, ln=lines(20.0), events=[ev("short_to_sun")])
     assert ms.mode == SELF_USE and "Spare sun goes into the battery" in ms.why
 
 
-def test_spare_sun_is_exported_when_it_is_not_worth_storing():                           # B18
-    ex = Executor(s0())
-    ms, *_ = step(ex, 0, ln=lines(10.0), events=[ev("short_to_sun")])
+def test_spare_sun_is_said_to_be_exported_in_hold(decides):             # B18
+    decides.set(HOLD)
+    ms, *_ = step(Executor(V2Settings()), 0, ln=lines(10.0), events=[ev("short_to_sun")])
     assert ms.mode == HOLD and "not worth storing" in ms.why
 
 
-def test_a_shortfall_returns_to_the_use_comparison():
-    ex = Executor(s0())
+def test_a_shortfall_returns_to_the_house_sentence(decides):
+    decides.set(SELF_USE)
+    ex = Executor(V2Settings())
     step(ex, 0, ln=lines(10.0), events=[ev("short_to_sun")])
     ms, *_ = step(ex, 10, ln=lines(5.0), events=[ev("sun_to_short", 10)])
     assert ms.mode == SELF_USE and "covers the house" in ms.why
 
 
 # ---- export ------------------------------------------------------------------------------------
-def test_export_runs_to_the_sell_floor_then_stops():                                      # B13
+def test_export_runs_to_the_decisions_level_then_stops(decides):                           # B13
+    decides.answer = lambda last_run=None, **kw: {"mode": SELF_USE} if last_run else {"mode": EXPORT, "stop": 40.0}
     lim = limits(allowed=NORMAL | {EXPORT})
     ex = Executor(V2Settings())
     ln = lines(5.0, exp=15.0, floor=40.0)             # sell line 14.25p
@@ -209,16 +242,28 @@ def test_export_runs_to_the_sell_floor_then_stops():                            
     assert ms.mode == EXPORT and ms.target_soc == 40.0 and dec.action == v1d.EXPORT
     assert "15.00p" in ms.why and "5.0p" in ms.why
     ms, dec, new, changed = step(ex, 10, level=39.9, ln=ln, lim=lim)
-    assert changed and ms.mode != EXPORT and [e.kind for e in new] == ["level"]
+    assert changed and ms.mode != EXPORT and [e.kind for e in new] == ["level_edge"]
 
 
-def test_export_needs_arbitrage_to_be_allowed():
-    ms, *_ = step(Executor(V2Settings()), 0, level=70, ln=lines(5.0, floor=40.0))
+def test_a_sale_never_goes_below_the_floor_even_if_the_decision_says_so(decides):
+    decides.set(EXPORT, 5.0)
+    ms, *_ = step(Executor(V2Settings()), 0, level=70, ln=lines(5.0), lim=limits(NORMAL | {EXPORT}, floor=12.0))
+    assert ms.mode == EXPORT and ms.target_soc == 12.0
+
+
+def test_a_sale_at_the_floor_ends_when_the_filtered_level_only_approaches_it(decides):
+    decides.answer = lambda last_run=None, **kw: {"mode": SELF_USE} if last_run else {"mode": EXPORT, "stop": None}
+    ex = Executor(V2Settings())
+    ln = lines(5.0, floor=0.0)
+    ms, *_ = step(ex, 0, level=50, ln=ln, lim=limits(EXPORTING))
+    assert ms.mode == EXPORT
+    ms, *_ = step(ex, 600, level=12.00000001, ln=ln, lim=limits(EXPORTING))
     assert ms.mode != EXPORT
 
 
 # ---- deadlines (B22) ---------------------------------------------------------------------------
-def test_a_deadline_raises_an_event_once_and_does_not_stop_the_charge():                    # B22
+def test_a_deadline_raises_an_event_once_and_does_not_stop_the_charge(decides):                    # B22
+    decides.set(CHARGE, 88.0)
     item = TimelineItem(CHARGE, T0, T0 + timedelta(hours=1), 40.0, 88.0, "until 88%", "reason")
     vr = vr_default(timeline=[item])
     ex = Executor(V2Settings())
@@ -233,7 +278,8 @@ def test_a_deadline_raises_an_event_once_and_does_not_stop_the_charge():        
     assert new == () and ms.mode == CHARGE
 
 
-def test_a_new_value_result_with_a_later_end_moves_the_deadline_and_arms_it_again():
+def test_a_new_value_result_with_a_later_end_moves_the_deadline_and_arms_it_again(decides):
+    decides.set(CHARGE, 88.0)
     item = TimelineItem(CHARGE, T0, T0 + timedelta(hours=1), 40.0, 88.0, "until 88%", "reason")
     ex = Executor(V2Settings())
     ln = lines(30.0, target=88.0)
@@ -246,7 +292,8 @@ def test_a_new_value_result_with_a_later_end_moves_the_deadline_and_arms_it_agai
     assert new == () and ms.deadline == T0 + timedelta(minutes=130)
 
 
-def test_the_exits_of_a_charge_are_listed_with_expected_times():
+def test_the_exits_of_a_charge_are_listed_with_expected_times(decides):
+    decides.set(CHARGE, 88.0)
     item = TimelineItem(CHARGE, T0, T0 + timedelta(hours=2), 40.0, 88.0, "until 88%", "reason")
     segs = [segment(T0 + timedelta(minutes=30 * i), import_p=7.0 if i < 2 else 30.0) for i in range(-2, 12)]
     vr = value_result(T0, forecast(T0, segs), timeline=[item])
@@ -257,9 +304,10 @@ def test_the_exits_of_a_charge_are_listed_with_expected_times():
     assert "price" in kinds and "car" in kinds and "deadline" in kinds
 
 
-def test_the_expected_time_of_a_level_exit_is_never_earlier_than_the_power_allows():
+def test_the_expected_time_of_a_level_exit_is_never_earlier_than_the_power_allows(decides):
     # 9 Oct 2026: "reaches 32% at 18:00" shown at 81% and 4.95 kW, because the plan's step for the sale ended at 18:00
-    # (it alternates sale and charge) while the live sale runs to the line. 49 points of 18 kWh is nearly two hours.
+    # while the live sale runs to its level. 49 points of 18 kWh is nearly two hours.
+    decides.set(EXPORT, 32.0)
     item = TimelineItem(EXPORT, T0, T0 + timedelta(minutes=18), 81.0, 73.0, "until 73%", "reason")
     segs = [segment(T0 + timedelta(minutes=30 * i), import_p=7.0) for i in range(-2, 12)]
     vr = value_result(T0, forecast(T0, segs), timeline=[item])
@@ -272,7 +320,7 @@ def test_the_expected_time_of_a_level_exit_is_never_earlier_than_the_power_allow
 
 # ---- forced modes ------------------------------------------------------------------------------
 def test_a_grid_event_forces_the_event_mode_with_no_minimum_time():
-    ex = Executor(V2Settings(min_dwell_s=600))
+    ex = Executor(V2Settings())
     step(ex, 0, ln=lines(6.0))
     lim = limits(allowed=(), forced=EVENT, floor=11.0, rule="event", discharge_cap_kw=3.0)
     ms, dec, new, changed = step(ex, 5, level=40, ln=lines(6.0), lim=lim)
@@ -309,7 +357,7 @@ def test_free_power_charges_to_the_ceiling_then_holds():
 
 def test_override_modes_are_forced_and_say_why():                                         # B19
     reason = "Manual override: Hold until 14:00"
-    ex = Executor(V2Settings(min_dwell_s=600))
+    ex = Executor(V2Settings())
     step(ex, 0, ln=lines(6.0))
     ms, dec, *_ = step(ex, 5, ln=lines(6.0), lim=limits(allowed={HOLD}, forced=HOLD, rule="override", reason=reason))
     assert ms.mode == HOLD and dec.rule == "v2_override" and "Manual override" in ms.why
@@ -348,7 +396,8 @@ def test_with_the_car_charging_the_battery_holds_and_never_feeds_it():          
     assert [e.text for e in car] == ["The car stops charging"]
 
 
-def test_with_the_car_charging_a_worthwhile_charge_still_goes_ahead():
+def test_with_the_car_charging_a_worthwhile_charge_still_goes_ahead(decides):
+    decides.set(CHARGE, 88.0)
     lim = limits(allowed={HOLD, CHARGE}, rule="car")
     ms, *_ = step(Executor(V2Settings()), 0, ln=lines(30.0, target=88.0), lim=lim, car=True)
     assert ms.mode == CHARGE
@@ -387,7 +436,8 @@ def test_a_forced_event_does_not_wait_for_the_first_value_result():
     assert ms.mode == EVENT
 
 
-def test_the_decisions_details_never_use_the_v1_latch_key():
+def test_the_decisions_details_never_use_the_v1_latch_key(decides):
+    decides.answer = lambda last_run=None, **kw: {"mode": HOLD} if last_run else {"mode": CHARGE, "stop": 88.0}
     ex = Executor(V2Settings())
     for sec, level in ((0, 50), (10, 88)):
         _, dec, *_ = step(ex, sec, level=level, ln=lines(30.0, target=88.0))
@@ -400,7 +450,8 @@ def test_the_reason_keeps_a_supplier_name_capitalised():
     assert dec.reason.startswith("Axle event")
 
 
-def test_state_is_json_safe_and_a_restored_executor_carries_on():
+def test_state_is_json_safe_and_a_restored_executor_carries_on(decides):
+    decides.set(CHARGE, 88.0)
     item = TimelineItem(CHARGE, T0, T0 + timedelta(hours=1), 40.0, 88.0, "until 88%", "reason")
     vr = vr_default(timeline=[item])
     ex = Executor(V2Settings())
@@ -415,75 +466,22 @@ def test_state_is_json_safe_and_a_restored_executor_carries_on():
     assert ms3.mode == CHARGE and not changed
 
 
-def test_a_running_charge_follows_the_timelines_end_level_when_the_lines_target_creeps_up():
-    first = TimelineItem(CHARGE, T0, T0 + timedelta(minutes=30), 12.0, 60.0, "until 60%", "r")
-    second = TimelineItem(CHARGE, T0 + timedelta(minutes=30), T0 + timedelta(minutes=90), 60.0, 100.0,
-                          "until 100%", "r")
-    vr = vr_default(timeline=[first, second])
-    ex = Executor(V2Settings())
-    ms, *_ = step(ex, 0, level=12.0, ln=lines(30.0, target=23.0), vr=vr)
-    assert ms.mode == CHARGE and ms.target_soc == 23.0                  # it starts on the lines
-    ms, dec, new, changed = step(ex, 10, level=23.5, ln=lines(30.0, target=23.0), vr=vr)
-    assert ms.mode == CHARGE and not changed and ms.target_soc == 100.0 and new == ()
-    ms, *_ = step(ex, 20, level=23.5, ln=lines(30.0, target=None), vr=vr)      # a tie on the curve: it carries on
-    assert ms.mode == CHARGE
-
-
-def test_without_a_timeline_charge_the_lines_target_ends_it():
-    ex = Executor(V2Settings())
-    step(ex, 0, level=12.0, ln=lines(30.0, target=23.0))
-    ms, dec, new, changed = step(ex, 10, level=23.5, ln=lines(30.0, target=23.0))
-    assert changed and ms.mode != CHARGE
-
-
-def test_charge_starts_when_the_plan_charges_in_this_stretch_even_on_a_tie():
-    """A flat cheap night: the value equals the buy line (charging now or later costs the same), but the plan charges
-    in this stretch, so the charge starts now (charge_now), not at the end of the cheap rate."""
-    from datetime import datetime, timezone
-
-    from pe_core.engine_v2.execute import Executor
-    from pe_core.engine_v2.settings import V2Settings
-    from pe_core.engine_v2.types import CHARGE, HOLD, SELF_USE, BatteryFacts, Limits, Lines, Observation
-
-    now = datetime(2026, 10, 5, 22, 35, tzinfo=timezone.utc)
-    ex = Executor(V2Settings(min_dwell_s=0))
-    lim = Limits(allowed=frozenset({SELF_USE, HOLD, CHARGE}), floor_soc=12, ceiling_soc=100)
-    obs = Observation(now=now, level_reported=40.0, level_filtered=40.0, net_load_kw=0.5, car_charging=False,
-                      data_ok=True)
-    tie = dict(value_p=7.36, buy_line_p=7.36, sell_line_p=14.25, use_line_p=6.64, store_sun_line_p=15.79,
-               import_p=6.99, export_p=15.0)
-    from test_engine_v2_observe import forecast, segment, value_result
-    vr = value_result(now, forecast(now, [segment(now, import_p=6.99)]))
-    mode, _, _, _ = ex.step(now, obs, lim, Lines(**tie), vr, (), BatteryFacts())
-    assert mode.mode != CHARGE                     # a tie alone does not buy
-    ex2 = Executor(V2Settings(min_dwell_s=0))
-    ln = Lines(**tie, charge_target_soc=71.0, charge_now=True, run_target_soc=71.0)
-    mode, decision, _, _ = ex2.step(now, obs, lim, ln, vr, (), BatteryFacts())
-    assert mode.mode == CHARGE and decision.target_soc == 71.0
-
-
-# ---- the level latch, the cycle tie-break and the cost of a change (engine_compare, 6 Oct 2026) ---------------------
 EXPORTING = NORMAL | {EXPORT}
 
 
-def test_a_charge_at_the_ceiling_ends_when_the_filtered_level_only_approaches_it():
-    """The filter closes on the reading but never reaches it: 99.99999999% at a target of 100% used to keep the charge
-    going for hours (dull day, 00:02 to 09:30)."""
+def test_a_charge_remembers_the_level_it_began_at_and_tells_the_decision(decides):
+    """The charge or sale running has a minimum length between the level bands (`value.leg_band`); the decision needs
+    to know where it began."""
+    decides.set(CHARGE, 88.0)
     ex = Executor(V2Settings())
-    ln = lines(30.0, target=100.0)
-    ms, *_ = step(ex, 0, level=90, ln=ln)
-    assert ms.mode == CHARGE
-    ms, dec, new, changed = step(ex, 600, level=99.99999999, ln=ln)
-    assert changed and ms.mode != CHARGE and [e.kind for e in new] == ["level"]
-
-
-def test_a_sale_at_the_floor_ends_when_the_filtered_level_only_approaches_it():
-    ex = Executor(V2Settings())
-    ln = lines(5.0, floor=0.0)
-    ms, *_ = step(ex, 0, level=50, ln=ln, lim=limits(EXPORTING))
-    assert ms.mode == EXPORT
-    ms, *_ = step(ex, 600, level=12.00000001, ln=ln, lim=limits(EXPORTING))
-    assert ms.mode != EXPORT
+    step(ex, 0, level=60, ln=lines(30.0, imp=6.99))
+    assert ex.leg_from == 60
+    step(ex, 60, level=64, ln=lines(30.0, imp=7.1))                          # asked again, mid-charge
+    assert decides.calls[-1]["leg_from"] == 60 and decides.calls[-1]["prev"] == CHARGE
+    assert Executor(V2Settings(), ex.state()).leg_from == 60                 # kept across a restart
+    decides.set(SELF_USE)
+    step(ex, 120, level=70, ln=lines(30.0, imp=7.2))
+    assert ex.leg_from is None                                               # forgotten when the charge ends
 
 
 def test_a_forced_charge_ends_at_its_ceiling_the_same_way():
@@ -493,118 +491,3 @@ def test_a_forced_charge_ends_at_its_ceiling_the_same_way():
     assert ms.mode == FREE
     ms, *_ = step(ex, 600, level=99.99999999, ln=lines(5.0), lim=lim)
     assert ms.mode == HOLD
-
-
-def _timeline(mode):
-    return (TimelineItem(mode=mode, start=T0 - timedelta(minutes=5), end=T0 + timedelta(minutes=25), level_start=90.0,
-                         level_end=85.0, until="until 85%", reason="x"),)
-
-
-def test_when_charging_and_selling_both_pay_the_timeline_says_which_comes_now():
-    both = lines(10.0, target=100.0, floor=0.0)            # worth 10p: under the 14.25p a sale brings, over the buy
-    for planned, expected in ((EXPORT, EXPORT), (CHARGE, CHARGE)):
-        ms, *_ = step(Executor(V2Settings()), 0, level=90, ln=both, lim=limits(EXPORTING),
-                      vr=value_result(T0, forecast(T0, [segment(T0)]), timeline=_timeline(planned)))
-        assert ms.mode == expected
-    ms, *_ = step(Executor(V2Settings()), 0, level=90, ln=both, lim=limits(EXPORTING))     # no item covers now
-    assert ms.mode == EXPORT
-
-
-def test_without_a_plan_item_the_running_mode_goes_on_when_both_pay():
-    ex = Executor(s0())
-    both = lines(10.0, target=100.0, floor=0.0)
-    ms, *_ = step(ex, 0, level=90, ln=lines(30.0, target=100.0), lim=limits(EXPORTING))
-    assert ms.mode == CHARGE
-    ms, *_ = step(ex, 10, level=90, ln=both, lim=limits(EXPORTING))
-    assert ms.mode == CHARGE                               # not swapped to the sale: the one that runs goes on
-
-
-def _from_idle(settings, level, ln):
-    ex = Executor(settings)
-    step(ex, 0, level=level, ln=lines(20.0, floor=0.0), lim=limits(EXPORTING))        # nothing pays: idle
-    assert ex.mode in (SELF_USE, HOLD)
-    return step(ex, 10, level=level, ln=ln, lim=limits(EXPORTING))[0]
-
-
-def test_a_change_into_a_sale_must_earn_more_than_the_change_costs():
-    near = lines(13.7, floor=0.0)                          # 0.55p under the sale line, but only 3 points to sell
-    assert _from_idle(s0(switch_cost_p=0.5), 15, near).mode != EXPORT
-    assert _from_idle(s0(switch_cost_p=0.0), 15, near).mode == EXPORT      # free to change: it goes
-    assert _from_idle(s0(switch_cost_p=0.5), 50, near).mode == EXPORT      # 38 points to sell: 3.7p, worth it
-
-
-def test_the_plans_own_charge_start_is_not_held_back_by_the_cost():
-    ln = Lines(value_p=7.0, buy_line_p=7.37, sell_line_p=14.25, use_line_p=6.6, store_sun_line_p=15.8, import_p=7.0,
-               export_p=15.0, charge_target_soc=60.0, sell_floor_soc=None, charge_now=True)
-    ms, *_ = step(Executor(V2Settings()), 0, level=50, ln=ln)
-    assert ms.mode == CHARGE                               # value on the line: the plan's own run, no gain to test
-
-
-def test_a_sale_the_programme_would_not_start_here_is_not_started(monkeypatch):
-    from pe_core.engine_v2 import execute
-    near = lines(8.0, floor=0.0)                           # well under the sale line: the lines alone say sell
-    idle = lines(20.0, floor=0.0)
-    for answer, expected in (((HOLD, 1.0), HOLD), ((EXPORT, 1.0), EXPORT), (None, EXPORT)):
-        monkeypatch.setattr(execute, "choice_now", lambda *a, _r=answer, **k: _r)
-        ex = Executor(s0())
-        step(ex, 0, level=60, ln=idle, lim=limits(EXPORTING))
-        ms, *_ = step(ex, 10, level=60, ln=near, lim=limits(EXPORTING))
-        assert ms.mode == expected
-
-
-def test_self_use_and_hold_do_not_trade_places_for_a_margin_that_does_not_cover_the_change():
-    """Self-use against hold is decided against the use line; with the house drawing 0.5 kW, half an hour moves
-    0.25 kWh, so a margin of 1p earns 0.25p, short of the 1p a change in and out costs."""
-    ex = Executor(s0(switch_cost_p=0.5))
-    assert step(ex, 0, ln=lines(6.9))[0].mode == HOLD                    # use line 6.65: hold
-    assert step(ex, 10, ln=lines(5.6))[0].mode == HOLD                   # 1p under the line (past the band): too thin
-    assert step(ex, 20, ln=lines(1.0))[0].mode == SELF_USE               # 5.6p under: 1.4p for the half hour, pays
-
-
-def test_a_reversal_levy_makes_turning_a_charge_into_a_sale_or_back_need_a_better_price():
-    lim = limits(allowed=NORMAL | {EXPORT})
-    buy = lines(7.8, imp=7.0, target=88.0)                 # just over the buy line (7.37p)
-    sell = lines(14.0, exp=15.0, floor=40.0)               # just under the sell line (14.25p)
-    for levy in (0.0, 1.0):
-        ex = Executor(s0(price_band_p=0.0, level_band_pct=0.0, reversal_levy_p=levy))
-        ex.mode = EXPORT
-        assert ex._can_charge(lim, buy, 50.0, staying=False) is (levy == 0.0)
-        assert ex._can_charge(lim, lines(9.0, imp=7.0, target=88.0), 50.0, staying=False)
-        ex.mode = CHARGE
-        assert ex._can_export(lim, sell, 70.0, staying=False) is (levy == 0.0)
-        assert ex._can_export(lim, lines(12.0, exp=15.0, floor=40.0), 70.0, staying=False)
-        ex.mode = SELF_USE
-        assert ex._can_charge(lim, buy, 50.0, staying=False) and ex._can_export(lim, sell, 70.0, staying=False)
-        ex.mode = CHARGE
-        assert ex._can_charge(lim, buy, 50.0, staying=True)          # carrying on is free
-
-
-def test_the_levies_also_gate_a_start_the_plan_asks_for():
-    """The plan executor's picks do not go through `_can_charge` / `_can_export`; a re-plan that turns a leg round
-    still has to clear the levy."""
-    ex = Executor(s0(price_band_p=0.0, reversal_levy_p=4.0))
-    thin_buy = lines(10.6, imp=7.0, target=88.0)           # buy line 7.37p: 3.2p over, under the 4p levy
-    fat_buy = lines(12.0, imp=7.0, target=88.0)
-    ex.mode, ex._ts = EXPORT, 1000.0
-    assert not ex._inertia_ok(CHARGE, thin_buy) and ex._inertia_ok(CHARGE, fat_buy)
-    ex.mode = SELF_USE
-    assert ex._inertia_ok(CHARGE, thin_buy)                # nothing was turned round
-    ex.mode = CHARGE
-    thin_sell = lines(11.0, exp=15.0, floor=40.0)          # sell line 14.25p: 3.25p under
-    assert not ex._inertia_ok(EXPORT, thin_sell) and ex._inertia_ok(EXPORT, lines(9.0, exp=15.0, floor=40.0))
-
-
-def test_a_charge_runs_its_length_between_the_bands_before_it_can_stop():
-    st = s0(level_top_start_soc=90, level_top_rate_p=200.0, level_bot_start_soc=70, level_bot_rate_p=10.0)
-    ex = Executor(st)
-    ms, *_ = step(ex, 0, level=60, ln=lines(30.0, imp=6.99, target=88.0))
-    assert ms.mode == CHARGE and ex.leg_from == 60
-    ms, *_ = step(ex, 60, level=64, ln=lines(5.0, imp=6.99))               # the value has fallen: it would stop
-    assert ms.mode == CHARGE and ms.target_soc >= 80.0
-    assert Executor(st, ex.state()).leg_from == 60                         # kept across a restart
-    ms, *_ = step(ex, 120, level=81, ln=lines(5.0, imp=6.99))              # 20 points done: free to stop
-    assert ms.mode != CHARGE
-    ex2 = Executor(st)                                                     # begun at 85%: only to the band's edge
-    step(ex2, 0, level=85, ln=lines(30.0, imp=6.99, target=95.0))
-    ms, *_ = step(ex2, 60, level=90.5, ln=lines(5.0, imp=6.99))
-    assert ms.mode != CHARGE

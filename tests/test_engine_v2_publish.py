@@ -11,7 +11,7 @@ from pe_core.engine_v2 import engine as engine_mod
 from pe_core.engine_v2 import publish
 from pe_core.engine_v2.engine import EngineV2
 from pe_core.engine_v2.settings import SETTINGS, V2Settings
-from pe_core.engine_v2.types import CHARGE, EXPORT, HOLD, SELF_USE, BatteryFacts, Limits, Lines, TimelineItem
+from pe_core.engine_v2.types import CHARGE, EXPORT, HOLD, SELF_USE, Limits, Lines, TimelineItem
 from pe_core.engine_v2.value import value_at
 
 LOCAL = timezone(timedelta(hours=1))
@@ -355,70 +355,19 @@ def _item(mode, a, b, l0, l1, now, remainder=False):
                         remainder=remainder)
 
 
-def test_the_displayed_plan_runs_the_next_step_as_soon_as_a_part_way_run_is_done():
-    """The plan fills the rest of a segment after a charge stops part-way with a hold, a way of saying how much; the
-    executor never rests there, so the display does not show it (prices the same: the next run starts at once)."""
+def test_the_shown_items_and_path_are_the_plans_own():
+    """The items are shown as the plan has them (the executor makes the plan's own decision, so nothing is shifted),
+    and the path is drawn on the plan's own clock."""
     now = T0
     segs = [segment(now + timedelta(minutes=30 * i), import_p=8.88, export_p=15.0) for i in range(4)]
-    plan = [_item(CHARGE, 0, 14, 58, 64, now), _item(HOLD, 14, 30, 64, 64, now, True),
-            _item(CHARGE, 30, 52, 64, 73, now), _item(HOLD, 52, 60, 73, 73, now, True),
+    plan = [_item(CHARGE, 0, 36, 58, 73, now), _item(HOLD, 36, 60, 73, 73, now, True),
             _item(EXPORT, 60, 90, 73, 60, now)]
-    shown = publish.as_run(_run_plan(plan, segs, now), V2Settings(hold_only_car_reserve=True))
-    assert [i.mode for i in shown] == [CHARGE, EXPORT]
-    assert shown[0].end - shown[0].start == timedelta(minutes=36) and shown[0].level_end == 73
-    assert shown[1].start == shown[0].end                        # the sale follows at once, for as long as planned
-    assert shown[1].end - shown[1].start == timedelta(minutes=30)
-
-
-def test_the_displayed_plan_keeps_the_clock_across_a_price_change_and_fills_the_wait_without_a_hold():
-    now = T0
-    segs = [segment(now, import_p=8.88, export_p=15.0), segment(now + timedelta(minutes=30), import_p=28.84,
-                                                                  export_p=15.0)]
-    plan = [_item(CHARGE, 0, 14, 58, 64, now), _item(HOLD, 14, 30, 64, 64, now, True),
-            _item(SELF_USE, 30, 60, 64, 60, now)]
-    shown = publish.as_run(_run_plan(plan, segs, now), V2Settings(hold_only_car_reserve=True))
-    assert [i.mode for i in shown] == [CHARGE, SELF_USE, SELF_USE]
-    assert shown[1].start == now + timedelta(minutes=14) and shown[1].end == now + timedelta(minutes=30)
-    held = publish.as_run(_run_plan(plan, segs, now), V2Settings(hold_only_car_reserve=False))
-    assert HOLD in [i.mode for i in held]
-
-
-def test_the_wait_between_two_runs_says_until_the_local_time_it_ends():
-    """`until` of the filled wait was the UTC clock: an item ending at 10:00 in summer time read "until 09:00"."""
-    from zoneinfo import ZoneInfo
-    now = T0
-    segs = [segment(now, import_p=8.88, export_p=15.0), segment(now + timedelta(minutes=30), import_p=28.84,
-                                                                  export_p=15.0)]
-    plan = [_item(CHARGE, 0, 14, 58, 64, now), _item(HOLD, 14, 30, 64, 64, now, True),
-            _item(SELF_USE, 30, 60, 64, 60, now)]
-    tz = ZoneInfo("Europe/London")
-    wait = publish.as_run(_run_plan(plan, segs, now), V2Settings(hold_only_car_reserve=True), tz)[1]
-    assert wait.until == f"until {(now + timedelta(minutes=30)).astimezone(tz):%H:%M}"
-
-
-def test_the_shown_path_follows_the_shown_items_not_the_plans_own_clock():
-    """The items are shown pulled forward (the next run starts as soon as one is done); a path left on the plan's clock
-    drew a battery still selling where the items said it waited (14 Oct, 21:52)."""
-    now = T0
-    segs = [segment(now + timedelta(minutes=30 * i), import_p=8.88, export_p=15.0) for i in range(4)]
-    plan = [_item(CHARGE, 0, 14, 58, 64, now), _item(HOLD, 14, 30, 64, 64, now, True),
-            _item(CHARGE, 30, 52, 64, 73, now), _item(HOLD, 52, 60, 73, 73, now, True),
-            _item(EXPORT, 60, 90, 73, 60, now)]
-    knots = [(0, 58), (14, 64), (30, 64), (52, 73), (60, 73), (90, 60), (120, 60)]
-
-    def raw(m):
-        for (a, x), (b, y) in zip(knots, knots[1:], strict=False):
-            if a <= m <= b:
-                return x + (y - x) * (m - a) / (b - a)
-    pts = [round(raw(15 * i), 3) for i in range(9)]
+    pts = [58.0, 64.0, 70.0, 73.0, 73.0, 69.0, 60.0, 60.0, 60.0]
     path = {"start": now.isoformat(), "step_min": 15, "mid": pts, "low": pts, "high": pts}
     vr = _with(_run_plan(plan, segs, now), path=path)
     _, a = publish._timeline(vr, V2Settings(hold_only_car_reserve=True), 12.0, LOCAL)
-    assert [(i["mode"], i["level_end"]) for i in a["items"]] == [("charge", 73), ("export", 60)]
-    mid = a["path"]["mid"]
-    assert raw(60) == 73 and mid[4] == pytest.approx(62.6, abs=0.3)      # shown: selling since 36 min, not still at 73
-    assert mid[2] == pytest.approx(70.4, abs=0.3) and mid[8] == pytest.approx(60.0, abs=0.3)
-    assert mid[3] == pytest.approx(73 - 13 * 9 / 30, abs=0.3)
+    assert [(i["mode"], i["level_end"]) for i in a["items"]][:3] == [("charge", 73), ("hold", 73), ("export", 60)]
+    assert a["path"]["mid"] == pts
 
 
 def _flat_curves(value_p, n_segs, rows=37):
@@ -434,31 +383,6 @@ def _idle_run_plan(value_p, now):
     lim = Limits(allowed=frozenset({CHARGE, EXPORT, SELF_USE}))
     return value_result(now, forecast(now, segs), timeline=tuple(plan), lam=_flat_curves(value_p, 2),
                         limits=(lim, lim))
-
-
-def test_a_wait_the_lines_would_sell_in_is_shown_as_the_sale():
-    """A stored kWh worth far under the sell line: the executor (no hold allowed) sells in the wait, the plan's rest
-    was only a way of saying how much; the levels after it follow the sale."""
-    now = T0
-    shown = publish.as_run(_idle_run_plan(5.0, now), V2Settings(hold_only_car_reserve=True), None, BatteryFacts())
-    assert [i.mode for i in shown] == [CHARGE, EXPORT, SELF_USE]
-    sale = shown[1]
-    assert sale.start == now + timedelta(minutes=14) and sale.end <= now + timedelta(minutes=30)
-    assert sale.level_start == 85 and sale.level_end < 92
-    assert shown[2].level_start == sale.level_end                    # what follows starts from where the sale left it
-
-
-def test_a_wait_between_the_buy_and_sell_lines_stays_a_wait():
-    now = T0
-    shown = publish.as_run(_idle_run_plan(11.0, now), V2Settings(hold_only_car_reserve=True), None, BatteryFacts())
-    assert [i.mode for i in shown] == [CHARGE, SELF_USE, SELF_USE]
-    assert shown[1].remainder and shown[2].level_start == 85
-
-
-def test_a_wait_is_left_alone_where_a_hold_is_allowed():
-    now = T0
-    shown = publish.as_run(_idle_run_plan(5.0, now), V2Settings(hold_only_car_reserve=False), None, BatteryFacts())
-    assert [i.mode for i in shown] == [CHARGE, HOLD, SELF_USE]
 
 
 def test_the_timeline_path_carries_the_value_the_controller_reads_at_each_point():

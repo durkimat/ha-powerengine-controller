@@ -64,7 +64,7 @@ def test_the_reserve_removes_every_discharge_mode_outside_events():             
 
 
 def test_reserve_latch_needs_the_level_band_above_it_before_discharging_again():
-    s = V2Settings(reserve_soc=20.0, level_band_pct=1.0)
+    s = V2Settings(reserve_soc=20.0)                        # the band is rules.LEVEL_BAND_PCT (1 point)
     assert now_limits(level=20.5, settings=s).allowed >= {SELF_USE}
     lim = rules.limits_now(Situation(active=True), obs(20.5), None, BatteryFacts(), s, readings(T0),
                            reserve_latched=True)

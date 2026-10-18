@@ -3,18 +3,14 @@ above the comfort band's top, the cost of reversing, a leg running to its step's
 it matters. The closed-loop check of the evening is in test_engine_v2_evening.py."""
 
 from dataclasses import replace
-from datetime import timedelta
 
 import pytest
-from test_engine_v2_execute import EXPORTING, _timeline, limits, lines, s0, step
-from test_engine_v2_observe import T0, forecast, segment, value_result
 from test_engine_v2_value import FACTS, NO_COMFORT, cheap_then_peak, limits_for, seg, solve
 from test_engine_v2_value import step as vstep
 
 from pe_core.engine_v2 import triggers, value
-from pe_core.engine_v2.execute import Executor
-from pe_core.engine_v2.settings import SECTIONS, SETTINGS, SettingsError, V2Settings, catalogue, parse_v2
-from pe_core.engine_v2.types import CHARGE, EXPORT, HOLD, TimelineItem
+from pe_core.engine_v2.settings import SECTIONS, SETTINGS, SettingsError, catalogue, parse_v2
+from pe_core.engine_v2.types import CHARGE, EXPORT, HOLD
 from pe_core.engine_v2.value import CHARGE_K, DISCHARGE_K, HOLD_K, NONE_K, switch_cost
 
 TOP = replace(NO_COMFORT, top_up_cost_p=2.0)             # 90% top, 2p per kWh charged above it, no other cost
@@ -135,119 +131,11 @@ def test_a_saved_reversal_setting_from_an_earlier_release_is_ignored_not_an_erro
     assert s.switch_cost_p == 2.0 and s.top_up_cost_p == 4
 
 
-def test_the_executor_counts_a_change_at_its_own_price():
-    obs = type("Obs", (), {"net_load_kw": 0.5})()
-    ln = lines(11.0, floor=0.0)                                         # 3.25p under the sale line
-    near = lines(14.2, floor=68.0)                                      # 0.05p under it, and only 2 points to sell
-    lim, lim_near = limits(EXPORTING), limits(EXPORTING, floor=68.0)
-    ex = Executor(V2Settings(min_dwell_s=0, switch_cost_p=2.0))
-    big = ex._pick_for(EXPORT, lim, ln, 70.0, FACTS, None)
-    small = ex._pick_for(EXPORT, lim_near, near, 70.0, FACTS, None)
-    assert ex._worth_the_change(CHARGE, big, lim, ln, 70.0, FACTS, obs)             # 41p against 2 x 2p
-    assert not ex._worth_the_change(CHARGE, small, lim_near, near, 70.0, FACTS, obs)
-    assert ex._worth_the_change(HOLD, small, lim_near, near, 70.0, FACTS, obs) is False     # 2 x 2p still too dear
-    cheap = Executor(V2Settings(min_dwell_s=0, switch_cost_p=0.0))
-    assert cheap._worth_the_change(CHARGE, small, lim_near, near, 70.0, FACTS, obs)
-
-
 def test_the_programme_adds_the_change_cost_to_a_turn_from_a_charge_to_a_sale():
     cands = [(10.0, CHARGE, 1.0), (9.0, EXPORT, 1.0)]
     assert value._pick(cands, CHARGE_K, 2.0) == pytest.approx(10.0)                # 9 + 2 loses to staying at 10
     assert value._pick(cands, CHARGE_K, 0.5) == pytest.approx(9.5)                 # a small cost lets it turn
 
-
-
-# ---- 3. a leg runs to its step's end --------------------------------------------------------------
-BOTH = dict(target=100.0, floor=0.0)
-
-
-def _running(ex, mode_value_ln, lim=None):
-    step(ex, 0, level=70, ln=mode_value_ln, lim=lim or limits(EXPORTING))
-    return ex
-
-
-def test_a_charge_in_progress_is_not_turned_into_a_sale_when_the_plan_flips_mid_leg():
-    ex = Executor(s0())
-    ms, *_ = step(ex, 0, level=70, ln=lines(30.0, target=100.0), lim=limits(EXPORTING))
-    assert ms.mode == CHARGE
-    both = lines(10.0, **BOTH)                                         # now buying and selling both pay
-    vr = value_result(T0, forecast(T0, [segment(T0)]), timeline=_timeline(EXPORT))      # a revaluation says: sell
-    for sec in (10, 20, 30, 40):
-        ms, *_ = step(ex, sec, level=70 + sec / 10, ln=both, lim=limits(EXPORTING), vr=vr)
-        assert ms.mode == CHARGE, sec
-    # the same moment from idle: the plan's sale starts
-    ms, *_ = step(Executor(s0()), 0, level=70, ln=both, lim=limits(EXPORTING), vr=vr)
-    assert ms.mode == EXPORT
-
-
-def test_a_sale_in_progress_is_not_turned_into_a_charge_when_the_plan_flips_mid_leg():
-    ex = Executor(s0())
-    ms, *_ = step(ex, 0, level=70, ln=lines(8.0, floor=40.0), lim=limits(EXPORTING))
-    assert ms.mode == EXPORT
-    both = lines(10.0, target=100.0, floor=40.0)
-    vr = value_result(T0, forecast(T0, [segment(T0)]), timeline=_timeline(CHARGE))
-    for sec in (10, 20, 30):
-        ms, *_ = step(ex, sec, level=70 - sec / 10, ln=both, lim=limits(EXPORTING), vr=vr)
-        assert ms.mode == EXPORT, sec
-
-
-def test_the_leg_ends_when_it_no_longer_pays_at_all():
-    ex = Executor(s0())
-    step(ex, 0, level=70, ln=lines(30.0, target=100.0), lim=limits(EXPORTING))
-    vr = value_result(T0, forecast(T0, [segment(T0)]), timeline=_timeline(EXPORT))
-    # the value rose above the sale line: selling no longer pays, and the buy line is long passed: the charge goes on
-    ms, *_ = step(ex, 10, level=70, ln=lines(30.0, target=100.0, floor=None), lim=limits(EXPORTING), vr=vr)
-    assert ms.mode == CHARGE
-    # the lines' target is reached: it must end (a sale pays, so the sale comes)
-    ms, *_ = step(ex, 20, level=70, ln=lines(8.0, target=70.0, floor=0.0), lim=limits(EXPORTING), vr=vr)
-    assert ms.mode == EXPORT
-
-
-def test_an_urgent_event_ends_a_leg_at_once():
-    from test_engine_v2_execute import ev
-    ex = Executor(s0())
-    step(ex, 0, level=70, ln=lines(30.0, target=100.0), lim=limits(EXPORTING))
-    vr = value_result(T0, forecast(T0, [segment(T0)]), timeline=_timeline(EXPORT))
-    both = lines(10.0, **BOTH)
-    ms, *_ = step(ex, 10, level=70, ln=both, lim=limits(EXPORTING), vr=vr)
-    assert ms.mode == CHARGE                                           # without one the leg goes on
-    ms, *_ = step(ex, 20, level=70, ln=both, lim=limits(EXPORTING), vr=vr, events=(ev("settings", 20),))
-    assert ms.mode == EXPORT                                           # an urgent event lets the plan's mode through
-
-
-def test_the_leg_goes_on_to_the_end_of_its_plan_step_and_then_the_plan_says():
-    ex = Executor(s0())
-    item = TimelineItem(mode=CHARGE, start=T0 - timedelta(minutes=5), end=T0 + timedelta(minutes=25), level_start=60.0,
-                        level_end=80.0, until="until 80%", reason="x")
-    vr = value_result(T0, forecast(T0, [segment(T0)]), timeline=(item,))
-    ex._plan_target, ex._plan_sell = 80.0, None
-    assert ex._leg_going(CHARGE, 70.0, T0)                              # short of the step's end
-    assert not ex._leg_going(CHARGE, 79.95, T0)                         # reached it (within the level epsilon)
-    assert ex._leg_going(EXPORT, 70.0, T0)                              # no sale step covers now: nothing ends it early
-    ex._plan_sell = 55.0
-    assert ex._leg_going(EXPORT, 60.0, T0) and not ex._leg_going(EXPORT, 55.05, T0)
-    assert ex._plan_leg_end(vr, T0, CHARGE) == 80.0 and ex._plan_leg_end(vr, T0, EXPORT) is None
-
-
-def test_consecutive_plan_steps_of_the_same_mode_are_one_leg():
-    items = (TimelineItem(mode=EXPORT, start=T0 - timedelta(minutes=5), end=T0 + timedelta(minutes=25),
-                          level_start=90.0, level_end=80.0, until="x", reason="x"),
-             TimelineItem(mode=EXPORT, start=T0 + timedelta(minutes=25), end=T0 + timedelta(minutes=55),
-                          level_start=80.0, level_end=66.0, until="x", reason="x"),
-             TimelineItem(mode=CHARGE, start=T0 + timedelta(minutes=55), end=T0 + timedelta(minutes=85),
-                          level_start=66.0, level_end=90.0, until="x", reason="x"))
-    vr = value_result(T0, forecast(T0, [segment(T0)]), timeline=items)
-    assert Executor._plan_leg_end(vr, T0, EXPORT) == 66.0
-
-
-def test_a_sale_in_progress_goes_down_to_where_the_plan_ends_it():
-    ex = Executor(s0())
-    ex.mode = EXPORT
-    ex._plan_sell = 45.0
-    assert ex._sell_floor(limits(EXPORTING), lines(8.0, floor=60.0), staying=True) == 45.0
-    assert ex._sell_floor(limits(EXPORTING), lines(8.0, floor=60.0), staying=False) == 60.0
-    lim = limits(EXPORTING, floor=50.0)
-    assert ex._sell_floor(lim, lines(8.0, floor=60.0), staying=True) == 50.0         # never under the floor
 
 
 # ---- 4. "learned" revalues only when it matters -----------------------------------------------------

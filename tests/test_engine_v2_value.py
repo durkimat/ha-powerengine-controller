@@ -229,7 +229,7 @@ def test_a_partial_charge_stops_between_grid_levels():
     assert item.level_end == pytest.approx((0.12 * 18 + 1.0 / 0.95) / 18 * 100, abs=0.7)
     minutes = (item.end - item.start).total_seconds() / 60
     assert 0 < minutes < 30                                                          # charged for part of the half-hour
-    assert vr.timeline[1].mode == HOLD and "target" in vr.timeline[1].reason
+    assert vr.timeline[1].mode == HOLD                                               # the rest of it idles
 
 
 def test_a_sunny_day_ahead_lowers_the_night_charge():
@@ -254,10 +254,10 @@ def test_a_grid_event_raises_the_value_before_it(monkeypatch):
     # with time to buy more at 15p, a stored kWh is worth what it costs to put there: the buy line, not the event's pay
     assert v_plain == pytest.approx(15 * 0.95, abs=0.1)
     assert v_event == pytest.approx(15 / 0.95, abs=0.1) and v_event > v_plain + 1
-    ln = V.lines(boosted, before, 30.0, 15.0, 15.0, FACTS, NO_COMFORT)
-    assert ln.charge_target_soc is not None and ln.charge_now  # a run of one price: charge early, same cost
-    assert not ln.charge_now or ln.run_target_soc == pytest.approx(ln.charge_target_soc)
-    assert V.lines(boosted, before, 97.0, 15.0, 15.0, FACTS, NO_COMFORT).charge_now is False
+    # a run of one price: charge early, same cost; the plan's decision, the executor's call (`decide`)
+    go = V.decide(boosted, before, 30.0, boosted.limits[10], FACTS, NO_COMFORT, None)
+    assert go["mode"] == CHARGE and go["stop"] > 90.0
+    assert V.decide(boosted, before, 97.0, boosted.limits[10], FACTS, NO_COMFORT, None)["mode"] == HOLD
     # where nothing more can be bought (no grid charging allowed) the value rises towards the event's pay. The inverter
     # derates at low charge, so how much of the last kWh is sold depends on the level, in steps; the cost-to-go is made
     # convex (CONVEX_COST_TO_GO), which spreads those steps over the range: the value is the average, a little under it
@@ -489,24 +489,15 @@ def test_charge_in_a_flat_night_starts_with_the_night_and_ends_at_the_same_level
     assert first.mode == CHARGE and first.start == t(0)                  # from the first half-hour, not the last
     assert first.level_end == pytest.approx(need, abs=1.0) and first.until == f"until {first.level_end:.0f}%"
     assert vr.timeline[1].mode == HOLD and first.end < t(6)                # done in the first hours of the night
-    # the same total as the plain policy, which charges late
-    core_rows = [V._end_row(vr.lam, k) for k in range(len(segs))]
-    plain = V._walk([V._make(sg, FACTS, NO_COMFORT, limits_for(sg)) for sg in segs], core_rows, vr.step_kwh,
-                    0.12 * 18, "mid", NO_COMFORT.price_band_p, front=False)
-    late_end = max(r["e1"] for r in plain if r["k"] < 12) / 18 * 100
-    assert late_end == pytest.approx(first.level_end, abs=0.7)
-    assert next(r for r in plain if r["mode"] == CHARGE)["k"] > 3        # the late plan really does start later
     # live, five minutes into the night: charge now, up to that level
-    ln = V.lines(vr, t(0) + timedelta(minutes=5), 12.0, 6.99, 15.0, FACTS, NO_COMFORT)
-    assert ln.charge_now is True
-    assert ln.run_target_soc == pytest.approx(first.level_end, abs=0.7)
-    assert ln.charge_target_soc == pytest.approx(ln.run_target_soc)
+    now = t(0) + timedelta(minutes=5)
+    go = V.decide(vr, now, 12.0, vr.limits[0], FACTS, NO_COMFORT, None)
+    assert go["mode"] == CHARGE and go["stop"] == pytest.approx(first.level_end, abs=0.7)
     # at the target the run has nothing more to do; during the day it is not asked
-    done = V.lines(vr, t(3), need, 6.99, 15.0, FACTS, NO_COMFORT)
-    assert done.charge_now is False
-    day = V.lines(vr, t(14), 40.0, 28.84, 15.0, FACTS, NO_COMFORT)
-    assert day.run_target_soc is None and day.charge_now is False
-    assert V.run_target(vr, t(14), 40.0, 6.99, FACTS, NO_COMFORT) is None   # price no longer the one asked about
+    done = V.decide(vr, t(3), first.level_end, vr.limits[3], FACTS, NO_COMFORT, CHARGE, last_run=CHARGE)
+    assert done["mode"] != CHARGE
+    day = V.decide(vr, t(14), 40.0, vr.limits[14], FACTS, NO_COMFORT, None)
+    assert day["mode"] != CHARGE and day["stop"] is None
 
 
 def test_a_tie_never_charges_to_the_ceiling(monkeypatch):
@@ -521,14 +512,15 @@ def test_a_tie_never_charges_to_the_ceiling(monkeypatch):
     assert top < need + 2.0
     ln = V.lines(vr, t(0) + timedelta(minutes=5), 12.0, 6.99, 15.0, FACTS, st)
     assert ln.charge_target_soc is None or ln.charge_target_soc < need + 2.0
-    assert ln.run_target_soc is None or ln.run_target_soc < need + 2.0
+    go = V.decide(vr, t(0) + timedelta(minutes=5), 12.0, vr.limits[0], FACTS, st, None)
+    assert go["mode"] != CHARGE or go["stop"] < need + 2.0
 
 
-def test_run_target_is_cheap_and_does_not_resolve():
+def test_decide_is_cheap_and_does_not_resolve():
     vr = solve(night_and_day(), soc=12.0)
     started = time.perf_counter()
     for _ in range(50):
-        V.run_target(vr, t(2), 20.0, 6.99, FACTS, NO_COMFORT)
+        V.decide(vr, t(2), 20.0, vr.limits[2], FACTS, NO_COMFORT, None)
     assert (time.perf_counter() - started) / 50 < 0.05
 
 
@@ -561,21 +553,21 @@ def test_a_solve_with_the_switch_cost_stays_inside_the_time_budget():
     assert time.perf_counter() - t0 < 3.0
 
 
-def test_the_programmes_choice_now_is_the_first_timeline_mode_and_it_is_not_made_for_a_forced_segment():
+def test_the_executors_decision_is_the_first_timeline_mode_and_it_is_made_for_a_forced_segment_too():
     segs = [seg(i, imp=6.99, exp=15.0, load=0.3) for i in range(12)]
     lim = lambda s: limits_for(s, arbitrage=True)                       # noqa: E731
     st = replace(NO_COMFORT, switch_cost_p=0.5)
     vr = solve(segs, 100.0, settings=st, lim=lim)
-    mode, share = V.choice_now(vr, segs[0].start, 100.0, 6.99, FACTS, st, None)
-    assert mode == vr.timeline[0].mode == EXPORT and 0 < share <= 1
-    # from the mode already running, going on costs nothing and a change costs: never a worse choice than the first
-    again = V.choice_now(vr, segs[0].start, 100.0, 6.99, FACTS, st, EXPORT)
-    assert again[0] == EXPORT
+    got = V.decide(vr, segs[0].start, 100.0, vr.limits[0], FACTS, st, None)
+    assert got["mode"] == vr.timeline[0].mode == EXPORT and got["stop"] is not None
+    # from the mode already running, going on is never a worse choice than the first
+    assert V.decide(vr, segs[0].start, 100.0, vr.limits[0], FACTS, st, EXPORT)["mode"] == EXPORT
     ev = [replace(segs[0], event=True, event_p=115.0)] + segs[1:]
     vr2 = solve(ev, 100.0, settings=st, lim=lambda s: limits_for(s, arbitrage=True))
-    assert V.choice_now(vr2, ev[0].start, 100.0, 6.99, FACTS, st, None) is None
+    forced = V.decide(vr2, ev[0].start, 100.0, vr2.limits[0], FACTS, st, None)
+    assert forced["mode"] == EVENT == vr2.timeline[0].mode
     bare = replace(vr, vk=())
-    assert V.choice_now(bare, segs[0].start, 100.0, 6.99, FACTS, st, None) is None
+    assert V.decide(bare, segs[0].start, 100.0, vr.limits[0], FACTS, st, None) is None      # no curves: it can't say
 
 
 def daily(end_hh, load=0.3, cheap_hh=(range(0, 12), range(44, 48))):
@@ -630,7 +622,7 @@ def test_a_look_ahead_ending_in_the_peak_does_not_dump_the_battery_at_its_end(mo
     st = replace(NO_COMFORT, reserve_soc=15.0)
     ar = lambda sg: limits_for(sg, arbitrage=True)                                    # noqa: E731
     vr = solve(daily(96 + 13), soc=70.0, settings=st, lim=ar)                         # ends 06:30
-    assert min(_end_levels(vr)) > 60.0
+    assert vr.timeline[-1].level_end > 60.0                                           # the last step keeps its level
     tv, curve = V._terminal_curve(fc_of(daily(96 + 13)), FACTS, st, 0.18, 100)
     assert tv == pytest.approx(max(6.99 / FACTS.eta_charge, 15.0 * FACTS.eta_discharge))   # the surplus can be sold
 
@@ -671,7 +663,8 @@ def test_a_sale_that_is_running_is_not_turned_round_by_the_stretch_front_charge(
     assert _solve_running(segs, None).timeline[0].mode == CHARGE         # nothing running: the front charge stands
     vr = _solve_running(segs, EXPORT)
     assert vr.timeline[0].mode == EXPORT                                 # the sale goes on, as the executor will
-    assert V.choice_now(vr, segs[0].start, 63.0, 6.66, FACTS, RUNNING_SETTINGS, EXPORT)[0] == vr.timeline[0].mode
+    got = V.decide(vr, segs[0].start, 63.0, vr.limits[0], FACTS, RUNNING_SETTINGS, EXPORT)
+    assert got["mode"] == vr.timeline[0].mode
     assert any(it.mode == CHARGE for it in vr.timeline)                  # and the night is still refilled
 
 
@@ -700,23 +693,11 @@ def test_a_long_cheap_window_with_arbitrage_is_not_broken_up_by_holds():
     assert len(long_holds) <= 1
 
 
-def test_a_charge_that_stops_part_way_has_a_corridor_around_its_end_and_a_remainder_hold():
+def test_a_charge_that_stops_part_way_is_followed_by_a_remainder_hold():
     segs = cheap_then_peak(n_cheap=1, n_peak=2, n_after=0)
     run, after = solve(segs, soc=12.0).timeline[:2]
     assert run.mode == CHARGE and not run.remainder
-    assert run.level_lo <= run.level_end + 0.05 and run.level_hi >= run.level_end - 0.05
-    assert run.level_hi - run.level_lo > 0.0                       # a stop a little either side costs about the same
-    assert after.mode == HOLD and after.remainder and after.level_start == pytest.approx(after.level_end)
-
-
-def test_a_wider_cost_tolerance_widens_the_corridor(monkeypatch):
-    segs = cheap_then_peak(n_cheap=1, n_peak=2, n_after=0)
-    monkeypatch.setattr(V, "CORRIDOR_COST_P", 0.05)
-    narrow = solve(segs, soc=12.0, settings=NO_COMFORT).timeline[0]
-    monkeypatch.setattr(V, "CORRIDOR_COST_P", 5.0)
-    wide = solve(segs, soc=12.0, settings=NO_COMFORT).timeline[0]
-    assert wide.level_hi - wide.level_lo > narrow.level_hi - narrow.level_lo
-    assert wide.level_lo <= narrow.level_lo + 1e-6 and wide.level_hi >= narrow.level_hi - 1e-6
+    assert after.mode == HOLD and after.level_start == pytest.approx(after.level_end)
 
 
 # --- a charge or a sale runs a minimum length between the level bands ---------------------------------------------

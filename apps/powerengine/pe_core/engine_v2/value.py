@@ -220,7 +220,7 @@ class _Seg:
     __slots__ = ("seg", "lim", "dt", "cap", "eta_c", "eta_d", "taper", "dtaper", "max_chg", "max_dis", "chg_f",
                  "chg_cap", "dis_cap", "export_limit", "fuse", "floor", "ceil", "car", "export_p", "event_p",
                  "wear_h", "wear_s", "ccost", "topup", "sw", "lo", "hi", "allowed", "forced", "outcomes", "scen",
-                 "mid", "pen", "fcap", "corr", "leg")
+                 "mid", "pen", "fcap", "leg")
 
 
 def _groups(solar: Spread, load: Spread) -> list[tuple[float, float, float]]:
