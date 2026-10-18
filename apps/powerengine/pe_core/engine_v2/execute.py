@@ -39,7 +39,7 @@ from .types import (
     Observation,
     ValueResult,
 )
-from .value import decide
+from .value import MAX_PIECES, decide
 
 FLIP_FLOP_S = 600
 LEVEL_EPS = 0.1               # points: a mode that runs "until" a level is done within this of it. The filtered level
@@ -184,7 +184,8 @@ class Executor:
                 facts: BatteryFacts) -> tuple[str, float | None]:
         """The plan's decision, carried out: (mode, the level it runs to). A new decision at a segment's start, with new
         values, or when the rules change; else the one in hand goes on. A charge or a sale that stops inside the segment
-        runs to its level, then the segment's rest is the idle mode."""
+        runs to its level, and the decision for what is left of the segment follows at once (a new run, else the idle
+        mode), as the plan's walk has it."""
         seg = next((g for g in vr.forecast.segments if g.start <= now < g.end), None)
         if seg is None:
             self.dec = None
@@ -196,24 +197,31 @@ class Executor:
             if d is None:
                 self.dec = None
                 return self._fallback(lim), None
-            self.dec = {"key": key, **d, "reached": False}
-        d = self.dec
-        mode, stop = d["mode"], d["stop"]
-        if mode not in lim.allowed:                        # a mode the forecast forced but the rules now don't
-            return self._fallback(lim, d["rest"]), None
-        if mode == CHARGE:
-            top = lim.ceiling_soc if stop is None else min(stop, lim.ceiling_soc)
-            if d["reached"] or level >= top - LEVEL_EPS:
-                d["reached"] = True
+            self.dec = {"key": key, **d, "used": 0, "reached": False}
+        for _ in range(MAX_PIECES):
+            d = self.dec
+            mode, stop = d["mode"], d["stop"]
+            if mode not in lim.allowed:                    # a mode the forecast forced but the rules now don't
                 return self._fallback(lim, d["rest"]), None
-            return CHARGE, top
-        if mode == EXPORT:
-            bottom = lim.floor_soc if stop is None else max(stop, lim.floor_soc)
-            if d["reached"] or level <= bottom + LEVEL_EPS:
-                d["reached"] = True
+            if mode not in (CHARGE, EXPORT):
+                return mode, None
+            if mode == CHARGE:
+                edge = lim.ceiling_soc if stop is None else min(stop, lim.ceiling_soc)
+                short = level < edge - LEVEL_EPS
+            else:
+                edge = lim.floor_soc if stop is None else max(stop, lim.floor_soc)
+                short = level > edge + LEVEL_EPS
+            if short and not d["reached"]:
+                return mode, edge
+            d["reached"] = True
+            if stop is None or d["used"] + 1 >= MAX_PIECES - 1:
                 return self._fallback(lim, d["rest"]), None
-            return EXPORT, bottom
-        return mode, None
+            # the run reached its stop inside the segment: the plan's decision for what is left of it (`value._walk`)
+            nd = decide(vr, now, level, lim, facts, self.s, mode, self.leg_from, used=d["used"] + 1, last_run=mode)
+            if nd is None:
+                return self._fallback(lim, d["rest"]), None
+            self.dec = {"key": key, **nd, "used": d["used"] + 1, "reached": False}
+        return self._fallback(lim, self.dec["rest"]), None
 
     @staticmethod
     def _fallback(lim: Limits, want: str | None = None) -> str:
