@@ -177,27 +177,34 @@ class Executor:
         if ln is None:
             return _Pick(SELF_USE, "no_lines", "The live comparison could not be made: the battery stays on self-use",
                          forced=True)
-        mode, target = self._follow(now, lim, vr, level, facts)
+        mode, target = self._follow(now, lim, vr, ln, level, facts)
         return self._pick_for(mode, lim, ln, target)
 
-    def _follow(self, now: datetime, lim: Limits, vr: ValueResult, level: float,
+    def _follow(self, now: datetime, lim: Limits, vr: ValueResult, ln: Lines, level: float,
                 facts: BatteryFacts) -> tuple[str, float | None]:
-        """The plan's decision, carried out: (mode, the level it runs to). A new decision at a segment's start, with new
-        values, or when the rules change; else the one in hand goes on. A charge or a sale that stops inside the segment
-        runs to its level, and the decision for what is left of the segment follows at once (a new run, else the idle
-        mode), as the plan's walk has it."""
+        """The plan's decision, carried out: (mode, the level it runs to). A decision stands until something changes:
+        a charge or a sale runs to its level (across segments, until its stretch of one price ends), and reaching it
+        brings the next decision at once (a new run, else the idle mode for the rest of the segment); idle time is
+        decided again at each segment. New values, or rules that change what is allowed, bring a new decision at once.
+        This is the plan's own walk (`value._walk`), at the live level."""
         seg = next((g for g in vr.forecast.segments if g.start <= now < g.end), None)
         if seg is None:
             self.dec = None
             return self._fallback(lim), None
-        key = [seg.start.timestamp(), vr.made_at.isoformat(), _lim_key(lim)]
-        if self.dec is None or self.dec.get("key") != key:
+        ts, seg_ts = now.timestamp(), seg.start.timestamp()
+        key = [vr.made_at.isoformat(), _lim_key(lim), round(ln.import_p, 2), round(ln.export_p, 2)]
+        d = self.dec
+        if d is None or d.get("key") != key or ts >= d["until"]:
             running = self.mode if self.mode in (CHARGE, EXPORT) else None
-            d = decide(vr, now, level, lim, facts, self.s, self.mode, self.leg_from if running else None)
+            d = decide(vr, now, level, lim, facts, self.s, self.mode, self.leg_from if running else None,
+                       import_p=ln.import_p, export_p=ln.export_p,
+                       held_s=None if self.since is None else ts - self.since)
             if d is None:
                 self.dec = None
                 return self._fallback(lim), None
-            self.dec = {"key": key, **d, "used": 0, "reached": False}
+            self.dec = d = {"key": key, **d, "seg": seg_ts, "used": 0, "reached": False}
+        elif d["seg"] != seg_ts:                           # a run going on into the next segment: its first mode there
+            d["seg"], d["used"] = seg_ts, 0
         for _ in range(MAX_PIECES):
             d = self.dec
             mode, stop = d["mode"], d["stop"]
@@ -214,13 +221,14 @@ class Executor:
             if short and not d["reached"]:
                 return mode, edge
             d["reached"] = True
-            if stop is None or d["used"] + 1 >= MAX_PIECES - 1:
-                return self._fallback(lim, d["rest"]), None
-            # the run reached its stop inside the segment: the plan's decision for what is left of it (`value._walk`)
-            nd = decide(vr, now, level, lim, facts, self.s, mode, self.leg_from, used=d["used"] + 1, last_run=mode)
-            if nd is None:
-                return self._fallback(lim, d["rest"]), None
-            self.dec = {"key": key, **nd, "used": d["used"] + 1, "reached": False}
+            idle = {"mode": d["rest"], "stop": None, "until": seg.end.timestamp()}
+            if d["used"] + 1 >= MAX_PIECES - 1:                # the segment's last mode: the rest of it idles
+                self.dec = {**d, **idle, "used": d["used"] + 1, "reached": False}
+                continue
+            # the run reached its level: the plan's next decision, now (`value._walk`)
+            nd = decide(vr, now, level, lim, facts, self.s, mode, self.leg_from, used=d["used"] + 1, last_run=mode,
+                        import_p=ln.import_p, export_p=ln.export_p)
+            self.dec = {"key": key, **(nd or {**d, **idle}), "seg": seg_ts, "used": d["used"] + 1, "reached": False}
         return self._fallback(lim, self.dec["rest"]), None
 
     @staticmethod
