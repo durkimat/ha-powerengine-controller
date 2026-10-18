@@ -843,7 +843,7 @@ def _choose(stretch: list[_Seg], vks: list, e: float, kind: str, prev: str | Non
                        None)
             if nxt is not None and first not in (CHARGE, EXPORT):    # a later run, pulled forward: inside the range
                 m, t = nxt
-                t = min(t, S.fcap) if m == CHARGE else max(t, S.fbot)
+                t = min(t, S.fcap) if m == CHARGE else (max(t, S.fbot) if PULL_CAP_SALES else t)
                 if t > e + 1e-6 if m == CHARGE else t < e - 1e-6:
                     mode, target = m, t
                 else:
@@ -881,6 +881,7 @@ def _next_leg(S: _Seg, mode: str, e: float, leg: tuple | None) -> tuple | None:
 
 
 LEVEL_TOL_PCT = 0.1     # points: a run is at its level within this (the executor's own test, `execute.LEVEL_EPS`)
+PULL_CAP_SALES = True   # a sale pulled forward stops at the range's bottom too (experiment)
 RESTART_PCT = 1.0       # a run that reached its level starts again only to go at least this much further (points)
 SLIVER_S = 60           # less than this left of a segment: the executor decides for the next one
 MAX_PIECES = 4          # modes in one segment at most (a safety bound: runs go to levels, not to segment ends)
