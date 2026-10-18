@@ -937,17 +937,19 @@ def _choose(stretch: list[_Seg], vks: list, e: float, kind: str, prev: str | Non
             else:
                 mode = first if first not in (CHARGE, EXPORT) else _idle(S)
     if S.leg is not None and not S.forced:
+        going = False
         if leg is not None and leg[0] in S.allowed:
             lm, frm, need = leg
-            if (e - frm if lm == CHARGE else frm - e) < need - 1e-9 \
-                    and (e < S.ceil - 1e-9 if lm == CHARGE else e > S.floor + 1e-9):
+            going = (e - frm if lm == CHARGE else frm - e) < need - 1e-9 \
+                and (e < S.ceil - 1e-9 if lm == CHARGE else e > S.floor + 1e-9)
+            if going:
                 goal = min(frm + need, S.ceil) if lm == CHARGE else max(frm - need, S.floor)
                 if mode != lm:
                     mode, target = lm, goal                      # a leg runs its length: no stop, no turn-round
                 elif target is not None:
                     target = max(target, goal) if lm == CHARGE else min(target, goal)
-        elif mode in (CHARGE, EXPORT) and target is not None:   # a leg starting now: its length is part of its level
-            need = leg_need(S.leg, mode, e)
+        if not going and mode in (CHARGE, EXPORT) and target is not None and (leg is None or leg[0] != mode):
+            need = leg_need(S.leg, mode, e)                      # a leg starting now: its length is part of its level
             target = max(target, min(e + need, S.ceil)) if mode == CHARGE else min(target, max(e - need, S.floor))
     return mode, target
 
