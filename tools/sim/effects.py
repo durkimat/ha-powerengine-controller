@@ -47,6 +47,20 @@ def hours_in(mode):
     return lambda r: sum(STEP_H for _t, _l, m, *_ in _trace(r) if m == mode)
 
 
+def hours_in_without_car(mode):
+    """Hours in `mode` in the half-hours the car was not charging (a charging car holds the battery whatever is set)."""
+    def fn(r):
+        car = {row["start"][11:16]: (row.get("car") or 0) > 0 for row in r["series"]["rows"]}
+        out = 0.0
+        for t, _l, m, *_ in _trace(r):
+            hh, mm = t.split(":")[:2]
+            slot = f"{hh}:{'30' if int(mm) >= 30 else '00'}"
+            if m == mode and not car.get(slot, False):
+                out += STEP_H
+        return out
+    return fn
+
+
 def discharged_kwh(r):
     return sum(row[4] for row in _trace(r) if len(row) > 4) / 1000 * STEP_H
 
@@ -64,7 +78,7 @@ MEASURES = {
     "below70": ("hours below 70%", hours_below(70)),
     "above90": ("hours above 90%", hours_above(90)),
     "outside70_90": ("hours outside 70 to 90%", hours_outside(70, 90)),
-    "hold": ("hours in Hold", hours_in("hold")),
+    "hold": ("hours in Hold, the car not charging", hours_in_without_car("hold")),
 }
 
 # setting, values in order, the measure, which way it must go as the values go ("down" / "up"), the smallest move that
