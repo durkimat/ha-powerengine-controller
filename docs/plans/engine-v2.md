@@ -666,7 +666,10 @@ re-check, not a revalue. v1 had to replan for it.
 | **Backstop**: no revalue for `max_value_age_min` | Timer | none | no | **yes** |
 
 * **Coalescing.** Revalue requests that arrive within `revalue_coalesce_s` (10 s) of each other run once. A revalue already
-  running finishes, then runs once more if new requests came in.
+  running finishes, then runs once more if new requests came in. A smart-slot change and a price change (`slots_changed`,
+  `prices_published`) instead wait `price_churn_hold_s` (60 s) from the first of them: the supplier updates the dispatch, then the
+  rates entity 20 to 60 s later, and 103 of 435 such re-plans in 10 days came in close pairs. Anything else, and any urgent event,
+  runs on the normal window and takes the held ones with it.
 * **The backstop** is the one plain timer (default 120 minutes). It exists in case a trigger is missed; the journal says when
   a revalue came from the backstop, so it can be checked that this is rare.
 * **Forecast drift, the model: CUSUM.** The cumulative sum (Page's CUSUM change detection, a standard method for noticing
@@ -683,6 +686,7 @@ re-check, not a revalue. v1 had to replan for it.
 | `band_exit_min` | 10 | How long outside the expected band before revaluing |
 | `forecast_change_pct` | 10 | How much a solar forecast update must move the day to matter |
 | `revalue_coalesce_s` | 10 | Batches bursts of events |
+| `price_churn_hold_s` | 60 | How long a smart-slot change and a price change wait for each other |
 | `max_value_age_min` | 120 | The backstop |
 
 ---

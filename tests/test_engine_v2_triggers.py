@@ -25,7 +25,7 @@ def test_an_urgent_event_revalues_at_once_and_says_why():
 
 
 def test_a_non_urgent_event_waits_for_the_batch_window_then_runs_once():
-    t = Triggers(V2Settings(revalue_coalesce_s=10))
+    t = Triggers(V2Settings(revalue_coalesce_s=10, price_churn_hold_s=10))
     assert t.due(at(0), (ev("prices_published"),), at(-60)) is None
     assert t.due(at(5), (ev("slots_changed", 5),), at(-60)) is None
     because = t.due(at(11), (), at(-60))
@@ -69,7 +69,7 @@ def test_no_backstop_without_a_first_value_time():
 
 
 def test_day_counts_and_recent_events():
-    t = Triggers(V2Settings(revalue_coalesce_s=0))
+    t = Triggers(V2Settings(revalue_coalesce_s=0, price_churn_hold_s=0))
     events = (ev("prices_published", 0), ev("price", 0))
     because = t.due(at(0), events, at(-60))
     assert because
@@ -119,3 +119,39 @@ def test_state_is_json_safe_and_restores_the_pending_batch():
     t2 = Triggers(V2Settings(revalue_coalesce_s=10), json.loads(json.dumps(t.state())))
     assert t2.due(at(11), (), at(-60)) == "The house drifted from the forecast"
     assert len(t2.recent) == 1
+
+
+def test_a_slot_change_and_a_price_change_wait_the_churn_hold_for_each_other_and_run_one_replan():
+    t = Triggers(V2Settings())                                       # price_churn_hold_s 60
+    assert t.due(at(0), (ev("slots_changed"),), at(-60)) is None
+    assert t.due(at(30), (), at(-60)) is None                        # past the 10 s batch window: still held
+    assert t.due(at(35), (ev("prices_published", 35),), at(-60)) is None
+    assert t.due(at(59), (), at(-60)) is None
+    because = t.due(at(60), (), at(-60))                             # 60 s from the FIRST of the two
+    assert because == "Smart slots changed and New prices published"
+    assert t.due(at(130), (), at(-60)) is None                       # consumed: nothing left over
+
+
+def test_the_churn_hold_never_delays_urgent_events_or_other_kinds_and_they_take_the_held_ones_with_them():
+    t = Triggers(V2Settings())
+    t.due(at(0), (ev("slots_changed"),), at(-60))
+    because = t.due(at(5), (ev("car_start", 5),), at(-60))           # urgent: at once, with the held slot change
+    assert "car started" in because and "Smart slots changed" in because
+    t2 = Triggers(V2Settings())
+    t2.due(at(0), (ev("slots_changed"),), at(-60))
+    t2.due(at(2), (ev("drift", 2),), at(-60))                        # not urgent: its own 10 s batch window
+    because = t2.due(at(12), (), at(-60))
+    assert "drifted" in because and "Smart slots changed" in because
+
+
+def test_a_zero_churn_hold_is_the_old_behaviour():
+    t = Triggers(V2Settings(price_churn_hold_s=0))
+    assert t.due(at(0), (ev("slots_changed"),), at(-60)) == "Smart slots changed"
+
+
+def test_the_churn_hold_survives_a_restart():
+    t = Triggers(V2Settings())
+    t.due(at(0), (ev("slots_changed"),), at(-60))
+    again = Triggers(V2Settings(), json.loads(json.dumps(t.state())))
+    assert again.due(at(30), (), at(-60)) is None
+    assert again.due(at(61), (), at(-60)) == "Smart slots changed"

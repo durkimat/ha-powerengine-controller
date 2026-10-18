@@ -15,6 +15,7 @@ from .types import Event
 
 RECENT = 30
 TEXT_MAX = 120
+HELD_KINDS = ("slots_changed", "prices_published")     # re-plan kinds that wait `price_churn_hold_s` for each other
 # what a revalue reads as in "values worked out because ..."
 BECAUSE = {
     "start": "The engine started", "prices_published": "New prices published", "slots_changed": "Smart slots changed",
@@ -74,6 +75,7 @@ class Triggers:
         st = dict(state or {})
         self.pending: list = list(st.get("pending") or [])          # [[kind, text], ...] waiting to be coalesced
         self.pending_since: float | None = st.get("pending_since")
+        self.hold_since: float | None = st.get("hold_since")        # when the first slot or price change began to wait
         self.today: dict = dict(st.get("today") or {})
         self.recent: list = list(st.get("recent") or [])
         self.last_causes: list = list(st.get("last_causes") or [])  # the kinds behind the revalue now running
@@ -93,10 +95,18 @@ class Triggers:
             if self._revalues(e):
                 if not any(k == e.kind for k, _ in self.pending):
                     self.pending.append([e.kind, e.text])
-                if self.pending_since is None:
+                if e.kind in HELD_KINDS and not e.urgent:
+                    if self.hold_since is None:
+                        self.hold_since = ts
+                elif self.pending_since is None:
                     self.pending_since = ts
                 urgent = urgent or e.urgent
-        if self.pending and (urgent or ts - (self.pending_since or ts) >= self.s.revalue_coalesce_s):
+        # a smart-slot change and a price change usually come a few seconds apart (the supplier updates one entity,
+        # then the other): they wait `price_churn_hold_s` from the first so one re-plan sees both. Anything else keeps
+        # the short batching window, and takes whatever is waiting with it.
+        held = self.hold_since is not None and ts - self.hold_since >= self.s.price_churn_hold_s
+        batched = self.pending_since is not None and ts - self.pending_since >= self.s.revalue_coalesce_s
+        if self.pending and (urgent or batched or held):
             return self._take()
         if last_value_at is not None and now - last_value_at >= timedelta(minutes=self.s.max_value_age_min):
             self.pending.append(["backstop", ""])
@@ -111,7 +121,7 @@ class Triggers:
     def _take(self) -> str:
         kinds = [k for k, _ in self.pending]
         self.last_causes = kinds
-        self.pending, self.pending_since = [], None
+        self.pending, self.pending_since, self.hold_since = [], None, None
         phrases = []
         for k in kinds:
             p = BECAUSE.get(k, k.replace("_", " ").capitalize())
@@ -165,5 +175,6 @@ class Triggers:
 
     def state(self) -> dict:
         return {"pending": [list(p) for p in self.pending], "pending_since": self.pending_since,
-                "today": dict(self.today), "recent": list(self.recent), "last_causes": list(self.last_causes)}
+                "hold_since": self.hold_since, "today": dict(self.today), "recent": list(self.recent),
+                "last_causes": list(self.last_causes)}
 
