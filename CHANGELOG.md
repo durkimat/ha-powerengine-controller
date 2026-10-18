@@ -2,6 +2,33 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.157 (beta)
+
+### Behaviour changes
+
+- **One decision for the plan and the battery.** Engine v2 now makes every decision with one piece of code. The expected timeline is that decision stepped forward over the forecast; the battery runs the same decision on the live level, the live prices and the mode it is actually in. Before, the live side had its own rules on top of the plan (price and level bands, a minimum time, a turn-round levy, "a change must pay for itself"), and the plan did not know about them, so what the forecast showed and what the battery did drifted apart. Those rules are gone.
+- **Charges and sales run to a level, not for a time.** A charge or sale carries on across half-hours until it reaches its level, or until the price changes. When it gets there, the next decision is made straight away instead of waiting for the next half-hour. Idle time (Self-use or Hold) is still looked at again each half-hour, because the sun and house forecasts come in half-hours.
+- **The next run starts now.** While the price stays the same, a charge or sale the plan would make later starts now and the idle time comes afterwards, because the forecast moves (smart slots come and go). A charge pulled forward this way stops at the top of your range.
+- **"Now" is priced at the live rates.** A smart slot that is running is treated as certain, and a new rate that arrives a moment before its half-hour is used straight away.
+- **Replays of 8 to 16 Oct:** with your settings, £25.56 earned over the nine days against £24.69 for 0.9.156 (87p more), with 318 mode changes against 279 and 30 flip-flops against 29. The forecast follows what the battery does far more closely (mean gap between planned and actual level 0.3 points, was 0.9).
+- **Settings that say what you want.** The engine v2 settings page is reorganised into five sections:
+  - **What the battery may do:** selling, grid events, free power, when Hold is allowed, the highest charge level and the highest price to charge at.
+  - **The battery's range:** your reserve; the everyday range (bottom and top) and how firmly it holds (off, gentle, firm, strict); the shortest charge or sale; a level to keep above while a smart slot is counted on; and the smart slot odds, which move here from the shared settings.
+  - **Trading:** the cost of a mode change, and battery wear.
+  - **Forecast:** caution (cautious, balanced, optimistic) and whether to learn.
+  - **Advanced:** the rest, collapsed.
+  The comfort band and its top-up cost are gone (the range does that job), and so are 24 lower-level settings (the curve rates, the starting weights and so on); they are now worked out from the settings above. What you had saved carries over where it means the same thing, and the 2.1 beta and 2.2 beta profiles give the same behaviour as before: in the replays your settings give exactly the same result before and after the change.
+- **Each setting was checked to do what it says**, over four stored days (`tools/sim/effects.py`): a lower range bottom keeps it out of the low levels (hours below 50%: 24.5 at 40%, 20.4 at 80%), a higher top lets it sit higher (hours above 90%: 1.3 at 80%, 16.1 at 97%), a firmer range keeps it inside (hours outside 70 to 90%: 61 off, 47 strict), a longer shortest run and a dearer mode change both mean fewer changes (162 to 137, and 151 to 118), wear makes the battery give out less (346 to 325 kWh at 6p), the charge price cap stops peak-rate charging, wider Hold means more Hold, and selling on means selling. The smart slot odds made no difference between 30% and 60% on these days and let the battery go lower at 90% (hours below 70%: 39.5, 39.1, 42.3).
+- **Removed settings:** `executor`, `price_band_p`, `level_band_pct`, `min_dwell_s` and `reversal_levy_p` (the live-only rules), plus the comfort band, the level-curve and slot settings, the starting weights, the two learning switches, `prefer_self_use`, `hold_only_car_reserve`, `wear_house_p` and `wear_sale_p` (replaced as above). A saved value is ignored without error, or carried over where it means the same thing.
+
+### Behind the scenes
+
+- `value._choose` is the decision. `value._walk` steps it forward (each record now has `pieces`: the modes inside a segment), and `value.decide` is the executor's call. `execute._follow` keeps the decision in hand and decides again when the plan, the limits or the live rates change, when its time is up, or when a run reaches its level.
+- `rules.LEVEL_BAND_PCT` (1 point) replaces `level_band_pct` for the reserve latch. The corridors, `as_run` and `idle_action` are gone.
+- `V2Settings` derives the old tuning names as properties. `settings._migrate` carries saved values over, and `config.MOVED_TO_V2` seeds `slot_odds_pct` from the old safety setting.
+- Tested and not used, because each cost money in the replays: a minimum time in a mode (2, 5 or 10 minutes) and a turn-round price (5 or 10p), both inside the shared decision, and a higher mode-change cost (4, 6 or 10p).
+- Docs: `docs/plans/engine-v2-architecture.md` (the decision, the settings) and `docs/logic/08-decision-log.md` (8.9).
+
 ## 0.9.156 (beta)
 
 ### Behaviour changes
