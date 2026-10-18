@@ -24,8 +24,8 @@ Reductions that keep a 48 h look-ahead under 3 s on this machine (measured 0.5 t
 
 1. levels: `level_step_kwh` (0.1) up to `FINE_HOURS` ahead and 0.5 kWh beyond (values are interpolated between
    levels; `lam` is published on the fine grid for every segment). With the 200-level grid the whole 48 h solves in
-   under a second, so `FINE_HOURS` is 48 (no coarse part); the coarse grid is kept for the comfort-free comparison
-   solve and as a lever if a slower machine needs it (set `FINE_HOURS` to 12);
+   under a second, so `FINE_HOURS` is 48 (no coarse part); the coarse grid stays as a lever if a slower machine
+   needs it (set `FINE_HOURS` to 12);
 2. three net-load scenarios instead of nine, identical ones merged;
 3. a smart slot doubles only its own segments; a forced segment takes one expected price;
 4. the partial charge or sale is a bisection on the slope (7 steps), not a scan of every end level.
@@ -188,7 +188,7 @@ class _Arr:
 
 def _grid(cap: float, step: float) -> tuple[int, float]:
     """Number of level steps and the step (kWh) of a grid 0 .. capacity. The count is a multiple of 100, so every whole
-    percent (the floors, the ceiling, the comfort band's edges) falls exactly on a level: a kink between two levels
+    percent (the floors, the ceiling, the range's edges) falls exactly on a level: a kink between two levels
     would be rounded at every segment and show as wiggles in the value curve. Close to `step` (0.1 kWh on 18 kWh
     gives 200 levels of 0.09 kWh)."""
     n = 100 * max(1, int(round(cap / max(step, 1e-6) / 100)))
@@ -219,7 +219,7 @@ def _slope(a: _Arr, e: float) -> float:
 class _Seg:
     __slots__ = ("seg", "lim", "dt", "cap", "eta_c", "eta_d", "taper", "dtaper", "max_chg", "max_dis", "chg_f",
                  "chg_cap", "dis_cap", "export_limit", "fuse", "floor", "ceil", "car", "export_p", "event_p",
-                 "wear_h", "wear_s", "ccost", "topup", "sw", "lo", "hi", "allowed", "forced", "outcomes", "scen",
+                 "wear_h", "wear_s", "sw", "allowed", "forced", "outcomes", "scen",
                  "mid", "pen", "fcap", "leg")
 
 
@@ -265,23 +265,23 @@ def _groups(solar: Spread, load: Spread) -> list[tuple[float, float, float]]:
     return [(m[0] / tot, m[1], m[2]) for m in merged]
 
 
-def leg_band(settings: V2Settings) -> tuple[float, float] | None:
-    """(bottom, top) in percent: the level bands that bound a leg, or None where the bands are not in use. A charge or
-    a sale runs the whole span between them, or as far as the band's edge where that is nearer: a leg that starts at
-    85% going up needs only to reach 90%, and the sale after it then runs the full span. Plan and executor use it
+def leg_band(settings: V2Settings) -> tuple[float, float, float] | None:
+    """(bottom, top, shortest run) in percent: the everyday range and the shortest charge or sale (`min_run_pct`), or
+    None where there is no shortest run. A charge or a sale runs that far, or as far as the range's edge where that is
+    nearer: a charge that starts at 85% going up with a 90% top needs only to reach 90%. Plan and executor use it
     alike."""
-    top, bot = settings.level_top_start_soc, settings.level_bot_start_soc
-    if settings.level_top_rate_p > 0.0 and settings.level_bot_rate_p > 0.0 and top > bot:
-        return bot, top
+    lo, hi, run = settings.range_low_soc, settings.range_high_soc, settings.min_run_pct
+    if run > 0 and hi > lo:
+        return lo, hi, run
     return None
 
 
-def leg_need(band: tuple[float, float], mode: str, start: float) -> float:
+def leg_need(band: tuple[float, float, float], mode: str, start: float) -> float:
     """How far (the same unit as `band` and `start`) a charge or a sale that begins at `start` must run before it can
-    stop or turn round: the span between the bands, cut short by the band's edge in its direction."""
-    bot, top = band
+    stop or turn round: the shortest run, cut short by the range's edge in its direction."""
+    bot, top, run = band
     room = top - start if mode == CHARGE else start - bot
-    return min(top - bot, max(room, 0.0))
+    return min(run, max(room, 0.0))
 
 
 def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) -> _Seg:
@@ -303,16 +303,11 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     S.car = seg.car_kw * S.dt
     S.export_p, S.event_p = seg.export_p, seg.event_p
     S.wear_h, S.wear_s = settings.wear_house_p, settings.wear_sale_p
-    S.ccost = settings.comfort_cost_p
-    S.topup = settings.top_up_cost_p
     S.sw = settings.switch_cost_p
-    S.lo, S.hi = settings.comfort_low_soc / 100 * S.cap, settings.comfort_high_soc / 100 * S.cap
     S.pen = _level_penalty(S.cap, seg.slot_prob is not None, settings)
     band = leg_band(settings)
-    S.leg = None if band is None else (band[0] / 100 * S.cap, band[1] / 100 * S.cap)     # (bottom, top) in kWh
-    S.fcap = S.hi if (S.ccost or S.topup) else S.cap          # where charging early stops being free (see `_walk`)
-    if S.pen is not None:
-        S.fcap = min(S.fcap, S.pen.top_start_kwh)
+    S.leg = None if band is None else tuple(x / 100 * S.cap for x in band)     # (bottom, top, shortest run) in kWh
+    S.fcap = S.pen.top_start_kwh if S.pen is not None else S.cap     # where charging early stops being free (`_choose`)
     S.forced = lim.forced or (EVENT if seg.event else FREE if seg.free and not lim.allowed else seg.manual)
     S.allowed = tuple(m for m in _ORDER if m in lim.allowed) or (SELF_USE,)
     scen = []
@@ -353,13 +348,12 @@ def _dis_kw(S: _Seg, e: float) -> float:
 def _phys(S: _Seg, e: float, mode: str, net: float, imp_p: float, ckw: float | None = None,
           dkw: float | None = None) -> tuple:
     """One segment of battery physics, consistent with v1's planner.step. `net` is house + car - sun in kWh (positive:
-    the house needs energy). Returns (end kWh, cost p, comfort p, import, export, event export, battery to house,
-    battery sold, grid to battery, top-up p, level penalty p), energies in kWh, cost including wear, comfort and the
-    top-up. The top-up (`top_up_cost_p`: grid energy charged above the comfort band's top) is counted in the comfort
-    figure, element 2, and is also returned alone (element 9), because a part-way charge has to price it from its end
-    level; the level penalty is counted there too and returned alone as the last element (10), for the same reason."""
+    the house needs energy). Returns (end kWh, cost p, level cost p, import, export, event export, battery to house,
+    battery sold, grid to battery, level penalty p), energies in kWh, cost including wear and the level cost (the
+    range's curves, `_level_penalty`: not money). The level cost is returned alone as the last element too, because a
+    part-way charge has to price it from the level it reaches."""
     dt, cap = S.dt, S.cap
-    imp = exp = evx = house = sold = gtb = top = 0.0
+    imp = exp = evx = house = sold = gtb = 0.0
     end = e
     if mode == HOLD:
         if net > 0:
@@ -389,7 +383,6 @@ def _phys(S: _Seg, e: float, mode: str, net: float, imp_p: float, ckw: float | N
         flow = net + into
         imp, exp = (flow, 0.0) if flow > 0 else (0.0, -flow)
         gtb = max(0.0, into + min(net, 0.0))
-        top = _top_up(S, e, end, gtb / into if into > 1e-12 else 0.0) if mode == CHARGE else 0.0
     else:                                           # EXPORT, EVENT
         if dkw is None:
             dkw = _dis_kw(S, e)
@@ -403,45 +396,18 @@ def _phys(S: _Seg, e: float, mode: str, net: float, imp_p: float, ckw: float | N
         if mode == EVENT:
             evx = sold
     cash = imp * imp_p - (exp - evx) * S.export_p - evx * S.event_p + S.wear_h * house + S.wear_s * sold
-    comfort = 0.0
-    if S.ccost:
-        hi, lo = S.hi, S.lo
-        ex0 = (e - hi if e > hi else 0.0) + (lo - e if e < lo else 0.0)
-        ex1 = (end - hi if end > hi else 0.0) + (lo - end if end < lo else 0.0)
-        comfort = S.ccost * dt * 0.5 * (ex0 + ex1)
-    pen = 0.0
-    if S.pen is not None:
-        pen = _pen_partial(S.pen, dt, e, end, 1.0)
-    comfort += top + pen
-    return (end, cash + comfort, comfort, imp, exp, evx, house, sold, gtb, top, pen)
-
-
-def _top_up(S: _Seg, e0: float, e1: float, grid_share: float) -> float:
-    """Pence for charging from level e0 to e1 (kWh): `top_up_cost_p` on the grid energy that goes in above the comfort
-    band's top, only the part above it. `grid_share` is the share of the charge that came from the grid (the rest is
-    sun); the energy is counted as bought, so the charging loss is included."""
-    if not S.topup or e1 <= S.hi:
-        return 0.0
-    return S.topup * grid_share * (e1 - max(e0, S.hi)) / S.eta_c
-
-
-def _grid_share(S: _Seg, full: tuple, hold: tuple) -> float:
-    """The share of a full charge's energy that comes from the grid (from its flows); 0 for anything but a charge."""
-    into = (full[0] - hold[0]) / S.eta_c
-    return min(1.0, full[8] / into) if into > 1e-12 else 0.0
+    pen = _pen_partial(S.pen, dt, e, end, 1.0) if S.pen is not None else 0.0
+    return (end, cash + pen, pen, imp, exp, evx, house, sold, gtb, pen)
 
 
 def _mix(a: tuple, b: tuple, f: float, S: _Seg | None = None) -> tuple:
-    """f of the segment in `a` (a charge or a sale), the rest in `b` (idle). With `S`, the top-up is priced from the
-    level the part-way charge ends at, not scaled with the share (it only applies above the comfort band's top)."""
+    """f of the segment in `a` (a charge or a sale), the rest in `b` (idle). With `S`, the level penalty is priced from
+    the level the part-way step reaches, not mixed."""
     g = 1.0 - f
     out = tuple(f * x + g * y for x, y in zip(a, b, strict=True))
-    if S is not None and a[9] > 0.0:
-        top = _top_up(S, b[0], out[0], _grid_share(S, a, b))
-        out = out[:1] + (out[1] - out[9] + top, out[2] - out[9] + top) + out[3:9] + (top,) + out[10:]
-    if S is not None and S.pen is not None:               # the level penalty from the level the part-way step reaches
+    if S is not None and S.pen is not None:
         pen = _pen_partial(S.pen, S.dt, b[0], out[0], f)
-        out = out[:1] + (out[1] - out[10] + pen, out[2] - out[10] + pen) + out[3:10] + (pen,)
+        out = out[:1] + (out[1] - out[9] + pen, out[2] - out[9] + pen) + out[3:9] + (pen,)
     return out
 
 
@@ -450,9 +416,8 @@ def _partial(scen: list, full: list, hold: list, Vn: _Arr, S: _Seg | None = None
     """The best stop inside a charge (or a sale): the share f of the segment (0 < f < 1) spent on the mode, the rest
     in the idle mode (`hold` holds its flows). The expected cost is convex in f, so the smallest f whose slope reaches
     zero is found by bisection, then snapped to the grid levels either side of it. Returns (expected cost-to-go, f) or
-    None when full or none is best.
-    The cost of a part-way charge is the hold cost plus f of the difference, except the top-up (`_top_up`), which only
-    starts above the comfort band's top and so is priced from the level the charge reaches."""
+    None when full or none is best. The cost of a part-way step is the idle cost plus f of the difference, except the
+    level penalty, which is priced from the level reached."""
     n = len(scen)
     ef = [x[0] for x in full]
     eh = [x[0] for x in hold]
@@ -465,18 +430,8 @@ def _partial(scen: list, full: list, hold: list, Vn: _Arr, S: _Seg | None = None
     base = [hold[i][1] for i in range(n)]
     if pen is not None:      # the level penalty is priced from the level reached, not mixed
         for i in range(n):
-            d_c[i] -= full[i][10] - hold[i][10]
-            base[i] -= hold[i][10]
-    # top-up: per scenario the pence per kWh of level above the band's top, and what the full charge's linear share was
-    tc = [0.0] * n
-    if S is not None and S.topup:
-        for i in range(n):
-            if full[i][9] > 0.0:
-                tc[i] = S.topup * _grid_share(S, full[i], hold[i]) / S.eta_c
-                d_c[i] -= full[i][9]
-
-    def top(i: int, f: float) -> float:
-        return tc[i] * max(0.0, eh[i] + f * d_e[i] - max(eh[i], S.hi)) if tc[i] else 0.0
+            d_c[i] -= full[i][9] - hold[i][9]
+            base[i] -= hold[i][9]
 
     def pen_f(i: int, f: float) -> float:
         return _pen_partial(pen, S.dt, eh[i], eh[i] + f * d_e[i], f) if pen is not None else 0.0
@@ -487,16 +442,13 @@ def _partial(scen: list, full: list, hold: list, Vn: _Arr, S: _Seg | None = None
     def slope(f: float) -> float:
         t = 0.0
         for i in range(n):
-            s_i = d_c[i] + _slope(Vn, eh[i] + f * d_e[i]) * d_e[i] + dpen_f(i, f)
-            if tc[i] and (eh[i] >= S.hi or eh[i] + f * d_e[i] > S.hi):
-                s_i += tc[i] * d_e[i]
-            t += ps[i] * s_i
+            t += ps[i] * (d_c[i] + _slope(Vn, eh[i] + f * d_e[i]) * d_e[i] + dpen_f(i, f))
         return t
 
     def cost(f: float) -> float:
         t = 0.0
         for i in range(n):
-            t += ps[i] * (base[i] + f * d_c[i] + top(i, f) + pen_f(i, f) + _val(Vn, eh[i] + f * d_e[i]))
+            t += ps[i] * (base[i] + f * d_c[i] + pen_f(i, f) + _val(Vn, eh[i] + f * d_e[i]))
         return t
 
     if slope(0.0) >= -SLOPE_TOL or slope(1.0) < -SLOPE_TOL:
@@ -726,8 +678,8 @@ def _convex_from(v: list[float], lo: int) -> list[float]:
 
 def _lam_row(a: _Arr) -> list[float]:
     """The value of one more stored kWh at each level: the slope of the cost-to-go to the next level up (the last level
-    takes the slope below it). A one-sided slope, not a central one, because the floors, the ceiling and the comfort
-    band's edges are kinks that fall on levels: a central difference would give half the value at the floor, which is
+    takes the slope below it). A one-sided slope, not a central one, because the floors, the ceiling and the range's
+    edges are kinks that fall on levels: a central difference would give half the value at the floor, which is
     exactly where a battery at its reserve sits."""
     v, st = a.v, a.step
     out = [(v[i] - v[i + 1]) / st for i in range(a.n)]
@@ -746,18 +698,6 @@ def _fine_lam(a: _Arr, n: int, step: float) -> tuple[float, ...]:
 # --- forward runs --------------------------------------------------------------------------------------------------
 def _outcome_price(S: _Seg) -> float:
     return max(S.outcomes, key=lambda o: o[0])[1]
-
-
-def _charge_cross(row, step: float, e: float, buy: float, top: float, hi: float, tol: float) -> float:
-    """The level (kWh) a charge from e stops at, going up: where the value stops being above the buy line (`buy`, p per
-    kWh stored), which is `top` higher for energy that lands above the comfort band's top `hi` (kWh)."""
-    x = _cross(row, step, e, (buy + top if e >= hi else buy) + tol, True)
-    if e < hi < x:
-        if _row_at(row, step, hi) > buy + top + tol:
-            x = max(hi, _cross(row, step, hi, buy + top + tol, True))
-        else:
-            x = hi
-    return x
 
 
 def _cross(row, step: float, e: float, thr: float, up: bool) -> float | None:
@@ -861,8 +801,8 @@ def _choose(stretch: list[_Seg], vks: list, e: float, kind: str, prev: str | Non
       so it never creeps on in slivers): the forecast
       moves (smart slots come and go), so what pays at today's prices is done while they hold;
     * a charge anywhere in the stretch starts now, at full power, to the level the programme reaches by the stretch's
-      end (late is risky: the rate tapers, a slot is withdrawn); only up to the top of the free range (the comfort
-      band's top or where the top curve starts), where holding starts to cost by the hour. A sale running now is not
+      end (late is risky: the rate tapers, a slot is withdrawn); only up to the top of the range (where the top
+      curve starts), where holding starts to cost by the hour. A sale running now is not
       turned round by it.
 
     `leg` is (mode, kWh it began at, kWh it must run): a charge or a sale runs at least `leg_need` between the level
@@ -885,7 +825,7 @@ def _choose(stretch: list[_Seg], vks: list, e: float, kind: str, prev: str | Non
         if CHARGE in S.allowed:
             reach = sub[-1]["e1"]
             sale_goes_on = prev == EXPORT and sub[0]["mode"] == EXPORT
-            capped = bool((S.ccost or S.topup or S.pen is not None) and reach > S.fcap)
+            capped = S.pen is not None and reach > S.fcap
             if capped:                              # early is free only inside the band: above its top the hours cost
                 reach = S.fcap
             if any(m == CHARGE for m, _ in runs) and reach > e + 1e-9 and not sale_goes_on and done != CHARGE \
@@ -958,7 +898,7 @@ def _walk(segs: list[_Seg], e0: float, kind: str, front: bool = True, prev: str 
         tail = segs[i + 1:end_i + 1] if front else []
         vst = vks[i:i + 1 + len(tail)]
         pieces: list[tuple] = []
-        tot = [0.0] * 11
+        tot = [0.0] * 10
         cost, x, cur = 0.0, 0.0, S
         n_used, stopped = (used, last_run) if i == 0 else (0, None)
         if active is not None and (i > active[2] or S.forced or active[0] not in S.allowed):
@@ -993,7 +933,7 @@ def _walk(segs: list[_Seg], e0: float, kind: str, front: bool = True, prev: str 
             part = cur if f >= 1.0 else _part(cur, 0.0, f)
             r = _phys(part, e, mode, _net(part, kind), imp_p)
             cost += r[1] + (switch_cost(KIND[prev_mode], KIND[mode], S.sw) if prev_mode is not None else 0.0)
-            for j in range(2, 11):
+            for j in range(2, 10):
                 tot[j] += r[j]
             x1 = 1.0 if f >= 1.0 else x + f * (1.0 - x)
             pieces.append((mode, x, x1, e, r[0], False, target))
@@ -1008,7 +948,7 @@ def _walk(segs: list[_Seg], e0: float, kind: str, front: bool = True, prev: str 
                 continue
             r = _phys(cur, e, idle, _net(cur, kind), imp_p)       # the rest of the segment idles
             cost += r[1] + (switch_cost(KIND[prev_mode], KIND[idle], S.sw) if prev_mode != idle else 0.0)
-            for j in range(2, 11):
+            for j in range(2, 10):
                 tot[j] += r[j]
             pieces.append((idle, x, 1.0, e, r[0], True, None))
             e, prev_mode, leg = r[0], idle, None
@@ -1205,18 +1145,10 @@ def solve(forecast: Forecast, start_soc: float, facts: BatteryFacts, settings: V
     low, _ = _forward(core, e0, "low", running, leg)
     high, _ = _forward(core, e0, "high", running, leg)
     _, cost_self = _forward(core, e0, "self")
-    given_up = None
-    if settings.comfort_cost_p > 0 or settings.top_up_cost_p > 0:      # the top-up is part of the comfort figure
-        plain = replace(settings, comfort_cost_p=0.0, top_up_cost_p=0.0)
-        core0 = _backward(forecast, facts, plain, limits_for, now, COARSE_STEP_KWH, COARSE_STEP_KWH)
-        n0, step0 = _grid(cap, COARSE_STEP_KWH)
-        _, cost0 = _forward(core0, e0, "mid")
-        cash_a = cost_mid - sum(r["comfort"] for r in mid)
-        given_up = max(0.0, cash_a - cost0)
     path = _path(core, now, {"mid": mid, "low": low, "high": high})
     timeline = _timeline(core, mid, lam, step, now, tz, facts)
     return ValueResult(made_at=now, because=because, forecast=forecast, step_kwh=step, lam=lam, timeline=timeline,
-                       path=path, cost_expected_p=cost_mid, cost_selfuse_p=cost_self, comfort_given_up_p=given_up,
+                       path=path, cost_expected_p=cost_mid, cost_selfuse_p=cost_self, comfort_given_up_p=None,
                        calc_s=time.perf_counter() - t_start, limits=tuple(S.lim for S in core.segs),
                        vk=tuple(core.VK[1:]))
 
@@ -1323,9 +1255,6 @@ def lines(vr: ValueResult, t: datetime, soc: float, import_p: float, export_p: f
     use, store = import_p * ed - settings.wear_house_p, export_p / ec
     value = value_at(vr, t, soc)
     target = floor = None
-    top = settings.top_up_cost_p / ec
-    if soc >= settings.comfort_high_soc:                 # energy charged above the band's top costs the top-up more
-        buy += top
     if vr.lam:
         k = _segment_index(vr, t)
         row = _end_row(vr.lam, k)
@@ -1333,8 +1262,7 @@ def lines(vr: ValueResult, t: datetime, soc: float, import_p: float, export_p: f
         cap = step * (len(row) - 1)
         e = soc / 100 * cap
         if value > buy + LINE_TOL / ec:
-            hi = settings.comfort_high_soc / 100 * cap
-            target = _charge_cross(row, step, e, import_p / ec, top, hi, LINE_TOL / ec) / cap * 100
+            target = _cross(row, step, e, buy + LINE_TOL / ec, True) / cap * 100
         if value < sell - LINE_TOL:
             floor = _cross(row, step, e, sell - LINE_TOL, False) / cap * 100
     return Lines(value_p=value, buy_line_p=buy, sell_line_p=sell, use_line_p=use, store_sun_line_p=store,

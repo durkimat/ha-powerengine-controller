@@ -75,11 +75,13 @@ FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smar
                     "engine_compare": True, "axle_stop_car": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 INT_SAFETY = ("smart_max_requests_per_day",)     # whole numbers: a fractional value is rounded
+# Safety settings that became engine v2 settings: a saved value seeds the v2 setting (`SEED_FROM`), and is not an error.
+MOVED_TO_V2 = frozenset({"smart_slot_certainty_pct"})      # 0.9.157: engine v2's `slot_odds_pct`
+
 SAFETY = {
     "smart_max_requests_per_day": (6, 4, 10),  # smart-charge ready-by changes a day
     "smart_min_gap_min": (20, 10, 120),        # minutes between ready-by changes
     "smart_lookahead_h": (3, 1, 8),            # no request if a slot is planned within this many hours
-    "smart_slot_certainty_pct": (60, 0, 100),  # engine v2: how likely a smart slot outside the overnight window is (%)
     "car_min_charge_min": (2.0, 0.5, 10.0),    # the car must charge this long, unbroken, for a smart slot to count
     "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
     "battery_floor_soc": (12, 0, 50),         # the battery's own lowest level (BMS cut-off); engine v2's hard floor (%)
@@ -177,7 +179,6 @@ SETTING_TEXT = {
                           "minutes."),
     "smart_lookahead_h": ("Skip if a slot is due within", "h",
                           "Don't ask when a slot is already planned to start within this time."),
-    "smart_slot_certainty_pct": ("Smart slot odds", "%", "How likely a smart slot is outside the overnight window."),
     "car_min_charge_min": ("Shortest real charge", "min",
                            "How long the car's charger must report charging without a break inside a smart-charge "
                            "slot for the slot to count as used. Shorter bursts (the car waking up) are ignored. "
@@ -309,7 +310,7 @@ SETTING_SECTIONS = (
     ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
     ("axle", "Grid events", ("pre_axle_lookahead_h", "axle_margin_soc")),
     ("smart", "Smart-charge requests", ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h",
-                                                  "car_min_charge_min", "smart_slot_certainty_pct")),
+                                                  "car_min_charge_min")),
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
                                 "arbitrage_max_soc", "arbitrage_band_penalty_p", "overnight_switch_cost_p")),
     ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p", "ram_refresh_min",
@@ -594,7 +595,10 @@ def parse_config(data: Any) -> Config:
     raw_safety = data.get("safety") or {}
     if not isinstance(raw_safety, dict):
         raise ConfigError("'safety' must be a mapping")
+    moved = {k: raw_safety[k] for k in MOVED_TO_V2 if k in raw_safety}     # seeds engine v2's own setting
     for key, value in raw_safety.items():
+        if key in MOVED_TO_V2:
+            continue
         if key not in SAFETY:
             raise ConfigError(f"unknown safety setting '{key}'")
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -639,7 +643,8 @@ def parse_config(data: Any) -> Config:
         v2_profile = data.get("v2_profile") or (profile_of("v2_1") if beta_alias else DEFAULT_PROFILE)
         if not isinstance(v2_profile, str) or (v2_profile not in BUILTIN_PROFILES and v2_profile not in v2_profiles):
             raise SettingsError(f"unknown engine v2 profile {v2_profile!r}")
-        engine_v2 = parse_v2(data.get("engine_v2"), features, safety, profile_values(v2_profile, v2_profiles))
+        engine_v2 = parse_v2(data.get("engine_v2"), features, {**safety, **moved},
+                             profile_values(v2_profile, v2_profiles))
     except SettingsError as err:
         raise ConfigError(str(err)) from err
 

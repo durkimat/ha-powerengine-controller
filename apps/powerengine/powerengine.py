@@ -913,7 +913,7 @@ class PowerEngine(hass.Hass):
         situation = Situation(active=send, mode_reason=reason, override=self._active_override(),
                               house_load_includes_ev=bool(self.cfg.system.get("house_load_includes_ev", True)),
                               control_method=method)
-        slot_c = float(self.cfg.safety.get("smart_slot_certainty_pct", 60)) / 100     # a fixed setting, not learned
+        slot_c = float(self.cfg.engine_v2.slot_odds_pct) / 100                # a fixed setting, not learned
         return StepInput(now=now, readings=r, facts=facts, situation=situation, tz=self.tz or timezone.utc,
                          solar_points=solar, load_profile=self.profile,
                          slot_certainty=lambda _s, _f: slot_c, slot_hold=lambda: slot_c,

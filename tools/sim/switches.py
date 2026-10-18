@@ -21,20 +21,20 @@ LAYERS: list[dict] = []
 
 # setting -> the value at which it has no effect (ablation 1 and 2). Not offered for a setting not listed.
 OFF_VALUES = {
-    "comfort_cost_p": 0,
-    "top_up_cost_p": 0,
-    "prefer_self_use": False,
+    "range_firmness": "off",
+    "min_run_pct": 0,
+    "slot_floor_soc": 0,
+    "charge_max_import_p": 0,
     "switch_cost_p": 0,
-    "wear_house_p": 0,
-    "wear_sale_p": 0,
+    "wear_p": 0,
 }
 
 PRESETS = [
     {
         "id": "engine_2_1_beta",
-        "label": "Engine 2.1 beta (as released, top-up cost out)",
-        "help": "The released profile: follows the plan, level curves, sharper bottom in smart slots. Your saved settings win over its values, so the top-up cost is set to 0 here, as in the tests.",
-        "settings": {"system.engine": "v2_1", "top_up_cost_p": 0},
+        "label": "Engine 2.1 beta",
+        "help": "The 2.1 beta profile: a firm range of 70 to 90%, charges and sales that run its span, and 80% kept while a smart slot is counted on. Your saved settings win over its values.",
+        "settings": {"system.engine": "v2_1"},
         "consts": {},
     },
     {

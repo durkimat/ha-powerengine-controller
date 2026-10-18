@@ -16,88 +16,72 @@ from typing import Any
 
 from ..names import fill
 
-W0 = "Starting weight; learned from then on."
 # key: (kind, default, min, max, unit, label, help). kind: "number", "int", "bool" or "choice" (min = the options).
+# Since 0.9.157 the settings say what you want, not how the engine gets there: each maps onto the engine's own tuning
+# (the properties of V2Settings below). Everything here acts in the plan and in the live decision alike.
+HOLD_USE = ("car and reserve", "cheap times", "any time")
+FIRMNESS = ("off", "gentle", "firm", "strict")
+CAUTION = ("cautious", "balanced", "optimistic")
 SETTINGS: dict[str, tuple] = {
-    # --- what is allowed ---------------------------------------------------------------------------------------
+    # --- what the battery may do -------------------------------------------------------------------------------
     "arbitrage": ('bool', False, None, None, '', 'Sell from the battery',
                  'Sell stored energy outside grid events when that pays more than keeping it.'),
     "events": ("bool", True, None, None, "", "Grid events",
                "Act on grid events (<<event>>): export at full power while one runs."),
+    "event_value_p": ("number", 100.0, 0, 500, "p/kWh", "Grid event pays",
+                      "What a grid event pays per kWh, before any export rate on top."),
     "event_plus_export": ("bool", True, None, None, "", "Export rate paid on top of a grid event",
                           "The export rate is paid on top of the event's rate."),
     "free_power": ("bool", True, None, None, "", "Free-power sessions", "Charge to 100% during a free-power session."),
     "free_arbitrage": ("bool", False, None, None, "", "Free power: charge or sell",
                        "A free-power session may also sell what is stored."),
-    "hold_only_car_reserve": ("bool", False, None, None, "", "Hold only for car and reserve",
-                              "Hold only for the car or the reserve; else charge, sell or self-use."),
-    "prefer_self_use": ('bool', True, None, None, '', 'Prefer Self-use to Hold by day',
-                 'By day the battery runs the house and stores spare sun; Hold is for cheap times, the car and '
-                 'the reserve.'),
-    "preview_when_v1": ('bool', True, None, None, '', 'Preview while engine v1 is in control',
-                 'Show what engine v2 would do while v1 is in control. Nothing is sent.'),
+    "hold_use": ("choice", "cheap times", HOLD_USE, None, "", "When the battery may hold",
+                 "Hold lets the grid run the house while the battery keeps its charge. Car and reserve: only then. "
+                 "Cheap times: also at a cheap rate. Any time: whenever that pays."),
     "charge_ceiling_soc": ('number', 100, 10, 100, '%', 'Highest grid charge',
                  'A grid charge never goes above this. Sun can still fill the battery.'),
     "charge_max_import_p": ('number', 0.0, 0, 100, 'p/kWh', 'Highest price to charge at',
                  'No grid charge above this import price (a smart slot may bring less). 0: off.'),
-    # --- floors ------------------------------------------------------------------------------------------------
+    # --- the battery's range -----------------------------------------------------------------------------------
     "reserve_soc": ('number', 12, 0, 100, '%', 'Your reserve',
                  'Kept back in normal running; grid events may go below it.'),
+    "range_low_soc": ("number", 20, 0, 100, "%", "Everyday range: bottom",
+                      "Below this, keeping energy in the battery gets dearer by the hour, so the plan stays above it "
+                      "where it can."),
+    "range_high_soc": ("number", 90, 50, 100, "%", "Everyday range: top",
+                       "Above this, holding energy gets dearer by the hour: the battery fills past it only when that "
+                       "pays (a last fill before a dear stretch)."),
+    "range_firmness": ("choice", "gentle", FIRMNESS, None, "", "How firmly the range holds",
+                       "Off: no range. Gentle: a soft guide. Firm: the battery rarely leaves it. Strict: only to "
+                       "avoid a real loss."),
+    "min_run_pct": ("number", 0, 0, 100, "points", "Shortest charge or sale",
+                    "A charge or sale runs at least this far (or to the edge of the range) before it stops or turns "
+                    "round. Fewer, longer cycles. 0: off."),
+    "slot_floor_soc": ("number", 0, 0, 100, "%", "Smart slots: keep above",
+                       "While the plan counts on a smart slot to refill the battery, it keeps the level above this, "
+                       "in case the slot is withdrawn. 0: the everyday range."),
+    "slot_odds_pct": ("number", 60, 0, 100, "%", "Smart slot odds",
+                      "How likely a smart slot outside the overnight window is to happen. The plan prices it at "
+                      "these odds."),
+    # --- trading -----------------------------------------------------------------------------------------------
+    "switch_cost_p": ('number', 2.0, 0, 20, 'p per change', 'Cost of a mode change',
+                 'What each change of mode counts as costing. Higher: fewer changes, less profit.'),
+    "wear_p": ("number", 0.0, 0, 20, "p/kWh", "Battery wear",
+               "Cost counted for each kWh the battery gives out (to the house or sold). 0: a sunk cost."),
+    # --- the forecast ------------------------------------------------------------------------------------------
+    "forecast_caution": ("choice", "balanced", CAUTION, None, "", "Forecast caution",
+                         "How much weight the low-sun, high-house case gets, before learning moves it."),
+    "learn": ("bool", True, None, None, "", "Learn from experience",
+              "Learn how often sun and house come in low or high, and the solar forecast's bias."),
+    # --- advanced ----------------------------------------------------------------------------------------------
     "hard_floor_margin_pct": ('number', 1, 0, 10, 'points', 'Grid event margin above the hard floor',
                  "A grid event stops this far above the battery's hard floor."),
-    # --- value and costs ---------------------------------------------------------------------------------------
-    "wear_house_p": ('number', 0.0, 0, 20, 'p/kWh', 'Wear: battery supplying the house',
-                 'Cost per kWh the battery supplies to the house. 0: sunk cost.'),
-    "wear_sale_p": ("number", 0.0, 0, 20, "p/kWh", "Wear: sales",
-                    "Cost counted per kWh the battery sells (exports and grid events)."),
-    "event_value_p": ("number", 100.0, 0, 500, "p/kWh", "Grid event pays",
-                      "What a grid event pays per kWh, before any export rate on top."),
-    # --- comfort band ------------------------------------------------------------------------------------------
-    "comfort_low_soc": ('number', 20, 0, 100, '%', 'Comfort band: lower edge',
-                 'Below this the battery pays the comfort cost for each hour there.'),
-    "comfort_high_soc": ('number', 90, 0, 100, '%', 'Comfort band: upper edge',
-                 'Above this the battery pays the comfort cost for each hour there.'),
-    "comfort_cost_p": ('number', 0.3, 0, 10, 'p per kWh per hour', 'Comfort cost',
-                 'The price of each kWh held an hour outside the band: a soft guide. 0: off.'),
-    "top_up_cost_p": ('number', 5.0, 0, 20, 'p/kWh', 'Grid charging above the comfort band',
-                 "What each kWh charged from the grid above the band's top counts as costing. 0: off."),
-    # --- following the plan and the top and bottom of the battery (engine 2.1 beta) -----------------------------
-    "level_top_start_soc": ("number", 90, 50, 100, "%", "Top: where the cost starts",
-                            "Above this level each stored kWh costs a rate per hour."),
-    "level_top_rate_p": ('number', 0.0, 0, 1000, 'p/kWh/h', 'Top: rate at 100%',
-                 'The rate at 100%, doubling every few points above the start. 0: off.'),
-    "level_top_doubling_pts": ("number", 2.0, 0.5, 20, "points", "Top: points per doubling",
-                               "How steeply the top rate climbs."),
-    "level_bot_start_soc": ("number", 70, 0, 100, "%", "Bottom: where the cost starts",
-                            "Below this level each stored kWh costs a rate per hour."),
-    "level_bot_rate_p": ('number', 0.0, 0, 1000, 'p/kWh/h', 'Bottom: rate at your reserve',
-                 'The rate at your reserve, doubling every few points below the start. 0: off.'),
-    "level_bot_doubling_pts": ("number", 5.0, 0.5, 30, "points", "Bottom: points per doubling",
-                               "How steeply the bottom rate climbs."),
-    "slot_bot_factor": ('number', 1.0, 1, 1000, 'times', 'Slots: bottom multiplier',
-                 'In a smart slot the bottom rate is multiplied by this. 1: no change.'),
-    "slot_bot_start_soc": ('number', 0, 0, 100, '%', 'Slots: bottom start',
-                 'In a smart slot the bottom curve starts here (0: as usual).'),
-    # --- forecast caution and learning -------------------------------------------------------------------------
-    "solar_low_pct": ("number", 25, 0, 100, "%", "Solar: weight of the low forecast", W0),
-    "solar_mid_pct": ("number", 50, 0, 100, "%", "Solar: weight of the middle forecast", W0),
-    "solar_high_pct": ("number", 25, 0, 100, "%", "Solar: weight of the high forecast", W0),
-    "load_low_pct": ("number", 25, 0, 100, "%", "House load: weight of the low figure", W0),
-    "load_mid_pct": ("number", 50, 0, 100, "%", "House load: weight of the middle figure", W0),
-    "load_high_pct": ("number", 25, 0, 100, "%", "House load: weight of the high figure", W0),
-    "learn_scenario_weights": ('bool', True, None, None, '', 'Learn the weights from experience',
-                 'Move the weights towards how often sun and house came in low, mid or high.'),
+    "learn_soc_offset": ("bool", True, None, None, "", "Learn the battery reading's offset",
+                         "Learn how far the battery reading is off when charging, holding and discharging."),
     "scenario_half_life_days": ("number", 14, 1, 60, "days", "Learning: half-life",
                                 "How quickly old days stop counting."),
     "scenario_prior_days": ('number', 7, 0, 60, 'days', 'Learning: weight of the starting values',
                  'The starting weights count as this many days of experience.'),
-    "learn_solar_bias": ('bool', True, None, None, '', "Learn the solar forecast's bias",
-                 'Scale the solar forecast by how it compared with the real sun in the last 14 days.'),
-    "learn_soc_offset": ("bool", True, None, None, "", "Learn the battery reading's offset",
-                         "Learn how far the battery reading is off when charging, holding and discharging."),
-    # --- responsiveness ----------------------------------------------------------------------------------------
-    "switch_cost_p": ('number', 2.0, 0, 20, 'p per change', 'Cost of a mode change',
-                 'What each change of mode counts as costing, in the plan and when deciding.'),
     "car_start_debounce_s": ('int', 60, 0, 600, 's', 'Car start debounce',
                  'The car must report charging this long before it counts.'),
     "car_stop_debounce_s": ("int", 30, 0, 600, "s", "Car stop debounce",
@@ -110,31 +94,25 @@ SETTINGS: dict[str, tuple] = {
                  'A smart-slot change and a price change wait this long for each other, so one re-plan sees both.'),
     "sample_s": ("int", 10, 5, 60, "s", "Sample interval",
                  "How often the readings are checked against the conditions."),
-    # --- model -------------------------------------------------------------------------------------------------
+    "preview_when_v1": ('bool', True, None, None, '', 'Preview while engine v1 is in control',
+                 'Show what engine v2 would do while v1 is in control. Nothing is sent.'),
 }
 
 # config-page sections, in display order: (key, label, settings)
 SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("allowed", "What engine v2 may do",
-     ("arbitrage", "events", "event_plus_export",
-      "free_power", "free_arbitrage", "hold_only_car_reserve", "charge_ceiling_soc",
-      "charge_max_import_p", "prefer_self_use", "preview_when_v1")),
-    ("floors", "Floors", ("reserve_soc", "hard_floor_margin_pct")),
-    ("comfort", "Comfort band", ("comfort_low_soc", "comfort_high_soc", "comfort_cost_p", "top_up_cost_p")),
-    ("levels", "Plan-following and battery limits",
-     ("level_top_start_soc", "level_top_rate_p", "level_top_doubling_pts",
-      "level_bot_start_soc", "level_bot_rate_p", "level_bot_doubling_pts", "slot_bot_factor", "slot_bot_start_soc")),
-    ("value", "Value and costs",
-     ("wear_house_p", "wear_sale_p", "event_value_p")),
-    ("forecast", "Forecast caution and learning",
-     ("solar_low_pct", "solar_mid_pct", "solar_high_pct", "load_low_pct", "load_mid_pct", "load_high_pct",
-      "learn_scenario_weights", "scenario_half_life_days", "scenario_prior_days", "learn_solar_bias",
-      "learn_soc_offset")),
-    ("response", "Responsiveness",
-     ("switch_cost_p", "car_start_debounce_s",
-      "car_stop_debounce_s", "stale_after_s", "soc_filter_gain", "price_churn_hold_s", "sample_s")),
+    ("allowed", "What the battery may do",
+     ("arbitrage", "events", "event_value_p", "event_plus_export", "free_power", "free_arbitrage", "hold_use",
+      "charge_ceiling_soc", "charge_max_import_p")),
+    ("range", "The battery's range",
+     ("reserve_soc", "range_low_soc", "range_high_soc", "range_firmness", "min_run_pct", "slot_floor_soc",
+      "slot_odds_pct")),
+    ("trading", "Trading", ("switch_cost_p", "wear_p")),
+    ("forecast", "Forecast", ("forecast_caution", "learn")),
+    ("advanced", "Advanced",
+     ("hard_floor_margin_pct", "learn_soc_offset", "scenario_half_life_days", "scenario_prior_days",
+      "car_start_debounce_s", "car_stop_debounce_s", "stale_after_s", "soc_filter_gain", "price_churn_hold_s",
+      "sample_s", "preview_when_v1")),
 )
-
 # v2 key -> (v1 config part, v1 key): where a missing v2 setting takes its first value from
 SEED_FROM = {
     "arbitrage": ("features", "arbitrage"),
@@ -142,8 +120,17 @@ SEED_FROM = {
     "event_plus_export": ("features", "axle_plus_export"),
     "free_power": ("features", "free_power_days"),
     "reserve_soc": ("safety", "min_reserve_soc"),
-    "comfort_high_soc": ("safety", "arbitrage_max_soc"),
+    "slot_odds_pct": ("safety", "smart_slot_certainty_pct"),
 }
+
+# What each choice means to the engine's own tuning
+# firmness -> (top rate at 100% p/kWh/h, top points per doubling, bottom rate at the reserve, its points per doubling)
+FIRMNESS_CURVES = {"off": (0.0, 2.0, 0.0, 5.0), "gentle": (50.0, 3.0, 3.0, 5.0), "firm": (200.0, 3.0, 10.0, 5.0),
+                   "strict": (500.0, 2.0, 50.0, 4.0)}
+SLOT_BOT_FACTOR = 30.0          # inside a smart slot the bottom curve's rate is this many times the usual
+# caution -> ((solar low, mid, high), (house low, mid, high)) starting weights in percent
+CAUTION_WEIGHTS = {"cautious": ((40, 45, 15), (15, 45, 40)), "balanced": ((25, 50, 25), (25, 50, 25)),
+                   "optimistic": ((15, 45, 40), (40, 45, 15))}
 
 
 class SettingsError(ValueError):
@@ -154,61 +141,106 @@ class SettingsError(ValueError):
 class V2Settings:
     arbitrage: bool = False
     events: bool = True
+    event_value_p: float = 100.0
     event_plus_export: bool = True
     free_power: bool = True
     free_arbitrage: bool = False
-    hold_only_car_reserve: bool = False
-    prefer_self_use: bool = True
-    preview_when_v1: bool = True
+    hold_use: str = "cheap times"
     charge_ceiling_soc: float = 100
     charge_max_import_p: float = 0.0
     reserve_soc: float = 12
+    range_low_soc: float = 20
+    range_high_soc: float = 90
+    range_firmness: str = "gentle"
+    min_run_pct: float = 0
+    slot_floor_soc: float = 0
+    slot_odds_pct: float = 60
+    switch_cost_p: float = 2.0
+    wear_p: float = 0.0
+    forecast_caution: str = "balanced"
+    learn: bool = True
     hard_floor_margin_pct: float = 1
-    wear_house_p: float = 0.0
-    wear_sale_p: float = 0.0
-    event_value_p: float = 100.0
-    level_top_start_soc: float = 90
-    level_top_rate_p: float = 0.0
-    level_top_doubling_pts: float = 2.0
-    level_bot_start_soc: float = 70
-    level_bot_rate_p: float = 0.0
-    level_bot_doubling_pts: float = 5.0
-    slot_bot_factor: float = 1.0
-    slot_bot_start_soc: float = 0
-    comfort_low_soc: float = 20
-    comfort_high_soc: float = 90
-    comfort_cost_p: float = 0.3
-    top_up_cost_p: float = 5.0
-    solar_low_pct: float = 25
-    solar_mid_pct: float = 50
-    solar_high_pct: float = 25
-    load_low_pct: float = 25
-    load_mid_pct: float = 50
-    load_high_pct: float = 25
-    learn_scenario_weights: bool = True
+    learn_soc_offset: bool = True
     scenario_half_life_days: float = 14
     scenario_prior_days: float = 7
-    learn_solar_bias: bool = True
-    learn_soc_offset: bool = True
-    switch_cost_p: float = 2.0
     car_start_debounce_s: int = 60
     car_stop_debounce_s: int = 30
     stale_after_s: int = 180
     soc_filter_gain: float = 0.05
     price_churn_hold_s: int = 60
     sample_s: int = 10
+    preview_when_v1: bool = True
 
     def as_dict(self) -> dict[str, Any]:
         return {f.name: getattr(self, f.name) for f in fields(self)}
 
+    # ---- the engine's own tuning, from what the settings say ---------------------------------------------------
+    @property
+    def hold_only_car_reserve(self) -> bool:
+        return self.hold_use == "car and reserve"
+
+    @property
+    def prefer_self_use(self) -> bool:
+        """By day Hold only at cheap times (with the car or at the reserve always)."""
+        return self.hold_use == "cheap times"
+
+    @property
+    def level_top_start_soc(self) -> float:
+        return self.range_high_soc
+
+    @property
+    def level_top_rate_p(self) -> float:
+        return FIRMNESS_CURVES[self.range_firmness][0]
+
+    @property
+    def level_top_doubling_pts(self) -> float:
+        return FIRMNESS_CURVES[self.range_firmness][1]
+
+    @property
+    def level_bot_start_soc(self) -> float:
+        return self.range_low_soc
+
+    @property
+    def level_bot_rate_p(self) -> float:
+        return FIRMNESS_CURVES[self.range_firmness][2]
+
+    @property
+    def level_bot_doubling_pts(self) -> float:
+        return FIRMNESS_CURVES[self.range_firmness][3]
+
+    @property
+    def slot_bot_factor(self) -> float:
+        return SLOT_BOT_FACTOR if self.slot_floor_soc > 0 else 1.0
+
+    @property
+    def slot_bot_start_soc(self) -> float:
+        return self.slot_floor_soc
+
+    @property
+    def wear_house_p(self) -> float:
+        return self.wear_p
+
+    @property
+    def wear_sale_p(self) -> float:
+        return self.wear_p
+
+    @property
+    def learn_scenario_weights(self) -> bool:
+        return self.learn
+
+    @property
+    def learn_solar_bias(self) -> bool:
+        return self.learn
+
     @property
     def solar_weights(self) -> tuple[float, float, float]:
         """Starting weights of the low, middle and high solar scenarios, as fractions summing to 1."""
-        return _norm(self.solar_low_pct, self.solar_mid_pct, self.solar_high_pct)
+        return _norm(*CAUTION_WEIGHTS[self.forecast_caution][0])
 
     @property
     def load_weights(self) -> tuple[float, float, float]:
-        return _norm(self.load_low_pct, self.load_mid_pct, self.load_high_pct)
+        return _norm(*CAUTION_WEIGHTS[self.forecast_caution][1])
+
 
 
 def _norm(a: float, b: float, c: float) -> tuple[float, float, float]:
@@ -248,28 +280,24 @@ BETA22_PROFILE = "2.2 beta"
 BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
     DEFAULT_PROFILE: {},
     BETA_PROFILE: {
-        "comfort_cost_p": 0.0, "top_up_cost_p": 0.0,
-        "prefer_self_use": False,
-        "level_top_start_soc": 90, "level_top_rate_p": 200.0, "level_top_doubling_pts": 3.0,
-        "level_bot_start_soc": 70, "level_bot_rate_p": 10.0, "level_bot_doubling_pts": 5.0,
-        "slot_bot_factor": 30.0, "slot_bot_start_soc": 80,
+        "hold_use": "any time", "range_low_soc": 70, "range_high_soc": 90, "range_firmness": "firm",
+        "min_run_pct": 20, "slot_floor_soc": 80,
     },
 }
-BUILTIN_PROFILES[BETA22_PROFILE] = {**BUILTIN_PROFILES[BETA_PROFILE], "hold_only_car_reserve": True,
-                                    "free_arbitrage": True,
-                                    "charge_max_import_p": 15.0}
+BUILTIN_PROFILES[BETA22_PROFILE] = {**BUILTIN_PROFILES[BETA_PROFILE], "hold_use": "car and reserve",
+                                    "free_arbitrage": True, "charge_max_import_p": 15.0}
 BUILTIN_NOTES = {
     DEFAULT_PROFILE: "Engine v2's own defaults.",
-    BETA_PROFILE: "Engine v2 following its own plan, with a smooth cost keeping the battery off the very top and "
-                  "bottom. Beta.",
-    BETA22_PROFILE: "2.1 beta, and Hold only for the car and the reserve, free power that may also sell, "
-                    "and no grid charge above 15p. Beta.",
+    BETA_PROFILE: "A firm range of 70 to 90% with charges and sales running its whole span, and the battery kept above "
+                  "80% while a smart slot is counted on. Beta.",
+    BETA22_PROFILE: "2.1 beta, and Hold only for the car and the reserve, free power that may also sell, and no grid "
+                    "charge above 15p. Beta.",
 }
+
 # Settings that belong to the house, not to a way of tuning the engine: a profile never holds or changes them.
 SITE_KEYS = frozenset({
     "arbitrage", "events", "event_plus_export", "free_power", "preview_when_v1", "charge_ceiling_soc",
-    "reserve_soc", "hard_floor_margin_pct", "comfort_low_soc", "comfort_high_soc",
-    "wear_house_p", "wear_sale_p", "event_value_p",
+    "reserve_soc", "hard_floor_margin_pct", "wear_p", "event_value_p", "slot_odds_pct",
 })
 PROFILE_KEYS = tuple(k for k in SETTINGS if k not in SITE_KEYS)
 MAX_USER_PROFILES = 10
@@ -302,7 +330,7 @@ def parse_profiles(raw: Any) -> dict[str, dict[str, Any]]:
             raise SettingsError(problem)
         if not isinstance(values, dict):
             raise SettingsError(f"profile '{name}' must be a mapping")
-        values = {k: v for k, v in values.items() if k not in RETIRED}
+        values = {k: v for k, v in _migrate(values).items() if k not in RETIRED}
         unknown = sorted(set(values) - set(PROFILE_KEYS))
         if unknown:
             raise SettingsError(f"profile '{name}' has setting(s) a profile can't hold: {', '.join(unknown)}")
@@ -334,7 +362,37 @@ RETIRED = frozenset({"reversal_cost_p",     # 0.9.129: one cost for every change
                      "corridor_cost_p", "max_segment_min", "forecast_change_pct", "drift_kwh", "band_exit_min",
                      "revalue_coalesce_s", "max_value_age_min", "deadline_grace_min", "debounce_s", "level_step_kwh",
                      # 0.9.157: one decision for the plan and the executor; these only tuned the live comparison
-                     "executor", "price_band_p", "level_band_pct", "min_dwell_s", "reversal_levy_p"})
+                     "executor", "price_band_p", "level_band_pct", "min_dwell_s", "reversal_levy_p",
+                     # 0.9.157: settings that say what you want instead of how (`_migrate` carries the old values over
+                     # where a new setting means the same)
+                     "comfort_low_soc", "comfort_high_soc", "comfort_cost_p", "top_up_cost_p",
+                     "level_top_start_soc", "level_top_rate_p", "level_top_doubling_pts",
+                     "level_bot_start_soc", "level_bot_rate_p", "level_bot_doubling_pts",
+                     "slot_bot_factor", "slot_bot_start_soc", "prefer_self_use", "hold_only_car_reserve",
+                     "wear_house_p", "wear_sale_p", "solar_low_pct", "solar_mid_pct", "solar_high_pct",
+                     "load_low_pct", "load_mid_pct", "load_high_pct", "learn_scenario_weights", "learn_solar_bias"})
+
+
+def _migrate(raw: dict) -> dict:
+    """Settings saved before 0.9.157, in the new terms where a new setting means the same thing (the rest of the old
+    keys are dropped as RETIRED)."""
+    out = dict(raw)
+    for old, new in (("level_bot_start_soc", "range_low_soc"), ("level_top_start_soc", "range_high_soc"),
+                     ("slot_bot_start_soc", "slot_floor_soc")):
+        if old in out and new not in out:
+            out[new] = out[old]
+    if "hold_use" not in out and ("hold_only_car_reserve" in out or "prefer_self_use" in out):
+        out["hold_use"] = ("car and reserve" if out.get("hold_only_car_reserve")
+                           else "cheap times" if out.get("prefer_self_use", True) else "any time")
+    if "wear_p" not in out and ("wear_house_p" in out or "wear_sale_p" in out):
+        out["wear_p"] = max(out.get("wear_house_p") or 0, out.get("wear_sale_p") or 0)
+    if "learn" not in out and "learn_scenario_weights" in out:
+        out["learn"] = bool(out["learn_scenario_weights"])
+    if "range_firmness" not in out and "level_bot_rate_p" in out:
+        rate = out["level_bot_rate_p"] or 0
+        out["range_firmness"] = "off" if rate <= 0 else min(
+            (f for f in FIRMNESS if f != "off"), key=lambda f: abs(FIRMNESS_CURVES[f][2] - rate))
+    return out
 
 
 def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None,
@@ -346,7 +404,7 @@ def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None,
         raw = {}
     if not isinstance(raw, dict):
         raise SettingsError("'engine_v2' must be a mapping")
-    raw = {k: v for k, v in raw.items() if k not in RETIRED}      # a setting an earlier release had: ignored
+    raw = {k: v for k, v in _migrate(raw).items() if k not in RETIRED}   # a setting an earlier release had: ignored
     unknown = sorted(set(raw) - set(SETTINGS))
     if unknown:
         raise SettingsError(f"unknown engine v2 setting(s): {', '.join(unknown)}")
@@ -361,15 +419,8 @@ def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None,
             values[key] = _check(key, v1[SEED_FROM[key][0]][SEED_FROM[key][1]])
         else:
             values[key] = spec[1]
-    if values["comfort_low_soc"] >= values["comfort_high_soc"]:
-        raise SettingsError("the comfort band's lower edge must be below its upper edge")
-    if values["level_top_rate_p"] > 0 and values["level_top_start_soc"] >= 100:
-        raise SettingsError("the top of the battery's cost must start below 100%")
-    if values["level_bot_rate_p"] > 0 and values["level_bot_start_soc"] <= values["reserve_soc"]:
-        raise SettingsError("the bottom of the battery's cost must start above your reserve")
-    for part in ("solar", "load"):
-        if values[f"{part}_low_pct"] + values[f"{part}_mid_pct"] + values[f"{part}_high_pct"] <= 0:
-            raise SettingsError(f"the {part} weights can't all be 0")
+    if values["range_low_soc"] >= values["range_high_soc"]:
+        raise SettingsError("the bottom of the everyday range must be below its top")
     return V2Settings(**values)
 
 
