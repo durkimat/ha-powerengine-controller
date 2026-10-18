@@ -1324,10 +1324,9 @@ def decide(vr: ValueResult, t: datetime, soc: float, lim: Limits, facts: Battery
     if t > sg.start:                                    # only what is left of the segment now running
         frac = (sg.end - t).total_seconds() / (sg.end - sg.start).total_seconds()
         sg = replace(sg, start=t, solar_kwh=_scaled(sg.solar_kwh, frac), load_kwh=_scaled(sg.load_kwh, frac))
-    if LIVE_RATES and import_p is not None \
-            and (abs(import_p - _effective_price(sg)) >= 0.01 or abs(export_p - sg.export_p) >= 0.01):
-        # the live rates say otherwise than the forecast (a new rate a moment before its segment, a slot that came or
-        # went): now is priced at what it costs now
+    if LIVE_RATES and import_p is not None and k0 == _segment_index(vr, t):
+        # now is priced at what it costs now: a slot running now is certain (no odds), and a new rate can arrive a
+        # moment before the forecast's segment does
         sg = replace(sg, import_p=import_p, export_p=export_p, slot_prob=None, slot_import_p=None)
     cut = [_make(sg, facts, settings, lim)]
     k = k0
