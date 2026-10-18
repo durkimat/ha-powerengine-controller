@@ -48,7 +48,7 @@ FLIP_FLOP_S = 600
 LEVEL_EPS = 0.1               # points: a mode that runs "until" a level is done within this of it. The filtered level
                               # only approaches a reading (99.999...% at 100%), so a bare `level < target` never ends it
 
-REENTRY_WINDOW_S = 600             # a charge or sale that ended within this long ago has just ended
+DEADLINE_GRACE_MIN = 10            # how long a run may pass its expected end before a re-plan
 
 
 @dataclass
@@ -486,20 +486,11 @@ class Executor:
             target = self._plan_target if target is None else max(target, self._plan_target)
         return None if target is None else min(target, lim.ceiling_soc)
 
-    def _just_left(self, mode: str) -> bool:
-        """`mode` (a charge or a sale) was running and ended within REENTRY_WINDOW_S: restarting it must earn a levy."""
-        last = self.changes[-1] if self.changes else None
-        return last is not None and last[1] == mode and self.mode != mode and self._ts - last[0] < REENTRY_WINDOW_S
-
     def _inertia_ok(self, mode: str, ln: Lines) -> bool:
         """The plan asks to start a charge or a sale that is not the mode now. Turning a run round (charge to sale or
-        back) or restarting one that just ended costs a levy, and the value must clear its line by that much. The
-        plan's own steps are in the value already; the levy is the margin against a re-plan that reverses a leg."""
-        levy = 0.0
-        if self.mode == (EXPORT if mode == CHARGE else CHARGE):
-            levy += self.s.reversal_levy_p
-        if self._just_left(mode):
-            levy += self.s.reentry_levy_p
+        back) costs a levy, and the value must clear its line by that much. The plan's own steps are in the value
+        already; the levy is the margin against a re-plan that reverses a leg."""
+        levy = self.s.reversal_levy_p if self.mode == (EXPORT if mode == CHARGE else CHARGE) else 0.0
         if levy <= 0:
             return True
         if mode == CHARGE:
@@ -515,8 +506,6 @@ class Executor:
         band = self.s.price_band_p
         if not staying and self.mode == EXPORT:
             band += self.s.reversal_levy_p                      # turning a sale round into a charge: a levy
-        if not staying and self._just_left(CHARGE):
-            band += self.s.reentry_levy_p  # a charge that has just ended: a margin
         # charge_now: the plan charges in this stretch at one price, so the charge starts now rather than at its end
         # (the same cost, and room left if the charge runs slower than modelled); the value test covers the rest
         if not (ln.charge_now or ln.value_p > ln.buy_line_p + (-band if staying else band)):
@@ -540,8 +529,6 @@ class Executor:
         band = self.s.price_band_p
         if not staying and self.mode == CHARGE:
             band += self.s.reversal_levy_p                      # turning a charge round into a sale: a levy
-        if not staying and self._just_left(EXPORT):
-            band += self.s.reentry_levy_p                       # a sale that has just ended restarts only for a margin
         if not ln.value_p < ln.sell_line_p + (band if staying else -band):
             return False
         floor = self._sell_floor(lim, ln, staying)
@@ -661,7 +648,7 @@ class Executor:
                 gap = abs(self.target_soc - level) / 100 * facts.capacity_kwh
                 kw = max(0.5, (facts.max_charge_kw if self.mode == CHARGE else facts.max_discharge_kw))
                 end = now + timedelta(hours=1.5 * gap / kw)
-            dl = (end + timedelta(minutes=self.s.deadline_grace_min)).timestamp() if end is not None else None
+            dl = (end + timedelta(minutes=DEADLINE_GRACE_MIN)).timestamp() if end is not None else None
             if dl is not None and dl > ts:
                 self.deadline_fired = False
             self.deadline = dl

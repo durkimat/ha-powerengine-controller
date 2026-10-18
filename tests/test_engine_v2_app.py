@@ -263,7 +263,7 @@ def test_engine_2_1_beta_is_engine_v2_with_a_profile_and_switching_to_it_keeps_t
     raw["system"]["engine"] = "v2_1"
     app._on_save("pe_config_save", {"config": raw}, {})
     assert app._engine_name() == "v2" and app._engine_choice() == "v2_1"          # engine v2 everywhere the app asks
-    assert app.cfg.engine_v2.executor == "plan" and app.cfg.engine_v2.replan_on_level
+    assert app.cfg.engine_v2.executor == "plan"
     assert app.mode.effective == "active" and app._v2 is first                    # the same engine, other settings
     assert any("Engine changed from v2 to 2.1 beta" in m["msg"] for m in app._log_ring.lines)
     Clock.now += timedelta(minutes=1)

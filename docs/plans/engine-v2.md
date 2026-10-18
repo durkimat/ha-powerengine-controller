@@ -1,5 +1,7 @@
 # Engine v2: event-driven planning and control
 
+> **0.9.156:** several settings named below are gone or are constants now (`replan_on_level`, `reentry_levy_p`, `terminal_value`, `terminal_value_p`, and the tuning of triggers and the model); see [engine-v2-architecture.md](engine-v2-architecture.md), "Constants since 0.9.156". This page is the original design and is not edited line by line.
+
 > **Status: built for 0.9.106 (5 Oct 2026), not yet run live.** See [engine-v2-build.md](engine-v2-build.md). The
 > owner's decisions so far: v2 is a clean design (it does not reuse v1's planner, optimiser or `decide`); the Plan view shows
 > both the expected timeline and the value curve; no shadow run, v2 is tested on recorded and simulated data and then

@@ -32,8 +32,14 @@ from pe_core.readings import Readings, Window
 UTC = timezone.utc
 T0 = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
 FACTS = BatteryFacts()                      # 18 kWh, 95% each way, 4.8 kW, floor 12%
-NO_COMFORT = V2Settings(comfort_cost_p=0.0, top_up_cost_p=0.0,
-                        terminal_value="fixed", terminal_value_p=0.0, switch_cost_p=0.0)
+NO_COMFORT = V2Settings(comfort_cost_p=0.0, top_up_cost_p=0.0, switch_cost_p=0.0)
+
+
+@pytest.fixture(autouse=True)
+def _zero_terminal_value(monkeypatch):
+    """The sums in these tests assume the energy left at the end is worth nothing; the ones that want the refill value
+    (the real default) switch the fixed value off."""
+    monkeypatch.setattr(V, "TERMINAL_FIXED_P", 0.0)
 BUY = 6.99 / 0.95
 
 
@@ -189,7 +195,7 @@ def test_comfort_cost_is_per_kwh_per_hour_outside_the_band():
 
 
 # --- the value curve -----------------------------------------------------------------------------------------------
-def test_cheap_night_before_a_dear_evening_gives_a_charge_target_where_the_curve_says():
+def test_cheap_night_before_a_dear_evening_gives_a_charge_target_where_the_curve_says(monkeypatch):
     # five dear half-hours at 0.5 kWh need 2.5 kWh of house energy = 2.63 kWh stored, above the 12% floor
     segs = cheap_then_peak(n_cheap=20, n_peak=3, n_after=2)
     vr = solve(segs, soc=12.0)
@@ -202,8 +208,9 @@ def test_cheap_night_before_a_dear_evening_gives_a_charge_target_where_the_curve
     above = V.lines(vr, segs[19].start, expected + 3, 6.99, 15.0, FACTS, NO_COMFORT)
     assert above.charge_target_soc is None and above.value_p < 1.0
     # with the usual end-of-horizon value (a refill at the cheap price) the curve flattens at the buy line instead
+    monkeypatch.setattr(V, "TERMINAL_FIXED_P", None)
     no_sale = segs[:-1] + [replace(segs[-1], export_p=0.0)]                      # nothing to sell at the end of it
-    refill = solve(no_sale, soc=12.0, settings=replace(NO_COMFORT, terminal_value="refill"))
+    refill = solve(no_sale, soc=12.0, settings=NO_COMFORT)
     flat = V.lines(refill, segs[19].start, expected + 3, 6.99, 15.0, FACTS, NO_COMFORT)
     assert flat.charge_target_soc is None and flat.value_p == pytest.approx(BUY, abs=0.1)
     # the timeline charges, and stops about there
@@ -502,11 +509,12 @@ def test_charge_in_a_flat_night_starts_with_the_night_and_ends_at_the_same_level
     assert V.run_target(vr, t(14), 40.0, 6.99, FACTS, NO_COMFORT) is None   # price no longer the one asked about
 
 
-def test_a_tie_never_charges_to_the_ceiling():
+def test_a_tie_never_charges_to_the_ceiling(monkeypatch):
+    monkeypatch.setattr(V, "TERMINAL_FIXED_P", None)                  # the usual end-of-horizon value: a refill
     # tomorrow needs little, and the end-of-horizon value equals the refill price: ties are not bought
     segs = night_and_day(n_cheap=12, n_dear=2)
     segs[-1] = replace(segs[-1], export_p=0.0)                          # nothing to sell at the end of the look-ahead
-    st = replace(NO_COMFORT, terminal_value="refill")
+    st = NO_COMFORT
     vr = solve(segs, soc=12.0, settings=st)
     need = (0.12 * 18 + 2 * 0.5 / 0.95) / 18 * 100                      # 17.9%
     top = max(it.level_end for it in vr.timeline)
@@ -580,12 +588,13 @@ def _end_levels(vr, last=4):
     return [it.level_end for it in vr.timeline[-last:]]
 
 
-def test_a_look_ahead_ending_in_the_cheap_window_keeps_what_the_dear_stretch_needs():
+def test_a_look_ahead_ending_in_the_cheap_window_keeps_what_the_dear_stretch_needs(monkeypatch):
+    monkeypatch.setattr(V, "TERMINAL_FIXED_P", None)                  # the usual end-of-horizon value: a refill
     # 8 Oct 2026: the look-ahead ended inside the cheap window and the last steps sold the battery to the floor, because
     # what was left was valued at the cheap refill price though only an hour of the window was left to refill in.
     # The 48 h look-ahead below ends at 05:00: one cheap hour is left (4.6 kWh refillable) and the 06:00 to 22:00
     # house load (9.6 kWh, 10.1 stored) must be there at 06:00, so about 12.8 - 4.6 = 8.2 kWh (45%) is kept.
-    st = replace(NO_COMFORT, terminal_value="refill", reserve_soc=15.0)
+    st = replace(NO_COMFORT, reserve_soc=15.0)
     ar = lambda sg: limits_for(sg, arbitrage=True)                                    # noqa: E731
     vr = solve(daily(96 + 10), soc=70.0, settings=st, lim=ar)
     assert min(_end_levels(vr)) > 38.0
@@ -604,19 +613,21 @@ def test_a_look_ahead_ending_in_the_cheap_window_keeps_what_the_dear_stretch_nee
     assert min(_end_levels(dumped)) < 20.0
 
 
-def test_a_look_ahead_ending_in_the_cheap_window_with_time_to_refill_may_sell_down():
+def test_a_look_ahead_ending_in_the_cheap_window_with_time_to_refill_may_sell_down(monkeypatch):
+    monkeypatch.setattr(V, "TERMINAL_FIXED_P", None)                  # the usual end-of-horizon value: a refill
     # three hours of the window left refill 13.7 kWh, more than the dear stretch needs: selling down is right
-    st = replace(NO_COMFORT, terminal_value="refill", reserve_soc=15.0)
+    st = replace(NO_COMFORT, reserve_soc=15.0)
     tv, curve = V._terminal_curve(fc_of(daily(96 + 6)), FACTS, st, 0.18, 100)
     refill_step = -6.99 / FACTS.eta_charge * 0.18
     assert curve[1] - curve[0] == pytest.approx(curve[100] - curve[99]) == pytest.approx(refill_step)
 
 
-def test_a_look_ahead_ending_in_the_peak_does_not_dump_the_battery_at_its_end():
+def test_a_look_ahead_ending_in_the_peak_does_not_dump_the_battery_at_its_end(monkeypatch):
+    monkeypatch.setattr(V, "TERMINAL_FIXED_P", None)                  # the usual end-of-horizon value: a refill
     # 7 Oct 2026 (0.9.119): the look-ahead ended 30 min into the 28.84p peak and the last step sold 25% down to the
     # floor. Nothing is refillable until 22:00, so the day's remaining house load (31 half hours, 9.3 kWh, 9.8 stored)
     # plus the reserve, about 12.5 kWh (69%), is worth the peak price and the plan keeps it.
-    st = replace(NO_COMFORT, terminal_value="refill", reserve_soc=15.0)
+    st = replace(NO_COMFORT, reserve_soc=15.0)
     ar = lambda sg: limits_for(sg, arbitrage=True)                                    # noqa: E731
     vr = solve(daily(96 + 13), soc=70.0, settings=st, lim=ar)                         # ends 06:30
     assert min(_end_levels(vr)) > 60.0
@@ -624,8 +635,9 @@ def test_a_look_ahead_ending_in_the_peak_does_not_dump_the_battery_at_its_end():
     assert tv == pytest.approx(max(6.99 / FACTS.eta_charge, 15.0 * FACTS.eta_discharge))   # the surplus can be sold
 
 
-def test_the_value_of_energy_left_never_rises_with_the_level_and_a_flat_tariff_keeps_the_refill_price():
-    st = replace(NO_COMFORT, terminal_value="refill", reserve_soc=15.0)
+def test_the_value_of_energy_left_never_rises_with_the_level_and_a_flat_tariff_keeps_the_refill_price(monkeypatch):
+    monkeypatch.setattr(V, "TERMINAL_FIXED_P", None)                  # the usual end-of-horizon value: a refill
+    st = replace(NO_COMFORT, reserve_soc=15.0)
     for end in (96 + 5, 96 + 13, 96 + 30):
         tv, curve = V._terminal_curve(fc_of(daily(end)), FACTS, st, 0.18, 100)
         slopes = [curve[k] - curve[k + 1] for k in range(100)]
@@ -633,8 +645,8 @@ def test_the_value_of_energy_left_never_rises_with_the_level_and_a_flat_tariff_k
     flat_tariff = [seg(i, imp=28.84, load=0.3) for i in range(96)]
     tv, curve = V._terminal_curve(fc_of(flat_tariff), FACTS, st, 0.18, 100)
     assert tv == pytest.approx(28.84 / FACTS.eta_charge) and curve[50] == pytest.approx(-tv * 50 * 0.18)
-    fixed = replace(NO_COMFORT, terminal_value="fixed", terminal_value_p=12.0)
-    got = V._terminal_curve(fc_of(daily(96 + 5)), FACTS, fixed, 0.18, 10)
+    monkeypatch.setattr(V, "TERMINAL_FIXED_P", 12.0)
+    got = V._terminal_curve(fc_of(daily(96 + 5)), FACTS, NO_COMFORT, 0.18, 10)
     assert got == (12.0, [-12.0 * i * 0.18 for i in range(11)])
 
 
@@ -697,10 +709,12 @@ def test_a_charge_that_stops_part_way_has_a_corridor_around_its_end_and_a_remain
     assert after.mode == HOLD and after.remainder and after.level_start == pytest.approx(after.level_end)
 
 
-def test_a_wider_cost_tolerance_widens_the_corridor():
+def test_a_wider_cost_tolerance_widens_the_corridor(monkeypatch):
     segs = cheap_then_peak(n_cheap=1, n_peak=2, n_after=0)
-    narrow = solve(segs, soc=12.0, settings=replace(NO_COMFORT, corridor_cost_p=0.05)).timeline[0]
-    wide = solve(segs, soc=12.0, settings=replace(NO_COMFORT, corridor_cost_p=5.0)).timeline[0]
+    monkeypatch.setattr(V, "CORRIDOR_COST_P", 0.05)
+    narrow = solve(segs, soc=12.0, settings=NO_COMFORT).timeline[0]
+    monkeypatch.setattr(V, "CORRIDOR_COST_P", 5.0)
+    wide = solve(segs, soc=12.0, settings=NO_COMFORT).timeline[0]
     assert wide.level_hi - wide.level_lo > narrow.level_hi - narrow.level_lo
     assert wide.level_lo <= narrow.level_lo + 1e-6 and wide.level_hi >= narrow.level_hi - 1e-6
 

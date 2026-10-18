@@ -5,6 +5,7 @@ from datetime import timedelta, timezone
 
 from test_engine_v2_observe import T0
 
+from pe_core.engine_v2 import triggers
 from pe_core.engine_v2.settings import V2Settings
 from pe_core.engine_v2.triggers import RECENT, Triggers
 from pe_core.engine_v2.types import Event
@@ -25,7 +26,7 @@ def test_an_urgent_event_revalues_at_once_and_says_why():
 
 
 def test_a_non_urgent_event_waits_for_the_batch_window_then_runs_once():
-    t = Triggers(V2Settings(revalue_coalesce_s=10, price_churn_hold_s=10))
+    t = Triggers(V2Settings(price_churn_hold_s=10))
     assert t.due(at(0), (ev("prices_published"),), at(-60)) is None
     assert t.due(at(5), (ev("slots_changed", 5),), at(-60)) is None
     because = t.due(at(11), (), at(-60))
@@ -48,14 +49,15 @@ def test_events_that_do_not_revalue_never_trigger_one():
     assert t.due(at(100), (), at(-60)) is None
 
 
-def test_more_than_two_reasons_are_counted_in_the_text():
-    t = Triggers(V2Settings(revalue_coalesce_s=0))
+def test_more_than_two_reasons_are_counted_in_the_text(monkeypatch):
+    monkeypatch.setattr(triggers, "REVALUE_COALESCE_S", 0)
+    t = Triggers(V2Settings(price_churn_hold_s=0))
     because = t.due(at(0), (ev("drift"), ev("forecast_update"), ev("slots_changed")), at(-60))
     assert because.endswith("(and 1 more)")
 
 
 def test_the_backstop_runs_after_the_maximum_age_and_is_counted():
-    t = Triggers(V2Settings(max_value_age_min=120))
+    t = Triggers(V2Settings())
     assert t.due(at(119 * 60), (), at(0)) is None
     because = t.due(at(120 * 60), (), at(0))
     assert because == "The backstop timer"
@@ -69,7 +71,7 @@ def test_no_backstop_without_a_first_value_time():
 
 
 def test_day_counts_and_recent_events():
-    t = Triggers(V2Settings(revalue_coalesce_s=0, price_churn_hold_s=0))
+    t = Triggers(V2Settings(price_churn_hold_s=0))
     events = (ev("prices_published", 0), ev("price", 0))
     because = t.due(at(0), events, at(-60))
     assert because
@@ -113,10 +115,10 @@ def test_a_revalue_the_engine_asked_for_is_counted_under_its_own_kind():
 
 
 def test_state_is_json_safe_and_restores_the_pending_batch():
-    t = Triggers(V2Settings(revalue_coalesce_s=10))
+    t = Triggers(V2Settings())
     t.due(at(0), (ev("drift"),), at(-60))
     t.note(at(0), (ev("drift"),), False, False, None)
-    t2 = Triggers(V2Settings(revalue_coalesce_s=10), json.loads(json.dumps(t.state())))
+    t2 = Triggers(V2Settings(), json.loads(json.dumps(t.state())))
     assert t2.due(at(11), (), at(-60)) == "The house drifted from the forecast"
     assert len(t2.recent) == 1
 

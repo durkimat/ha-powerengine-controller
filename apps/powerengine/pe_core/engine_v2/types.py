@@ -69,7 +69,7 @@ class Spread:
 @dataclass(frozen=True)
 class Segment:
     """A stretch of time with one set of prices and events; sun and house load as spreads. Boundaries fall where the
-    data changes (a price, a smart slot's real start, an event), and no segment is longer than max_segment_min."""
+    data changes (a price, a smart slot's real start, an event), and no segment is longer than MAX_SEGMENT_MIN."""
     start: datetime
     end: datetime
     import_p: float                       # import price if no smart slot happens (p/kWh)
@@ -142,7 +142,7 @@ class TimelineItem:
     until: str                            # the condition that ends it, in words ("until 88%", "until 05:30")
     reason: str                           # plain words naming the prices
     level_lo: float | None = None         # a charge or sale may end anywhere in this corridor (percent):
-    level_hi: float | None = None         # as good as level_end within corridor_cost_p; None: a point
+    level_hi: float | None = None         # as good as level_end within CORRIDOR_COST_P (value.py); None: a point
     remainder: bool = False               # a hold that only fills out the rest of a segment after a stop part-way: a
                                           # way of saying how much, not a decision to hold
 

@@ -27,7 +27,7 @@ def test_the_profile_fills_what_the_config_does_not_set():
     s = parse_v2({}, profile=profile_values("2.1 beta"))
     for key, value in BUILTIN_PROFILES["2.1 beta"].items():
         assert getattr(s, key) == value
-    assert s.executor == "plan" and s.replan_on_level and s.level_top_rate_p == 200.0 and s.slot_bot_factor == 30.0
+    assert s.executor == "plan" and s.level_top_rate_p == 200.0 and s.slot_bot_factor == 30.0
     assert s.prefer_self_use is False and s.top_up_cost_p == 0.0
 
 
@@ -41,7 +41,7 @@ def test_what_you_saved_beats_the_profile_and_other_keys_still_seed_from_v1():
 
 def test_engine_v2_without_the_profile_is_unchanged():
     s = parse_v2({})
-    assert s == V2Settings() and s.executor == "lines" and not s.replan_on_level
+    assert s == V2Settings() and s.executor == "lines"
     assert s.level_top_rate_p == 0 and s.level_bot_rate_p == 0 and s.slot_bot_factor == 1.0
 
 
@@ -97,14 +97,12 @@ def test_the_catalogue_shows_the_profiles_defaults_and_the_engines_on_offer():
     assert any(sec["key"] == "levels" for sec in beta["sections"])
 
 
-def test_a_charge_or_sale_reaching_its_level_asks_for_a_re_plan_only_when_set_to():
+def test_a_charge_or_sale_reaching_its_level_does_not_ask_for_a_re_plan():
     now = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
     ev = (Event(now, "level", "The battery reached 90%: the charge ends"),)
-    off, on = Triggers(V2Settings()), Triggers(V2Settings(replan_on_level=True))
+    tr = Triggers(V2Settings())
     later = now + timedelta(seconds=11)  # past the batch window
-    assert off.due(now, ev, now) is None and off.due(later, (), now) is None
-    assert on.due(now, ev, now) is None  # batched with anything else that arrives
-    assert on.due(later, (), now) == "Level"  # asked for, and named by the kind of event
+    assert tr.due(now, ev, now) is None and tr.due(later, (), now) is None
 
 
 def _plan_with(mode):
@@ -195,7 +193,7 @@ def test_the_lines_executor_does_not_look_at_the_plans_mode():
 
 def test_a_level_at_the_corridor_edge_does_not_ask_for_a_re_plan():
     now = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
-    tr = Triggers(V2Settings(replan_on_level=True))
+    tr = Triggers(V2Settings())
     later = now + timedelta(seconds=11)
     assert tr.due(now, (Event(now, "level_edge", "The battery reached 80%: the charge ends"),), now) is None
     assert tr.due(later, (), now) is None

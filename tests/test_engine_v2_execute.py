@@ -221,7 +221,7 @@ def test_export_needs_arbitrage_to_be_allowed():
 def test_a_deadline_raises_an_event_once_and_does_not_stop_the_charge():                    # B22
     item = TimelineItem(CHARGE, T0, T0 + timedelta(hours=1), 40.0, 88.0, "until 88%", "reason")
     vr = vr_default(timeline=[item])
-    ex = Executor(V2Settings(deadline_grace_min=10))
+    ex = Executor(V2Settings())
     ln = lines(30.0, target=88.0)
     ms, *_ = step(ex, 0, level=40, ln=ln, vr=vr)
     assert ms.deadline == T0 + timedelta(minutes=70)
@@ -235,7 +235,7 @@ def test_a_deadline_raises_an_event_once_and_does_not_stop_the_charge():        
 
 def test_a_new_value_result_with_a_later_end_moves_the_deadline_and_arms_it_again():
     item = TimelineItem(CHARGE, T0, T0 + timedelta(hours=1), 40.0, 88.0, "until 88%", "reason")
-    ex = Executor(V2Settings(deadline_grace_min=10))
+    ex = Executor(V2Settings())
     ln = lines(30.0, target=88.0)
     step(ex, 0, level=40, ln=ln, vr=vr_default(timeline=[item]))
     ms, dec, new, _ = step(ex, 4300, level=75, ln=ln, vr=vr_default(timeline=[item]))
@@ -579,34 +579,16 @@ def test_a_reversal_levy_makes_turning_a_charge_into_a_sale_or_back_need_a_bette
         assert ex._can_charge(lim, buy, 50.0, staying=True)          # carrying on is free
 
 
-def test_a_re_entry_levy_makes_restarting_a_run_that_has_just_ended_need_a_better_price():
-    from pe_core.engine_v2 import execute
-    lim = limits(allowed=NORMAL | {EXPORT})
-    ex = Executor(s0(price_band_p=0.0, level_band_pct=0.0, reentry_levy_p=1.0))
-    buy = lines(7.8, imp=7.0, target=88.0)
-    sell = lines(14.0, exp=15.0, floor=40.0)
-    ex.mode, ex._ts = SELF_USE, 1000.0
-    ex.changes = [[900.0, CHARGE, SELF_USE]]               # a charge ended 100 s ago
-    assert not ex._can_charge(lim, buy, 50.0, staying=False)
-    assert ex._can_charge(lim, lines(9.0, imp=7.0, target=88.0), 50.0, staying=False)
-    assert ex._can_export(lim, sell, 70.0, staying=False)   # a sale is not a charge that ended
-    ex._ts = 1000.0 + execute.REENTRY_WINDOW_S
-    assert ex._can_charge(lim, buy, 50.0, staying=False)    # long enough ago
-
-
 def test_the_levies_also_gate_a_start_the_plan_asks_for():
     """The plan executor's picks do not go through `_can_charge` / `_can_export`; a re-plan that turns a leg round
     still has to clear the levy."""
-    ex = Executor(s0(price_band_p=0.0, reversal_levy_p=4.0, reentry_levy_p=4.0))
+    ex = Executor(s0(price_band_p=0.0, reversal_levy_p=4.0))
     thin_buy = lines(10.6, imp=7.0, target=88.0)           # buy line 7.37p: 3.2p over, under the 4p levy
     fat_buy = lines(12.0, imp=7.0, target=88.0)
     ex.mode, ex._ts = EXPORT, 1000.0
     assert not ex._inertia_ok(CHARGE, thin_buy) and ex._inertia_ok(CHARGE, fat_buy)
     ex.mode = SELF_USE
-    assert ex._inertia_ok(CHARGE, thin_buy)                # nothing was turned round, nothing just ended
-    ex.changes = [[900.0, CHARGE, SELF_USE]]
-    assert not ex._inertia_ok(CHARGE, thin_buy)            # a charge that just ended
-    ex.changes = []
+    assert ex._inertia_ok(CHARGE, thin_buy)                # nothing was turned round
     ex.mode = CHARGE
     thin_sell = lines(11.0, exp=15.0, floor=40.0)          # sell line 14.25p: 3.25p under
     assert not ex._inertia_ok(EXPORT, thin_sell) and ex._inertia_ok(EXPORT, lines(9.0, exp=15.0, floor=40.0))

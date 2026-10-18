@@ -388,6 +388,7 @@ views:
 
               </details>
               {%- endif %}
+  # BEGIN view-engine-v1 (the app leaves this page out while engine v2 is the one in use)
   - title: Engine v1
     path: plan
     icon: pe:engine-v1
@@ -987,6 +988,8 @@ views:
               {%- else %}
               No actions stored for this day.
               {%- endif %}
+  # END view-engine-v1
+  # BEGIN view-engine-v2 (the app leaves this page out while engine v1 is the one in use)
   - title: Engine v2
     path: engine-v2
     icon: pe:engine-v2
@@ -1024,6 +1027,7 @@ views:
           - type: custom:powerengine-v2-history-card
             entity: sensor.pe_v2_history
             grid_options: {columns: full}
+  # END view-engine-v2
   - title: Costs
     path: costs
     icon: mdi:cash-multiple

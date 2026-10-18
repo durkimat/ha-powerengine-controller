@@ -24,6 +24,10 @@ MAX_TICK_GAP_S = 300              # a longer gap between ticks is not counted as
 SUN_BAND_KW = 0.05                # net load inside +/- this keeps the sun/short state it had
 BMS_MOVE_KW = 0.5
 PRICE_SETTLE_S = 90               # a live price change this soon after a boundary is the same change
+DRIFT_KWH = 0.75                 # re-plan when what happened differs from the forecast by this much
+BAND_EXIT_MIN = 10                # re-plan when the battery has been outside its expected range this long
+FORECAST_CHANGE_PCT = 10          # re-plan when a forecast update moves the rest of the day by this much
+DEBOUNCE_S = 20                   # a changed reading must last this long to count
 MIN_FORECAST_KWH = 0.5            # a rest-of-day total below this is too small to judge a change by
 REQUIRED = (("battery_soc", "battery level"), ("import_rate", "import rate"))
 
@@ -209,7 +213,7 @@ class Observer:
             state = False
         else:
             state = cur
-        committed, changed = self._settle("short", state, ts, self.s.debounce_s)
+        committed, changed = self._settle("short", state, ts, DEBOUNCE_S)
         if changed:
             if committed:
                 ev("sun_to_short", "The spare sun has turned to a shortfall")
@@ -227,7 +231,7 @@ class Observer:
         return sorted(out)
 
     def _data_events(self, inp: StepInput, ts: float, ev, first: bool) -> None:
-        s, r = self.s, inp.readings
+        r = inp.readings
         prev_ts = self.prev.get("now", ts)
 
         # prices published: the set of future rate windows changed (an empty list is a missed reading: ignored)
@@ -236,7 +240,7 @@ class Observer:
             old = self.stable.get("rates")
             if old is not None:
                 old["v"] = [w for w in old["v"] if w[1] > ts]
-            committed, changed = self._settle("rates", sig, ts, s.debounce_s)
+            committed, changed = self._settle("rates", sig, ts, DEBOUNCE_S)
             if changed:
                 ev("prices_published", "New prices have been published")
 
@@ -245,7 +249,7 @@ class Observer:
         old = self.stable.get("slots")
         if old is not None:
             old["v"] = [w for w in old["v"] if w[1] > ts]
-        committed, changed = self._settle("slots", dsig, ts, s.debounce_s)
+        committed, changed = self._settle("slots", dsig, ts, DEBOUNCE_S)
         if changed:
             ev("slots_changed", "The smart-charge slots have changed")
 
@@ -280,7 +284,7 @@ class Observer:
                "The grid event started" if r.axle_active else "The grid event ended")
         self.prev["axle_active"] = r.axle_active
         esig = [r.axle_start.timestamp() if r.axle_start else None, r.axle_end.timestamp() if r.axle_end else None]
-        committed, changed = self._settle("event", esig, ts, s.debounce_s)
+        committed, changed = self._settle("event", esig, ts, DEBOUNCE_S)
         if changed and any(esig) and not (was_active is not None and r.axle_active != was_active):
             ev("event_changed", "A grid event was announced or changed")
 
@@ -290,7 +294,7 @@ class Observer:
                "A free-power session started" if r.free_active else "The free-power session ended")
         self.prev["free_active"] = r.free_active
         fsig = [r.free_start.timestamp() if r.free_start else None, r.free_end.timestamp() if r.free_end else None]
-        committed, changed = self._settle("free", fsig, ts, s.debounce_s)
+        committed, changed = self._settle("free", fsig, ts, DEBOUNCE_S)
         if changed and any(fsig) and not (was_free is not None and r.free_active != was_free):
             ev("event_changed", "A free-power session was announced or changed")
 
@@ -310,7 +314,7 @@ class Observer:
         exp = self._expected_net_kw(forecast, datetime.fromtimestamp(ts, tz=timezone.utc))
         if prev_ts is not None and net is not None and exp is not None and 0 < ts - prev_ts <= MAX_TICK_GAP_S:
             self.cusum += (net - exp) * (ts - prev_ts) / 3600.0
-        if not self.drift_fired and abs(self.cusum) >= self.s.drift_kwh:
+        if not self.drift_fired and abs(self.cusum) >= DRIFT_KWH:
             self.drift_fired = True
             word = "more" if self.cusum > 0 else "less"
             ev("drift", f"The house is using {abs(self.cusum):.1f} kWh {word} than forecast since the last time "
@@ -347,10 +351,10 @@ class Observer:
             self.band_since, self.band_fired = None, False
             return
         self.band_since = self.band_since if self.band_since is not None else ts
-        if not self.band_fired and ts - self.band_since >= self.s.band_exit_min * 60:
+        if not self.band_fired and ts - self.band_since >= BAND_EXIT_MIN * 60:
             self.band_fired = True
             ev("band_exit", f"The battery has been outside its expected range ({lo:.0f} to {hi:.0f}%) for "
-                            f"{self.s.band_exit_min:g} minutes")
+                            f"{BAND_EXIT_MIN:g} minutes")
 
     @staticmethod
     def _run_span(vr: ValueResult, now: datetime) -> tuple[float, float] | None:
@@ -406,7 +410,7 @@ class Observer:
         if old < MIN_FORECAST_KWH:
             return
         moved = abs(new - old) / old * 100
-        stable_moved, changed = self._settle("fc_moved", moved >= self.s.forecast_change_pct, ts, self.s.debounce_s)
+        stable_moved, changed = self._settle("fc_moved", moved >= FORECAST_CHANGE_PCT, ts, DEBOUNCE_S)
         if stable_moved and not self.forecast_fired:
             self.forecast_fired = True
             word = "up" if new > old else "down"
