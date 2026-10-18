@@ -176,83 +176,59 @@ Nothing in the repo's engine code changes. A setting set to "off" in the GUI is 
 
 ## Every setting, what it does, and where it is applied
 
-Kinds: **MODEL** changes what the plan (and so the live decision, which is the plan's) thinks is worth doing; **LIMIT** a hard rule
-shared by plan and live decision; **DISPLAY** only what is shown; **WHEN** decides when to re-plan; **DATA**
-filters readings; **LEARN** learns a correction that feeds the forecast or filter; **APP** is not part of how the engine decides.
-"Your config" shows the values in your archived config that differ from the default (all other settings are at their defaults).
+Since 0.9.157 the settings say **what you want**, and each maps onto the engine's own tuning (the properties of `V2Settings`
+in `settings.py`). Every one acts in the plan and the live decision alike, because the live decision is the plan's. Kinds:
+**LIMIT** a hard rule (`rules.py`); **MODEL** what the plan thinks is worth doing; **WHEN** when to re-plan; **DATA** filters
+readings; **LEARN** learns a correction; **APP** not part of how the engine decides. "2.2 beta" is the profile's value where it
+differs from the default.
 
-### What engine v2 may do
+### What the battery may do
 
-| Setting | Default | Your config | Kind | Where it is applied | What it does |
-|---|---|---|---|---|---|
-| `arbitrage` | off |  | LIMIT | rules.py | Whether Export is a mode at all. Off: the plan and the live decision can never sell for profit; only grid events sell. |
-| `events` | on |  | LIMIT | rules.py, forecast.py, value.py | Whether grid events are acted on. On: a running event forces the Event mode (sell to the floor); the plan prices known events and the late-event chance. |
-| `late_events` | on |  | REMOVED 0.9.148 | value.py `_late_events` | Treats every future unforced stretch as having a small chance that an unannounced grid event is running. That makes a stored kWh worth more in the plan (a full battery would be sold at the event rate), so the plan fills up at the end of a cheap window and keeps more. |
-| `late_events_per_week` | 1.5 per week |  | REMOVED 0.9.148 | value.py | How often such events are expected. With the hours below it sets the chance (about events/week / 7 x hours / 24). 0 turns late events off. |
-| `late_event_hours` | 1.0 h |  | REMOVED 0.9.148 | value.py | How long each late event is assumed to last. |
-| `event_plus_export` | on |  | MODEL | forecast.py, value.py (the live sentence in execute.py quotes it) | Whether the export rate is paid on top of an event's own rate. It changes what the plan thinks an event pays; the live event itself is forced either way. |
-| `free_power` | on |  | LIMIT | rules.py, forecast.py | Whether free-power sessions are acted on (forced Free mode, charge to 100%). |
-| `charge_ceiling_soc` | 100 % |  | LIMIT | rules.py | The highest level a charge may reach; the plan's physics and the live charge target both stop here. Sun can still fill past it. |
-| `prefer_self_use` | on |  | LIMIT | rules.py `_core` | Takes Hold away outside cheap-rate times (overnight window, smart slot), for the plan and the live decision alike (same function). By day the battery then runs the house instead of idling. |
-| `preview_when_v1` | on |  | APP | powerengine.py | Whether engine v2 runs as a preview while v1 is in control. No effect on how v2 decides; irrelevant in the simulator. |
+| Setting | Default | 2.2 beta | Kind | What it does (engine tuning it sets) |
+|---|---|---|---|---|
+| `arbitrage` | off |  | LIMIT | Whether Export is a mode at all. |
+| `events`, `event_value_p`, `event_plus_export` | on, 100p, on |  | LIMIT, MODEL | Act on grid events; what one pays; whether the export rate is paid on top. |
+| `free_power`, `free_arbitrage` | on, off | on, **on** | LIMIT | Act on free-power sessions; may they also sell. |
+| `hold_use` | cheap times | **car and reserve** | LIMIT | When Hold is allowed: only for the car and the reserve (`hold_only_car_reserve`), also at cheap times (`prefer_self_use`), or any time. |
+| `charge_ceiling_soc` | 100 % |  | LIMIT | The highest level a grid charge reaches. |
+| `charge_max_import_p` | 0 (off) | **15p** | LIMIT | No grid charge above this import price. |
 
-### Floors
+### The battery's range
 
-| Setting | Default | Your config | Kind | Where it is applied | What it does |
-|---|---|---|---|---|---|
-| `reserve_soc` | 12 % | **15** | LIMIT | rules.py, value.py, executor | The level normal running may not discharge below (Self-use and Export are removed at it, Hold stays). Never below the battery's hard floor. A grid event may go lower. |
-| `hard_floor_margin_pct` | 1 points |  | LIMIT | rules.py | A grid event stops this many points above the battery's own hard floor, so the battery's cut-off never ends it. |
+| Setting | Default | 2.2 beta | Kind | What it does (engine tuning it sets) |
+|---|---|---|---|---|
+| `reserve_soc` | 12 % | (yours: 15) | LIMIT | Kept back in normal running. |
+| `range_low_soc` | 20 % | **70** | MODEL | Where the bottom curve starts (`level_bot_start_soc`): below it keeping energy costs by the hour. |
+| `range_high_soc` | 90 % | 90 | MODEL | Where the top curve starts (`level_top_start_soc`); also where a charge stops being free to start early. |
+| `range_firmness` | gentle | **firm** | MODEL | The curves' rates (`FIRMNESS_CURVES`: off 0/0, gentle 50/3p, firm 200/10p, strict 500/50p, top at 100% / bottom at the reserve, p per kWh per hour). |
+| `min_run_pct` | 0 (off) | **20** | MODEL | Shortest charge or sale, cut short by the range's edge (`value.leg_band`, `leg_need`). Before 0.9.157 it was implied as the span between the two curve starts. |
+| `slot_floor_soc` | 0 (off) | **80** | MODEL | While a smart slot is counted on, the bottom curve starts here at 30 times the rate (`slot_bot_start_soc`, `SLOT_BOT_FACTOR`). |
+| `slot_odds_pct` | 60 % | (yours: 90) | MODEL | The chance of a smart slot outside the overnight window (was the shared `smart_slot_certainty_pct`, which seeds it). |
 
-### Comfort band
+### Trading
 
-| Setting | Default | Your config | Kind | Where it is applied | What it does |
-|---|---|---|---|---|---|
-| `comfort_low_soc` | 20 % |  | MODEL | value.py (cost), learning.py (counts hours) | Lower edge of the comfort band. Below it each stored kWh pays the comfort cost per hour inside the plan. |
-| `comfort_high_soc` | 90 % |  | MODEL + LIVE | value.py, lines() | Upper edge of the band. Above it a stored kWh pays the comfort cost per hour, and a kWh charged from the grid above it adds the top-up cost to the buy line (live and plan). |
-| `comfort_cost_p` | 0.3 p per kWh per hour |  | MODEL | value.py | Pence per kWh per hour held outside the band: a soft guide inside the plan, not a limit. 0 removes the band's holding cost. |
-| `top_up_cost_p` | 5.0 p/kWh | **4** | MODEL + LIVE | value.py, lines() | A price added to each kWh bought from the grid above the band's top. It keeps cycling below the top, while a last fill before a dear stretch still pays. Sun is not charged it. |
+| Setting | Default | Kind | What it does |
+|---|---|---|---|
+| `switch_cost_p` | 2.0 p per change | MODEL | The one price of changing mode. Higher: fewer changes, less profit. |
+| `wear_p` | 0.0 p/kWh | MODEL | Counted on each kWh the battery gives out, to the house or sold (`wear_house_p`, `wear_sale_p`). |
 
-### Value and costs
+### Forecast
 
-| Setting | Default | Your config | Kind | Where it is applied | What it does |
-|---|---|---|---|---|---|
-| `wear_house_p` | 0.0 p/kWh |  | MODEL + LIVE | value.py, lines() | Cost per kWh the battery supplies to the house. It lowers the 'use line' (the battery covering the house is worth less). |
-| `wear_sale_p` | 0.0 p/kWh | **0** | MODEL + LIVE | value.py, lines() | Cost per kWh the battery sells. It lowers the 'sell line'. |
-| `event_value_p` | 100.0 p/kWh |  | MODEL | forecast.py, value.py (the live sentence quotes it) | What a grid event pays per kWh exported (plus the export rate if on top). Used by the plan, including the late-event chance. |
+| Setting | Default | Kind | What it does |
+|---|---|---|---|
+| `forecast_caution` | balanced | MODEL | The starting weights of the low / middle / high sun and house (`CAUTION_WEIGHTS`). |
+| `learn` | on | LEARN | Learn the weights and the solar forecast's bias. |
 
-### Forecast caution and learning
+### Advanced
 
-| Setting | Default | Your config | Kind | Where it is applied | What it does |
-|---|---|---|---|---|---|
-| `solar_low_pct` | 25 % |  | MODEL | learning.py -> forecast.py -> value.py | Starting weight of the 'low sun' scenario. The plan is solved against three sun x house scenarios and chooses the mode with the lowest expected cost. |
-| `solar_mid_pct` | 50 % |  | MODEL | same | Starting weight of the middle sun scenario. |
-| `solar_high_pct` | 25 % |  | MODEL | same | Starting weight of the high sun scenario. |
-| `load_low_pct` | 25 % |  | MODEL | same | Starting weight of the low house-load figure. |
-| `load_mid_pct` | 50 % |  | MODEL | same | Starting weight of the middle house-load figure. |
-| `load_high_pct` | 25 % |  | MODEL | same | Starting weight of the high house-load figure. |
-| `learn_scenario_weights` | on |  | LEARN | learning.py | Moves the six weights above towards how often the sun and house really came in low, middle or high. |
-| `scenario_half_life_days` | 14 days |  | LEARN | learning.py | How fast old days stop counting in that learning. |
-| `scenario_prior_days` | 7 days |  | LEARN | learning.py | How many days of experience the starting weights count as (so nothing moves much on day one). |
-| `learn_solar_bias` | on |  | LEARN | learning.py -> forecast.py | Scales the solar forecast hour by hour by how it compared with the real sun over the last 14 days (within 0.5 to 1.5). |
-| `learn_soc_offset` | on |  | LEARN | learning.py -> observe.py | Learns how far the inverter's level reads off while charging, holding and discharging (about a point lower while charging), so the filtered level is right. |
+`hard_floor_margin_pct` (LIMIT: a grid event stops this far above the hard floor), `learn_soc_offset`, `scenario_half_life_days`,
+`scenario_prior_days` (LEARN), `car_start_debounce_s`, `car_stop_debounce_s`, `stale_after_s`, `soc_filter_gain` (DATA),
+`price_churn_hold_s` (WHEN), `sample_s`, `preview_when_v1` (APP).
 
-### Responsiveness
-
-| Setting | Default | Your config | Kind | Where it is applied | What it does |
-|---|---|---|---|---|---|
-| `switch_cost_p` | 2.0 p per change |  | MODEL | value.py `switch_cost` | The one price of changing mode, in pence per change, in the backward pass and so in the decision (plan and live alike). Raising it trades money for fewer changes (replays of 8 to 16 Oct: 4p, 6p and 10p all cost money). |
-| `car_start_debounce_s` | 60 s |  | DATA | observe.py | The car must report charging this long before it counts (car wake-ups blink). |
-| `car_stop_debounce_s` | 30 s |  | DATA | observe.py | The car must report not charging this long before it counts as stopped. |
-| `stale_after_s` | 180 s |  | DATA | observe.py | A required reading missing this long counts as missing data; the engine then hands the battery back to the inverter's self-use until it returns. |
-| `soc_filter_gain` | 0.05 |  | DATA | observe.py | How strongly the filtered battery level is pulled to the reading each sample. The filter counts the energy flowing and nudges towards the reading, so a one-point wobble does not move it. |
-| `price_churn_hold_s` | 60 s |  | WHEN | triggers.py | A smart-slot change and a price change wait this long (from the first) for each other, so one new plan sees both. |
-| `sample_s` | 10 s |  | APP | powerengine.py, observe.py | How often the engine ticks (reads the inputs and re-checks). Also the time unit of the level filter. |
-
-### Model
-
-| Setting | Default | Your config | Kind | Where it is applied | What it does |
-|---|---|---|---|---|---|
-
+Retired in 0.9.157 and carried over where a new setting means the same (`settings._migrate`): the comfort band
+(`comfort_low_soc`, `comfort_high_soc`, `comfort_cost_p`, `top_up_cost_p`: their code is gone; the range does the job), the six
+`level_*` curve settings, `slot_bot_factor` and `slot_bot_start_soc`, `prefer_self_use` and `hold_only_car_reserve`, `wear_house_p`
+and `wear_sale_p`, the six starting weights and the two learning switches.
 
 ### Constants since 0.9.156 (no longer settings)
 
@@ -304,16 +280,9 @@ sensors, the history and the control path are the same. What differs:
 | Which mode now | the one decision (since 0.9.157; before, `executor: lines` or `plan`) | the same |
 | Top and bottom of the battery | the comfort band and the top-up cost | exponential curves in the plan (`level_top_*`, `level_bot_*`), sharper bottom inside smart slots (`slot_bot_*`) |
 
-It has no separate settings block: it **uses the `engine_v2:` settings**, and a profile (`PROFILES["2.1"]` in `settings.py`) supplies the
-value for any key the config has not set. What you have saved is kept, so a saved `top_up_cost_p` stays (the tests ran it at 0).
-Selecting engine v2 again restores v2's own starting values for what was not saved. The ten new settings are in the section
-"Plan-following and battery limits (2.1 beta)" and, with the curves at 0, change nothing.
-
-| Setting | Kind | Where applied | What it does |
-|---|---|---|---|
-| `level_top_start_soc`, `level_top_rate_p`, `level_top_doubling_pts` | MODEL | `value.py` | the top curve ([details](engine-v2-level-penalty.md)) |
-| `level_bot_start_soc`, `level_bot_rate_p`, `level_bot_doubling_pts` | MODEL | `value.py` | the bottom curve, its rate set at your reserve |
-| `slot_bot_factor`, `slot_bot_start_soc` | MODEL | `value.py` | the bottom curve inside a smart slot (the factor multiplies its rate; the start level replaces the usual one) |
+It has no separate settings block: it is a profile of the `engine_v2:` settings (`BUILTIN_PROFILES` in `settings.py`). Since
+0.9.157 "2.1 beta" is a firm 70 to 90% range, a shortest run of 20 points and an 80% slot floor, with Hold any time; "2.2 beta"
+adds Hold only for the car and the reserve, free power that may sell, and the 15p charge cap.
 
 ## Things worth being clear about
 

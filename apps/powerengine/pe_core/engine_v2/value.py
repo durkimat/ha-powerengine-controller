@@ -86,7 +86,7 @@ class _Pen:
     """Tables over the battery level (kWh, `res` entries per kWh): `phi[i]` the cost in pence per hour of holding that
     level, `dphi[i]` its slope in pence per kWh per hour (the rate of the layer at that level: positive above the top
     start, negative below the bottom start), and the top curve's start."""
-    __slots__ = ("phi", "dphi", "res", "top_start_kwh")
+    __slots__ = ("phi", "dphi", "res", "top_start_kwh", "bot_start_kwh")
 
 
 _pen_cache: dict = {}
@@ -136,6 +136,7 @@ def _level_penalty(cap: float, slot: bool, s: V2Settings) -> _Pen | None:
     pen = _Pen()
     pen.phi, pen.dphi, pen.res = phi, rate, PEN_RES
     pen.top_start_kwh = top_start / 100.0 * cap if top_on else cap
+    pen.bot_start_kwh = bot_start / 100.0 * cap if bot_on else 0.0
     if len(_pen_cache) > 8:
         _pen_cache.clear()
     _pen_cache[key] = pen
@@ -220,7 +221,7 @@ class _Seg:
     __slots__ = ("seg", "lim", "dt", "cap", "eta_c", "eta_d", "taper", "dtaper", "max_chg", "max_dis", "chg_f",
                  "chg_cap", "dis_cap", "export_limit", "fuse", "floor", "ceil", "car", "export_p", "event_p",
                  "wear_h", "wear_s", "sw", "allowed", "forced", "outcomes", "scen",
-                 "mid", "pen", "fcap", "leg")
+                 "mid", "pen", "fcap", "fbot", "leg")
 
 
 def _groups(solar: Spread, load: Spread) -> list[tuple[float, float, float]]:
@@ -308,6 +309,7 @@ def _make(seg: Segment, facts: BatteryFacts, settings: V2Settings, lim: Limits) 
     band = leg_band(settings)
     S.leg = None if band is None else tuple(x / 100 * S.cap for x in band)     # (bottom, top, shortest run) in kWh
     S.fcap = S.pen.top_start_kwh if S.pen is not None else S.cap     # where charging early stops being free (`_choose`)
+    S.fbot = S.pen.bot_start_kwh if S.pen is not None else 0.0       # ... and selling early
     S.forced = lim.forced or (EVENT if seg.event else FREE if seg.free and not lim.allowed else seg.manual)
     S.allowed = tuple(m for m in _ORDER if m in lim.allowed) or (SELF_USE,)
     scen = []
@@ -797,9 +799,10 @@ def _choose(stretch: list[_Seg], vks: list, e: float, kind: str, prev: str | Non
 
     * a run the programme starts now goes to where its run ends, however many segments that takes;
     * where the programme would idle now and start a run later in the stretch, that run starts now and the idle time
-      comes after it (`done`, the run that has just reached its level, starts again only to go `RESTART_PCT` further,
-      so it never creeps on in slivers): the forecast
-      moves (smart slots come and go), so what pays at today's prices is done while they hold;
+      comes after it, as far as the range's edge (above the top or below the bottom holding costs by the hour, so a
+      last fill before a dear stretch keeps the programme's own timing). The forecast moves (smart slots come and go),
+      so what pays at today's prices is done while they hold. `done`, the run that has just reached its level,
+      starts again only to go `RESTART_PCT` further, so it never creeps on in slivers;
     * a charge anywhere in the stretch starts now, at full power, to the level the programme reaches by the stretch's
       end (late is risky: the rate tapers, a slot is withdrawn); only up to the top of the range (where the top
       curve starts), where holding starts to cost by the hour. A sale running now is not
@@ -835,9 +838,17 @@ def _choose(stretch: list[_Seg], vks: list, e: float, kind: str, prev: str | Non
             first = sub[0]["pieces"][0][0]
             again = S.cap * RESTART_PCT / 100                       # how far a run that just ended must still go
             nxt = next(((m, t) for m, t in runs
-                        if (t > e + 1e-6 if m == CHARGE else t < e - 1e-6) and (m != done or abs(t - e) >= again)),
+                        if (t > e + 1e-6 if m == CHARGE else t < e - 1e-6)
+                        and (m != done or abs(t - e) >= again)),
                        None)
-            if nxt is not None:                                      # the first run of the stretch, now
+            if nxt is not None and first not in (CHARGE, EXPORT):    # a later run, pulled forward: inside the range
+                m, t = nxt
+                t = min(t, S.fcap) if m == CHARGE else max(t, S.fbot)
+                if t > e + 1e-6 if m == CHARGE else t < e - 1e-6:
+                    mode, target = m, t
+                else:
+                    mode = first
+            elif nxt is not None:                                    # the first run of the stretch, now
                 mode, target = nxt
             else:
                 mode = first if first not in (CHARGE, EXPORT) else _idle(S)
