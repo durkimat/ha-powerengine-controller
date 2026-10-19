@@ -229,7 +229,8 @@ class Executor:
                 self.dec = {**d, **idle, "used": d["used"] + 1, "reached": False}
                 continue
             # the run reached its level: the plan's next decision, now (`value._walk`)
-            nd = decide(vr, now, level, lim, facts, self.s, mode, self.leg_from, used=d["used"] + 1, last_run=mode,
+            # the run reached its level, so its shortest run is done (the walk does the same: `leg` ends there)
+            nd = decide(vr, now, level, lim, facts, self.s, mode, None, used=d["used"] + 1, last_run=mode,
                         import_p=ln.import_p, export_p=ln.export_p)
             self.dec = {"key": key, **(nd or {**d, **idle}), "seg": seg_ts, "used": d["used"] + 1, "reached": False}
         return self._fallback(lim, self.dec["rest"]), None

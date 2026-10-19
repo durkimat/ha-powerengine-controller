@@ -936,7 +936,7 @@ def _walk(segs: list[_Seg], e0: float, kind: str, front: bool = True, prev: str 
             if f * cur.dt < 1e-6:                                # it is at its level already: nothing runs
                 active = None
                 if mode in (CHARGE, EXPORT) and mode != stopped and n_used < MAX_PIECES - 1:
-                    stopped, n_used = mode, n_used + 1
+                    stopped, n_used, leg = mode, n_used + 1, None
                     continue
                 mode, f = idle, 1.0
             part = cur if f >= 1.0 else _part(cur, 0.0, f)
@@ -951,7 +951,7 @@ def _walk(segs: list[_Seg], e0: float, kind: str, front: bool = True, prev: str 
             if f >= 1.0:
                 break
             cur, x = _part(cur, f, 1.0), x1
-            active = None                                        # the run reached its level inside the segment
+            active, leg = None, None                             # the run reached its level inside the segment: done
             if mode in (CHARGE, EXPORT) and n_used < MAX_PIECES - 1:
                 stopped = mode                                   # decide again for what is left of the segment
                 continue
