@@ -43,9 +43,9 @@ def feed_day(ln, day, solar_factor=1.0, house_factor=1.0, hours=(0, 24), step=12
 
 
 def test_the_starting_weights_are_the_settings_until_something_is_seen():
-    ln = Learner(V2Settings(solar_low_pct=20, solar_mid_pct=60, solar_high_pct=20))
-    assert [round(x, 3) for x in ln.solar_weights("midday")] == [0.2, 0.6, 0.2]
-    assert ln.diag()["weights"]["start"]["solar"] == [0.2, 0.6, 0.2]
+    ln = Learner(V2Settings(forecast_caution="cautious"))
+    assert [round(x, 3) for x in ln.solar_weights("midday")] == [0.4, 0.45, 0.15]
+    assert ln.diag()["weights"]["start"]["solar"] == [0.4, 0.45, 0.15]
     assert ln.diag()["weights"]["days"] == 0
 
 
@@ -57,8 +57,15 @@ def test_one_dull_day_moves_the_weights_only_a_little_because_of_the_prior():
     assert ln.days == 1
 
 
-def test_a_fortnight_of_dull_days_makes_the_low_weight_heavy_but_never_certain():
-    ln = Learner(V2Settings(learn_solar_bias=False))          # the bias would learn the centre and leave the spread
+def _weights_only(monkeypatch):
+    """Learn the weights but not the solar bias (one setting, `learn`, switches both): the bias would learn the centre
+    and leave the spread."""
+    monkeypatch.setattr(V2Settings, "learn_solar_bias", property(lambda self: False))
+
+
+def test_a_fortnight_of_dull_days_makes_the_low_weight_heavy_but_never_certain(monkeypatch):
+    _weights_only(monkeypatch)
+    ln = Learner(V2Settings())
     for d in range(14):
         feed_day(ln, D0 + timedelta(days=d), solar_factor=0.7, hours=(7, 17))
     for part in ("morning", "midday", "afternoon"):
@@ -69,8 +76,9 @@ def test_a_fortnight_of_dull_days_makes_the_low_weight_heavy_but_never_certain()
     assert max(ln.solar_weights("midday")) <= W_MAX + 1e-9 and min(ln.solar_weights("midday")) >= W_MIN - 1e-9
 
 
-def test_recent_days_count_more_than_old_ones():
-    ln = Learner(V2Settings(scenario_half_life_days=5, scenario_prior_days=1, learn_solar_bias=False))
+def test_recent_days_count_more_than_old_ones(monkeypatch):
+    _weights_only(monkeypatch)
+    ln = Learner(V2Settings(scenario_half_life_days=5, scenario_prior_days=1))
     for d in range(10):
         feed_day(ln, D0 + timedelta(days=d), solar_factor=0.7, hours=(8, 16))
     for d in range(10, 30):
@@ -88,7 +96,7 @@ def test_the_load_weights_learn_from_all_day():
 
 
 def test_nothing_is_learned_when_the_switch_is_off():
-    ln = Learner(V2Settings(learn_scenario_weights=False, learn_solar_bias=False, learn_soc_offset=False))
+    ln = Learner(V2Settings(learn=False, learn_soc_offset=False))
     for d in range(3):
         feed_day(ln, D0 + timedelta(days=d), solar_factor=0.7, house_factor=1.3, hours=(8, 16))
     assert ln.solar_weights("midday") == clamp_weights([0.25, 0.5, 0.25])
@@ -249,7 +257,7 @@ def test_the_diag_and_learned_views_have_the_card_and_forecast_shapes():
 
 # ---- comfort -----------------------------------------------------------------------------------
 def test_comfort_hours_above_and_below_the_band_and_the_cash_given_up():
-    ln = Learner(V2Settings(comfort_low_soc=20, comfort_high_soc=90))
+    ln = Learner(V2Settings(range_low_soc=20, range_high_soc=90))
     t = D0
     for i in range(361):                                        # one hour at 95%
         ln.note_comfort(t + timedelta(seconds=10 * i), 95.0, 6.0, timezone.utc)

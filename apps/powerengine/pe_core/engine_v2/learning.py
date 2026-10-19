@@ -295,9 +295,9 @@ class Learner:
             self.comfort = self.comfort[-14:]
         row = self.comfort[-1]
         if dt and 0 < dt <= 300 and level is not None:
-            if level > self.s.comfort_high_soc:
+            if level > self.s.range_high_soc:
                 row["hours_above"] = round(row["hours_above"] + dt / 3600, 4)
-            elif level < self.s.comfort_low_soc:
+            elif level < self.s.range_low_soc:
                 row["hours_below"] = round(row["hours_below"] + dt / 3600, 4)
         if given_up_p is not None:
             row["given_up"] = round(given_up_p / 100.0, 3)

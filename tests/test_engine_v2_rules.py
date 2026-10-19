@@ -64,7 +64,7 @@ def test_the_reserve_removes_every_discharge_mode_outside_events():             
 
 
 def test_reserve_latch_needs_the_level_band_above_it_before_discharging_again():
-    s = V2Settings(reserve_soc=20.0, level_band_pct=1.0)
+    s = V2Settings(reserve_soc=20.0)                        # the band is rules.LEVEL_BAND_PCT (1 point)
     assert now_limits(level=20.5, settings=s).allowed >= {SELF_USE}
     lim = rules.limits_now(Situation(active=True), obs(20.5), None, BatteryFacts(), s, readings(T0),
                            reserve_latched=True)
@@ -133,7 +133,7 @@ def test_fuse_headroom_is_live_house_and_car_less_the_sun():
 def test_limits_for_matches_limits_now_for_the_same_situations():
     t = T0
     facts = BatteryFacts(hard_floor_soc=10.0)
-    s = V2Settings(reserve_soc=25.0, arbitrage=True, prefer_self_use=False)
+    s = V2Settings(reserve_soc=25.0, arbitrage=True, hold_use="any time")
     normal = rules.limits_for(segment(t), facts, s)
     assert normal.allowed == {SELF_USE, HOLD, CHARGE, EXPORT} and normal.floor_soc == 25.0
     ev = rules.limits_for(segment(t, event=True), facts, s)
@@ -169,7 +169,7 @@ def test_the_ceiling_is_the_setting():
     assert rules.limits_for(segment(T0), BatteryFacts(), V2Settings(charge_ceiling_soc=88)).ceiling_soc == 88
 
 
-def test_prefer_self_use_takes_hold_away_by_day_but_not_at_cheap_times_the_car_or_the_reserve():
+def test_hold_use_cheap_times_takes_hold_away_by_day_but_not_at_cheap_times_the_car_or_the_reserve():
     facts = BatteryFacts()
     by_day = segment(T0)
     for seg, hold in ((by_day, False), (segment(T0, overnight=True), True),
@@ -179,15 +179,15 @@ def test_prefer_self_use_takes_hold_away_by_day_but_not_at_cheap_times_the_car_o
         assert (HOLD in lim.allowed) is hold and SELF_USE in lim.allowed
     car = rules.limits_for(segment(T0, car_kw=7.0), facts, SETTINGS)
     assert car.allowed == frozenset({HOLD, CHARGE})
-    assert HOLD in rules.limits_for(by_day, facts, replace(SETTINGS, prefer_self_use=False)).allowed
+    assert HOLD in rules.limits_for(by_day, facts, replace(SETTINGS, hold_use="any time")).allowed
     low = now_limits(level=12.0, seg=by_day)
     assert HOLD in low.allowed                                   # the reserve still holds
 
 
-def test_prefer_self_use_is_a_setting_in_the_first_section():
+def test_hold_use_is_a_setting_in_the_first_section():
     cat = catalogue()
-    assert "prefer_self_use" in {s["key"]: s["keys"] for s in cat["sections"]}["allowed"]
-    assert cat["values"]["prefer_self_use"] is True
+    assert "hold_use" in {s["key"]: s["keys"] for s in cat["sections"]}["allowed"]
+    assert cat["values"]["hold_use"] == "cheap times"
 
 
 def _core(settings, **kw):
@@ -196,15 +196,15 @@ def _core(settings, **kw):
     return rules._core(settings, BatteryFacts(), **{**args, **kw})
 
 
-def test_hold_only_for_the_car_and_the_reserve_takes_hold_away_everywhere_else():
-    s = replace(SETTINGS, arbitrage=True, hold_only_car_reserve=True)
+def test_hold_use_car_and_reserve_takes_hold_away_everywhere_else():
+    s = replace(SETTINGS, arbitrage=True, hold_use="car and reserve")
     for cheap in (True, False):
         lim = _core(s, cheap=cheap)
         assert lim.allowed == {SELF_USE, CHARGE, EXPORT}
     assert _core(s, car=True, car_kw=7.0).allowed == {HOLD, CHARGE}
     low = _core(s, level=12.0)
     assert HOLD in low.allowed and SELF_USE not in low.allowed and low.rule == "reserve"
-    assert HOLD in _core(replace(s, hold_only_car_reserve=False)).allowed  # off: as before
+    assert HOLD in _core(replace(s, hold_use="any time")).allowed  # off: as before
 
 
 def test_free_arbitrage_lets_a_free_session_charge_or_sell_and_off_still_forces_the_charge():

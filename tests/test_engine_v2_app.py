@@ -258,29 +258,29 @@ def test_engine_2_1_beta_is_engine_v2_with_a_profile_and_switching_to_it_keeps_t
     run = simulate(tmp_path, mp, 0.5, engine="v2")
     app = run["app"]
     first = app._v2
-    assert app._engine_choice() == "v2" and app.cfg.engine_v2.executor == "lines"
+    assert app._engine_choice() == "v2" and app.cfg.engine_v2.level_top_rate_p == 50.0
     raw = json.loads(json.dumps(app.cfg.raw))
     raw["system"]["engine"] = "v2_1"
     app._on_save("pe_config_save", {"config": raw}, {})
     assert app._engine_name() == "v2" and app._engine_choice() == "v2_1"          # engine v2 everywhere the app asks
-    assert app.cfg.engine_v2.executor == "plan"
+    assert app.cfg.engine_v2.level_top_rate_p == 200.0
     assert app.mode.effective == "active" and app._v2 is first                    # the same engine, other settings
     assert any("Engine changed from v2 to 2.1 beta" in m["msg"] for m in app._log_ring.lines)
     Clock.now += timedelta(minutes=1)
     app._engine_tick({})
-    assert app._v2 is first and first.s.executor == "plan" and first.vr is not None
+    assert app._v2 is first and first.s.level_top_rate_p == 200.0 and first.vr is not None
     state, attrs = app._published["state_engine"]
     assert state == "v2" and attrs["choice"] == "v2_1" and attrs["profile"] == "2.1 beta"
     settings = app._published["diag_v2_settings"][1]
-    assert settings["engines"] == ["v1", "v2"] and settings["values"]["executor"] == "plan"
-    assert next(r for r in settings["settings"] if r["key"] == "level_top_rate_p")["default"] == 200.0
+    assert settings["engines"] == ["v1", "v2"] and settings["values"]["range_firmness"] == "firm"
+    assert next(r for r in settings["settings"] if r["key"] == "range_firmness")["default"] == "firm"
     assert attr_bytes(app, "diag_v2_settings") < LIMIT
     state, prof = app._published["diag_v2_profiles"]
     assert state == "2.1 beta" and prof["profile"] == "2.1 beta" and "reserve_soc" in prof["site_keys"]
     assert attr_bytes(app, "diag_v2_profiles") < LIMIT
     raw["system"]["engine"] = "v2"
     app._on_save("pe_config_save", {"config": raw}, {})
-    assert app._engine_choice() == "v2" and app.cfg.engine_v2.executor == "lines"
+    assert app._engine_choice() == "v2" and app.cfg.engine_v2.level_top_rate_p == 50.0
     assert app._published["state_engine"][1]["choice"] == "v2"
 
 

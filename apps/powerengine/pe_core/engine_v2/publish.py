@@ -9,15 +9,12 @@ from __future__ import annotations
 
 import json
 import math
-from bisect import bisect_right
-from dataclasses import replace
 from datetime import datetime, timedelta
 
-from .execute import Executor, idle_action
 from .forecast import DISPLAY_H
 from .settings import SETTINGS, V2Settings, catalogue, profiles_catalogue
-from .types import CHARGE, EXPORT, HOLD, MODE_LABEL, SELF_USE, ModeState, StepOutput, TimelineItem, ValueResult
-from .value import _segment_index, lines, value_at
+from .types import MODE_LABEL, ModeState, StepOutput, ValueResult
+from .value import value_at
 
 LIMIT = 14_500                       # below the app's 15,000 byte warning
 CURVE_PCTS = tuple(range(0, 101, 10))
@@ -225,148 +222,6 @@ def _clamp(x: float) -> float:
     return max(0.0, min(100.0, x))
 
 
-def _run_reason(mode: str, ln_value: float | None, level_end: float) -> str:
-    if mode == EXPORT:
-        return (f"Sell: the plan has no run here, and a stored kWh is worth {ln_value:.1f}p, under what a sale "
-                f"brings: the battery sells down to {level_end:.0f}% before the next step.")
-    return (f"Charge: the plan has no run here, and a stored kWh is worth {ln_value:.1f}p, over the import price: "
-            f"the battery charges to {level_end:.0f}% before the next step.")
-
-
-def _as_run(vr: ValueResult, settings: V2Settings, tz=None,
-            facts=None) -> tuple[list[TimelineItem], list[tuple[float, float]], list[tuple[float, ...]]]:
-    """`as_run`'s items, the anchors that map the time they are shown at to the plan's own clock: (shown, plan) in
-    seconds, in step with both clocks, and the moves: (start, end, level before, level after) in seconds and percent
-    for a run the lines start where the plan has none (`idle_action`), which shifts the levels after it."""
-    idle = HOLD if not settings.hold_only_car_reserve else SELF_USE
-    out: list[TimelineItem] = []
-    anchors: list[tuple[float, float]] = []
-    moves: list[tuple[float, ...]] = []
-    cursor = None
-    shift = 0.0
-    for it in vr.timeline:
-        if it.remainder:
-            continue
-        plan_start, plan_end = it.start, it.end
-        if shift:
-            it = replace(it, level_start=_clamp(it.level_start + shift), level_end=_clamp(it.level_end + shift),
-                         level_lo=None if it.level_lo is None else _clamp(it.level_lo + shift),
-                         level_hi=None if it.level_hi is None else _clamp(it.level_hi + shift))
-        if cursor is not None and cursor < it.start:
-            if Executor._same_prices(vr, cursor, it.start):         # the next step starts as soon as the run is done
-                span = it.end - it.start
-                it = replace(it, start=cursor, end=cursor + span) if it.mode in (CHARGE, EXPORT) \
-                    else replace(it, start=cursor)
-            else:                                                   # the clock stands: the rest is what fills the wait
-                level = out[-1].level_end if out else it.level_start
-                at = cursor
-                act = idle_action(vr, cursor, level, settings, facts) if facts is not None and idle == SELF_USE \
-                    else None
-                if act is not None:                                 # no run in the plan, but the lines start one
-                    mode, goal = act
-                    seg = vr.limits[_segment_index(vr, cursor)]
-                    kw = (seg.charge_cap_kw if mode == CHARGE else seg.discharge_cap_kw)
-                    kw = kw if kw is not None else (facts.max_charge_kw if mode == CHARGE else facts.max_discharge_kw)
-                    rate = max(kw, 0.1) / max(facts.capacity_kwh, 1.0) * 100.0 \
-                        * (facts.eta_charge if mode == CHARGE else 1.0)     # percent an hour
-                    hours = abs(goal - level) / rate
-                    run_end = min(it.start, cursor + timedelta(hours=hours))
-                    reached = level + (rate if mode == CHARGE else -rate) * (run_end - cursor).total_seconds() / 3600
-                    reached = _clamp(min(reached, goal) if mode == CHARGE else max(reached, goal))
-                    seg_k = vr.forecast.segments[_segment_index(vr, cursor)]
-                    ln = lines(vr, cursor, level, seg_k.import_p, seg_k.export_p, facts, settings)
-                    out.append(TimelineItem(mode=mode, start=cursor, end=run_end, level_start=level,
-                                            level_end=reached, until=f"until {reached:.0f}%",
-                                            reason=_run_reason(mode, ln.value_p, reached)))
-                    moves.append((cursor.timestamp(), run_end.timestamp(), level, reached))
-                    shift += reached - level
-                    it = replace(it, level_start=_clamp(it.level_start + reached - level),
-                                 level_end=_clamp(it.level_end + reached - level))
-                    level, at = reached, run_end
-                if at < it.start:
-                    out.append(TimelineItem(
-                        mode=idle, start=at, end=it.start, level_start=level, level_end=level,
-                        until=f"until {_hhmm(it.start, tz)}", remainder=True,
-                        reason="The run has reached its target; the battery waits for the next step."))
-        anchors.append((it.start.timestamp(), plan_start.timestamp()))
-        anchors.append((it.end.timestamp(), plan_end.timestamp()))
-        if out and out[-1].mode == it.mode and out[-1].end == it.start and it.mode in (CHARGE, EXPORT):
-            last = out[-1]
-            out[-1] = replace(last, end=it.end, level_end=it.level_end, until=it.until, level_lo=it.level_lo,
-                              level_hi=it.level_hi)
-        else:
-            out.append(it)
-        cursor = out[-1].end
-    return out, anchors, moves
-
-
-def as_run(vr: ValueResult, settings: V2Settings, tz=None, facts=None) -> list[TimelineItem]:
-    """The plan's timeline as the plan executor will run it, for display only (the plan itself is not changed). The
-    plan ends a charge or sale part-way through a segment and fills the rest with a hold (`remainder`), a way of saying
-    how much; the executor never rests there: a run follows the plan by level, and the next step starts as soon as the
-    run is done wherever the prices are those of now (`Executor._plan_candidate`). Where they differ the clock stands
-    and the battery does what the rules allow in between (a hold only where one is allowed, else self-use)."""
-    return _as_run(vr, settings, tz, facts)[0]
-
-
-def _path_as_run(path: dict, anchors: list[tuple[float, float]]) -> dict:
-    """The level path on the clock the items are shown at. The plan's own path runs on the plan's clock, where each
-    run ends at its segment's end; the items are shown pulled forward (`as_run`), so a path left as it is draws a
-    battery that is still selling where the items say it waits. Each path point is read at the plan's time that the
-    shown time maps to (linear between the anchors, the same shift as the items)."""
-    start = datetime.fromisoformat(path["start"]).timestamp()
-    step = path["step_min"] * 60.0
-    if not anchors:
-        return path
-    xs, ys = [], []
-    for shown, plan in anchors:                       # shown time must not go back; the plan's time must not either
-        if xs and shown < xs[-1]:
-            shown = xs[-1]
-        if ys and plan < ys[-1]:
-            plan = ys[-1]
-        xs.append(shown)
-        ys.append(plan)
-    out = dict(path)
-    for k in ("mid", "low", "high"):
-        series = path.get(k) or []
-        if len(series) < 2:
-            continue
-        vals = []
-        for i in range(len(series)):
-            t = start + i * step
-            if t <= xs[0] or t >= xs[-1]:                 # before the first run, or past the last: the plan's own time
-                plan_t = t if t <= xs[0] else t - xs[-1] + ys[-1]
-            else:
-                j = bisect_right(xs, t)
-                x0, x1, y0, y1 = xs[j - 1], xs[j], ys[j - 1], ys[j]
-                plan_t = y0 + (y1 - y0) * ((t - x0) / (x1 - x0) if x1 > x0 else 0.0)
-            f = min(len(series) - 1.0, max(0.0, (plan_t - start) / step))
-            lo = int(f)
-            hi = min(lo + 1, len(series) - 1)
-            vals.append(series[lo] + (series[hi] - series[lo]) * (f - lo))
-        out[k] = vals
-    return out
-
-
-def _path_after_moves(path: dict, moves: list[tuple[float, ...]]) -> dict:
-    """The level path with the runs the lines start where the plan has none: the points inside a run lie on its ramp,
-    the points after it are lifted or lowered by what it moved (the plan's own path stays flat there)."""
-    start = datetime.fromisoformat(path["start"]).timestamp()
-    step = path["step_min"] * 60.0
-    out = dict(path)
-    for k in ("mid", "low", "high"):
-        series = list(path.get(k) or [])
-        for s0, e0, before, after in moves:
-            for i in range(len(series)):
-                t = start + i * step
-                if s0 <= t < e0:
-                    series[i] = before + (after - before) * (t - s0) / max(e0 - s0, 1.0)
-                elif t >= e0:
-                    series[i] = _clamp(series[i] + after - before)
-        out[k] = series
-    return out
-
-
 def _path_value(vr: ValueResult, p: dict, mid: list) -> list[float]:
     """What a stored kWh is worth (p/kWh) at each point of the shown level path: `value_at`, the figure the controller
     reads at the battery's level, so the chart shows that and not a coarser copy of the curve. Empty with no curve."""
@@ -394,10 +249,8 @@ def _timeline(vr: ValueResult | None, settings: V2Settings, hard_floor: float, t
               facts=None) -> tuple[str, dict]:
     if vr is None:
         return "unknown", {}
-    items_run, anchors, moves = _as_run(vr, settings, tz, facts)
-    p = _path_as_run(vr.path, anchors) if vr.path and vr.path.get("start") else (vr.path or {})
-    if moves and p.get("start"):
-        p = _path_after_moves(p, moves)
+    items_run = vr.timeline                                       # the executor's own decision, stepped forward
+    p = vr.path or {}
     cut = _cutoff(vr)
     step_min = p.get("step_min", 15)
     keep = int(DISPLAY_H * 60 // step_min) + 1                    # path points up to the end of what is shown

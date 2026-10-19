@@ -264,16 +264,16 @@ def test_a_layer_can_be_stubbed_and_unknown_ones_are_refused():
     worker._use_code(str(ROOT))
     from pe_core.engine_v2.execute import Executor
 
-    original = Executor._worth_the_change
+    original = Executor._car_on
     try:
-        worker.apply_consts({"engine_v2.execute.Executor._worth_the_change": "@true"})
-        assert Executor._worth_the_change(None) is True
+        worker.apply_consts({"engine_v2.execute.Executor._car_on": "@true"})
+        assert Executor._car_on(None) is True
         with pytest.raises(ValueError, match="no constant"):
             worker.apply_consts({"engine_v2.execute.Executor._not_a_layer": "@true"})
         with pytest.raises(ValueError, match="no Nothing"):
             worker.apply_consts({"engine_v2.execute.Nothing.x": "@true"})
     finally:
-        Executor._worth_the_change = original
+        Executor._car_on = original
 
 
 def test_synthetic_sun_is_an_early_east_facing_curve():
@@ -323,33 +323,21 @@ def test_catalogue_offers_settings_by_section_constants_layers_and_presets():
     assert all(v["section"] for v in cat["settings"].values())
     assert {sec for sec, _ in cat["sections"]} >= {v["section"] for v in cat["settings"].values()}
     assert any(c["key"] == "engine_v2.value.COARSE_STEP_KWH" for c in cat["constants"])
-    assert {layer["id"] for layer in cat["layers"]} == {"leg_going", "programme_choice", "worth_the_change"}
+    assert cat["layers"] == []  # the executor makes the plan's own decision: no rule of its own to switch off
     assert set(cat["off_values"]) <= set(s.SETTINGS)  # an "off" only for a real setting
     by_id = {p["id"]: p for p in cat["presets"]}
     assert by_id["current"]["settings"] == {} and by_id["current"]["consts"] == {}
-    mvp = by_id["mvp"]
-    assert (
-        set(mvp["settings"]) <= set(s.SETTINGS) and "switch_cost_p" not in mvp["settings"]
-    )  # the plan's own cost stays
-    assert len(mvp["consts"]) == 3 and len(by_id["mvp_programme_choice"]["consts"]) == 2
+    assert set(by_id) == {"engine_2_1_beta", "current"}
 
 
 def test_every_preset_applies_to_the_code():
     import worker
 
     worker._use_code(str(ROOT))
-    from pe_core.engine_v2 import execute
 
-    saved = {
-        n: getattr(execute.Executor, n) for n in ("_leg_going", "_with_the_programmes_choice", "_worth_the_change")
-    }
-    try:
-        for p in worker.catalogue(str(ROOT))["presets"]:
-            worker.apply_consts(p["consts"])
-            worker.patch_config("engine_v2: {}", p["settings"])
-    finally:
-        for n, f in saved.items():
-            setattr(execute.Executor, n, f)
+    for p in worker.catalogue(str(ROOT))["presets"]:
+        worker.apply_consts(p["consts"])
+        worker.patch_config("engine_v2: {}", p["settings"])
 
 
 def test_a_day_whose_snapshot_starts_late_is_not_offered(tmp_path):
@@ -379,28 +367,6 @@ def test_a_trigger_table_entry_can_be_overridden_and_unknown_ones_refused():
             worker.apply_consts({"engine_v2.types.EVENT_KINDS.level": "yes"})
     finally:
         T.EVENT_KINDS["level"] = saved
-
-
-def test_follow_the_timeline_stub_prefers_the_plans_mode_when_allowed():
-    import worker
-
-    worker._use_code(str(ROOT))
-    from pe_core.engine_v2.execute import Executor
-
-    original = Executor._candidate
-    try:
-        worker.apply_consts({"engine_v2.execute.Executor._candidate": "@planned"})
-
-        class Lim:
-            allowed = frozenset({"charge", "hold"})
-
-        class Fake:
-            _planned_mode = staticmethod(lambda vr, now: vr)
-
-        assert Executor._candidate(Fake(), Lim(), None, 50.0, "charge", None) == "charge"
-        assert Executor._candidate is not original
-    finally:
-        Executor._candidate = original
 
 
 def test_cloudy_sun_is_lower_seeded_and_forecast_a_little_optimistic():

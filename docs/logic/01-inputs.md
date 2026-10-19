@@ -146,7 +146,7 @@ half-hour stands: over every window that began, the later half-hours it kept, di
 that ran to its end, or was cut short but carried on, kept all of them; one cut short kept those begun before the cut),
 pulled towards the overall figure with the same weight as a group. It is shown as `running` in the certainty summary on `sensor.pe_plan` and the Health export.
 
-**Engine v2 (0.9.133): a fixed certainty, one price.** Engine v2 no longer uses the learned figures. The setting `smart_slot_certainty_pct`
+**Engine v2 (0.9.133): a fixed certainty, one price.** Engine v2 no longer uses the learned figures. The setting `smart_slot_certainty_pct` (since 0.9.157 engine v2's own `slot_odds_pct`, "Smart slot odds" under "The battery's range")
 (default 60) is the chance of a smart slot outside the overnight window, for a window that has not started and for the half-hours still to come in
 one that has (the half-hour in progress is certain). Inside the overnight window a slot is certain. An uncertain slot is **one** price, the expected
 one: chance x slot price + (1 - chance) x the standard price, so the plan is cautious by itself. Pricing each half-hour as an independent chance

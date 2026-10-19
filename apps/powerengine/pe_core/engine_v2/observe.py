@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
+from .rules import LEVEL_BAND_PCT
 from .settings import V2Settings
 from .types import CHARGE, EXPORT, Event, Forecast, Observation, StepInput, ValueResult
 
@@ -342,11 +343,10 @@ class Observer:
         except (KeyError, IndexError, ValueError, TypeError):
             self.band_since = None
             return
-        lo, hi = min(mid, low, high) - self.s.level_band_pct, max(mid, low, high) + self.s.level_band_pct
-        if self.s.executor == "plan":                    # while a run goes, the range is its whole corridor
-            span = self._run_span(vr, now)
-            if span is not None:
-                lo, hi = min(lo, span[0] - self.s.level_band_pct), max(hi, span[1] + self.s.level_band_pct)
+        lo, hi = min(mid, low, high) - LEVEL_BAND_PCT, max(mid, low, high) + LEVEL_BAND_PCT
+        span = self._run_span(vr, now)                   # while a run goes, the range is its whole corridor
+        if span is not None:
+            lo, hi = min(lo, span[0] - LEVEL_BAND_PCT), max(hi, span[1] + LEVEL_BAND_PCT)
         if lo <= self.level <= hi:
             self.band_since, self.band_fired = None, False
             return
@@ -379,8 +379,6 @@ class Observer:
         pts = []
         for it in items[a:b + 1]:
             pts += [it.level_start, it.level_end]
-            if it.level_lo is not None and it.level_hi is not None:
-                pts += [it.level_lo, it.level_hi]
         return min(pts), max(pts)
 
     def _rest_of_day(self, inp: StepInput) -> dict:

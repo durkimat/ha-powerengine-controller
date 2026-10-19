@@ -3,6 +3,9 @@
 What the profile adds to "2.1 beta", why, and what was measured. Written when it was built (12 to 13 Oct 2026); the code is the
 authority for what it does now.
 
+> **Since 0.9.157** there is one decision for the plan and the executor (`engine-v2-architecture.md`, "The decision"). The
+> executor modes, the corridor and `reversal_levy_p` described below are gone; the rest of the profile stands.
+
 ## What it is
 
 A new built-in profile, "2.2 beta" (`settings.BETA22_PROFILE`). It is "2.1 beta" plus six settings, all neutral in every

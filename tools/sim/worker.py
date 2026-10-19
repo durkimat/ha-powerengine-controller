@@ -98,9 +98,14 @@ def catalogue(root: str) -> dict:
 
 
 def _typed(text):
+    """A setting's value from its text. YAML reads "off", "on", "yes" and "no" as booleans; only "true" and "false" are
+    (a choice setting can be "off")."""
     import yaml
 
-    return yaml.safe_load(text) if isinstance(text, str) else text
+    if not isinstance(text, str):
+        return text
+    value = yaml.safe_load(text)
+    return text if isinstance(value, bool) and text.strip().lower() not in ("true", "false") else value
 
 
 STUBS = {  # what a layer is replaced with: its neutral answer (an ablation: "as if this rule were not there")

@@ -8,6 +8,7 @@ from test_engine_v2_observe import T0, forecast, inp, segment, value_result
 
 from pe_core import decide as v1d
 from pe_core.engine_v2 import engine as engine_mod
+from pe_core.engine_v2 import execute as execute_mod
 from pe_core.engine_v2.engine import EngineV2
 from pe_core.engine_v2.settings import V2Settings
 from pe_core.engine_v2.types import CHARGE, EVENT, HOLD, SELF_USE, Lines, TimelineItem
@@ -53,11 +54,24 @@ class StubValue:
                      sell_floor_soc=self.floor)
 
 
+def _decider(v):
+    """Stands in for `value.decide` (the plan's decision, tested in test_engine_v2_value.py): a charge to the stub's
+    target while the stub's value is above the buy line, else Self-use. These tests are about the engine's plumbing."""
+    def decide(vr, t, soc, lim, facts, settings, prev, leg_from=None, used=0, last_run=None, import_p=None,
+               export_p=None):
+        until = vr.forecast.segments[-1].end.timestamp()
+        if not last_run and v.value_p > import_p / facts.eta_charge:
+            return {"mode": CHARGE, "stop": v.target, "rest": SELF_USE, "until": until, "end": v.target}
+        return {"mode": SELF_USE, "stop": None, "rest": SELF_USE, "until": until, "end": soc}
+    return decide
+
+
 @pytest.fixture
 def stubs(monkeypatch):
     f, v = StubForecast(), StubValue()
     monkeypatch.setattr(engine_mod, "forecast", f)
     monkeypatch.setattr(engine_mod, "value", v)
+    monkeypatch.setattr(execute_mod, "decide", _decider(v))
     return f, v
 
 
@@ -141,12 +155,12 @@ def test_a_settings_change_revalues_and_reaches_every_layer(stubs):
     f, v = stubs
     eng = EngineV2(V2Settings())
     tick(eng, 0)
-    new = V2Settings(price_band_p=1.5, reserve_soc=30.0)
+    new = V2Settings(min_run_pct=15.0, reserve_soc=30.0)
     eng.update_settings(new)
     out = tick(eng, 10)
     assert out.revalued and v.because[-1] == "The settings were saved"
-    assert eng.s.price_band_p == 1.5 and eng.executor.s.reserve_soc == 30.0 and eng.observer.s.price_band_p == 1.5
-    assert eng.learner.s.price_band_p == 1.5 and eng.triggers.s.price_band_p == 1.5
+    assert eng.s.min_run_pct == 15.0 and eng.executor.s.reserve_soc == 30.0 and eng.observer.s.min_run_pct == 15.0
+    assert eng.learner.s.min_run_pct == 15.0 and eng.triggers.s.min_run_pct == 15.0
 
 
 def test_asking_for_a_replan_revalues_at_once_and_only_once(stubs):
@@ -350,7 +364,7 @@ def test_a_failure_on_the_very_first_step_gives_self_use(stubs, monkeypatch):
 # ---- the journal -------------------------------------------------------------------------------
 def test_every_mode_change_has_a_journal_row_with_its_event_prices_and_value(stubs):
     f, v = stubs
-    eng = EngineV2(V2Settings(min_dwell_s=0))
+    eng = EngineV2(V2Settings())
     changes = 0
     rows = []
     script = [(0, dict(import_rate=0.07)), (60, dict(import_rate=0.30)),
