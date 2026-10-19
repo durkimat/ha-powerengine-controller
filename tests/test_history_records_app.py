@@ -210,3 +210,27 @@ def test_a_failing_snapshot_warns_once_a_day_and_never_raises(monkeypatch, tmp_p
     app.get_state = lambda *a, **k: {"state": "1", "attributes": {}}
     app._snapshot_forecast(r)
     assert not (tmp_path / "x").exists()
+
+
+def test_v2_flows_are_published_with_the_history_and_a_failed_read_is_quiet(v2_run):
+    app = v2_run["app"]
+    today = today_of(app)
+    real = {"date": today.isoformat(), "start": "x", "bucket": 5, "m": [0], "imp": [0.1], "exp": [0.0], "car": [0.0]}
+    original = app._day_flows
+    try:
+        app._day_flows = lambda day, t, now: real
+        state, attrs = published(app, app._publish_v2_history, "v2_flows")
+        assert state == today.isoformat() and attrs == real
+        app._day_flows = lambda day, t, now: None
+        attrs = published(app, app._publish_v2_history, "v2_flows")[1]
+        assert attrs == {"date": today.isoformat(), "m": []}                   # nothing to draw, but the date is said
+    finally:
+        app._day_flows = original
+    app._flows_cache.clear()
+    app._history = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no recorder"))
+    try:
+        assert app._day_flows(today, today, datetime.now(timezone.utc)) is None        # logged, not raised
+        assert today in app._flows_cache
+        assert app._day_flows(today + timedelta(days=1), today, datetime.now(timezone.utc)) is None     # a coming day
+    finally:
+        del app._history
