@@ -126,3 +126,13 @@ want to change or remove a rule, read its row first: the incident is what the ru
 | Now is priced at the live rates, without slot odds (a slot running now is certain) | `value.decide` |
 | Inertia: a time-based minimum (2, 5, 10 min) and a turn-round price (5, 10p), each tried inside the shared decision, all cost money in the replays of 8 to 16 Oct; neither is used. The calm comes from runs that go to a level, the leg bands and the switch cost | (simulator runs, 18 Oct) |
 | Retired with the second set of live rules: `executor`, `price_band_p`, `level_band_pct`, `min_dwell_s`, `reversal_levy_p` | `settings.RETIRED` |
+
+## 8.10 Owner decisions on caution (19 Oct 2026, 0.9.158)
+
+| Decision | Where |
+|---|---|
+| Behavioural costs (the range curves, the switch cost) steer; they are not money. Results are judged in real money only (the simulator's meter) | `compare/replay.py` |
+| A sale while energy is dear keeps what the house may need until energy is certainly cheap again (a smart slot that may not come does not count): the forecast caution, balanced by default (19 Oct: charged in a short slot, sold to 76%, ran out at 18:00) | `value._keep_kwh`, `_choose` |
+| The shortest charge or sale is 5 points in the beta profiles: 20 forced sales past where they paid | `settings.BUILTIN_PROFILES` |
+| A run's shortest run ends when it reaches its level, in the plan and the executor alike (they split on 0.1 point at 10:11 on 19 Oct) | `value._walk`, `execute._follow` |
+
