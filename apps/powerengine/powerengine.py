@@ -107,7 +107,7 @@ from pe_core.forecast import (
 )
 from pe_core.health import WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
 from pe_core.heatpump import HeatPumpSettings
-from pe_core.history import chosen_plan, day_view
+from pe_core.history import add_forecast, chosen_plan, day_view, real_flows
 from pe_core.journal import WriteJournal, day_summary, is_staged
 from pe_core.loadstore import LoadStore
 from pe_core.lowwrite import Study as LowWriteStudy
@@ -168,6 +168,7 @@ OVERRIDE_EVENT, OVERRIDE_RESULT_EVENT = "pe_override", "pe_override_result"
 HISTORY_DAY_EVENT = "pe_history_day"
 V2_HISTORY_DAY_EVENT = "pe_v2_history_day"
 V2_REPLAN_EVENT = "pe_v2_replan"        # the plan card's "Re-plan now" button (admin only: HA's fire_event needs admin)
+FORECAST_DAYS = 2                                          # days after today the Plan history tab can show
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
 PAUSE_ENTITY = "switch.pe_ctl_pause"
@@ -484,7 +485,7 @@ class PowerEngine(hass.Hass):
             self.run_every(self._compare_poll, f"now+{COMPARE_POLL_S}", COMPARE_POLL_S)
         self.run_in(lambda kwargs: self._compare_publish(), 30)
         self.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
-        self.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
+        self.run_every(self._publish_history, "now+60", 300)     # Plan history tab (today fills in as it goes)
         self.run_every(self._check_update, "now+120", 60)        # a new version installed: ask HA to restart us
         if not self._demo:                                       # (the demo makes no calls to the internet)
             self.run_every(self._release_check, "now+60", 300)   # a new version released: straight from GitHub
@@ -497,6 +498,7 @@ class PowerEngine(hass.Hass):
             self._override = manual.load(self._override_file(), datetime.now(timezone.utc))
         self.listen_event(self._on_override, OVERRIDE_EVENT)
         self._history_date = None                            # a day picked with the card's date picker (Plan history)
+        self._flows_cache = {}                               # day -> (real_flows, when read): Plan history's grid flows
         self.listen_event(self._on_history_day, HISTORY_DAY_EVENT)
         self._v2_history_date = None                         # a day picked on the Engine v2 page's history
         self.listen_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
@@ -1803,10 +1805,49 @@ class PowerEngine(hass.Hass):
         except ValueError:
             return
         today = datetime.now(timezone.utc).astimezone(self.tz or timezone.utc).date()
-        if not today - timedelta(days=KEEP_DAYS) <= day <= today:
+        if not today - timedelta(days=KEEP_DAYS) <= day <= self._history_latest(today):
             return
         self._history_date = day
         self._publish_history()
+
+    def _history_latest(self, today):
+        """The last day the Plan history tab can show: the plan's own horizon, at most FORECAST_DAYS ahead."""
+        plan = getattr(self, "plan", None)
+        if plan is None or not plan.slots:
+            return today
+        last = max(ps.slot.start for ps in plan.slots).astimezone(self.tz or timezone.utc).date()
+        return min(today + timedelta(days=FORECAST_DAYS), max(today, last))
+
+    FLOW_ROLES = ("battery_power", "battery_charge_power", "battery_discharge_power", "grid_power",
+                  "grid_power_reference")
+
+    def _day_flows(self, day, today, now):
+        """Grid charging and exports through the day as they happened (`history.real_flows`), read from HA's own
+        history of the grid and battery power. None for a day to come, one the recorder no longer holds, or when
+        reading fails. A past day is read once; today again every few minutes; a failure is retried after ten."""
+        if self.cfg is None or day > today:
+            return None
+        cached = self._flows_cache.get(day)
+        if cached is not None:
+            age = (now - cached[1]).total_seconds()
+            if age < (600 if cached[0] is None else 240) or (day < today and cached[0] is not None):
+                return cached[0]
+        tz = self.tz or timezone.utc
+        flows = None
+        try:
+            start = datetime(day.year, day.month, day.day, tzinfo=tz).astimezone(timezone.utc)
+            end = datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=tz).astimezone(timezone.utc)
+            plain, _ = history_entities(self.cfg, self.FLOW_ROLES)
+            timelines = {eid: Timeline(self._history(eid, start, end),
+                                       {"unit_of_measurement": self.get_state(eid, attribute="unit_of_measurement")})
+                         for eid in plain}
+            flows = real_flows(replay(self.cfg, timelines, start, min(end, now - timedelta(minutes=1))), tz)
+        except Exception as err:
+            self.log(f"Could not read the grid history for {day}: {err!r}", level="WARNING")
+        self._flows_cache[day] = (flows, now)
+        for old in sorted(self._flows_cache)[:-6]:
+            del self._flows_cache[old]
+        return flows
 
     def _publish_history(self, *args, **kwargs):
         """The Plan history tab: the chosen day and plan against what happened."""
@@ -1816,17 +1857,24 @@ class PowerEngine(hass.Hass):
             tz = self.tz or timezone.utc
             now = datetime.now(timezone.utc)
             today = now.astimezone(tz).date()
-            day = self._history_date or today - timedelta(days=1)
+            latest = self._history_latest(today)
+            day = min(self._history_date or today - timedelta(days=1), latest)
             info = self._day_engine(day, today)
             label, snap = chosen_plan(self.costbook.plan_snapshot(day), self.costbook.ran_plan(day),
                                       info["engine"] if info else None)
+            if day >= today and getattr(self, "plan", None) is not None:        # the rest of the day is the live plan
+                start = datetime(day.year, day.month, day.day, tzinfo=tz)
+                end = datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=tz)
+                live = plan_snapshot(self.plan, start, end)
+                label, snap = add_forecast(label, snap, live, now)
             view = day_view(day, self.costbook.day_records(day), snap, label, tz, now)
             view["in_control"], view["live"] = (info["engine"], info["live"]) if info else (None, None)
             if info and info.get("profile") is not None:
                 view["profile"] = info["profile"]
             recorded = self.costbook.recorded_days()
+            view["real"] = self._day_flows(day, today, now)           # when charging and exports happened
             view["earliest"] = min(recorded[0], day.isoformat()) if recorded else day.isoformat()  # for the picker
-            view["latest"] = today.isoformat()
+            view["latest"] = latest.isoformat()
             self._publish_state("plan_history", day.isoformat(), view)
         except Exception as err:
             self.log(f"Could not build the plan history: {err!r}", level="WARNING")
