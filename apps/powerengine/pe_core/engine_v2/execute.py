@@ -15,7 +15,7 @@ plus a grace) raises an event so the plan is looked at again; it never stops a m
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timedelta, timezone
 
 from .. import decide as v1d
@@ -106,7 +106,8 @@ class Executor:
         self.exits: list = list(st.get("exits") or [])
         self.dec: dict | None = st.get("dec")                      # the decision being carried out (`_follow`)
         lines = st.get("lines")
-        self.lines: Lines | None = Lines(**lines) if lines else None
+        known = {f.name for f in fields(Lines)}                    # a field an earlier release saved is dropped
+        self.lines: Lines | None = Lines(**{k: v for k, v in lines.items() if k in known}) if lines else None
         self.flip_flop_now = False                                   # the last step was an A to B to A change
         self._tz = None
         self._ended = False                                          # this step's run reached its level
