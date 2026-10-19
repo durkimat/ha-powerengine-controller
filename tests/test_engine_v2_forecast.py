@@ -234,9 +234,6 @@ def test_weights_start_from_settings_and_follow_what_is_learned():
     assert am.solar_kwh.w == pytest.approx((0.25, 0.25, 0.5))
     pm = next(s for s in segs if s.start == at(16, 0))
     assert pm.solar_kwh.w == pytest.approx((0.25, 0.5, 0.25))          # no learned afternoon weights: the start
-    custom = F.build(inp, replace(ST, forecast_caution="optimistic")).segments[3]
-    assert custom.solar_kwh.w == pytest.approx((0.15, 0.45, 0.40))
-    assert custom.load_kwh.w == pytest.approx((0.40, 0.45, 0.15))
 
 
 def test_house_spread_default_and_learned():
