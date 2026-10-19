@@ -1,4 +1,4 @@
-"""The Plan history tab (#58): one past (or today's) day, a plan made that day, and what actually happened.
+"""The Plan history tab (#58): one past, current or coming day, a plan made that day, and what actually happened.
 
 Choices come from two dashboard selects: the day ("Today", "Yesterday", "2 days ago" ... "30 days ago") and the
 plan ("As run" = the plan as it stood in each half-hour that ran, "Start of day" = the first plan of that day, or
@@ -43,6 +43,74 @@ def chosen_plan(start_of_day: dict | None, ran: dict | None,
     if start_of_day:
         return "Start of day", start_of_day
     return None, None
+
+
+def _utc(iso: str) -> str:
+    return datetime.fromisoformat(iso).astimezone(timezone.utc).isoformat()
+
+
+def add_forecast(label: str | None, snapshot: dict | None, live: dict | None,
+                 now: datetime) -> tuple[str | None, dict | None]:
+    """Fill the half-hours still to come from the live plan (`health.plan_snapshot` of the day), keeping what was
+    stored for those already run. A day with nothing stored (tomorrow) is the live plan alone, labelled "Forecast"."""
+    if not live or not live.get("slots"):
+        return label, snapshot
+    slots = {_utc(s["start"]): s for s in (snapshot or {}).get("slots", [])}
+    cut = now.astimezone(timezone.utc)
+    for s in live["slots"]:
+        k = _utc(s["start"])
+        if k not in slots and datetime.fromisoformat(k) + HALF > cut:
+            slots[k] = {**s, "start": k}
+    windows = {(w.get("start"), w.get("action")): w for w in live.get("windows", [])}
+    windows.update({(w.get("start"), w.get("action")): w for w in (snapshot or {}).get("windows", [])})
+    return (label or "Forecast"), {
+        "made_at": (snapshot or live).get("made_at"),
+        "slots": [slots[k] for k in sorted(slots)],
+        "windows": sorted(windows.values(), key=lambda w: w.get("start") or ""),
+    }
+
+
+FLOW_BUCKET_MIN = 5
+
+
+def real_flows(readings, tz, bucket_min: int = FLOW_BUCKET_MIN) -> dict | None:
+    """Grid charging and exports as they really happened, from readings taken every few seconds (a replay of HA's
+    history), averaged into `bucket_min`-minute buckets. The half-hour records only say how much moved in each half
+    hour; this says when.
+
+    Per reading (grid_power + is importing, battery_power + is discharging): the grid energy going into the battery
+    is the smaller of the import and the charge; export is split into the battery's discharge (up to what it
+    delivers) and the rest, solar. Values are kWh per half-hour at that power (kW x 0.5), the chart's own scale.
+    Result: {"bucket": minutes, "m": local minute of day each bucket starts, "charge", "bat_export",
+    "solar_export"}, or None when there was nothing to read. Buckets with no readings, or with nothing moving, are
+    left out."""
+    span = bucket_min * 60
+    sums: dict[int, list[float]] = {}
+    for r in readings:
+        if r.grid_power is None:
+            continue
+        g, b = r.grid_power / 1000, (r.battery_power or 0) / 1000
+        out = max(-g, 0.0)
+        bat = min(out, max(b, 0.0))
+        row = sums.setdefault(int(r.now.timestamp()) // span, [0, 0.0, 0.0, 0.0])
+        row[0] += 1
+        row[1] += min(max(g, 0.0), max(-b, 0.0))
+        row[2] += bat
+        row[3] += out - bat
+    if not sums:
+        return None
+    ks = sorted(sums)
+    out = {"bucket": bucket_min, "m": [], "charge": [], "bat_export": [], "solar_export": []}
+    for k in ks:
+        n = sums[k][0]
+        vals = [round(sums[k][i] / n * 0.5, 2) for i in (1, 2, 3)]
+        if not any(vals):                               # quiet: left out (the chart draws the gap as zero), to keep
+            continue                                    # the attribute small
+        local = datetime.fromtimestamp(k * span, timezone.utc).astimezone(tz)
+        out["m"].append(local.hour * 60 + local.minute)
+        for key, v in zip(("charge", "bat_export", "solar_export"), vals, strict=True):
+            out[key].append(v)
+    return out
 
 
 def _r(v, n=2):
@@ -146,5 +214,7 @@ def day_view(day: date, records: list[dict], snapshot: dict | None, plan_label: 
         "date": day.isoformat(), "label": start.strftime("%A %d %B %Y"),
         "plan": plan_label, "plan_made_at": (snapshot or {}).get("made_at"),
         "windows": windows, "series": ser, "summary": summary,
+        # the chart's x axis is always "today": where now falls on it (viewing today only); is the day yet to come
+        "now_x": int(now.timestamp() * 1000) if day == today else None, "forecast": day > today,
         "day_import_export_cost": _r(day_cost), "recorded_half_hours": len(records),
     }

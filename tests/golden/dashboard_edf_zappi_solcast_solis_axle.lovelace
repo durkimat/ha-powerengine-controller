@@ -787,6 +787,10 @@ views:
                     title: {text: "kWh per half-hour", style: {color: "#757575"}}
                     labels: {style: {colors: "#757575"}}
                     axisBorder: {show: true, color: "#757575", width: 3}
+                - id: now
+                  show: false
+                  min: 0
+                  max: 1
               series: &chart_day_series
                 - entity: sensor.pe_plan_history
                   name: Battery
@@ -833,8 +837,19 @@ views:
                   stroke_width: 1
                   color: "#43a047"
                   extend_to: false
+                  # real timing from the meter's history (5-minute steps) when the app has it, else half-hour blocks
                   data_generator: |
-                    const s = entity.attributes.series || {x: []};
+                    const r = entity.attributes.real, s = entity.attributes.series || {x: []};
+                    if (r && r.m) {
+                      if (!r.m.length) return [];
+                      const d0 = s.x.length ? s.x[0] : 0, step = r.bucket * 60000, pts = [];
+                      r.m.forEach((m, i) => {
+                        if (i && m - r.m[i - 1] > r.bucket) pts.push([d0 + (r.m[i - 1] + r.bucket) * 60000, 0]);
+                        pts.push([d0 + m * 60000, r.charge[i]]);
+                      });
+                      pts.push([d0 + (r.m[r.m.length - 1] * 60000) + step, 0]);
+                      return pts;
+                    }
                     const pts = s.x.map((x, i) => [x, s.actual_charge[i]]).filter(p => p[1] !== null);
                     if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
                     return pts;
@@ -863,8 +878,19 @@ views:
                   stroke_width: 1
                   color: "#e53935"
                   extend_to: false
+                  # real timing from the meter's history (5-minute steps) when the app has it, else half-hour blocks
                   data_generator: |
-                    const s = entity.attributes.series || {x: []};
+                    const r = entity.attributes.real, s = entity.attributes.series || {x: []};
+                    if (r && r.m) {
+                      if (!r.m.length) return [];
+                      const d0 = s.x.length ? s.x[0] : 0, step = r.bucket * 60000, pts = [];
+                      r.m.forEach((m, i) => {
+                        if (i && m - r.m[i - 1] > r.bucket) pts.push([d0 + (r.m[i - 1] + r.bucket) * 60000, 0]);
+                        pts.push([d0 + m * 60000, r.bat_export[i]]);
+                      });
+                      pts.push([d0 + (r.m[r.m.length - 1] * 60000) + step, 0]);
+                      return pts;
+                    }
                     const pts = s.x.map((x, i) => [x, s.actual_bat_export[i]]).filter(p => p[1] !== null);
                     if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
                     return pts;
@@ -878,11 +904,34 @@ views:
                   stroke_width: 1
                   color: "#f9a825"
                   extend_to: false
+                  # real timing from the meter's history (5-minute steps) when the app has it, else half-hour blocks
                   data_generator: |
-                    const s = entity.attributes.series || {x: []};
+                    const r = entity.attributes.real, s = entity.attributes.series || {x: []};
+                    if (r && r.m) {
+                      if (!r.m.length) return [];
+                      const d0 = s.x.length ? s.x[0] : 0, step = r.bucket * 60000, pts = [];
+                      r.m.forEach((m, i) => {
+                        if (i && m - r.m[i - 1] > r.bucket) pts.push([d0 + (r.m[i - 1] + r.bucket) * 60000, 0]);
+                        pts.push([d0 + m * 60000, r.solar_export[i]]);
+                      });
+                      pts.push([d0 + (r.m[r.m.length - 1] * 60000) + step, 0]);
+                      return pts;
+                    }
                     const pts = s.x.map((x, i) => [x, s.actual_solar_export[i]]).filter(p => p[1] !== null);
                     if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
                     return pts;
+                # a vertical line at the present moment, on the day being shown today only (the app sends now_x then)
+                - entity: sensor.pe_plan_history
+                  name: Now
+                  yaxis_id: now
+                  type: line
+                  color: "#e53935"
+                  stroke_width: 1
+                  show: {in_legend: false, legend_value: false}
+                  extend_to: false
+                  data_generator: |
+                    const x = entity.attributes.now_x;
+                    return x ? [[x, 0], [x, 1]] : [];
           - type: conditional
             grid_options: {columns: full, rows: auto}
             conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
@@ -893,8 +942,12 @@ views:
               span: {"start": "day"}
               header: {"show": true, "title": "Battery, prices and grid use (plan dashed, actual solid)", "show_states": false}
               apex_config: {"chart": {"height": 420, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"datetimeFormatter": {"day": "HH:mm", "hour": "HH:mm"}, "style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
-              yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#1565c0", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#757575", "fontSize": "10px"}}}, "show": false}]
+              yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#1565c0", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#757575", "fontSize": "10px"}}}, "show": false}, {"id": "now", "show": false, "min": 0, "max": 1}]
               series: *chart_day_series
+          # a time of day on the chart above and what the plan and the record say for it (hides itself on an older card)
+          - type: custom:powerengine-history-point-card
+            entity: sensor.pe_plan_history
+            grid_options: {columns: full}
           # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
           - type: conditional
             grid_options: {columns: full, rows: auto}
@@ -914,12 +967,18 @@ views:
                 legend: {show: true}
                 tooltip: {shared: true, x: {format: "HH:mm"}}
               yaxis:
-                - min: 0
+                - id: kwh
+                  min: 0
                   decimals: 1
                   apex_config: {title: {text: "kWh per half-hour"}}
+                - id: now
+                  show: false
+                  min: 0
+                  max: 1
               series: &chart_load_series
                 - entity: sensor.pe_plan_history
                   name: House (actual)
+                  yaxis_id: kwh
                   unit: "kWh"
                   type: line
                   color: "#616161"
@@ -930,6 +989,7 @@ views:
                     return s.x.map((x, i) => [x, s.actual_load[i]]).filter(p => p[1] !== null);
                 - entity: sensor.pe_plan_history
                   name: House (forecast)
+                  yaxis_id: kwh
                   unit: "kWh"
                   type: line
                   color: "#9e9e9e"
@@ -941,6 +1001,7 @@ views:
                     return s.x.map((x, i) => [x, s.plan_load[i]]).filter(p => p[1] !== null);
                 - entity: sensor.pe_plan_history
                   name: Solar (actual)
+                  yaxis_id: kwh
                   unit: "kWh"
                   type: area
                   color: "#fdd835"
@@ -951,6 +1012,7 @@ views:
                     return s.x.map((x, i) => [x, s.actual_solar[i]]).filter(p => p[1] !== null);
                 - entity: sensor.pe_plan_history
                   name: Solar (forecast)
+                  yaxis_id: kwh
                   unit: "kWh"
                   type: line
                   color: "#f9a825"
@@ -960,6 +1022,18 @@ views:
                   data_generator: |
                     const s = entity.attributes.series || {x: []};
                     return s.x.map((x, i) => [x, s.plan_solar[i]]).filter(p => p[1] !== null);
+                # a vertical line at the present moment, on the day being shown today only (the app sends now_x then)
+                - entity: sensor.pe_plan_history
+                  name: Now
+                  yaxis_id: now
+                  type: line
+                  color: "#e53935"
+                  stroke_width: 1
+                  show: {in_legend: false, legend_value: false}
+                  extend_to: false
+                  data_generator: |
+                    const x = entity.attributes.now_x;
+                    return x ? [[x, 0], [x, 1]] : [];
           - type: conditional
             grid_options: {columns: full, rows: auto}
             conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
@@ -970,7 +1044,7 @@ views:
               span: {"start": "day"}
               header: {"show": true, "title": "House load and solar (forecast dashed, actual solid)", "show_states": false}
               apex_config: {"chart": {"height": 240, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
-              yaxis: [{"min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"fontSize": "10px"}}}}]
+              yaxis: [{"id": "kwh", "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"fontSize": "10px"}}}}, {"id": "now", "show": false, "min": 0, "max": 1}]
               series: *chart_load_series
           - type: heading
             heading: The plan's actions for the day

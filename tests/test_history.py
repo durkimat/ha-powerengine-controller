@@ -1,7 +1,9 @@
+import types
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from pe_core.history import chosen_plan, day_view
+from pe_core.history import add_forecast, chosen_plan, day_view, real_flows
+from pe_core.readings import Readings
 
 LON = ZoneInfo("Europe/London")
 TODAY = date(2026, 9, 26)
@@ -113,11 +115,12 @@ def _picker_app(monkeypatch, tmp_path):
     monkeypatch.setattr(pe, "datetime", FakeDT)
     book = CostBook(str(tmp_path), LON)
     published = []
-    app = types.SimpleNamespace(costbook=book, tz=LON, _history_date=None, published=published)
+    app = types.SimpleNamespace(costbook=book, tz=LON, _history_date=None, published=published, cfg=None,
+                                _flows_cache={})
     app._get_publisher = lambda: object()
     app._publish_state = lambda key, state, attrs=None: published.append((key, state, attrs))
     app.log = lambda *a, **k: None
-    for name in ("_publish_history", "_on_history_day", "_day_engine"):
+    for name in ("_publish_history", "_on_history_day", "_day_engine", "_history_latest", "_day_flows"):
         setattr(app, name, types.MethodType(getattr(pe.PowerEngine, name), app))
     return app, pe
 
@@ -151,3 +154,105 @@ def test_as_run_windows_drop_replaced_copies_and_merge():
           {"start": t[0], "end": t[1], "from": "08:00", "to": "08:30", "action": "hold", "reason": "old"}]
     out = as_run_windows(ws, slots, ZoneInfo("Europe/London"))
     assert [(w["from"], w["to"], w["action"]) for w in out] == [("08:00", "10:00", "self_use")]
+
+
+def _live(day, from_slot=0):
+    recs, snap = _day(day)
+    snap["slots"] = [{**s, "soc": 80.0, "price_p": 7.0} for s in snap["slots"][from_slot:]]
+    snap["windows"] = [{"start": snap["slots"][0]["start"], "action": "grid_charge", "reason": "cheap"}]
+    return snap
+
+
+def test_add_forecast_keeps_what_ran_and_fills_the_rest_from_the_live_plan():
+    day = date(2026, 9, 26)
+    _, ran = _day(day)
+    ran["slots"] = ran["slots"][:24]                                  # the first 24 half-hours ran
+    now = datetime(2026, 9, 26, 10, 40, tzinfo=UTC)                   # 11:40 local
+    label, snap = add_forecast("As run", ran, _live(day), now)
+    assert label == "As run"
+    by = {s["start"]: s for s in snap["slots"]}
+    assert len(by) == 48
+    assert all(by[s["start"]]["soc"] == s["soc"] for s in ran["slots"])          # what ran is kept as it was
+    assert by[datetime(2026, 9, 26, 11, 0, tzinfo=UTC).isoformat()]["soc"] == 80.0   # later half-hours: live plan
+
+
+def test_add_forecast_for_a_coming_day_is_the_live_plan_labelled_forecast():
+    day = date(2026, 9, 28)
+    now = datetime(2026, 9, 26, 12, tzinfo=UTC)
+    label, snap = add_forecast(None, None, _live(day), now)
+    assert label == "Forecast" and len(snap["slots"]) == 48 and snap["windows"][0]["action"] == "grid_charge"
+    v = day_view(day, [], snap, label, LON, now)
+    assert v["forecast"] is True and v["now_x"] is None
+    assert v["series"]["plan_soc"][0] == 80.0 and v["series"]["actual_soc"][0] is None
+    assert v["series"]["price_p"][0] == 7.0
+
+
+def test_add_forecast_without_a_live_plan_changes_nothing():
+    _, ran = _day(date(2026, 9, 26))
+    now = datetime(2026, 9, 26, 12, tzinfo=UTC)
+    assert add_forecast("As run", ran, None, now) == ("As run", ran)
+    assert add_forecast(None, None, {"slots": []}, now) == (None, None)
+
+
+def test_day_view_marks_now_only_on_today():
+    day = date(2026, 9, 26)
+    recs, snap = _day(day)
+    now = datetime(2026, 9, 26, 12, tzinfo=UTC)
+    assert day_view(day, recs, snap, "x", LON, now)["now_x"] == int(now.timestamp() * 1000)
+    past = day_view(date(2026, 9, 25), [], None, None, LON, now)
+    assert past["now_x"] is None and past["forecast"] is False
+
+
+def test_date_picker_reaches_into_the_plan_horizon_and_no_further(monkeypatch, tmp_path):
+    app, pe = _picker_app(monkeypatch, tmp_path)
+    def slot(d, h):
+        return types.SimpleNamespace(slot=types.SimpleNamespace(start=datetime(2026, 10, d, h, tzinfo=UTC)))
+
+    app.plan = types.SimpleNamespace(slots=[slot(3, 12), slot(4, 12), slot(5, 12)])       # ends on the 5th
+    assert app._history_latest(date(2026, 10, 3)) == date(2026, 10, 5)
+    app.plan.slots.append(slot(8, 12))
+    assert app._history_latest(date(2026, 10, 3)) == date(2026, 10, 5)                  # two days ahead at most
+    app.plan.slots = [slot(3, 12)]
+    assert app._history_latest(date(2026, 10, 3)) == date(2026, 10, 3)
+    app.plan = None
+    assert app._history_latest(date(2026, 10, 3)) == date(2026, 10, 3)
+
+
+def _sample(minute, grid_w, battery_w, hour=0):
+    t = datetime(2026, 10, 3, hour, minute, tzinfo=UTC)
+    return Readings(now=t, grid_power=grid_w, battery_power=battery_w)
+
+
+def test_real_flows_say_when_charging_and_exports_happened():
+    samples = ([_sample(m, 3000, -2800) for m in (0, 1, 2, 3, 4)]          # 00:00-00:05 charging 2.8 kW from the grid
+               + [_sample(m, -4000, 3000) for m in (5, 6, 7, 8, 9)]         # then exporting 4 kW, 3 kW from the battery
+               + [_sample(m, -1000, 0) for m in (10, 11)]                   # then 1 kW of solar only
+               + [_sample(m, None, None) for m in (12, 13)])                # no grid reading: skipped
+    f = real_flows(samples, LON)
+    assert f["bucket"] == 5 and f["m"] == [60, 65, 70]                      # BST: local = UTC + 1h
+    assert f["charge"] == [1.4, 0.0, 0.0]                                    # 2.8 kW for half an hour = 1.4 kWh
+    assert f["bat_export"] == [0.0, 1.5, 0.0] and f["solar_export"] == [0.0, 0.5, 0.5]
+
+
+def test_real_flows_leave_out_quiet_buckets_and_keep_the_rest():
+    f = real_flows([_sample(0, 100, 0), _sample(5, 3000, -2800), _sample(10, 0, 0)], UTC)
+    assert f["m"] == [5] and f["charge"] == [1.4]
+    quiet = real_flows([_sample(0, 100, 0)], UTC)
+    assert quiet["m"] == [] and quiet["charge"] == []                        # real, but nothing moved
+
+
+def test_real_flows_without_battery_power_call_all_export_solar_and_empty_input_is_none():
+    f = real_flows([_sample(0, -2000, None)], UTC)
+    assert f["bat_export"] == [0.0] and f["solar_export"] == [1.0]
+    assert real_flows([], UTC) is None and real_flows([_sample(0, None, None)], UTC) is None
+
+
+def test_the_published_history_carries_real_flows_when_the_app_has_them(monkeypatch, tmp_path):
+    app, pe = _picker_app(monkeypatch, tmp_path)
+    app._day_flows = lambda day, today, now: {"bucket": 5, "m": [0], "charge": [0.1], "bat_export": [0.0],
+                                              "solar_export": [0.0]}
+    app._publish_history()
+    assert app.published[-1][2]["real"]["m"] == [0]
+    app2, _ = _picker_app(monkeypatch, tmp_path)
+    app2._publish_history()
+    assert app2.published[-1][2]["real"] is None                              # no config: nothing to read
