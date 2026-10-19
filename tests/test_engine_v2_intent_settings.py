@@ -9,7 +9,6 @@ from pe_core.engine_v2 import value as V
 from pe_core.engine_v2.settings import (
     BETA22_PROFILE,
     BETA_PROFILE,
-    CAUTION_WEIGHTS,
     FIRMNESS_CURVES,
     SECTIONS,
     SETTINGS,
@@ -119,17 +118,14 @@ def test_wear_and_learning_are_one_value_each():
 
 
 @pytest.mark.parametrize("caution", S.CAUTION)
-def test_forecast_caution_gives_weights_summing_to_one(caution):
+def test_the_starting_weights_no_longer_depend_on_the_caution(caution):
     s = V2Settings(forecast_caution=caution)
-    assert sum(s.solar_weights) == pytest.approx(1.0) and sum(s.load_weights) == pytest.approx(1.0)
-    assert s.solar_weights == pytest.approx(tuple(x / 100 for x in CAUTION_WEIGHTS[caution][0]))
-    assert s.load_weights == pytest.approx(tuple(x / 100 for x in CAUTION_WEIGHTS[caution][1]))
+    assert s.solar_weights == pytest.approx((0.25, 0.5, 0.25)) and s.load_weights == pytest.approx((0.25, 0.5, 0.25))
 
 
-def test_cautious_leans_to_low_sun_and_high_house_and_balanced_is_the_old_default():
-    c, b = V2Settings(forecast_caution="cautious"), V2Settings()
-    assert c.solar_weights[0] > b.solar_weights[0] and c.load_weights[2] > b.load_weights[2]
-    assert b.solar_weights == pytest.approx((0.25, 0.5, 0.25))
+def test_the_caution_says_whose_needs_a_sale_keeps_for():
+    assert V.KEEP_CASE["optimistic"] is None and V.KEEP_CASE["balanced"] == "mid" and V.KEEP_CASE["cautious"] == "high"
+    assert V2Settings().forecast_caution == "balanced"
 
 
 def test_the_old_names_are_properties_not_arguments():
@@ -144,15 +140,15 @@ def test_the_old_names_are_properties_not_arguments():
 def test_the_2_1_beta_profile_values():
     s = parse_v2({}, profile=profile_values(BETA_PROFILE))
     assert (s.range_low_soc, s.range_high_soc, s.range_firmness) == (70, 90, "firm")
-    assert s.min_run_pct == 20 and s.slot_floor_soc == 80 and s.hold_use == "any time"
+    assert s.min_run_pct == 5 and s.slot_floor_soc == 80 and s.hold_use == "any time"
     assert s.level_top_rate_p == 200.0 and s.level_bot_rate_p == 10.0
-    assert V.leg_band(s) == (70, 90, 20)
+    assert V.leg_band(s) == (70, 90, 5)
 
 
 def test_the_2_2_beta_profile_values():
     s = parse_v2({}, profile=profile_values(BETA22_PROFILE))
     assert (s.range_low_soc, s.range_high_soc, s.range_firmness) == (70, 90, "firm")
-    assert s.min_run_pct == 20 and s.slot_floor_soc == 80
+    assert s.min_run_pct == 5 and s.slot_floor_soc == 80
     assert s.hold_use == "car and reserve" and s.free_arbitrage is True and s.charge_max_import_p == 15.0
 
 

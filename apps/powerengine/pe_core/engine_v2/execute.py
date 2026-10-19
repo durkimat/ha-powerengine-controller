@@ -15,7 +15,7 @@ plus a grace) raises an event so the plan is looked at again; it never stops a m
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timedelta, timezone
 
 from .. import decide as v1d
@@ -106,7 +106,8 @@ class Executor:
         self.exits: list = list(st.get("exits") or [])
         self.dec: dict | None = st.get("dec")                      # the decision being carried out (`_follow`)
         lines = st.get("lines")
-        self.lines: Lines | None = Lines(**lines) if lines else None
+        known = {f.name for f in fields(Lines)}                    # a field an earlier release saved is dropped
+        self.lines: Lines | None = Lines(**{k: v for k, v in lines.items() if k in known}) if lines else None
         self.flip_flop_now = False                                   # the last step was an A to B to A change
         self._tz = None
         self._ended = False                                          # this step's run reached its level
@@ -228,7 +229,8 @@ class Executor:
                 self.dec = {**d, **idle, "used": d["used"] + 1, "reached": False}
                 continue
             # the run reached its level: the plan's next decision, now (`value._walk`)
-            nd = decide(vr, now, level, lim, facts, self.s, mode, self.leg_from, used=d["used"] + 1, last_run=mode,
+            # the run reached its level, so its shortest run is done (the walk does the same: `leg` ends there)
+            nd = decide(vr, now, level, lim, facts, self.s, mode, None, used=d["used"] + 1, last_run=mode,
                         import_p=ln.import_p, export_p=ln.export_p)
             self.dec = {"key": key, **(nd or {**d, **idle}), "seg": seg_ts, "used": d["used"] + 1, "reached": False}
         return self._fallback(lim, self.dec["rest"]), None

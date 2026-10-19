@@ -201,7 +201,7 @@ differs from the default.
 | `range_low_soc` | 20 % | **70** | MODEL | Where the bottom curve starts (`level_bot_start_soc`): below it keeping energy costs by the hour. |
 | `range_high_soc` | 90 % | 90 | MODEL | Where the top curve starts (`level_top_start_soc`); also where a charge stops being free to start early. |
 | `range_firmness` | gentle | **firm** | MODEL | The curves' rates (`FIRMNESS_CURVES`: off 0/0, gentle 50/3p, firm 200/10p, strict 500/50p, top at 100% / bottom at the reserve, p per kWh per hour). |
-| `min_run_pct` | 0 (off) | **20** | MODEL | Shortest charge or sale, cut short by the range's edge (`value.leg_band`, `leg_need`). Before 0.9.157 it was implied as the span between the two curve starts. |
+| `min_run_pct` | 0 (off) | **5** (20 until 0.9.158) | MODEL | Shortest charge or sale, cut short by the range's edge (`value.leg_band`, `leg_need`). Before 0.9.157 it was implied as the span between the two curve starts. |
 | `slot_floor_soc` | 0 (off) | **80** | MODEL | While a smart slot is counted on, the bottom curve starts here at 30 times the rate (`slot_bot_start_soc`, `SLOT_BOT_FACTOR`). |
 | `slot_odds_pct` | 60 % | (yours: 90) | MODEL | The chance of a smart slot outside the overnight window (was the shared `smart_slot_certainty_pct`, which seeds it). |
 
@@ -216,7 +216,7 @@ differs from the default.
 
 | Setting | Default | Kind | What it does |
 |---|---|---|---|
-| `forecast_caution` | balanced | MODEL | The starting weights of the low / middle / high sun and house (`CAUTION_WEIGHTS`). |
+| `forecast_caution` | balanced | MODEL | What a sale while energy is dear keeps for the house until energy is certainly cheap again (`value._keep_kwh`; a smart slot that may not come is not cheap): optimistic nothing, balanced the forecast's middle case, cautious the high house and low sun (0.9.158; before, the starting weights, which learning overrode). |
 | `learn` | on | LEARN | Learn the weights and the solar forecast's bias. |
 
 ### Advanced

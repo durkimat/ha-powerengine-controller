@@ -70,7 +70,10 @@ SETTINGS: dict[str, tuple] = {
                "Cost counted for each kWh the battery gives out (to the house or sold). 0: a sunk cost."),
     # --- the forecast ------------------------------------------------------------------------------------------
     "forecast_caution": ("choice", "balanced", CAUTION, None, "", "Forecast caution",
-                         "How much weight the low-sun, high-house case gets, before learning moves it."),
+                         "What the battery keeps for the house before it sells while energy is dear, until energy "
+                         "is certainly cheap again (a smart slot that may not come does not count). Optimistic: "
+                         "nothing kept. Balanced: what the forecast says the house needs. Cautious: enough for a "
+                         "busy, dull day."),
     "learn": ("bool", True, None, None, "", "Learn from experience",
               "Learn how often sun and house come in low or high, and the solar forecast's bias."),
     # --- advanced ----------------------------------------------------------------------------------------------
@@ -128,9 +131,8 @@ SEED_FROM = {
 FIRMNESS_CURVES = {"off": (0.0, 2.0, 0.0, 5.0), "gentle": (50.0, 3.0, 3.0, 5.0), "firm": (200.0, 3.0, 10.0, 5.0),
                    "strict": (500.0, 2.0, 50.0, 4.0)}
 SLOT_BOT_FACTOR = 30.0          # inside a smart slot the bottom curve's rate is this many times the usual
-# caution -> ((solar low, mid, high), (house low, mid, high)) starting weights in percent
-CAUTION_WEIGHTS = {"cautious": ((40, 45, 15), (15, 45, 40)), "balanced": ((25, 50, 25), (25, 50, 25)),
-                   "optimistic": ((15, 45, 40), (40, 45, 15))}
+# the starting weights of the low, middle and high sun and house (learning moves them from there)
+START_WEIGHTS = (25, 50, 25)
 
 
 class SettingsError(ValueError):
@@ -235,11 +237,11 @@ class V2Settings:
     @property
     def solar_weights(self) -> tuple[float, float, float]:
         """Starting weights of the low, middle and high solar scenarios, as fractions summing to 1."""
-        return _norm(*CAUTION_WEIGHTS[self.forecast_caution][0])
+        return _norm(*START_WEIGHTS)
 
     @property
     def load_weights(self) -> tuple[float, float, float]:
-        return _norm(*CAUTION_WEIGHTS[self.forecast_caution][1])
+        return _norm(*START_WEIGHTS)
 
 
 
@@ -281,15 +283,15 @@ BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
     DEFAULT_PROFILE: {},
     BETA_PROFILE: {
         "hold_use": "any time", "range_low_soc": 70, "range_high_soc": 90, "range_firmness": "firm",
-        "min_run_pct": 20, "slot_floor_soc": 80,
+        "min_run_pct": 5, "slot_floor_soc": 80,
     },
 }
 BUILTIN_PROFILES[BETA22_PROFILE] = {**BUILTIN_PROFILES[BETA_PROFILE], "hold_use": "car and reserve",
                                     "free_arbitrage": True, "charge_max_import_p": 15.0}
 BUILTIN_NOTES = {
     DEFAULT_PROFILE: "Engine v2's own defaults.",
-    BETA_PROFILE: "A firm range of 70 to 90% with charges and sales running its whole span, and the battery kept above "
-                  "80% while a smart slot is counted on. Beta.",
+    BETA_PROFILE: "A firm range of 70 to 90%, charges and sales of at least 5 points, and the battery kept above 80% "
+                  "while a smart slot is counted on. Beta.",
     BETA22_PROFILE: "2.1 beta, and Hold only for the car and the reserve, free power that may also sell, and no grid "
                     "charge above 15p. Beta.",
 }

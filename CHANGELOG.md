@@ -2,6 +2,38 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.158 (beta)
+
+### Behaviour changes
+
+- **Forecast caution now does something: it keeps energy back for the house.** While energy is dear, a sale never takes what the house may need before energy is certainly cheap again. A smart slot that may not come doesn't count as cheap. After such a sale, the house runs on what was kept instead of on the grid.
+  - **Optimistic:** keeps nothing, the same as 0.9.157.
+  - **Balanced (the new default):** keeps what the forecast's middle case says the house needs.
+  - **Cautious:** keeps enough for a busy, dull day.
+  - Before this, "Forecast caution" only set starting weights that learning replaced within days, so it had almost no effect.
+  - This stops the pattern seen on 19 Oct: charge in a short smart slot, sell at 15p, then run out at about 18:00 and buy the evening at 28.84p.
+- **The shortest charge or sale in the 2.1 beta and 2.2 beta profiles is 5 points, not 20.** At 20, a sale that only paid down to about 80% was forced on to 70%, selling energy the evening needed.
+- **Replays (real money, end-of-day battery valued at the cheap rate), your settings:**
+  - **Nine recorded October days with plentiful smart slots:** +£25.11 against +£25.47 on 0.9.157 (36p less).
+  - **Three simulated dull days** (a brief early slot, no slot, an afternoon slot withdrawn): −£0.53 against −£1.43 (90p better).
+  - **All twelve:** +£24.57 against +£24.03 (54p better), with 391 mode changes on the recorded days against 321.
+  - On the recorded days trusting the slots always paid off, so caution costs a little there. On a day when the slots don't come, it saves much more.
+- **The plan and the battery no longer split at the edge of a shortest run.** On 19 Oct at 10:11 the battery reached its level 0.1 point short of the shortest-run goal. The plan carried on charging, then rested on self-use; the battery treated the charge as complete and started selling. In both, the shortest run now ends when the run reaches its level.
+- **Updating keeps the engine's saved state.** On the update to 0.9.157 the saved state was discarded once, because a field the new code no longer has couldn't be read back. Unknown fields are now ignored.
+
+### Behind the scenes
+
+- `value._keep_kwh` and the `keep` argument of `_choose` (all in the shared decision, so the plan and the battery agree); `value.KEEP_CASE` maps the caution; `value._rest` is the mode for the rest of a segment.
+- `settings.START_WEIGHTS` replaces the caution-dependent starting weights.
+- `execute`: unknown `Lines` fields are dropped on restore; `powerengine._v2_input` reads `slot_odds_pct` with a fallback.
+- Tests: `tests/test_engine_v2_keep.py`, `tests/test_engine_v2_restore.py`, and the intent-settings tests updated.
+- **Tried in the simulator and not adopted:**
+  - a "leave the night at least this full" floor (little gain once the keep is in);
+  - an "arrive at the night with at least X" margin (it held energy the evening needed);
+  - a per-kWh price for charging above the range top (filling to 100% didn't help while the plan still sold the energy);
+  - shortest-run variants that only gate the start or stop where a run stops paying (both cost money);
+  - trusting announced slots in the keep (it removed most of the protection).
+
 ## 0.9.157 (beta)
 
 ### Behaviour changes

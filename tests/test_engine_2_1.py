@@ -27,7 +27,7 @@ def test_the_profile_fills_what_the_config_does_not_set():
     for key, value in BUILTIN_PROFILES["2.1 beta"].items():
         assert getattr(s, key) == value
     assert s.level_top_rate_p == 200.0 and s.slot_bot_factor == 30.0
-    assert s.prefer_self_use is False and s.min_run_pct == 20
+    assert s.prefer_self_use is False and s.min_run_pct == 5
 
 
 def test_what_you_saved_beats_the_profile_and_other_keys_still_seed_from_v1():

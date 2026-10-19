@@ -43,9 +43,9 @@ def feed_day(ln, day, solar_factor=1.0, house_factor=1.0, hours=(0, 24), step=12
 
 
 def test_the_starting_weights_are_the_settings_until_something_is_seen():
-    ln = Learner(V2Settings(forecast_caution="cautious"))
-    assert [round(x, 3) for x in ln.solar_weights("midday")] == [0.4, 0.45, 0.15]
-    assert ln.diag()["weights"]["start"]["solar"] == [0.4, 0.45, 0.15]
+    ln = Learner(V2Settings())
+    assert [round(x, 3) for x in ln.solar_weights("midday")] == [0.25, 0.5, 0.25]
+    assert ln.diag()["weights"]["start"]["solar"] == [0.25, 0.5, 0.25]
     assert ln.diag()["weights"]["days"] == 0
 
 
