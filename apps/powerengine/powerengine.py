@@ -1887,7 +1887,8 @@ class PowerEngine(hass.Hass):
                            path=out.value.path if out.value is not None else None,
                            buy_line_p=ln.buy_line_p if ln else None, sell_line_p=ln.sell_line_p if ln else None,
                            grid_w=getattr(readings, "grid_power", None), car_w=getattr(readings, "ev_power", None),
-                           replanned=bool(out.revalued))
+                           replanned=bool(out.revalued),
+                           slot=bool(readings is not None and readings.current_dispatch() is not None))
             if wrote:
                 self._publish_v2_history()
         except Exception as err:
