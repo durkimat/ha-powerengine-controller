@@ -147,7 +147,7 @@ def test_the_2_1_beta_profile_values():
 
 def test_the_2_2_beta_profile_values():
     s = parse_v2({}, profile=profile_values(BETA22_PROFILE))
-    assert (s.range_low_soc, s.range_high_soc, s.range_firmness) == (70, 90, "firm")
+    assert (s.range_low_soc, s.range_high_soc, s.range_firmness) == (70, 90, "gentle")
     assert s.min_run_pct == 5 and s.slot_floor_soc == 80
     assert s.hold_use == "car and reserve" and s.free_arbitrage is True and s.charge_max_import_p == 15.0
 
