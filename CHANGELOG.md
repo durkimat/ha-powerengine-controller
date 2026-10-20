@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.159 (beta)
+
+### Behaviour changes
+
+- **The engine v2 history now shows grid import, export and the car at their real timing.** Before, they were drawn in half-hour blocks. The app now reads Home Assistant's own record of grid and car power and publishes it in 5-minute steps on a new sensor, `sensor.pe_v2_flows`. The bar areas are the real energy. A day Home Assistant no longer holds detail for keeps the half-hour bars.
+- **No other change to what the engine does.** The plan, the decisions and the inverter commands are untouched.
+
+### Behind the scenes
+
+- `pe_core/v2flows.py` (`real_flows`) rebuilds the day from the recorder with the replay machinery; `_day_flows` caches it (a past day once, today every 4 minutes) and a failed read is logged once and leaves the half-hour bars.
+- `sensor.pe_v2_flows` is a separate sensor so `sensor.pe_v2_history` stays under the attribute budget.
+
 ## 0.9.158 (beta)
 
 ### Behaviour changes

@@ -129,6 +129,9 @@ from pe_core.smartcharge import SmartCharger, ask_message, worth_asking
 from pe_core.status import entity_states
 from pe_core.store import coerce_flags, save_config, with_operation
 from pe_core.tariff import describe_window, fixed_window, overnight_window
+from pe_core.v2flows import FLOW_ROLES as V2_FLOW_ROLES
+from pe_core.v2flows import day_end as v2_day_end
+from pe_core.v2flows import real_flows
 from pe_core.v2history import KEEP_DAYS as V2_HISTORY_KEEP_DAYS
 from pe_core.v2history import V2History
 from pe_core.verification import active_refusal
@@ -499,6 +502,7 @@ class PowerEngine(hass.Hass):
         self._history_date = None                            # a day picked with the card's date picker (Plan history)
         self.listen_event(self._on_history_day, HISTORY_DAY_EVENT)
         self._v2_history_date = None                         # a day picked on the Engine v2 page's history
+        self._flows_cache = {}                               # day -> (grid flows, when read): the history's real timing
         self.listen_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
         self.listen_event(self._on_v2_replan, V2_REPLAN_EVENT)
         self.run_every(self._publish_v2_history, "now+65", 900)
@@ -1928,9 +1932,40 @@ class PowerEngine(hass.Hass):
             if info and info.get("profile") is not None:
                 attrs = {**attrs, "profile": info["profile"]}
             self._publish_state("v2_history", day.isoformat(), attrs)
+            flows = self._day_flows(day, today, datetime.now(timezone.utc))
+            self._publish_state("v2_flows", day.isoformat(), flows or {"date": day.isoformat(), "m": []})
         except Exception as err:
             self._warn_daily("v2history_pub", f"Could not build engine v2's history: {err!r}")
         self._publish_v2_recent()
+
+    def _day_flows(self, day, today, now):
+        """The grid and the car through the day at the time they happened (`v2flows.real_flows`), from Home Assistant's
+        own history of those readings. None for a day the recorder no longer holds or when reading fails. A past day
+        is read once; today again every few minutes; a failure is retried after ten."""
+        if self.cfg is None or day > today:
+            return None
+        cache = self._flows_cache
+        cached = cache.get(day)
+        if cached is not None:
+            age = (now - cached[1]).total_seconds()
+            if age < (600 if cached[0] is None else 240) or (day < today and cached[0] is not None):
+                return cached[0]
+        tz = self.tz or timezone.utc
+        flows = None
+        try:
+            start = datetime(day.year, day.month, day.day, tzinfo=tz).astimezone(timezone.utc)
+            plain, _ = history_entities(self.cfg, V2_FLOW_ROLES)
+            timelines = {eid: Timeline(self._history(eid, start, v2_day_end(day, tz)),
+                                       {"unit_of_measurement": self.get_state(eid, attribute="unit_of_measurement")})
+                         for eid in plain}
+            flows = real_flows(replay(self.cfg, timelines, start, min(v2_day_end(day, tz), now - timedelta(minutes=1))),
+                               tz, day)
+        except Exception as err:
+            self.log(f"Could not read the grid history for {day}: {err!r}", level="WARNING")
+        cache[day] = (flows, now)
+        for old in sorted(cache)[:-6]:
+            del cache[old]
+        return flows
 
     def _publish_v2_recent(self):
         """sensor.pe_v2_recent: the last 18 hours as engine v2 ran them, for the plan chart's scrollback. Independent of

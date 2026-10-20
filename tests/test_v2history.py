@@ -344,3 +344,39 @@ def test_an_older_record_without_the_new_figures_publishes_without_them(tmp_path
     row = h.attributes(date(2026, 10, 7), date(2026, 10, 7), "v2")["series"][0]
     assert "buy_p" not in row and "car" not in row
     assert h.attributes(date(2026, 10, 7), date(2026, 10, 7), "v2")["replans"] == []
+
+
+# --- real timing of the grid and car (v2flows) ------------------------------------------------------------------
+
+def _reading(minute, grid_w, car_w=None, hour=0):
+    from datetime import datetime, timezone
+
+    from pe_core.readings import Readings
+    return Readings(now=datetime(2026, 10, 3, hour, minute, tzinfo=timezone.utc), grid_power=grid_w, ev_power=car_w)
+
+
+def test_real_flows_say_when_the_grid_and_car_moved():
+    from datetime import date
+    from zoneinfo import ZoneInfo
+
+    from pe_core.v2flows import real_flows
+    london = ZoneInfo("Europe/London")                         # BST: midnight local is 23:00 UTC the day before
+    samples = ([_reading(m, 3000, 2000, hour=1) for m in (0, 1, 2, 3, 4)]       # 01:00 UTC: importing 3 kW, car 2 kW
+               + [_reading(m, -4000, hour=1) for m in (5, 6, 7, 8, 9)]           # then exporting 4 kW
+               + [_reading(m, 100, hour=1) for m in (10, 11)]                    # then 0.1 kW: kept (rounds to 0.05)
+               + [_reading(m, 0, hour=1) for m in (15, 16)]                      # quiet: left out
+               + [_reading(m, None, hour=1) for m in (20, 21)])                  # no grid figure: skipped
+    f = real_flows(samples, london, date(2026, 10, 3))
+    assert f["date"] == "2026-10-03" and f["bucket"] == 5 and f["start"] == "2026-10-03T00:00:00+01:00"
+    assert f["m"] == [120, 125, 130]                           # 02:00 local is 120 minutes after midnight
+    assert f["imp"] == [1.5, 0.0, 0.05] and f["exp"] == [0.0, 2.0, 0.0] and f["car"] == [1.0, 0.0, 0.0]
+
+
+def test_real_flows_with_nothing_read_is_none_and_all_quiet_is_empty_but_real():
+    from datetime import date, timezone
+
+    from pe_core.v2flows import real_flows
+    assert real_flows([], timezone.utc, date(2026, 10, 3)) is None
+    assert real_flows([_reading(0, None)], timezone.utc, date(2026, 10, 3)) is None
+    quiet = real_flows([_reading(0, 0)], timezone.utc, date(2026, 10, 3))
+    assert quiet["m"] == [] and quiet["imp"] == []
