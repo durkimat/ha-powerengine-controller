@@ -1101,8 +1101,17 @@ def _reason(mode: str, rec: dict, S: _Seg, value: float, ahead: str, by_level: b
                     f"{_pp(imp * facts.eta_discharge)}p it saves now{ahead}.")
         return f"Hold at {_pp(imp)}p: the grid runs the house; a stored kWh is worth {v}p here{ahead}."
     if rec["house"] > 0.02:
-        return (f"Self-use at {_pp(imp)}p: the battery covers the house; a stored kWh is worth {v}p here, "
-                f"under the {_pp(imp * facts.eta_discharge)}p it saves{ahead}.")
+        save = imp * facts.eta_discharge
+        if value < save:
+            return (f"Self-use at {_pp(imp)}p: the battery covers the house; a stored kWh is worth {v}p here, "
+                    f"under the {_pp(save)}p it saves{ahead}.")
+        top = S.pen.top_start_kwh if S.pen is not None else None
+        why = ("the battery is above the top of its everyday range, where holding costs by the hour"
+               if top is not None and rec["e0"] > top + 1e-6
+               else "Hold isn't allowed at this time" if HOLD not in S.allowed
+               else "the plan expects that to cost less overall than holding")
+        return (f"Self-use at {_pp(imp)}p: the battery covers the house; a stored kWh is worth {v}p here, more than "
+                f"the {_pp(save)}p it saves, but {why}{ahead}.")
     if rec["e1"] > rec["e0"] + 0.02:
         return (f"Self-use: spare sun goes into the battery; a stored kWh is worth {v}p here, more than the "
                 f"{_pp(exp)}p export pays{ahead}.")

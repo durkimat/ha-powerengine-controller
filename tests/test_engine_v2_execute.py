@@ -491,3 +491,32 @@ def test_a_forced_charge_ends_at_its_ceiling_the_same_way():
     assert ms.mode == FREE
     ms, *_ = step(ex, 600, level=99.99999999, ln=lines(5.0), lim=lim)
     assert ms.mode == HOLD
+
+
+def test_the_self_use_sentence_never_states_a_comparison_that_is_false():
+    from types import SimpleNamespace
+
+    from pe_core.engine_v2 import value as V
+    from pe_core.engine_v2.execute import Executor
+    from pe_core.engine_v2.settings import V2Settings
+    from pe_core.engine_v2.types import CHARGE, EXPORT, HOLD, SELF_USE, BatteryFacts, Limits, Lines
+
+    ex = Executor(V2Settings())
+    ln = lambda v: Lines(value_p=v, buy_line_p=7.53, sell_line_p=13.27, use_line_p=5.89, store_sun_line_p=7.0,  # noqa: E731
+                         import_p=6.66, export_p=15.0)
+    no_hold = Limits(allowed=frozenset({SELF_USE, CHARGE, EXPORT}))
+    assert "less than the 6.66p" in ex._pick_for(SELF_USE, no_hold, ln(4.0), None).why
+    why = ex._pick_for(SELF_USE, no_hold, ln(10.3), None).why
+    assert "less than" not in why and "more than the 5.89p" in why and "Hold isn't allowed" in why
+    assert "than holding" in ex._pick_for(SELF_USE, Limits(allowed=frozenset({SELF_USE, HOLD})), ln(10.3), None).why
+
+    facts = BatteryFacts()
+    seg = SimpleNamespace(manual=None, event=False, export_p=15.0)
+    rec = {"imp_p": 8.88, "house": 0.5, "e0": 17.5, "e1": 17.0, "exp": 0.0, "imp": 0.0}
+    S = SimpleNamespace(seg=seg, forced=None, pen=SimpleNamespace(top_start_kwh=16.2),
+                        allowed=(SELF_USE, CHARGE, EXPORT))
+    assert "under the 8.44p" in V._reason(SELF_USE, rec, S, 3.0, "", False, facts)
+    high = V._reason(SELF_USE, rec, S, 10.51, "", False, facts)
+    assert "under" not in high and "above the top of its everyday range" in high
+    S.pen = None
+    assert "Hold isn't allowed" in V._reason(SELF_USE, rec, S, 10.51, "", False, facts)

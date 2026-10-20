@@ -302,9 +302,14 @@ class Executor:
             if self.sun_spare:
                 why = (f"Spare sun goes into the battery: a stored kWh is worth {v:.1f}p, more than the {exp:.2f}p "
                        f"exporting it pays (storing pays while it is worth more than {ln.store_sun_line_p:.2f}p)")
-            else:
+            elif v < ln.use_line_p:
                 why = (f"The battery covers the house: a stored kWh is worth {v:.1f}p, less than the {imp:.2f}p "
                        f"import (the battery wins while it is worth less than {ln.use_line_p:.2f}p)")
+            else:                                   # the plan's choice, not this line: say so rather than misstate it
+                why = (f"The battery covers the house at {imp:.2f}p: a stored kWh is worth {v:.1f}p, more than the "
+                       f"{ln.use_line_p:.2f}p it saves now, but "
+                       + ("Hold isn't allowed at this time and the plan finds charging or selling doesn't pay here"
+                          if HOLD not in lim.allowed else "the plan expects that to cost less overall than holding"))
             return _Pick(SELF_USE, "value", why)
         # hold
         if lim.rule == "car":
