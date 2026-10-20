@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.162 (beta)
+
+### Behaviour changes
+
+- **The house forecast is right again.** Since 14 Oct it expected about twice the house use on weekdays (45.8 kWh forecast against 26 kWh used on 19 Oct; about 2 kW all night). On each start PowerEngine rebuilt 14 days of house load from Home Assistant's history, corrected by the check meter, and that rebuilt figure replaced PowerEngine's own record. Its own record (the corrected live house load, which matches the Health tab's actuals) now comes first; the history only fills half-hours it lacks.
+- **A sensor that drops out no longer carries its last reading.** When a reading in Home Assistant's history is unavailable, that time now counts as missing, not as the value before it.
+- **Both engines plan with the corrected forecast.** The inflated forecast made stored energy look more valuable and kept more back for the house, so expect the plan to change: fewer "the house drifted from the forecast" re-plans overnight and more willingness to sell.
+- **Engine v2's Self-use sentence no longer states a comparison that is false.** It said, for example, "worth 10.3p, less than the 6.66p import". When the plan chooses Self-use although a stored kWh is worth more than it saves, the sentence now gives the real reason: the battery is above the top of its everyday range, or Hold isn't allowed at that time.
+
+### Behind the scenes
+
+- `forecast.parse_history(..., gaps=True)` returns unavailable rows as None; `half_hour_means` counts them as gaps. `_rebuild_profile`: the load record wins over `_hist_means`.
+- `execute._pick_for` and `value._reason`: the Self-use wording follows the real comparison.
+- Tests: `tests/test_forecast.py` (two), `tests/test_engine_v2_execute.py` (one).
+
 ## 0.9.161 (beta)
 
 ### Behaviour changes
