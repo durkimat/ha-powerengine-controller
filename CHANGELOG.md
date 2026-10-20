@@ -2,6 +2,12 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.161 (beta)
+
+### Behaviour changes
+
+None. This release is for the card (the engine v2 history chart); the app itself is unchanged.
+
 ## 0.9.160 (beta)
 
 ### Behaviour changes
