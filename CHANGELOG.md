@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.164 (beta)
+
+### Behaviour changes
+
+- **Engine v2 remembers which half-hours were in a smart slot.** Each recorded half-hour now says whether a smart slot covered it, so the history and plan charts can keep drawing that price as a dashed line after the slot has run. Half-hours recorded before this update carry no mark and stay solid.
+
+### Behind the scenes
+
+- `v2history`: `_Acc` counts the time spent in a slot (`readings.current_dispatch()`); the record, the history series and `sensor.pe_v2_recent` carry `"slot": true` only when most of the half-hour was in a slot. Test: `tests/test_v2history.py`.
+
 ## 0.9.163 (beta)
 
 ### Behaviour changes

@@ -110,14 +110,15 @@ class _Acc:
     def __init__(self, start: datetime):
         self.start = start
         self.modes: dict[str, float] = {}
-        self.sent = self.preview = self.total = 0.0
+        self.sent = self.preview = self.total = self.slot = 0.0
         self.level = self.import_p = self.export_p = self.value_p = self.buy_p = self.sell_p = None
         self.grid_in = self.grid_out = self.car = None            # kWh over the half-hour; None: never read
 
     def add(self, dt: float, mode: str, sent: bool, preview: bool, level, imp, exp, val, buy=None, sell=None,
-            grid_w=None, car_w=None) -> None:
+            grid_w=None, car_w=None, slot=False) -> None:
         self.modes[mode] = self.modes.get(mode, 0.0) + dt
         self.total += dt
+        self.slot += dt if slot else 0.0
         self.sent += dt if sent else 0.0
         self.preview += dt if preview else 0.0
         if level is not None:
@@ -142,6 +143,8 @@ class _Acc:
         rec = {"start": self.start.isoformat(timespec="seconds"), "mode": mode, "level_end": _r(self.level, 1),
                "import_p": _r(self.import_p), "export_p": _r(self.export_p), "value_p": _r(self.value_p),
                "sent": self.sent > half, "preview": self.preview > half}
+        if self.slot > half:                                     # a smart slot covered most of it
+            rec["slot"] = True
         for key, val, n in (("buy_line_p", self.buy_p, 2), ("sell_line_p", self.sell_p, 2),
                             ("grid_in_kwh", self.grid_in, 3), ("grid_out_kwh", self.grid_out, 3),
                             ("car_kwh", self.car, 3)):
@@ -201,7 +204,7 @@ class V2History:
     # --- recording ----------------------------------------
     def tick(self, now: datetime, *, mode: str, why: str = "", level=None, import_p=None, export_p=None,
              value_p=None, sent: bool = False, preview: bool = False, path: dict | None = None, buy_line_p=None,
-             sell_line_p=None, grid_w=None, car_w=None, replanned: bool = False) -> bool:
+             sell_line_p=None, grid_w=None, car_w=None, replanned: bool = False, slot: bool = False) -> bool:
         """One engine step. Returns True when a file was written."""
         local = now.astimezone(self.tz)
         day = local.date()
@@ -214,7 +217,7 @@ class V2History:
         dt = 0.0 if self._last_t is None else min(MAX_GAP_S, max(0.0, (now - self._last_t).total_seconds()))
         self._last_t = now
         self._acc.add(dt or 1.0, mode, sent, preview, level, import_p, export_p, value_p, buy_line_p, sell_line_p,
-                      grid_w, car_w)
+                      grid_w, car_w, slot)
         data = self.load(day)
         dirty = False
         if replanned and len(data.setdefault("replans", [])) < REPLANS_CAP:        # when the plan was worked out again
@@ -323,6 +326,8 @@ def attributes(data: dict, day: date, today: date, tz, in_control: str | None, l
                "sent": bool(x["sent"]) if x else False}
         if x and x.get("preview"):
             row["preview"] = True
+        if x and x.get("slot"):
+            row["slot"] = True
         if x:
             row.update(_extras(x))
         series.append(row)
@@ -365,6 +370,8 @@ def recent(rows_by_day: dict[str, dict], now: datetime, tz, hours: int = RECENT_
                 row.update(_extras(x))
                 if x.get("preview"):
                     row["preview"] = True
+                if x.get("slot"):
+                    row["slot"] = True
                 out.append(row)
     out.sort(key=lambda r: datetime.fromisoformat(r["t"]))
     changes = sorted((c for d in rows_by_day.values() for c in (d or {}).get("changes", []) if c.get("at")),
