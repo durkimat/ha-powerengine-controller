@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.160 (beta)
+
+### Behaviour changes
+
+- **The engine v2 history now also records the sun and the house at their real timing.** `sensor.pe_v2_flows` carries the solar and house power as they happened, in 5-minute steps, next to the grid and car. A day Home Assistant no longer holds detail for shows none.
+- **No other change to what the engine does.** The plan, the decisions and the inverter commands are untouched.
+
+### Behind the scenes
+
+- `real_flows` adds `sun` and `house` (kW x 0.5, like the others); the replay reads the solar plants for it (`history_entities(..., plants=True)`).
+
 ## 0.9.159 (beta)
 
 ### Behaviour changes
