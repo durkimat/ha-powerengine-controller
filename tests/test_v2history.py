@@ -380,3 +380,17 @@ def test_real_flows_with_nothing_read_is_none_and_all_quiet_is_empty_but_real():
     assert real_flows([_reading(0, None)], timezone.utc, date(2026, 10, 3)) is None
     quiet = real_flows([_reading(0, 0)], timezone.utc, date(2026, 10, 3))
     assert quiet["m"] == [] and quiet["imp"] == []
+
+
+def test_real_flows_also_carry_the_sun_and_the_house_when_they_were_read():
+    from datetime import date, timezone
+
+    from pe_core.v2flows import real_flows
+    a = _reading(0, 200, hour=1)
+    a.solar_power, a.house_power = 3000.0, 800.0
+    f = real_flows([a], timezone.utc, date(2026, 10, 3))
+    assert f["sun"] == [1.5] and f["house"] == [0.4]
+    assert "sun" not in real_flows([_reading(0, 200, hour=1)], timezone.utc, date(2026, 10, 3))
+    dark = _reading(0, 0, hour=1)
+    dark.solar_power, dark.house_power = 0.0, 0.0
+    assert real_flows([dark], timezone.utc, date(2026, 10, 3))["m"] == []        # nothing moving: still left out
