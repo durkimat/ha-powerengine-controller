@@ -136,3 +136,8 @@ want to change or remove a rule, read its row first: the incident is what the ru
 | The shortest charge or sale is 5 points in the beta profiles: 20 forced sales past where they paid | `settings.BUILTIN_PROFILES` |
 | A run's shortest run ends when it reaches its level, in the plan and the executor alike (they split on 0.1 point at 10:11 on 19 Oct) | `value._walk`, `execute._follow` |
 
+## 8.11 Owner decisions on the range (20 Oct 2026, 0.9.163)
+
+| Decision | Where |
+|---|---|
+| 2.2 beta's range is gentle, not firm, so the record is in the profile rather than a change on top of it. Replays of 7-16 Oct: gentle 1.10 GBP cheaper and 26 fewer mode changes; equal on synthetic dull days. No range at all cost 0.59 GBP (real) and 0.90 GBP (synthetic) more; lifting the range when the plan says it pays never lifted; optimistic caution lost 3.29 GBP on dull days | `settings.BUILTIN_PROFILES` |

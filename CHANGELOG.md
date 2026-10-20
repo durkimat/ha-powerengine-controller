@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.163 (beta)
+
+### Behaviour changes
+
+- **Engine v2's "2.2 beta" profile now has a gentle range instead of a firm one.** The battery still prefers 70 to 90%, but going above or below costs the plan much less: about 4p an hour to sit at 95% instead of 17.5p, so it fills up more readily when that avoids buying dear power later. In replays of 7 to 16 Oct this cost about £1.10 less, with 26 fewer mode changes, and made no difference on dull days. Removing the range altogether cost more, so the range stays. If you use 2.2 beta, the change applies on its own; a firmness you set yourself on top of the profile still wins. "2.1 beta" is unchanged.
+
+### Behind the scenes
+
+- `settings.BUILTIN_PROFILES["2.2 beta"]` sets `range_firmness: gentle`; its note says so. Decision log 8.11 records the simulator results.
+- Tests: `tests/test_engine_v2_profiles.py`.
+
 ## 0.9.162 (beta)
 
 ### Behaviour changes

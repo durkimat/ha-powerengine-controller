@@ -85,10 +85,11 @@ def test_the_catalogue_lists_the_profiles_and_defaults_follow_the_one_in_use():
 
 def test_the_2_2_beta_profile_is_2_1_beta_plus_the_new_settings_and_they_are_neutral_elsewhere():
     from pe_core.engine_v2.settings import BETA22_PROFILE, BETA_PROFILE, BUILTIN_PROFILES, V2Settings
-    new = {"hold_use", "free_arbitrage", "charge_max_import_p"}
+    new = {"hold_use", "range_firmness", "free_arbitrage", "charge_max_import_p"}
     p22, p21 = BUILTIN_PROFILES[BETA22_PROFILE], BUILTIN_PROFILES[BETA_PROFILE]
-    assert {k: v for k, v in p22.items() if k not in new} == {k: v for k, v in p21.items() if k != "hold_use"}
+    assert {k: v for k, v in p22.items() if k not in new} == {k: v for k, v in p21.items() if k not in new}
     assert new <= set(p22)
     assert p22["charge_max_import_p"] == 15.0 and p22["hold_use"] == "car and reserve" and p21["hold_use"] == "any time"
+    assert p22["range_firmness"] == "gentle" and p21["range_firmness"] == "firm"
     d = V2Settings()
     assert (d.hold_use, d.free_arbitrage, d.charge_max_import_p) == ("cheap times", False, 0.0)

@@ -286,14 +286,16 @@ BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
         "min_run_pct": 5, "slot_floor_soc": 80,
     },
 }
+# 2.2 beta's range is gentle, not firm: on 7-16 Oct the replays cost about 1.10 GBP less with 26 fewer mode changes, and
+# the same on dull synthetic days (20 Oct). Removing the range cost money.
 BUILTIN_PROFILES[BETA22_PROFILE] = {**BUILTIN_PROFILES[BETA_PROFILE], "hold_use": "car and reserve",
-                                    "free_arbitrage": True, "charge_max_import_p": 15.0}
+                                    "range_firmness": "gentle", "free_arbitrage": True, "charge_max_import_p": 15.0}
 BUILTIN_NOTES = {
     DEFAULT_PROFILE: "Engine v2's own defaults.",
     BETA_PROFILE: "A firm range of 70 to 90%, charges and sales of at least 5 points, and the battery kept above 80% "
                   "while a smart slot is counted on. Beta.",
-    BETA22_PROFILE: "2.1 beta, and Hold only for the car and the reserve, free power that may also sell, and no grid "
-                    "charge above 15p. Beta.",
+    BETA22_PROFILE: "2.1 beta with a gentle range, and Hold only for the car and the reserve, free power that may also "
+                    "sell, and no grid charge above 15p. Beta.",
 }
 
 # Settings that belong to the house, not to a way of tuning the engine: a profile never holds or changes them.
