@@ -231,3 +231,36 @@ def test_whole_house_off_keeps_the_fixed_overnight_window_and_skips_certainty():
     day = [s for s in off if s.smart_slot and not s.overnight]
     assert day and all(s.certainty is None and s.slot_price is None for s in day)      # no weighting off-window
     assert any(s.smart_slot and not s.overnight and s.certainty == 0.5 for s in weighted)
+
+
+def test_an_unavailable_sensor_is_a_gap_not_its_last_value_held():
+    t = datetime(2026, 10, 15, 1, 0, tzinfo=UTC)
+    rows = [{"state": "6000", "last_changed": t.isoformat()},
+            {"state": "unavailable", "last_changed": (t + timedelta(minutes=5)).isoformat()},
+            {"state": "500", "last_changed": (t + timedelta(minutes=60)).isoformat()}]
+    assert [v for _, v in parse_history(rows)] == [6000.0, 500.0]                 # as before by default
+    parsed = parse_history(rows, gaps=True)
+    assert [v for _, v in parsed] == [6000.0, None, 500.0]
+    means = half_hour_means(parsed, t + timedelta(minutes=90))
+    assert t not in means and t + timedelta(minutes=30) not in means              # 5 minutes known: too little
+    assert means[t + timedelta(minutes=60)] == pytest.approx(500.0)               # not 6000 carried through
+
+
+def test_the_profile_takes_the_apps_own_record_over_rebuilt_history(monkeypatch):
+    import sys
+    import types
+
+    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
+    hassapi.Hass = type("Hass", (), {})
+    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
+    sys.modules.pop("powerengine", None)
+    import powerengine as pe
+
+    s = datetime(2026, 10, 14, 1, 0, tzinfo=UTC)
+    app = types.SimpleNamespace(_hist_means={s: 2200.0, s + timedelta(minutes=30): 900.0}, _hist_fixed={s},
+                                loadstore=types.SimpleNamespace(means={s: 700.0}), tz=UTC, log=lambda *a, **k: None)
+    pe.PowerEngine._rebuild_profile(app)
+    assert app.profile.expected_w(s, UTC) == pytest.approx(700.0)
+    assert app.profile.days == pytest.approx(2 / 48)
