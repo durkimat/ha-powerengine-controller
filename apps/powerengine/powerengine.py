@@ -1954,7 +1954,7 @@ class PowerEngine(hass.Hass):
         flows = None
         try:
             start = datetime(day.year, day.month, day.day, tzinfo=tz).astimezone(timezone.utc)
-            plain, _ = history_entities(self.cfg, V2_FLOW_ROLES)
+            plain, _ = history_entities(self.cfg, V2_FLOW_ROLES, plants=True)
             timelines = {eid: Timeline(self._history(eid, start, v2_day_end(day, tz)),
                                        {"unit_of_measurement": self.get_state(eid, attribute="unit_of_measurement")})
                          for eid in plain}

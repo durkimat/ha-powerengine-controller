@@ -40,15 +40,16 @@ def flow_id(cfg: Config) -> str:
     return f"{FLOW_VERSION}-{digest}"
 
 
-def history_entities(cfg: Config, roles=COST_ROLES) -> tuple[list[str], list[str]]:
+def history_entities(cfg: Config, roles=COST_ROLES, plants: bool = False) -> tuple[list[str], list[str]]:
     """(entities fetched without attributes, entities fetched with attributes) for a replay. `roles` narrows it to
-    what a particular use needs (the solar plants and the attribute roles are fetched only for the full set)."""
+    what a particular use needs (the solar plants are fetched for the full set or with `plants`; the attribute roles
+    only for the full set)."""
     plain, full = [], []
     for role in roles:
         spec = cfg.inputs.get(role) or {}
         if "entity" in spec:
             plain.append(spec["entity"])
-    for plant in cfg.solar_plants if roles is COST_ROLES else []:
+    for plant in cfg.solar_plants if roles is COST_ROLES or plants else []:
         if plant.enabled and "entity" in plant.power:
             plain.append(plant.power["entity"])
     for role in ATTRIBUTE_ROLES if roles is COST_ROLES else ():
