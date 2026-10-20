@@ -136,7 +136,8 @@ def test_the_attributes_pair_ran_with_expected_and_flag_previews(tmp_path):
 
 def test_a_half_hour_in_a_smart_slot_is_flagged_so_the_chart_can_draw_its_price_dashed(tmp_path):
     h = V2History(str(tmp_path), LON)
-    run_ticks(h, t(0, 0, 5), 61, mode="grid_charge", level=50.5, import_p=7.0, export_p=15.0, value_p=9.0, sent=True, slot=True)
+    run_ticks(h, t(0, 0, 5), 61, mode="grid_charge", level=50.5, import_p=7.0, export_p=15.0, value_p=9.0,
+              sent=True, slot=True)
     run_ticks(h, t(1, 0, 5), 61, mode="self_use", level=50.5, import_p=30.0, export_p=15.0, value_p=9.0, sent=True)
     rows = {r["t"]: r for r in h.attributes(DAY, DAY, "v2", True)["series"]}
     assert rows["2026-10-07T00:00:00+01:00"]["slot"] is True

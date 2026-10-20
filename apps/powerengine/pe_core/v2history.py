@@ -143,7 +143,7 @@ class _Acc:
         rec = {"start": self.start.isoformat(timespec="seconds"), "mode": mode, "level_end": _r(self.level, 1),
                "import_p": _r(self.import_p), "export_p": _r(self.export_p), "value_p": _r(self.value_p),
                "sent": self.sent > half, "preview": self.preview > half}
-        if self.slot > half:                                     # a smart slot covered most of it (the chart draws its price dashed)
+        if self.slot > half:                                     # a smart slot covered most of it
             rec["slot"] = True
         for key, val, n in (("buy_line_p", self.buy_p, 2), ("sell_line_p", self.sell_p, 2),
                             ("grid_in_kwh", self.grid_in, 3), ("grid_out_kwh", self.grid_out, 3),
