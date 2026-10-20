@@ -1543,7 +1543,7 @@ class PowerEngine(hass.Hass):
                 if not eid:
                     continue
                 try:
-                    job["rows"][key] += parse_history(self._history(eid, start, end), unit=job["units"][key])
+                    job["rows"][key] += parse_history(self._history(eid, start, end), unit=job["units"][key], gaps=True)
                 except Exception as err:
                     job["errors"] += 1
                     if job["errors"] == 1:
@@ -1557,7 +1557,7 @@ class PowerEngine(hass.Hass):
         if job["rows"].get("grid") and job["rows"].get("check"):
             def signed(key, role):
                 flip = -1.0 if (self.cfg.inputs.get(role) or {}).get("invert") else 1.0
-                return half_hour_means([(t, flip * v) for t, v in job["rows"][key]], job["now"])
+                return half_hour_means([(t, None if v is None else flip * v) for t, v in job["rows"][key]], job["now"])
             self._hist_means, self._hist_fixed = meter_corrected(
                 self._hist_means, signed("grid", "grid_power"), signed("check", "grid_power_reference"))
             self.log(f"Load history: {len(self._hist_fixed)} half-hours corrected by the check meter")
@@ -1602,10 +1602,11 @@ class PowerEngine(hass.Hass):
                 self._rebuild_profile()
 
     def _rebuild_profile(self):
-        # PowerEngine's own record wins, except where the history was corrected by the check meter (the record from
-        # before the correction was live holds the uncorrected figure)
-        fixed = getattr(self, "_hist_fixed", set())
-        means = {**self._hist_means, **{s: w for s, w in self.loadstore.means.items() if s not in fixed}}
+        # PowerEngine's own record wins; HA's history only fills the half-hours it lacks. The record is the live house
+        # load, already corrected by the check meter tick by tick; history rebuilt from two meters read at different
+        # moments (and either one dropping out) put 45 to 52 kWh days into the profile (14 to 19 Oct 2026, actual 19
+        # to 26), and the plan expected the house to draw about 2 kW all night.
+        means = {**self._hist_means, **self.loadstore.means}
         if not means:
             return
         self.profile = profile_from_means(means, datetime.now(timezone.utc), self.tz)

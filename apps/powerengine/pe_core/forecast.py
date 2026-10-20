@@ -67,15 +67,19 @@ class LoadProfile:
         return self.watts.get(other, DEFAULT_LOAD_W)
 
 
-def half_hour_means(samples: list[tuple[datetime, float]], end: datetime) -> dict[datetime, float]:
-    """Time-weighted mean power per half-hour from state-change samples (value holds until next change)."""
-    samples = sorted((t.astimezone(timezone.utc), v) for t, v in samples if v is not None)
-    if not samples:                                      # e.g. no car charging in the period
+def half_hour_means(samples: list[tuple[datetime, float | None]], end: datetime) -> dict[datetime, float]:
+    """Time-weighted mean power per half-hour from state-change samples (value holds until next change). A None
+    sample is a gap (the sensor was unavailable): nothing is counted until the next reading, so a stale value is
+    never carried through an outage."""
+    samples = sorted(((t.astimezone(timezone.utc), v) for t, v in samples), key=lambda x: x[0])
+    if not any(v is not None for _, v in samples):       # e.g. no car charging in the period
         return {}
     energy: dict[datetime, float] = defaultdict(float)   # W*s
     covered: dict[datetime, float] = defaultdict(float)  # s
     for (t0, v), nxt in zip(samples, samples[1:] + [(end, None)], strict=True):
         t1 = min(nxt[0], end)
+        if v is None:
+            continue
         while t0 < t1:
             s = slot_start(t0)
             seg_end = min(s + SLOT, t1)
@@ -140,10 +144,12 @@ def flatten_history(result) -> list[dict]:
     return [row for row in result if isinstance(row, dict)]
 
 
-def parse_history(rows: list | None, unit: str | None = None) -> list[tuple[datetime, float]]:
+def parse_history(rows: list | None, unit: str | None = None,
+                  gaps: bool = False) -> list[tuple[datetime, float | None]]:
     """AppDaemon/HA history rows ([{'state', 'last_changed'}...]) -> (time, W).
 
-    `unit` is the entity's unit when the rows carry no attributes (no_attributes=True).
+    `unit` is the entity's unit when the rows carry no attributes (no_attributes=True). With `gaps`, a row that is not
+    a number (unavailable, unknown) comes back as (time, None), for `half_hour_means` to count as a gap.
     """
     out = []
     for row in flatten_history(rows):
@@ -152,6 +158,8 @@ def parse_history(rows: list | None, unit: str | None = None) -> list[tuple[date
         try:
             v = float(row.get("state"))
         except (TypeError, ValueError):
+            if gaps:
+                out.append((t, None))
             continue
         out.append((t, v * 1000 if unit == "kW" else v))
     return [x for x in out if x[0] is not None]
