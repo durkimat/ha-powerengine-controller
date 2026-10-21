@@ -31,6 +31,7 @@ from pe_core import (
     fcsnap,
     gridcheck,
     hapackage,
+    inuse,
     ramcontrol,
     rctest,
     releases,
@@ -626,6 +627,9 @@ class PowerEngine(hass.Hass):
                         if live not in (UNVERIFIED, "unknown", "unavailable", "None"):
                             state = {"state": live, "attributes": {}}
                 checks[role.key] = check(role, spec, state)
+                use = (getattr(self, "_in_use", None) or {}).get(role.key)
+                if use and spec and "value" in spec and checks[role.key][0] == OK:
+                    checks[role.key] = (OK, use["text"])        # what the plan really uses, not just what was typed
             if uses_battery_pair(self.cfg) and "battery_power" in self.cfg.inputs:
                 checks["battery_power"] = (OK, "Not used: the charging and discharging sensors are mapped")
         missing = blocking(checks, required)
@@ -878,14 +882,19 @@ class PowerEngine(hass.Hass):
         _, fac, _ = self._cold_in_use()
         return learning.slot_factors([slot_start(now)], self._caution, fac)[0]
 
-    def _v2_facts(self, r):
-        """The battery and supply as the engine needs them, from the same sources v1's planner and controller use."""
-        p, pc = self._params(r), self._control_params(r)
+    def _hard_floor(self) -> float:
+        """Engine v2's hard floor: the typed one, raised to where the battery has been seen to stop."""
         floor = float(self.cfg.safety.get("battery_floor_soc", 12))
         lr = getattr(self, "learned", None)
         if lr is not None and self.cfg.features.get("learn_reserve", True) and lr.reserve_soc is not None \
                 and floor < lr.reserve_soc <= floor + 15:
             floor = float(lr.reserve_soc)                         # learned: the battery really stops here
+        return floor
+
+    def _v2_facts(self, r):
+        """The battery and supply as the engine needs them, from the same sources v1's planner and controller use."""
+        p, pc = self._params(r), self._control_params(r)
+        floor = self._hard_floor()
         limits = self._bms_limits(r, pc.max_charge_kw * 1000)
         bms_c = limits.charge_w / 1000 if limits.charge_source == "bms" and limits.charge_w is not None else None
         bms_d = limits.discharge_w / 1000 if limits.discharge_source == "bms" and limits.discharge_w is not None \
@@ -1302,6 +1311,7 @@ class PowerEngine(hass.Hass):
             self.learned = learning.learn(halves, p.max_charge_kw, p.max_discharge_kw, p.min_reserve_soc,
                                           p.export_limit_kw, self._cold_settings())
             lr, used = self.learned, self._params()
+            self._in_use = self._in_use_report()
             thr, fac, cold_learned = self._cold_in_use()
             rows = [
                 ("Max charge rate", f"{p.max_charge_kw:.2f} kW", lr.max_charge_kw, "kW", lr.charge_samples,
@@ -1332,11 +1342,56 @@ class PowerEngine(hass.Hass):
             n = sum(1 for r in table if r["learned"] != "not yet")
             self._publish_state("diag_learned", f"{n} learned", {"rows": table, "raw": lr.as_dict(),
                                                                   "cold_learned": cold_learned,
+                                                                  "use": self._in_use,
                                                                   "days": len({h["start"][:10] for h in halves})})
             if getattr(self, "_wlive", None) is not None:
                 self._cold_model(datetime.now(timezone.utc))      # the learned threshold may have moved
         except Exception as err:
             self.log(f"Could not learn from recorded use: {err!r}", level="WARNING")
+
+    def _in_use_report(self) -> dict:
+        """For each figure that can be measured or learned: the sentence the config page shows under it (what is in
+        use, and why it is not the measured or learned one). The numbers are the ones the plan reads."""
+        out: dict = {}
+        try:
+            p, used = params_from(self.cfg), self._params()
+            plain = self._params(conversion=False)
+            m, lr = getattr(self, "measured", None) or {}, getattr(self, "learned", None)
+            flag = lambda k: use_measured(self.cfg, k)           # noqa: E731
+            out["battery_capacity"] = inuse.capacity(
+                p.capacity_kwh, m.get("capacity_kwh"), int(m.get("capacity_samples") or 0),
+                bool(m.get("capacity_measured")), used.capacity_kwh, flag("battery_capacity"), MIN_MEASURE_DAYS)
+            out["battery_round_trip"] = inuse.round_trip(
+                p.efficiency, m.get("rte") if m.get("measured") else None, plain.efficiency, used.efficiency,
+                flag("battery_round_trip"), MIN_MEASURE_DAYS)
+            if lr is not None:
+                out["battery_max_charge_power"] = inuse.rate(
+                    p.max_charge_kw, lr.max_charge_kw, used.max_charge_kw, flag("battery_max_charge_power"), False)
+                out["battery_max_discharge_power"] = inuse.rate(
+                    p.max_discharge_kw, lr.max_discharge_kw, used.max_discharge_kw,
+                    flag("battery_max_discharge_power"), True)
+                f, kw = self.cfg.features, (lambda v: f"{v:g} kW")      # noqa: E731
+                out["ev_charger_kw"] = inuse.learned(
+                    kw(p.ev_charger_kw), kw(lr.car_kw) if lr.car_kw is not None else None, kw(used.ev_charger_kw),
+                    "Learn: car charge rate", bool(f.get("learn_car", True)), "it is outside 1 to 22 kW")
+                out["export_limit_kw"] = inuse.learned(
+                    kw(p.export_limit_kw), kw(lr.export_kw) if lr.export_kw is not None else None,
+                    kw(used.export_limit_kw), "Learn: export ceiling", bool(f.get("learn_export", True)),
+                    "it is not lower than the limit you entered")
+                pc = lambda v: f"{v:g}%"                                 # noqa: E731
+                out["min_reserve_soc"] = inuse.learned(
+                    pc(p.min_reserve_soc), pc(lr.reserve_soc) if lr.reserve_soc is not None else None,
+                    pc(used.min_reserve_soc), "Learn: where discharging stops", bool(f.get("learn_reserve", True)),
+                    "it is not within 15 points above the one you entered")
+                floor = float(self.cfg.safety.get("battery_floor_soc", 12))
+                floor_used = self._hard_floor()
+                out["battery_floor_soc"] = inuse.learned(
+                    pc(floor), pc(lr.reserve_soc) if lr.reserve_soc is not None else None, pc(floor_used),
+                    "Learn: where discharging stops", bool(f.get("learn_reserve", True)),
+                    "it is not within 15 points above the one you entered")
+        except Exception as err:
+            self.log(f"Could not work out what is in use: {err!r}", level="WARNING")
+        return out
 
     def _measure(self, revalue=True):
         """Measure battery efficiency and system losses; publish them; re-value costs if the efficiency moved."""

@@ -155,10 +155,11 @@ NOTIFY_DEFAULT = "persistent_notification"      # HA's own notification area (th
 
 # Labels and one-line help for the config page (kept next to the defaults they describe).
 SETTING_TEXT = {
-    "min_reserve_soc": ("Minimum reserve", "%", "PowerEngine never plans to take the battery below this."),
+    "min_reserve_soc": ("Minimum reserve", "%", "Engine 1 never plans to take the battery below this. Engine 2 has its "
+                                                "own Your reserve and the Battery's hard floor."),
     "battery_floor_soc": ("Battery's hard floor", "%",
                           "The lowest level the battery itself allows (its BMS cut-off). Engine v2 never goes "
-                          "below it, not even for a grid event. Engine v1 uses the Minimum reserve instead."),
+                          "below it, not even for a grid event. Engine v1 uses its Minimum reserve instead."),
     "other_controller": ("Other battery controller", "",
                          "Whether anything else also controls the battery. With none, PowerEngine does not check or "
                          "need the handover guards below, and Active is allowed as far as they are concerned. With "
@@ -209,7 +210,8 @@ SETTING_TEXT = {
                         "The export limit your DNO approved. PowerEngine never plans to export more than this."),
     "battery_wear_p": ("Battery wear cost", "p/kWh",
                        "Cost of wear per kWh through the battery: battery price ÷ (capacity kWh × rated cycles). "
-                       "E.g. £4,000 ÷ (18 × 8,000) ≈ 2.8p. Used only to decide whether arbitrage is worth it."),
+                       "E.g. £4,000 ÷ (18 × 8,000) ≈ 2.8p. Used only to decide whether arbitrage is worth it. "
+                       "Engine 1 only: engine 2 has its own Battery wear."),
     "arbitrage_min_margin_p": ("Arbitrage minimum profit", "p/kWh",
                                "Arbitrage runs only if, per kWh exported, export price − purchase price ÷ losses − "
                                "wear is at least this."),
@@ -232,8 +234,8 @@ SETTING_TEXT = {
                              "wears its memory). Higher means fewer, longer charge and sell periods; 0 ignores it."),
     "ram_max_power_w": ("RAM max power", "W",
                         "With RAM remote control: the highest force charge/discharge power the inverter accepts. "
-                        "A higher value is refused and the inverter keeps its previous power (yours accepts 5000 W, "
-                        "not 5200 W). PowerEngine never asks for more than this."),
+                        "A higher value is refused and the inverter keeps its previous power (one tested inverter "
+                        "accepts 5000 W but not 5200 W). PowerEngine never asks for more than this."),
     "inverter_max_output_w": ("Inverter max output", "W",
                               "With RAM remote control: the most the inverter can put out in total, solar and battery "
                               "together (6000 W for a 6 kW model). When the sun is using part of it, a force discharge "
@@ -276,12 +278,13 @@ SETTING_TEXT = {
     "control_method": ("Control method", "",
                        "How PowerEngine drives the inverter. Timed windows: programs the inverter's charge and "
                        "discharge times (stored in its EEPROM, so each change wears it). RAM remote control: sends "
-                       "Force charge / Force discharge / Off through SolaX Modbus's Battery control override "
+                       "Force charge / Force discharge / Off through the inverter integration's Battery control "
+                       "override "
                        "(temporary settings, no EEPROM writes), re-sent every RAM refresh; if PowerEngine stops, "
                        "the inverter returns to Self-Use by itself within about 5 minutes. Tested on the Tests tab."),
     "ram_refresh_min": ("RAM refresh", "min",
                         "With RAM remote control: how often the current command is re-sent. Must stay well inside "
-                        "the inverter's remote-control timeout (about 5 minutes on yours)."),
+                        "the inverter's remote-control timeout (about 5 minutes on the inverter tested)."),
     "battery_location": ("Battery location", "",
                          "Where the battery is, which sets how quickly it follows the outside temperature: how long "
                          "a cold spell takes to chill it, and to warm it back up."),
