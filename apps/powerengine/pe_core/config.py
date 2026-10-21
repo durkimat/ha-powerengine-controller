@@ -52,6 +52,7 @@ KNOWN_KEYS = frozenset(
         "engine_v2",
         "v2_profile",
         "v2_profiles",
+        "v2_split",
         "remove_entities",
     }
 )
@@ -75,7 +76,7 @@ FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smar
                     "engine_compare": True, "axle_stop_car": True}
 # name: (default, min, max) -- numeric safety settings, all validated
 INT_SAFETY = ("smart_max_requests_per_day",)     # whole numbers: a fractional value is rounded
-# Safety settings that became engine v2 settings: a saved value seeds the v2 setting (`SEED_FROM`), and is not an error.
+# Safety settings that became engine v2 settings: a saved value starts the v2 setting (`parse_v2` `legacy`); no error.
 MOVED_TO_V2 = frozenset({"smart_slot_certainty_pct"})      # 0.9.157: engine v2's `slot_odds_pct`
 
 SAFETY = {
@@ -646,8 +647,8 @@ def parse_config(data: Any) -> Config:
         v2_profile = data.get("v2_profile") or (profile_of("v2_1") if beta_alias else DEFAULT_PROFILE)
         if not isinstance(v2_profile, str) or (v2_profile not in BUILTIN_PROFILES and v2_profile not in v2_profiles):
             raise SettingsError(f"unknown engine v2 profile {v2_profile!r}")
-        engine_v2 = parse_v2(data.get("engine_v2"), features, {**safety, **moved},
-                             profile_values(v2_profile, v2_profiles))
+        legacy = {"slot_odds_pct": moved["smart_slot_certainty_pct"]} if "smart_slot_certainty_pct" in moved else None
+        engine_v2 = parse_v2(data.get("engine_v2"), profile_values(v2_profile, v2_profiles), legacy)
     except SettingsError as err:
         raise ConfigError(str(err)) from err
 

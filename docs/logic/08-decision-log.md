@@ -141,3 +141,11 @@ want to change or remove a rule, read its row first: the incident is what the ru
 | Decision | Where |
 |---|---|
 | 2.2 beta's range is gentle, not firm, so the record is in the profile rather than a change on top of it. Replays of 7-16 Oct: gentle 1.10 GBP cheaper and 26 fewer mode changes; equal on synthetic dull days. No range at all cost 0.59 GBP (real) and 0.90 GBP (synthetic) more; lifting the range when the plan says it pays never lifted; optimistic caution lost 3.29 GBP on dull days | `settings.BUILTIN_PROFILES` |
+
+## 8.12 Owner decisions on separate settings (21 Oct 2026, 0.9.168)
+
+| Decision | Where |
+|---|---|
+| Engine v2 reads nothing from engine v1's settings. Until 0.9.168 five v2 settings (arbitrage, grid events, grid event export rate, free power, Your reserve) followed v1's equivalents unless the v2 block held them, so a change on the v1 page moved v2 with no sign on the v2 page. Hardware and site facts (battery size and rates, hard floor, export limit, fuse, car charger kW, control settings, learned values) stay shared | `settings.parse_v2` (no `SEED_FROM`) |
+| Nothing changes on upgrade: once, at start-up, the values v2 was following that differ from its own default are written into the saved `engine_v2` block and the config is marked `v2_split: true` (kept by every save). A config without the mark that the app has not yet migrated is replayed with the same values | `settings.split_block`, `PowerEngine._split_v2_settings`, `compare/settings.py` |
+| Engine v2's battery wear stays its own setting (0 unless set), not seeded from engine 1's 2p | `wear_p` |

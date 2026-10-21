@@ -92,7 +92,7 @@ def test_the_highest_price_rule_lets_a_charge_through_only_where_marked():
 def test_a_saved_late_events_setting_is_ignored_not_an_error():
     from pe_core.engine_v2.settings import parse_v2
     saved = {"late_events": True, "late_events_per_week": 3, "late_event_hours": 2, "reserve_soc": 15}
-    s = parse_v2(saved, {}, {}, None)
+    s = parse_v2(saved)
     assert s.reserve_soc == 15 and not hasattr(s, "late_events")
 
 

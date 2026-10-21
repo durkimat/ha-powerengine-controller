@@ -26,7 +26,7 @@ the card's icons `pe:engine-v1` / `pe:engine-v2` (`window.customIcons`).
 
 Design `docs/plans/engine-v2.md` (owner's decisions in its status box and section 18), build plan `docs/plans/engine-v2-build.md`.
 A second, selectable engine: system setting `engine` (`v1` default, `v2`); v2's own settings are the `engine_v2:` block
-(`pe_core/engine_v2/settings.py`; missing keys seeded once from v1's equivalents: arbitrage, events, free power, reserve). New shared
+(`pe_core/engine_v2/settings.py`; until 0.9.168 missing keys followed v1 (arbitrage, events, free power, reserve); now separate, see decision 8.12). New shared
 safety setting `battery_floor_soc` (12 %, the BMS's own limit; v2's hard floor, v1 does not read it).
 
 - **Soft top and steady legs (0.9.113, `docs/plans/engine-v2.md` 18a, from the first live evening):** `top_up_cost_p` (5p/kWh) prices grid energy charged
@@ -82,7 +82,7 @@ Engine 2.1 beta (0.9.136) was engine v2 plus a settings overlay (`PROFILES["2.1"
 saved `top_up_cost_p: 5` beat the beta's 0 and a switch needed a manual fix. 0.9.137 makes the overlay a **profile**:
 `pe_core/engine_v2/settings.py` (`BUILTIN_PROFILES`: `defaults`, `2.1 beta`; `SITE_KEYS`: house settings a profile never holds; `parse_profiles`,
 `profile_values`). Config keys `v2_profile` (in use) and `v2_profiles` (yours, name -> values that differ from the defaults, max 10).
-Precedence: `engine_v2:` (changes on top) > the profile > the v1-seeded value (`SEED_FROM`) > the default. **Loading a profile is done by the
+Precedence: `engine_v2:` (changes on top) > the profile > the default (v1 is no longer read: 0.9.168, see decision 8.12). **Loading a profile is done by the
 card**: it sends the config with `v2_profile` set and the profile keys cleared from `engine_v2:`; the app only reads the result. `system.engine: v2_1`
 parses as engine v2 with the `2.1 beta` profile (a saved `v2_profile` wins), and `_engine_choice()` still returns `v2_1` while that profile is in
 use (the state-engine `choice`, logs). The profile list is `sensor.pe_diag_v2_profiles`, not the settings sensor (14.9 KB of the 16 KB limit).

@@ -43,6 +43,12 @@ def replay_config(owner: dict | None, template: dict, engine: str) -> str:
     cfg["operation"] = {**(cfg.get("operation") or {}), "mode": "active"}
     cfg["system"] = {**(cfg.get("system") or {}), "control_method": "ram_remote", "publisher": "direct",
                      "engine": engine, "house_load_includes_ev": True}      # (the world's house load includes the car)
+    if "v2_split" not in cfg:                          # not yet separated by the app: engine v2 keeps what it followed
+        from ..config import parse_config
+        from ..engine_v2.settings import profile_values, split_block
+        parsed = parse_config(cfg)
+        cfg["engine_v2"] = split_block(cfg.get("engine_v2"), parsed.features, parsed.safety,
+                                       profile_values(parsed.v2_profile, parsed.v2_profiles))
     if engine == "v1":                                      # the v2 preview under v1 changes nothing v1 does: skip it
         cfg["engine_v2"] = {**(cfg.get("engine_v2") or {}), "preview_when_v1": False}
     return yaml.safe_dump(cfg, sort_keys=False)
