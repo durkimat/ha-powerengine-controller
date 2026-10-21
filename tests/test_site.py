@@ -149,7 +149,7 @@ def test_migration_is_idempotent(make):
 
 
 def test_a_saved_site_is_left_alone(make):
-    make(PLAIN + "site: {tariff: octopus}\n")
+    make(PLAIN + "site: {tariff: octopus}\nv2_split: true\n")
     assert saved(make)["site"] == {"tariff": "octopus"} and backups(make) == []
 
 

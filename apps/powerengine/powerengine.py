@@ -84,7 +84,7 @@ from pe_core.energy import Recorder
 from pe_core.engine_v2 import publish as v2publish
 from pe_core.engine_v2 import triggers as v2_triggers
 from pe_core.engine_v2.engine import EngineV2
-from pe_core.engine_v2.settings import BETA_PROFILE, V2Settings
+from pe_core.engine_v2.settings import BETA_PROFILE, SettingsError, V2Settings, profile_values, split_block
 from pe_core.engine_v2.types import BatteryFacts, Situation, StepInput
 from pe_core.entities import (
     ENTITIES,
@@ -359,6 +359,7 @@ class PowerEngine(hass.Hass):
         elif self.cfg is not None:
             self.log(f"Loaded config from {self.cfg_path}: {len(self.cfg.inputs)} inputs, "
                      f"{len(self.cfg.solar_plants)} solar plant(s)")
+            self._split_v2_settings()
             self._add_site()
 
         try:                                           # the log from before this start (Health tab's log card)
@@ -2325,6 +2326,35 @@ class PowerEngine(hass.Hass):
         """The grid-event adapter the site names (Axle, or none)."""
         return self._adapter("_events_adapter", "event", "events")
 
+    def _split_v2_settings(self):
+        """Once (0.9.168), for a real config saved before engine v2 had settings of its own: write into the saved
+        `engine_v2` block the values it was following from v1 (arbitrage, grid events, free power, reserve), and mark
+        the config `v2_split`, so engine v2 behaves exactly as before and v1's settings no longer move it. If the save
+        fails the same values are used in memory and it tries again at the next start."""
+        cfg = self.cfg
+        if cfg is None or self._demo or "v2_split" in cfg.raw or not self._real_config_exists() \
+                or self.cfg_path not in self._real_paths:
+            return
+        try:
+            profile = profile_values(cfg.v2_profile, cfg.v2_profiles)
+            block = split_block(cfg.raw.get("engine_v2"), cfg.features, cfg.safety, profile)
+            new = {**copy.deepcopy(cfg.raw), "v2_split": True}
+            if block or "engine_v2" in cfg.raw:
+                new["engine_v2"] = block
+            text = ", ".join(f"{k} {v}" for k, v in block.items() if k not in (cfg.raw.get("engine_v2") or {})) \
+                or "none needed"
+            try:
+                self.cfg, backup = save_config(self._save_path(), new)
+            except OSError as err:
+                self.cfg = parse_config(new)
+                self.log(f"Engine v2 settings: could not save the split ({err}); using the same values in memory",
+                         level="WARNING")
+                return
+            self.log(f"Engine v2 settings are now its own; values it was following from v1: {text}; "
+                     f"backup: {backup or 'none'}")
+        except (ConfigError, SettingsError) as err:
+            self.log(f"Engine v2 settings: could not separate them from v1's ({err})", level="WARNING")
+
     # --- the site: which plant this home has ---------------------------------------------------
 
     def _add_site(self):
@@ -3939,6 +3969,8 @@ class PowerEngine(hass.Hass):
             old_devices = self.cfg.raw.get("devices") if self.cfg else None
             if old_devices is not None and "devices" not in new:     # a card that doesn't know devices keeps them
                 new = {**new, "devices": old_devices}
+            if self.cfg and "v2_split" in self.cfg.raw and "v2_split" not in new:
+                new = {**new, "v2_split": self.cfg.raw["v2_split"]}      # the mark that v2 has its own settings
             new, switched = self._site_guard(new)
             _, backup = save_config(self._save_path(), new)
         except (ConfigError, OSError) as err:

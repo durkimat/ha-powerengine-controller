@@ -4,9 +4,9 @@ v1 and v2 keep separate settings, even where the defaults match, so each engine 
 Facts about the house (battery size, fuse, the battery's hard floor, control method, ...) stay shared in the v1
 sections of config.yaml; only engine choices live here.
 
-A key missing from the saved block takes its value from v1's equivalent setting when there is one (`SEED_FROM`), else
-the catalogue default. So the first time v2 is chosen it starts from what the owner already set for v1; once the
-config page saves the block, the two are independent.
+A key missing from the saved block takes the profile's value, else the catalogue default: nothing is read from v1's
+settings. (Before 0.9.168 six of them followed v1 until saved; `split_block` wrote the values then in use into the
+saved block once, so nothing changed.)
 """
 
 from __future__ import annotations
@@ -129,14 +129,13 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
       "car_start_debounce_s", "car_stop_debounce_s", "stale_after_s", "soc_filter_gain", "price_churn_hold_s",
       "sample_s", "preview_when_v1")),
 )
-# v2 key -> (v1 config part, v1 key): where a missing v2 setting takes its first value from
-SEED_FROM = {
+# the v1 settings engine v2 followed until 0.9.168 (v2 key -> (v1 part, v1 key)); used once, by `split_block`
+SPLIT_FROM = {
     "arbitrage": ("features", "arbitrage"),
     "events": ("features", "axle"),
     "event_plus_export": ("features", "axle_plus_export"),
     "free_power": ("features", "free_power_days"),
     "reserve_soc": ("safety", "min_reserve_soc"),
-    "slot_odds_pct": ("safety", "smart_slot_certainty_pct"),
 }
 
 # the starting weights of the low, middle and high sun and house (learning moves them from there)
@@ -407,11 +406,26 @@ def _migrate(raw: dict) -> dict:
     return out
 
 
-def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None,
-             profile: dict | None = None) -> V2Settings:
+def split_block(raw: Any, features: dict, safety: dict, profile: dict | None = None) -> dict:
+    """The saved `engine_v2:` block with the values engine v2 was following from v1 written into it, for a config
+    saved before the settings were split (0.9.168). A key the block, the profile and v2's default would leave to v1 gets
+    v1's value when that differs, so engine v2 keeps behaving exactly as it did. Returns a new block."""
+    block = dict(raw) if isinstance(raw, dict) else {}
+    have = set(_migrate(block)) | set(profile or {})
+    v1 = {"features": features, "safety": safety}
+    for key, (part, v1_key) in SPLIT_FROM.items():
+        if key in have or v1_key not in v1[part]:
+            continue
+        value = v1[part][v1_key]
+        if value != SETTINGS[key][1]:
+            block[key] = value
+    return block
+
+
+def parse_v2(raw: Any, profile: dict | None = None, legacy: dict | None = None) -> V2Settings:
     """The `engine_v2:` block, validated. Missing keys come from the profile in use (`profile`: its values, see
-    `profile_values`), else v1's equivalent (`SEED_FROM`), else the default. Raises SettingsError for an unknown key, a
-    wrong type, a value out of range, or settings that contradict."""
+    `profile_values`), else `legacy` (values of settings that moved here from v1's safety block), else the default.
+    Raises SettingsError for an unknown key, a wrong type, a value out of range, or settings that contradict."""
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):
@@ -420,15 +434,14 @@ def parse_v2(raw: Any, features: dict | None = None, safety: dict | None = None,
     unknown = sorted(set(raw) - set(SETTINGS))
     if unknown:
         raise SettingsError(f"unknown engine v2 setting(s): {', '.join(unknown)}")
-    v1 = {"features": features or {}, "safety": safety or {}}
     values: dict[str, Any] = {}
     for key, spec in SETTINGS.items():
         if key in raw:
             values[key] = _check(key, raw[key])
         elif profile and key in profile:
             values[key] = _check(key, profile[key])
-        elif key in SEED_FROM and SEED_FROM[key][1] in v1[SEED_FROM[key][0]]:
-            values[key] = _check(key, v1[SEED_FROM[key][0]][SEED_FROM[key][1]])
+        elif legacy and key in legacy:
+            values[key] = _check(key, legacy[key])
         else:
             values[key] = spec[1]
     if values["range_low_soc"] >= values["range_high_soc"]:

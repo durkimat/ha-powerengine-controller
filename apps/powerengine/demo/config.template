@@ -4,6 +4,9 @@
 # Off in the demo: smart-charge requests (no supplier to ask), the tariff simulator, and cold-battery weather
 # (the last two fetch from the internet).
 schema_version: 1
+v2_split: true                 # engine v2 has settings of its own (0.9.168)
+engine_v2:
+  arbitrage: true
 inputs:
   battery_soc:
     entity: sensor.demo_inverter_battery_soc

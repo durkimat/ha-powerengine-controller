@@ -30,11 +30,11 @@ def test_the_profile_fills_what_the_config_does_not_set():
     assert s.prefer_self_use is False and s.min_run_pct == 5
 
 
-def test_what_you_saved_beats_the_profile_and_other_keys_still_seed_from_v1():
+def test_what_you_saved_beats_the_profile_and_nothing_follows_v1():
     beta = profile_values("2.1 beta")
-    s = parse_v2({"range_low_soc": 60, "executor": "lines", "reserve_soc": 15}, {"arbitrage": True}, {}, beta)
+    s = parse_v2({"range_low_soc": 60, "executor": "lines", "reserve_soc": 15}, beta)
     assert s.range_low_soc == 60 and s.reserve_soc == 15            # "executor" is retired: ignored, not an error
-    assert s.arbitrage is True  # seeded from v1's feature, as for engine v2
+    assert s.arbitrage is False  # engine v2's own default: v1's settings are not read
     assert s.level_top_rate_p == 200.0  # unsaved: the profile's
 
 
