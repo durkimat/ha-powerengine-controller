@@ -19,6 +19,11 @@ from ..names import fill
 # key: (kind, default, min, max, unit, label, help). kind: "number", "int", "bool" or "choice" (min = the options).
 # Since 0.9.157 the settings say what you want, not how the engine gets there: each maps onto the engine's own tuning
 # (the properties of V2Settings below). Everything here acts in the plan and in the live decision alike.
+# What each choice means to the engine's own tuning
+# firmness -> (top rate at 100% p/kWh/h, top points per doubling, bottom rate at the reserve, its points per doubling)
+FIRMNESS_CURVES = {"off": (0.0, 2.0, 0.0, 5.0), "gentle": (50.0, 3.0, 3.0, 5.0), "firm": (200.0, 3.0, 10.0, 5.0),
+                   "strict": (500.0, 2.0, 50.0, 4.0)}
+SLOT_BOT_FACTOR = 30.0          # inside a smart slot the bottom curve's rate is this many times the usual
 HOLD_USE = ("car and reserve", "cheap times", "any time")
 FIRMNESS = ("off", "gentle", "firm", "strict")
 CAUTION = ("cautious", "balanced", "optimistic")
@@ -39,27 +44,33 @@ SETTINGS: dict[str, tuple] = {
                  "Hold lets the grid run the house while the battery keeps its charge. Car and reserve: only then. "
                  "Cheap times: also at a cheap rate. Any time: whenever that pays."),
     "charge_ceiling_soc": ('number', 100, 10, 100, '%', 'Highest grid charge',
-                 'A grid charge never goes above this. Sun can still fill the battery.'),
+                 'A grid charge stops at this level (a free-power session still charges to 100%). Sun can still '
+                 'fill the battery.'),
     "charge_max_import_p": ('number', 0.0, 0, 100, 'p/kWh', 'Highest price to charge at',
                  'No grid charge above this import price (a smart slot may bring less). 0: off.'),
     # --- the battery's range -----------------------------------------------------------------------------------
     "reserve_soc": ('number', 12, 0, 100, '%', 'Your reserve',
-                 'Kept back in normal running; grid events may go below it.'),
+                 'Kept back in normal running; grid events may go below it. Engine 2 only: engine 1 has its own '
+                 'Minimum reserve.'),
     "range_low_soc": ("number", 20, 0, 100, "%", "Everyday range: bottom",
-                      "Below this, keeping energy in the battery gets dearer by the hour, so the plan stays above it "
-                      "where it can."),
+                      "Below this, being low costs more the lower it goes (per hour), so the plan stays above it "
+                      "where it can. Needs a firmness other than Off."),
     "range_high_soc": ("number", 90, 50, 100, "%", "Everyday range: top",
                        "Above this, holding energy gets dearer by the hour: the battery fills past it only when that "
                        "pays (a last fill before a dear stretch)."),
     "range_firmness": ("choice", "gentle", FIRMNESS, None, "", "How firmly the range holds",
                        "Off: no range. Gentle: a soft guide. Firm: the battery rarely leaves it. Strict: only to "
-                       "avoid a real loss."),
+                       "avoid a real loss. What each charges for the last kWh, per hour: to hold it at 100% and to be "
+                       "without it at your reserve (the cost falls away towards the range): " + "; ".join(
+                           f"{n.capitalize()} {t:g}p and {b:g}p" for n, (t, _, b, _) in FIRMNESS_CURVES.items()
+                           if n != "off") + "."),
     "min_run_pct": ("number", 0, 0, 100, "points", "Shortest charge or sale",
                     "A charge or sale runs at least this far (or to the edge of the range) before it stops or turns "
                     "round. Fewer, longer cycles. 0: off."),
     "slot_floor_soc": ("number", 0, 0, 100, "%", "Smart slots: keep above",
-                       "While the plan counts on a smart slot to refill the battery, it keeps the level above this, "
-                       "in case the slot is withdrawn. 0: the everyday range."),
+                       "While the plan counts on a smart slot to refill the battery, being below this level costs "
+                       f"{SLOT_BOT_FACTOR:g} times the usual rate, in case the slot is withdrawn. A soft cost, not a "
+                       "limit, and it does nothing while the firmness is Off. 0: the everyday range."),
     "slot_odds_pct": ("number", 60, 0, 100, "%", "Smart slot odds",
                       "How likely a smart slot outside the overnight window is to happen. The plan prices it at "
                       "these odds."),
@@ -67,7 +78,8 @@ SETTINGS: dict[str, tuple] = {
     "switch_cost_p": ('number', 2.0, 0, 20, 'p per change', 'Cost of a mode change',
                  'What each change of mode counts as costing. Higher: fewer changes, less profit.'),
     "wear_p": ("number", 0.0, 0, 20, "p/kWh", "Battery wear",
-               "Cost counted for each kWh the battery gives out (to the house or sold). 0: a sunk cost."),
+               "Cost counted for each kWh the battery gives out (to the house or sold). 0: a sunk cost. Engine 2 "
+               "only: engine 1 has its own Battery wear cost."),
     # --- the forecast ------------------------------------------------------------------------------------------
     "forecast_caution": ("choice", "balanced", CAUTION, None, "", "Forecast caution",
                          "What the battery keeps for the house before it sells while energy is dear, until energy "
@@ -96,7 +108,8 @@ SETTINGS: dict[str, tuple] = {
     "price_churn_hold_s": ('int', 60, 0, 300, 's', 'Price churn hold',
                  'A smart-slot change and a price change wait this long for each other, so one re-plan sees both.'),
     "sample_s": ("int", 10, 5, 60, "s", "Sample interval",
-                 "How often the readings are checked against the conditions."),
+                 "How often the readings are checked against the conditions. A change takes effect when PowerEngine "
+                 "restarts."),
     "preview_when_v1": ('bool', True, None, None, '', 'Preview while engine v1 is in control',
                  'Show what engine v2 would do while v1 is in control. Nothing is sent.'),
 }
@@ -126,11 +139,6 @@ SEED_FROM = {
     "slot_odds_pct": ("safety", "smart_slot_certainty_pct"),
 }
 
-# What each choice means to the engine's own tuning
-# firmness -> (top rate at 100% p/kWh/h, top points per doubling, bottom rate at the reserve, its points per doubling)
-FIRMNESS_CURVES = {"off": (0.0, 2.0, 0.0, 5.0), "gentle": (50.0, 3.0, 3.0, 5.0), "firm": (200.0, 3.0, 10.0, 5.0),
-                   "strict": (500.0, 2.0, 50.0, 4.0)}
-SLOT_BOT_FACTOR = 30.0          # inside a smart slot the bottom curve's rate is this many times the usual
 # the starting weights of the low, middle and high sun and house (learning moves them from there)
 START_WEIGHTS = (25, 50, 25)
 

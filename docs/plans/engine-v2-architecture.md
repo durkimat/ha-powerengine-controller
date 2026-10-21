@@ -281,7 +281,7 @@ sensors, the history and the control path are the same. What differs:
 | Top and bottom of the battery | the comfort band and the top-up cost | exponential curves in the plan (`level_top_*`, `level_bot_*`), sharper bottom inside smart slots (`slot_bot_*`) |
 
 It has no separate settings block: it is a profile of the `engine_v2:` settings (`BUILTIN_PROFILES` in `settings.py`). Since
-0.9.157 "2.1 beta" is a firm 70 to 90% range, a shortest run of 20 points and an 80% slot floor, with Hold any time; "2.2 beta"
+0.9.157 "2.1 beta" is a firm 70 to 90% range, a shortest run of 5 points and an 80% slot floor, with Hold any time; "2.2 beta"
 adds Hold only for the car and the reserve, free power that may sell, and the 15p charge cap; since 0.9.163 its range is gentle.
 
 ## Things worth being clear about
