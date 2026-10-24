@@ -4,7 +4,7 @@
    {
     "key": "battery_soc",
     "label": "Battery state of charge",
-    "description": "How full the battery is. Used by every decision.",
+    "description": "How full the battery is.",
     "kind": "percent",
     "suggest": [
      "^sensor\\.solis_battery_soc$"
@@ -13,7 +13,7 @@
    {
     "key": "battery_power",
     "label": "Battery power",
-    "description": "Live charge/discharge power (unless the pair below is mapped).",
+    "description": "Live charge/discharge power (if no pair below).",
     "kind": "power",
     "signed": true,
     "sign_note": "+ discharging, - charging",
@@ -120,7 +120,7 @@
    {
     "key": "battery_temperature",
     "label": "Battery temperature",
-    "description": "The battery's own sensor, instead of the estimate.",
+    "description": "The battery's own sensor, not the estimate.",
     "kind": "temperature",
     "required": "no",
     "suggest": [
@@ -130,7 +130,7 @@
    {
     "key": "battery_bms_charge_limit",
     "label": "BMS charge limit",
-    "description": "The battery's own charge limit (A); commands stay under it.",
+    "description": "The battery's own charge limit (A).",
     "kind": "text",
     "required": "no",
     "suggest": [
@@ -160,7 +160,7 @@
    {
     "key": "inverter_min_soc",
     "label": "Inverter minimum SoC",
-    "description": "The inverter's own floor, as a safety cross-check.",
+    "description": "The inverter's own floor, as a cross-check.",
     "kind": "percent",
     "required": "no",
     "domains": [
@@ -235,7 +235,7 @@
    {
     "key": "house_load_power",
     "label": "House load",
-    "description": "Household consumption (the car is subtracted if included).",
+    "description": "Household consumption (car subtracted if in it).",
     "kind": "power",
     "suggest": [
      "^sensor\\.solis_house_load$"
@@ -244,7 +244,7 @@
    {
     "key": "house_load_today",
     "label": "House load today",
-    "description": "Household energy used today, for costs and losses.",
+    "description": "Household energy used today, for costs.",
     "kind": "energy",
     "suggest": [
      "^sensor\\.solis_house_load_today$"
@@ -388,7 +388,7 @@
    {
     "key": "ev_charge_power",
     "label": "Car charging power",
-    "description": "Live charging power, to separate car from house load.",
+    "description": "Live charging power, to split car from house.",
     "kind": "power",
     "suggest": [
      "^sensor\\.myenergi_.*_power_charging$"
@@ -397,7 +397,7 @@
    {
     "key": "ev_energy_today",
     "label": "Car energy today",
-    "description": "Energy into the car today, for the car's share of costs.",
+    "description": "Energy into the car today, for its share of costs.",
     "kind": "energy",
     "suggest": [
      "^sensor\\.myenergi_zappi_.*_energy_used_today$"
@@ -453,7 +453,7 @@
    {
     "key": "axle_event_active",
     "label": "Grid event active",
-    "description": "On during a grid event run by Axle (triggers force discharge).",
+    "description": "On during a grid event run by Axle.",
     "kind": "binary",
     "required": "axle",
     "domains": [
@@ -467,7 +467,7 @@
    {
     "key": "axle_event_start",
     "label": "Grid event start",
-    "description": "Start of the next grid event, to hold charge for it.",
+    "description": "Start of the next grid event.",
     "kind": "timestamp",
     "required": "axle",
     "suggest": [
@@ -487,7 +487,7 @@
    {
     "key": "axle_direction",
     "label": "Grid event direction",
-    "description": "Import or export event (only export is acted on).",
+    "description": "Import or export (only export is acted on).",
     "kind": "text",
     "required": "no",
     "suggest": [
@@ -511,7 +511,7 @@
    {
     "key": "free_power_next_start",
     "label": "Next free session start",
-    "description": "Start of the next free session, for planning.",
+    "description": "Start of the next free session.",
     "kind": "timestamp",
     "required": "free_power",
     "suggest": [
@@ -527,6 +527,22 @@
     "suggest": [
      "^sensor\\.edf_energy_.*_next_free_electricity_session_end$"
     ]
+   },
+   {
+    "key": "free_power_events",
+    "label": "All free sessions",
+    "description": "Every session, to see a whole night.",
+    "kind": "list",
+    "required": "no",
+    "domains": [
+     "event",
+     "sensor"
+    ],
+    "attribute": "events",
+    "suggest": [
+     "^event\\.edf_energy_.*_session_events$"
+    ],
+    "unknown_ok": true
    },
    {
     "key": "timed_charge_start_hour",
@@ -661,7 +677,7 @@
    {
     "key": "timed_update_button",
     "label": "Apply timed windows",
-    "description": "Button that sends the window times to the inverter.",
+    "description": "Sends the window times to the inverter.",
     "kind": "control",
     "required": "no",
     "domains": [
@@ -740,7 +756,7 @@
    {
     "key": "guard_read_only",
     "label": "Other controller read-only",
-    "description": "Must be on (e.g. a controller's read-only switch).",
+    "description": "Must be on (e.g. a read-only switch).",
     "kind": "binary",
     "required": "no",
     "domains": [
@@ -756,7 +772,7 @@
    {
     "key": "guard_off_1",
     "label": "Other control off (1)",
-    "description": "Must be off (another control, such as an automation).",
+    "description": "Must be off (another control).",
     "kind": "binary",
     "required": "no",
     "domains": [
@@ -1121,6 +1137,13 @@
   "free_power_next_end": [
    [
     "^sensor\\.edf_energy_.*_next_free_electricity_session_end$"
+   ],
+   [],
+   null
+  ],
+  "free_power_events": [
+   [
+    "^event\\.edf_energy_.*_session_events$"
    ],
    [],
    null

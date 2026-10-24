@@ -245,7 +245,7 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None, tariff: 
                                                             ev_raw["session_kwh"])
 
     r.axle_active, r.axle_start, r.axle_end = events.read_event(state)
-    r.free_active, r.free_start, r.free_end = tariff.read_free_sessions(state)
+    r.free_active, r.free_start, r.free_end = tariff.read_free_sessions(state, r.now)
     r.offpeak_now = tariff.read_offpeak(state)
 
     r.forecast_today_kwh = forecast.day_kwh(attr("solar_forecast_today", forecast.attribute))

@@ -14,10 +14,10 @@ stays in `pe_core.smartcharge`; this class only says which entities and values a
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
-from ..parsing import State, Window, _is_on, _num, _rate, parse_time, parse_windows
+from ..parsing import State, Window, _is_on, _num, _rate, free_chain, parse_time, parse_windows
 from .base import Dispatch, GridEvent, HomeAssistant
 from .registry import register
 from .vocabulary import DISPATCH, DISPATCH_SHORT, GRID_EVENT, SMART_CHARGE, SUPPLIER, TARIFF
@@ -91,11 +91,24 @@ class KrakenTariff:
         off = state("offpeak_now")
         return _is_on(off) if off else None
 
-    def read_free_sessions(self, state: StateFn) -> tuple[bool, datetime | None, datetime | None]:
-        """(active now, next session start, next session end) for free-electricity sessions."""
-        return (_is_on(state("free_power_active")),
-                parse_time((state("free_power_next_start") or {}).get("state")),
-                parse_time((state("free_power_next_end") or {}).get("state")))
+    def read_free_sessions(self, state: StateFn,
+                           now: datetime | None = None) -> tuple[bool, datetime | None, datetime | None]:
+        """(active now, session start, session end) for free-electricity sessions. The next-session sensors show one
+        session at a time; the events list (when mapped) shows them all, so back-to-back sessions are joined into one
+        run and the end is the end of the night, not of its first hour."""
+        active = _is_on(state("free_power_active"))
+        start = parse_time((state("free_power_next_start") or {}).get("state"))
+        end = parse_time((state("free_power_next_end") or {}).get("state"))
+        listed = parse_windows(self._attr(state, "free_power_events", "events"))
+        if not listed:
+            return active, start, end
+        now = now or datetime.now(timezone.utc)
+        if start and end:
+            listed.append(Window(start, end))
+        run = free_chain(listed, now)
+        if run is None:
+            return active, start, end
+        return active or run.start <= now < run.end, run.start, run.end
 
     # --- the smart-charge request (which entities and values to write) -------------------
 

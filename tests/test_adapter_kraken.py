@@ -4,7 +4,7 @@ integration's real attribute shapes."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fixtures import BST, CONFIG, NOW, STATES, S, get_state
@@ -20,7 +20,7 @@ ROLE_ENTITY = {
     "import_rates_today": "event.rates_today", "import_rates_tomorrow": "event.rates_tomorrow",
     "smart_dispatches": "binary_sensor.dispatching", "offpeak_now": "binary_sensor.offpeak",
     "free_power_active": "binary_sensor.free_now", "free_power_next_start": "sensor.free_start",
-    "free_power_next_end": "sensor.free_end",
+    "free_power_next_end": "sensor.free_end", "free_power_events": "event.free_sessions",
 }
 
 def roles(states=None):
@@ -94,6 +94,44 @@ def test_free_sessions():
     active, start, end = t.read_free_sessions(roles(states))
     assert active is True and start.astimezone(BST).hour == 18 and end - start == timedelta(hours=1)
     assert t.read_free_sessions(roles({})) == (False, None, None)
+
+def _sessions(*spans):
+    return S("2026-09-22T18:00:00+00:00",
+             events=[{"code": f"c{i}", "source": "x", "start": a, "end": b} for i, (a, b) in enumerate(spans)])
+
+
+def test_back_to_back_free_sessions_are_one_night():
+    """The next-session sensors show the first hour; the events list shows all of it."""
+    now = datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc)
+    states = {"binary_sensor.free_now": S("off"), "sensor.free_start": S("2026-09-22T22:00:00+00:00"),
+              "sensor.free_end": S("2026-09-22T23:00:00+00:00"),
+              "event.free_sessions": _sessions(("2026-09-22T22:00:00+00:00", "2026-09-22T23:00:00+00:00"),
+                                               ("2026-09-22T23:00:00+00:00", "2026-09-23T07:00:00+00:00"),
+                                               ("2026-09-25T22:00:00+00:00", "2026-09-25T23:00:00+00:00"))}
+    active, start, end = KrakenTariff().read_free_sessions(roles(states), now)
+    assert (active, start.hour, end.day, end.hour) == (False, 22, 23, 7)
+    later = datetime(2026, 9, 23, 0, 30, tzinfo=timezone.utc)
+    assert KrakenTariff().read_free_sessions(roles(states), later)[0] is True
+
+
+def test_a_gap_ends_the_run_and_finished_sessions_are_ignored():
+    now = datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc)
+    states = {"event.free_sessions": _sessions(("2026-09-22T06:00:00+00:00", "2026-09-22T07:00:00+00:00"),
+                                               ("2026-09-22T22:00:00+00:00", "2026-09-22T23:00:00+00:00"),
+                                               ("2026-09-23T01:00:00+00:00", "2026-09-23T03:00:00+00:00"))}
+    assert KrakenTariff().read_free_sessions(roles(states), now)[1:] == (
+        datetime(2026, 9, 22, 22, tzinfo=timezone.utc), datetime(2026, 9, 22, 23, tzinfo=timezone.utc))
+
+
+def test_an_empty_or_missing_events_list_leaves_the_sensors_in_charge():
+    now = datetime(2026, 9, 22, 12, 0, tzinfo=timezone.utc)
+    states = {"sensor.free_start": S("2026-09-22T22:00:00+00:00"), "sensor.free_end": S("2026-09-22T23:00:00+00:00"),
+              "event.free_sessions": _sessions()}
+    want = (False, datetime(2026, 9, 22, 22, tzinfo=timezone.utc), datetime(2026, 9, 22, 23, tzinfo=timezone.utc))
+    assert KrakenTariff().read_free_sessions(roles(states), now) == want
+    del states["event.free_sessions"]
+    assert KrakenTariff().read_free_sessions(roles(states), now) == want
+
 
 def test_read_puts_the_same_values_in_readings():
     """read() through the adapter gives what it always did (also covered by the replay)."""
