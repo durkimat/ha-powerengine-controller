@@ -183,6 +183,9 @@ the car is full).
 * **Grid event (Axle)** and **free-power sessions** come from their adapters as start/end windows. Slots that overlap are
   flagged. The event slot is always force-discharge in the plan (when the feature is on); free-power slots are always
   grid-charge.
+* The next-session sensors show one session at a time. When the **All free sessions** list (the EDF events entity's
+  `events` attribute) is mapped, sessions that touch or overlap are joined into one run (`parsing.free_chain`), so a night
+  offered as several back-to-back sessions is one free window. Without it, or with an empty list, the sensors are used.
 * A **scheduled** event (not yet active) sets `axle_state() == "scheduled"`; **active** sets `"active"`.
 * Event value: **£1.00 per kWh** (`Params.axle_value`, a code constant; it is *not* a setting), plus the supplier's export
   rate on top when `axle_plus_export` is on (EDF: £1 + 15p). Event power: the battery's maximum discharge, since the

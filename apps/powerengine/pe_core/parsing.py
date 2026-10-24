@@ -19,6 +19,20 @@ class Window:
     value: float | None = None           # rate (GBP/kWh), or kWh for dispatches
 
 
+def free_chain(windows: list[Window], now: datetime) -> Window | None:
+    """The free window in progress, or failing that the next one, with every window that touches or overlaps it joined
+    on: a night offered as several back-to-back sessions is one free run."""
+    wins = sorted((w for w in windows if w.end > w.start and w.end > now), key=lambda w: w.start)
+    if not wins:
+        return None
+    start, end = wins[0].start, wins[0].end
+    for w in wins[1:]:
+        if w.start > end + timedelta(minutes=1):
+            break
+        end = max(end, w.end)
+    return Window(start, end)
+
+
 def _num(value: Any) -> float | None:
     try:
         n = float(value)
