@@ -146,6 +146,18 @@ def test_a_half_hour_in_a_smart_slot_is_flagged_so_the_chart_can_draw_its_price_
     assert recent["2026-10-07T00:00:00+01:00"]["slot"] is True and "slot" not in recent["2026-10-07T01:00:00+01:00"]
 
 
+def test_a_half_hour_in_a_free_session_is_flagged_so_the_chart_can_say_so(tmp_path):
+    h = V2History(str(tmp_path), LON)
+    run_ticks(h, t(0, 0, 5), 61, mode="grid_charge", level=50.5, import_p=0.0, export_p=15.0, value_p=9.0,
+              sent=True, free=True)
+    run_ticks(h, t(1, 0, 5), 61, mode="self_use", level=50.5, import_p=30.0, export_p=15.0, value_p=9.0, sent=True)
+    rows = {r["t"]: r for r in h.attributes(DAY, DAY, "v2", True)["series"]}
+    assert rows["2026-10-07T00:00:00+01:00"]["free"] is True and rows["2026-10-07T00:00:00+01:00"]["import_p"] == 0
+    assert "free" not in rows["2026-10-07T01:00:00+01:00"]
+    recent = {r["t"]: r for r in h.recent_attributes(t(2, 10))["series"]}
+    assert recent["2026-10-07T00:00:00+01:00"]["free"] is True and "free" not in recent["2026-10-07T01:00:00+01:00"]
+
+
 def test_the_sensor_attributes_stay_under_15kb_on_the_busiest_day(tmp_path):
     h = V2History(str(tmp_path), LON)
     pth = path_from(t(0, 0, 5))

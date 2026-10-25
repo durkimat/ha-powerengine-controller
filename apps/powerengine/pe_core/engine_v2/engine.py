@@ -128,6 +128,8 @@ class EngineV2:
             self.last_import_p = imp
         if r.export_rate is not None:
             self.last_export_p = exp
+        if r.free_active and self.s.free_power:           # the meter still shows the tariff rate; the session is free
+            imp = 0.0
         ln = None
         if self.vr is not None and level is not None and imp is not None:
             try:

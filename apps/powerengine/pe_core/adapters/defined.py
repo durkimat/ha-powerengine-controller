@@ -223,7 +223,7 @@ class DefinedInverter:
             return None, None
         return self.role_entity(self._clock["clock_role"]), self.role_entity(self._clock["sync_role"])
 
-    def clock_status(self, now: datetime, tz) -> dict:
+    def clock_status(self, now: datetime, tz, retries: int = 0) -> dict:
         """drift (s, + = inverter ahead), when it was last synced, whether a sync is due, and the raw reading."""
         eid, button = self.clock_entities()
         st = (self.ha.get_state(eid, attribute="all") or {}) if eid else {}
@@ -231,7 +231,7 @@ class DefinedInverter:
         read_at = datetime.fromisoformat(read_at) if read_at else None
         drift = clock.drift_seconds(st.get("state"), read_at, tz)
         synced = clock.last_sync(self.ha.get_state(button), tz) if button else None
-        due = clock.sync_due(drift, synced, now)
+        due = clock.sync_due(drift, synced, now, retries)
         return {"drift": drift, "synced": synced, "due": due, "inverter_time": st.get("state")}
 
     def clock_sync_write(self) -> Write:

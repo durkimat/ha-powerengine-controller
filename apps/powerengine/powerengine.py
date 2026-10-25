@@ -1944,7 +1944,8 @@ class PowerEngine(hass.Hass):
                            buy_line_p=ln.buy_line_p if ln else None, sell_line_p=ln.sell_line_p if ln else None,
                            grid_w=getattr(readings, "grid_power", None), car_w=getattr(readings, "ev_power", None),
                            replanned=bool(out.revalued),
-                           slot=bool(readings is not None and readings.current_dispatch() is not None))
+                           slot=bool(readings is not None and readings.current_dispatch() is not None),
+                           free=bool(readings is not None and readings.free_active and self.cfg.engine_v2.free_power))
             if wrote:
                 self._publish_v2_history()
         except Exception as err:
@@ -3112,21 +3113,30 @@ class PowerEngine(hass.Hass):
             if not eid:
                 return
             now = datetime.now(timezone.utc)
-            status = self._inverter().clock_status(now, self.tz)
+            retries = getattr(self, "_clock_retries", 0)
+            status = self._inverter().clock_status(now, self.tz, retries)
             drift = status["drift"]
             old = getattr(self, "_clock_drift", None)
             self._clock_drift = drift
             synced, due = status["synced"], status["due"]
+            self._clock_synced = synced
+            if drift is not None and abs(drift) < clock.SYNC_DRIFT_S:
+                self._clock_retries = 0
             self._publish_if_changed("diag_inverter_clock", drift if drift is not None else "unknown", {
                 "inverter_time": status["inverter_time"],
                 "last_sync": synced.isoformat(timespec="seconds") if synced else None,
                 "sync_due": due, "sync_button": button})
             if due and button and self.mode.effective == "active" and not self._test_running():
+                if due == "retry":
+                    self._clock_retries = retries + 1
+                    self.log(f"The inverter clock is still {drift} s out after a sync; syncing again "
+                             f"({self._clock_retries} of {clock.MAX_RETRIES})", level="WARNING")
                 self.log(f"Syncing the inverter clock ({due}; drift {drift} s)")
                 self._write_why = "clock sync"
                 self._write([self._inverter().clock_sync_write()], {"inverter_clock_sync": button})
                 self._logbook(f"inverter clock synced ({due}, was {drift} s out)")
-            if (clock.finding(old) is None) != (clock.finding(drift) is None):
+            ram = self._control_method() == "ram_remote"
+            if (clock.finding(old, ram) is None) != (clock.finding(drift, ram) is None):
                 self._health()
         except Exception as err:
             self.log(f"Inverter clock check failed: {err!r}", level="WARNING")
@@ -3823,7 +3833,8 @@ class PowerEngine(hass.Hass):
                                                 max_kw=float(self.cfg.safety.get("ev_charger_kw", 7.4)),
                                                 min_charge_min=self._min_charge_min())
             h["smart_requests"] = self.smart.summary(datetime.now(timezone.utc), tz=self.tz)
-            f = clock.finding(getattr(self, "_clock_drift", None))
+            f = clock.finding(getattr(self, "_clock_drift", None), self._control_method() == "ram_remote",
+                              getattr(self, "_clock_synced", None), datetime.now(self.tz))
             if f:
                 h["findings"].append(f)
             from pe_core.health import finding_key
