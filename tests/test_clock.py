@@ -34,7 +34,9 @@ def test_sync_due():
     assert clock.sync_due(2, now - timedelta(days=7), now) == "routine"
     assert clock.sync_due(2, None, now) == "routine"
     assert clock.sync_due(90, now - timedelta(days=2), now) == "drift"
-    assert clock.sync_due(90, now - timedelta(hours=3), now) is None          # at most once a day for drift
+    assert clock.sync_due(90, now - timedelta(minutes=10), now) is None       # give a sync time to show
+    assert clock.sync_due(90, now - timedelta(hours=3), now) == "retry"       # one that did not take is repeated ...
+    assert clock.sync_due(90, now - timedelta(hours=3), now, retries=2) is None   # ... twice, then once a day
     assert clock.sync_due(None, now - timedelta(days=1), now) is None
 
 
@@ -43,3 +45,15 @@ def test_finding():
     f = clock.finding(3600)
     assert f["level"] == "problem" and "60 min ahead" in f["title"]
     assert clock.finding(-150)["level"] == "warning"
+
+
+def test_a_clock_out_with_ram_control_is_not_a_finding():
+    assert clock.finding(3600) is not None
+    assert clock.finding(3600, ram=True) is None
+
+
+def test_the_finding_says_when_a_sync_did_not_take():
+    now = datetime(2026, 10, 25, 6, 41, tzinfo=timezone.utc)
+    f = clock.finding(3596, False, now - timedelta(hours=5, minutes=39), now)
+    assert "did not change" in f["detail"] and "01:02" in f["detail"]
+    assert "did not change" not in clock.finding(3596, False, now - timedelta(days=3), now)["detail"]
