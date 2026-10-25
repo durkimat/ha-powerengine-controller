@@ -342,5 +342,18 @@ null
 {
 "t": "2026-09-27T20:00:00+00:00",
 "svc": "persistent_notification/create"
+},
+{
+"t": "2026-09-27T20:01:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_sync_rtc"
+},
+{
+"t": "2026-09-27T20:01:00+00:00",
+"svc": "logbook/log"
+},
+{
+"t": "2026-09-27T20:01:00+00:00",
+"warning": "The inverter clock is still -1500.0 s out after a sync; syncing again (1 of 2)"
 }
 ]
