@@ -50,15 +50,13 @@ def test_a_mode_changed_by_someone_else_during_the_event_is_not_overwritten_at_t
     assert not cs.held
 
 
-def test_stops_again_if_something_sets_the_mode_back_but_only_a_few_times():
+def test_keeps_stopping_again_for_the_whole_event_but_not_more_often_than_every_two_minutes():
     cs = CarStop()
     cs.step(at(0), True, "Eco+", OPTIONS)
     assert cs.step(at(1), True, "Eco+", OPTIONS) is None               # too soon after the last write
-    assert cs.step(at(3), True, "Eco+", OPTIONS).option == "Stopped"
-    assert cs.step(at(6), True, "Eco+", OPTIONS).option == "Stopped"
-    assert cs.step(at(9), True, "Eco+", OPTIONS).option == "Stopped"
-    assert cs.step(at(12), True, "Eco+", OPTIONS) is None              # gives up rather than fight for an hour
-    assert cs.step(at(60), False, "Stopped", OPTIONS).option == "Eco+"   # and still puts it back at the end
+    for minute in range(3, 60, 3):                                     # set back again and again for the hour
+        assert cs.step(at(minute), True, "Eco+", OPTIONS).option == "Stopped", minute
+    assert cs.step(at(60), False, "Stopped", OPTIONS).option == "Eco+"   # and it is put back at the end
 
 
 def test_an_unreadable_mode_changes_nothing_and_stays_held():
