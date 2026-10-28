@@ -10,8 +10,9 @@ None). The app does the reading, the writing and the saving. It remembers what i
 * it never stops a charger that was already stopped, and never restores one it did not stop;
 * it restores the mode it found (not always Eco+), and only if the charger still reads Stopped (if you or the
   charger changed it since, that choice stands);
-* if something sets the mode back during the event it stops it again, but only a few times and not more often than
-  every couple of minutes, so it never fights you for the whole event.
+* if something sets the mode back during the event it stops it again, not more often than every couple of minutes,
+  for as long as the event runs (27 Oct 2026: the Zappi went back to Eco+ within seconds of each stop and the old
+  cap of three retries gave up six minutes in). To keep a mode of your own through an event, turn `axle_stop_car` off.
 """
 
 from __future__ import annotations
@@ -21,7 +22,6 @@ from datetime import datetime
 
 STOPPED = "stopped"
 FALLBACK = "Eco+"                       # when the mode before the event can't be offered back
-MAX_STOPS_AFTER_FIRST = 3
 MIN_GAP_S = 120
 _UNREADABLE = ("", "unknown", "unavailable", "none")
 
@@ -71,7 +71,7 @@ class CarStop:
                     return None                    # already stopped by someone else: leave it as it is
                 self.held, self.previous, self.again, self.last = True, cur, 0, now
                 return Action(stopped, f"grid event: the car charger was {cur}, now stopped until the event ends")
-            if (not is_stopped and self.again < MAX_STOPS_AFTER_FIRST
+            if (not is_stopped
                     and (self.last is None or (now - self.last).total_seconds() >= MIN_GAP_S)):
                 self.again += 1
                 self.last = now
