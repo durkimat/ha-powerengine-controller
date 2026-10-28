@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.171 (beta)
+
+### Behaviour changes
+
+- **The car charger is kept stopped for the whole grid event.** On 27 Oct the Zappi went back to Eco+ within seconds of each stop, and PowerEngine gave up after three tries, six minutes into the event, leaving the car free to charge for the rest of it. It now stops the charger again whenever it finds the mode changed, no more often than every 2 minutes, until the event ends, and then puts the mode back as before.
+- **A mode you set by hand during an event is now set back to Stopped** every 2 minutes. To keep a mode of your own through events, turn off the `axle_stop_car` setting.
+
+### Behind the scenes
+
+- `carstop.py` drops `MAX_STOPS_AFTER_FIRST`; the 2-minute gap (`MIN_GAP_S`) stays. `tests/test_carstop.py` re-stops about every 3 minutes for an hour and restores at the end. The cause of the Zappi's mode being set back is not found; no HA automation, AppDaemon app or the myenergi integration writes it.
+
 ## 0.9.170 (beta)
 
 ### Behaviour changes
