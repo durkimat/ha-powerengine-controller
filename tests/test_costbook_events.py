@@ -25,3 +25,17 @@ def test_a_gap_starts_a_new_event(tmp_path):
     assert book.last_event["date"] == "2026-09-28" and book.last_event["kwh"] == 1.2
     book._note_event(_rec("2026-09-28T17:30:00+00:00", 0.05))        # next to no energy: ignored
     assert book.last_event["kwh"] == 1.2
+
+
+def test_a_half_hour_short_of_readings_still_joins_the_next(tmp_path):
+    """29 Oct 2026: the 18:00 half-hour covered 1617 s, and the next half-hour then began a new event."""
+    book = CostBook(str(tmp_path))
+    first = _rec("2026-10-29T18:00:00+00:00", 1.7)
+    first["seconds"] = 1617.6
+    book._note_event(first)
+    second = _rec("2026-10-29T18:30:00+00:00", 1.78)
+    second["seconds"] = 1707.2
+    book._note_event(second)
+    ev = book.last_event
+    assert ev["time"] == "18:00" and ev["half_hours"] == 2 and ev["kwh"] == 3.48
+    assert ev["end"].startswith("2026-10-29T19:00:00")

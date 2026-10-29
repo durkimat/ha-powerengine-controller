@@ -218,7 +218,10 @@ class CostBook:
         if not (v.get("event") and v.get("event_kwh", 0) >= 0.1):     # ignore a flag with next to no energy
             return
         start = datetime.fromisoformat(rec["start"])
-        end = start + timedelta(seconds=rec.get("seconds") or 1800)
+        # The slot's own end, not start + the seconds the recorder covered: a half-hour with a few minutes of missing
+        # readings is shorter than 1800 s, and its successor then looked like a new event (29 Oct 2026: 18:00 was
+        # recorded as 1617 s, so 18:30 started "another" event and the whole one showed as one half-hour).
+        end = start + timedelta(seconds=1800)
         vals = {"kwh": v["event_kwh"], "gross": v["event_gross"], "energy": v.get("event_energy", 0.0),
                 "net": v["event_net"]}
         ev = self.last_event
