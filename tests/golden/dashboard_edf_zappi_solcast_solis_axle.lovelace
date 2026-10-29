@@ -1048,6 +1048,28 @@ views:
             entity: switch.pe_ui_right_align
             name: Alignment
             grid_options: {columns: full, rows: 1}
+          # today so far: the headline below covers complete days only, so today, with any event, is told here
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
+              {%- set t = states.sensor.pe_cost_today %}
+              {%- set sc = t.attributes.scenarios if t and t.attributes.scenarios is defined else none %}
+              {%- if sc %}
+              {%- set ev = t.attributes.events or {} %}
+              {%- set e = states.sensor.pe_event_last %}
+              {%- set today = now().strftime('%Y-%m-%d') %}
+              **Today so far: {{ 'the day has paid you ' ~ gbp(-(sc.paid | float(0))) if (sc.paid | float(0)) < 0 else 'you have paid ' ~ gbp(sc.paid) }}**{{ " after Axle's payments" if ev.axle is defined else "" }}. With no solar or battery it would have been {{ gbp(sc.none) }}. This covers {{ t.attributes.half_hours }} of the day's 48 half-hours, with the standing charge for the whole day.
+              {%- if ev.axle is defined %}
+              Axle exported {{ ev.axle.kwh }} kWh today and paid you {{ gbp(ev.axle.gross) }} ({{ gbp(ev.axle.net) }} net of the battery energy it used).
+              {%- if e and e.attributes.type == 'axle' and e.attributes.date == today %} The last event ran from {{ e.attributes.time }} to {{ as_timestamp(e.attributes.end) | timestamp_custom('%H:%M') }}.{% endif %}
+              {%- endif %}
+              {%- if ev.free_power is defined %}
+              Free power today: {{ ev.free_power.kwh }} kWh, a net {{ gbp(ev.free_power.net) }}.
+              {%- endif %}
+              {%- else %}
+              **Today so far:** nothing recorded yet.
+              {%- endif %}
           - type: markdown
             grid_options: {columns: full}
             content: |-
