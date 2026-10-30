@@ -633,6 +633,7 @@ def test_waterfall_negative_total_is_a_day_you_earned_money():
                 events_metered=0.0, paid=-3.0)]
     w = waterfall(days, "yesterday")
     assert w["steps"][-1]["value"] == pytest.approx(-3.0)
+    assert w["steps"][-1]["label"] == "You were paid"
 
 
 def test_waterfall_periods_select_the_right_days():

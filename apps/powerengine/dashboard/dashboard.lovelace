@@ -1063,7 +1063,7 @@ views:
               {%- set ev = t.attributes.events or {} %}
               {%- set e = states.sensor.pe_event_last %}
               {%- set today = now().strftime('%Y-%m-%d') %}
-              **Today so far: {{ 'the day has paid you ' ~ gbp(-(sc.paid | float(0))) if (sc.paid | float(0)) < 0 else 'you have paid ' ~ gbp(sc.paid) }}**{{ " after <<event>>'s payments" if ev.axle is defined else "" }}. With no solar or battery it would have been {{ gbp(sc.none) }}. This covers {{ t.attributes.half_hours }} of the day's 48 half-hours, with the standing charge for the whole day.
+              **Today so far: {{ 'you have been paid ' ~ gbp(-(sc.paid | float(0))) if (sc.paid | float(0)) < -0.005 else 'you have paid ' ~ gbp(sc.paid) }}**{{ " after <<event>>'s payments" if ev.axle is defined else "" }}. With no solar or battery it would have been {{ gbp(sc.none) }}. This covers {{ t.attributes.half_hours }} of the day's 48 half-hours, with the standing charge for the whole day.
               {%- if ev.axle is defined %}
               <<event>> exported {{ ev.axle.kwh }} kWh today and paid you {{ gbp(ev.axle.gross) }} ({{ gbp(ev.axle.net) }} net of the battery energy it used).
               {%- if e and e.attributes.type == 'axle' and e.attributes.date == today %} The last event ran from {{ e.attributes.time }} to {{ as_timestamp(e.attributes.end) | timestamp_custom('%H:%M') }}.{% endif %}
@@ -1089,7 +1089,7 @@ views:
               {%- set pe_step = sv(p.steps, 'PowerEngine') | float(0) %}
               {%- set solar_tariff = no_batt + solar_step + tariff_step %}
 
-              **{{ label }}: you paid {{ gbp(paid) }}**{{ " after <<event>>'s payments" if has_axle else "" }}. With no solar or battery it would have been {{ gbp(no_batt) }}, with solar and your <<tariff>> alone {{ gbp(solar_tariff) }}. **The battery and PowerEngine saved {{ gbp(-pe_step) }}** on top of that.
+              **{{ label }}: {{ 'you were paid ' ~ gbp(-paid) if paid < -0.005 else 'you paid ' ~ gbp(paid) }}**{{ " after <<event>>'s payments" if has_axle else "" }}. With no solar or battery it would have been {{ gbp(no_batt) }}, with solar and your <<tariff>> alone {{ gbp(solar_tariff) }}. **The battery and PowerEngine saved {{ gbp(-pe_step) }}** on top of that.
               {%- endif %}
               {%- endmacro %}
               {%- set periods = state_attr('sensor.pe_cost_waterfall', 'periods') or {} %}
@@ -1116,7 +1116,7 @@ views:
               - **Solar, Tariff:** what your solar and your <<tariff>>'s cheap rates would each have saved.
               - **PowerEngine:** what the battery and PowerEngine saved on top of that, by choosing when to charge, discharge and export. It is the real metered cost of your normal half-hours, set against the line before it. The fold-out below splits it into the battery's own part and PowerEngine's. Energy bought for later or used from earlier counts on the day it was bought or used, so a single day can look dearer or cheaper than the battery really made it; it evens out over a week.
               - **<<event>> & free power:** the energy <<event>> exported, and the free-power half-hours, which are kept out of the everyday figures (the rest of an <<event>> half-hour, such as house load and car charging, stays in the everyday steps). Negative means money in: <<event>>'s £1/kWh plus <<supplier>>'s export payment.
-              - **You paid:** the real total for the period, after <<event>>'s payments.
+              - **You paid** (or **You were paid**, when the total is below zero): the real total for the period, after <<event>>'s payments.
           # how the PowerEngine step was made: folded by default so the page stays short (the summary line carries the headline numbers)
           - type: markdown
             grid_options: {columns: full}
@@ -1779,7 +1779,7 @@ views:
               {%- set cur = w.ranking | selectattr('id', 'eq', 'current') | first %}
               **What your last {{ w.days }} days ({{ w.from }} to {{ w.to }}) would have cost on other tariffs**, with the battery run as well as possible on each. Costs are per month (30.4 days), standing charges and export income included.
 
-              You actually paid **£{{ '%.2f' | format(w.actual_per_month) }}** a month{{ ' (estimated for imported days)' if w.actual_estimated else '' }}{% if cur %}; on your tariff with the best battery strategy it would have been **£{{ '%.2f' | format(cur.per_month) }}**, the baseline below{% endif %}.
+              {{ 'You were actually paid' if w.actual_per_month < -0.005 else 'You actually paid' }} **£{{ '%.2f' | format(w.actual_per_month | abs) }}** a month{{ ' (estimated for imported days)' if w.actual_estimated else '' }}{% if cur %}; on your tariff with the best battery strategy it would have been **£{{ '%.2f' | format(cur.per_month) }}**, the baseline below{% endif %}.
               {%- set np = state_attr('sensor.pe_cost_simulator', 'new_products') %}{% if np %}
 
               New tariffs since the last run: {{ np | map(attribute='name') | join(', ') }}.{% endif %}
