@@ -48,6 +48,10 @@ from pe_core.adapters.null import NULL as NULL_ADAPTERS
 from pe_core.adapters.options import site_options
 from pe_core.adapters.publish import ad_would_alter, select_publisher
 from pe_core.adapters.solcast import ROLES as FORECAST_ROLES
+from pe_core.announce import allowed as alexa_allowed
+from pe_core.announce import due as alexa_due
+from pe_core.announce import message as alexa_message
+from pe_core.announce import readiness as alexa_readiness
 from pe_core.carstop import CarStop
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
@@ -74,7 +78,7 @@ from pe_core.control import KINDS, Write, readback_mismatches, release, writes_n
 from pe_core.costbook import KEEP_DAYS, MIN_MEASURE_DAYS, CostBook, cost_entity_states
 from pe_core.costs import METHOD_VERSION, waterfall
 from pe_core.dashboard import energy_flow_card, sync_dashboard
-from pe_core.decide import cheap_limit, decide
+from pe_core.decide import cheap_limit, decide, pre_axle_reserve
 from pe_core.demo.gate import DemoGate
 from pe_core.demo.pack import load_pack as load_demo_pack
 from pe_core.demo.world import DemoWorld
@@ -715,6 +719,7 @@ class PowerEngine(hass.Hass):
                 self._grid_check(readings)
                 self._record_costs(readings)
                 self._watch_events(readings)
+                self._announce_event(readings)
                 self._car_stop_step(readings)
                 self._track_slots(readings)
                 self._snapshot_forecast(readings)
@@ -2121,6 +2126,42 @@ class PowerEngine(hass.Hass):
             self._notify("axle", axle_message(r.axle_start, r.axle_end, r.now, self.tz))
         if r.free_start and r.free_start > r.now:
             self._notify("free_power", free_message(r.free_start, r.free_end, r.now, self.tz))
+
+    def _announce_event(self, r):
+        """Alexa reminders for a grid event: hours before it (default 8, 5, 2, 1 and as it starts), each said once,
+        never outside the allowed hours. Says the battery level and whether it looks ready (pe_core/announce.py)."""
+        n = self.cfg.notifications
+        if not n["events"].get("alexa") or not (r.axle_start and r.axle_end):
+            return
+        a = n["alexa"]
+        h = alexa_due(r.axle_start, r.axle_end, r.now, a["hours_before"])
+        if h is None:
+            return
+        key = f"alexa:{r.axle_start.isoformat()}:{h:g}"
+        if not self.notifier.should_send(key, r.now):
+            return
+        if not alexa_allowed(r.now, self.tz, a["earliest_weekday"], a["earliest_weekend"], a["latest"]):
+            self.notifier.mark(key, r.now)                       # too early or late: skip it, never say it later
+            self.log(f"Alexa reminder {h:g} h before the grid event skipped: outside the allowed hours")
+            return
+        timeline = (self._published.get("v2_timeline") or (None, None))[1]
+        need = None
+        try:
+            need = pre_axle_reserve(r, self.cfg)
+        except Exception:
+            pass
+        ready = alexa_readiness(timeline, r.axle_start, r.axle_end, r.battery_soc, need)
+        text = alexa_message(h, r.axle_start, r.axle_end, r.now, self.tz, r.battery_soc, ready, a["intro"])
+        said = 0
+        for service in a["services"]:
+            try:
+                self.call_service(service.replace(".", "/", 1), message=text, data={"type": "announce"})
+                said += 1
+            except Exception as err:
+                self.log(f"Could not announce via {service}: {err!r}", level="WARNING")
+        if said:
+            self.notifier.mark(key, r.now)
+            self.log(f"Alexa announced ({h:g} h before) on {said} of {len(a['services'])}: {text}")
 
     # --- the car charger during a grid event (pe_core/carstop.py) -----------------------
 
