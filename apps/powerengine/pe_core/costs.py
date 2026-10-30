@@ -358,7 +358,8 @@ def _steps_for(chosen: list[dict]) -> list[dict]:
     ]
     if round(sums["events_metered"] - sums["axle_income"], 2) != 0:
         steps_list.append({"label": f"{N('event')} & free power", "kind": "step", "value": r2(r6 - r5)})
-    paid_label = f"You paid (after {N('event')} payments)" if round(sums["axle_income"], 2) > 0 else "You paid"
+    verb = "You were paid" if r6 < -0.005 else "You paid"
+    paid_label = f"{verb} (after {N('event')} payments)" if round(sums["axle_income"], 2) > 0 else verb
     steps_list.append({"label": paid_label, "kind": "total", "value": r6})
     return steps_list
 

@@ -83,3 +83,10 @@ def test_notification_area_create_and_dismiss(monkeypatch, tmp_path):
                       {"title": "T", "message": "M", "notification_id": "powerengine_guard_absent"})]
     a._clear_notice("guard:absent")
     assert calls[-1] == ("persistent_notification/dismiss", {"notification_id": "powerengine_guard_absent"})
+
+
+def test_daily_message_says_were_paid_when_the_day_made_money():
+    s = {"date": "2026-09-25", "s0": 4.72, "actual": -1.20}
+    _, title, msg = daily_message(s)
+    assert title == "PowerEngine: yesterday you were paid £1.20"
+    assert msg == "You were paid £1.20 against £4.72 with no solar or battery."

@@ -106,8 +106,17 @@ def daily_message(summary: dict, steps: list[dict] | None = None) -> tuple[str, 
     if len(totals) == 2:
         base, paid = totals[0]["value"], totals[1]["value"]
         parts = ", ".join(f"{x['label']} {signed(x['value'])}" for x in steps if x["kind"] == "step")
-        body = f"You paid {gbp(paid)} against {gbp(base)} with no solar or battery. {parts}."
+        base_s = gbp(base)
+        tail = f" {parts}."
     else:
         paid = s["actual"]
-        body = f"You paid {gbp(paid)} against {gbp(s['s0'])} with no solar or battery."
-    return (f"daily:{s['date']}", f"PowerEngine: yesterday {gbp(paid)}", body)
+        base_s = gbp(s["s0"])
+        tail = ""
+    if paid < -0.005:
+        # money in, not a cost: say so rather than "You paid −£1.20"
+        title = f"PowerEngine: yesterday you were paid {gbp(-paid)}"
+        body = f"You were paid {gbp(-paid)} against {base_s} with no solar or battery.{tail}"
+    else:
+        title = f"PowerEngine: yesterday {gbp(paid)}"
+        body = f"You paid {gbp(paid)} against {base_s} with no solar or battery.{tail}"
+    return (f"daily:{s['date']}", title, body)
