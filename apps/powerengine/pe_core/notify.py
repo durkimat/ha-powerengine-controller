@@ -30,11 +30,16 @@ class Notifier:
                 pass
 
     def should_send(self, key: str, now: datetime) -> bool:
+        if key.startswith("alexa:"):                              # spoken reminders have their own schedule
+            return key not in self.sent
         return key not in self.sent and self.per_day.get(now.date().isoformat(), 0) < DAILY_CAP
 
     def mark(self, key: str, now: datetime) -> None:
         day = now.date().isoformat()
         self.sent[key] = now.isoformat(timespec="seconds")
+        if key.startswith("alexa:"):
+            self.save()
+            return
         self.per_day = {d: n for d, n in self.per_day.items() if d >= day} | {day: self.per_day.get(day, 0) + 1}
         if len(self.sent) > 500:                                  # keep the newest keys
             self.sent = dict(sorted(self.sent.items(), key=lambda kv: kv[1])[-300:])

@@ -148,10 +148,16 @@ NOTIFY_EVENTS = {
     "axle": (True, "Grid events", "When a grid event (<<event>>) is scheduled, with its time."),
     "free_power": (True, "Free-power sessions", "When a free-electricity session is announced."),
     "daily": (False, "Daily summary", "Each morning: yesterday's cost and savings."),
+    "alexa": (False, "Alexa announcements", "Spoken reminders before a grid event, saying whether the battery looks "
+                                            "ready. Choose the speakers and the allowed hours below."),
     "simulator": (True, "Tariff opportunities", "When the overnight Simulator finds a tariff that would have cost "
                                                 "noticeably less, or new tariffs appear."),
 }
 _NOTIFY_SERVICE = re.compile(r"^notify\.[a-z0-9_]+$")
+# Alexa announcements: nothing is spoken before the earliest time (later at weekends) or after the latest
+ALEXA_DEFAULT = {"services": ["notify.alexa_media_everywhere"], "hours_before": [8, 5, 2, 1, 0],
+                 "earliest_weekday": "07:30", "earliest_weekend": "09:00", "latest": "21:00",
+                 "intro": "Daddybot here."}
 NOTIFY_DEFAULT = "persistent_notification"      # HA's own notification area (the bell); no phone needed
 
 # Labels and one-line help for the config page (kept next to the defaults they describe).
@@ -526,7 +532,7 @@ def _parse_notifications(raw: Any) -> dict[str, Any]:
     raw = raw or {}
     if not isinstance(raw, dict):
         raise ConfigError("'notifications' must be a mapping")
-    unknown = sorted(set(raw) - {"service", "events"})
+    unknown = sorted(set(raw) - {"service", "events", "alexa"})
     if unknown:
         raise ConfigError(f"unknown notification setting(s): {', '.join(unknown)}")
     # "persistent_notification" = HA's notification area (the default); "off" (or "") = none; else a notify service
@@ -546,7 +552,44 @@ def _parse_notifications(raw: Any) -> dict[str, Any]:
         if not isinstance(value, bool):
             raise ConfigError(f"notification '{key}' must be true or false")
         events[key] = value
-    return {"service": service, "events": events}
+    return {"service": service, "events": events, "alexa": _parse_alexa(raw.get("alexa"))}
+
+
+def _clock_minutes(name: str, value: Any) -> int:
+    try:
+        h, m = str(value).split(":")
+        h, m = int(h), int(m)
+    except ValueError:
+        raise ConfigError(f"notifications.alexa.{name} must be a time like 07:30") from None
+    if not (0 <= h < 24 and 0 <= m < 60):
+        raise ConfigError(f"notifications.alexa.{name} must be a time like 07:30")
+    return h * 60 + m
+
+
+def _parse_alexa(raw: Any) -> dict[str, Any]:
+    raw = raw or {}
+    if not isinstance(raw, dict):
+        raise ConfigError("'notifications.alexa' must be a mapping")
+    unknown = sorted(set(raw) - set(ALEXA_DEFAULT))
+    if unknown:
+        raise ConfigError(f"unknown notifications.alexa setting(s): {', '.join(unknown)}")
+    cfg = ALEXA_DEFAULT | raw
+    services = cfg["services"]
+    if not isinstance(services, list) or not all(isinstance(x, str) and _NOTIFY_SERVICE.match(x) for x in services):
+        raise ConfigError("notifications.alexa.services must be a list of notify services, "
+                          "e.g. [notify.alexa_media_kitchen]")
+    hours = cfg["hours_before"]
+    if (not isinstance(hours, list) or not hours
+            or not all(isinstance(h, (int, float)) and not isinstance(h, bool) and 0 <= h <= 48 for h in hours)):
+        raise ConfigError("notifications.alexa.hours_before must be a list of hours between 0 and 48")
+    intro = cfg["intro"]
+    if not isinstance(intro, str) or len(intro) > 80:
+        raise ConfigError("notifications.alexa.intro must be text of at most 80 characters (empty for none)")
+    return {"services": list(dict.fromkeys(services)), "intro": intro.strip(),
+            "hours_before": sorted({float(h) for h in hours}, reverse=True),
+            "earliest_weekday": _clock_minutes("earliest_weekday", cfg["earliest_weekday"]),
+            "earliest_weekend": _clock_minutes("earliest_weekend", cfg["earliest_weekend"]),
+            "latest": _clock_minutes("latest", cfg["latest"])}
 
 
 def parse_config(data: Any) -> Config:
