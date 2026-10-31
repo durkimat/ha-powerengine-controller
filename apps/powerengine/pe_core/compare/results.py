@@ -91,6 +91,8 @@ def build_result(day_input, outcome: dict, took_s: float, made_at: str | None = 
            "metered": {"cost": _r(day_input.metered_gbp)}, "calibration": None}
     if day_input.profile is not None:
         out["profile"] = day_input.profile
+    if getattr(day_input, "round_trip", None):
+        out["round_trip"] = day_input.round_trip
     if day_input.live and day_input.in_control in ("v1", "v2"):
         replay = out[day_input.in_control]["cost"]
         metered = out["metered"]["cost"]

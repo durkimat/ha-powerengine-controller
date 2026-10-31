@@ -331,3 +331,29 @@ def test_a_half_hour_measured_for_under_ten_minutes_refuses_the_day():
         r["seconds"] = 1800.0
     assert daymod.thin_reason(recs) is None
     assert "1 half-hour(s) measured for under 10 minutes" == daymod.thin_reason(_thin(recs, [5], 500.0))
+
+
+# --- the replay world's efficiency -------------------------------------------------------------------------------
+
+def test_the_replay_world_gets_the_measured_round_trip_unless_the_owner_fixed_one():
+    template = yaml.safe_load(TEMPLATE.read_text())
+    plain = yaml.safe_load(settings.replay_config(None, template, "v2"))
+    assert yaml.safe_load(settings.replay_config(None, template, "v2", 0.762))["inputs"]["battery_round_trip"] == {
+        "value": 76.2}
+    assert plain["inputs"].get("battery_round_trip") != {"value": 76.2}
+    owner = owner_config()
+    owner["inputs"]["battery_round_trip"] = {"value": 88}
+    cfg = yaml.safe_load(settings.replay_config(owner, template, "v2", 0.762))
+    assert cfg["inputs"]["battery_round_trip"] == {"value": 88}               # the owner's own figure stands
+    one_way = settings.battery_of(settings.replay_config(None, template, "v2", 0.762))["efficiency"]
+    assert one_way == pytest.approx(0.762 ** 0.5, abs=1e-3)
+
+
+def test_no_round_trip_without_enough_records(tmp_path):
+    from pe_core.compare import efficiency
+    battery = {"capacity_kwh": 18.0, "efficiency": 0.95, "charge_limit_w": 5000.0, "discharge_limit_w": 5000.0,
+               "floor_pct": 12.0}
+    assert efficiency.round_trip(str(tmp_path), date(2026, 10, 30), battery) is None          # no records at all
+    recs = records_from_pack(PACK, "car", DAY)
+    (tmp_path / "2026-10-29.json").write_text(json.dumps(recs))
+    assert efficiency.round_trip(str(tmp_path), date(2026, 10, 30), battery) is None          # one day is too few

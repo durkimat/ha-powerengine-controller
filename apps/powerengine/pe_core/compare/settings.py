@@ -22,14 +22,18 @@ FROM_TEMPLATE = ("solar_plants", "notifications")
 DROPPED = ("site", "devices", "remove_entities")
 
 
-def replay_config(owner: dict | None, template: dict, engine: str) -> str:
-    """The config.yaml text for a replay on `engine` ("v1" or "v2"). With no owner config it is the template's own."""
+def replay_config(owner: dict | None, template: dict, engine: str, round_trip: float | None = None) -> str:
+    """The config.yaml text for a replay on `engine` ("v1" or "v2"). With no owner config it is the template's own.
+    `round_trip` (0 to 1, grid to grid, see `compare.efficiency`) is the battery's efficiency for the replay's world and
+    plan unless the owner fixed one in their config."""
     tmpl = copy.deepcopy(template)
     cfg = copy.deepcopy(owner) if owner else copy.deepcopy(tmpl)
     inputs = copy.deepcopy(tmpl.get("inputs") or {})
     for role, spec in ((owner or {}).get("inputs") or {}).items():
         if isinstance(spec, dict) and "value" in spec:             # a fixed figure (battery size, power limits...)
             inputs[role] = copy.deepcopy(spec)
+    if round_trip is not None and "battery_round_trip" not in inputs:
+        inputs["battery_round_trip"] = {"value": round(100 * round_trip, 2)}
     cfg["inputs"] = inputs
     for key in FROM_TEMPLATE:
         if key in tmpl:

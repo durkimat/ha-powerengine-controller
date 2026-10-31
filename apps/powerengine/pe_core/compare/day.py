@@ -31,6 +31,7 @@ class DayInput:
     live: bool                       # an engine was really sending commands (Active, not paused)
     metered_gbp: float
     profile: str | None = None       # engine v2's settings profile the records name ("mixed" if it changed), if any
+    round_trip: dict | None = None   # the grid-to-grid efficiency the replay used, and its sources (efficiency.py)
 
 
 class Refused(Exception):
