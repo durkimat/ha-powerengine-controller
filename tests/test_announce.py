@@ -107,6 +107,7 @@ def test_trial_announcement_text_and_speakers():
     assert trial_message("") == "Test message."
     assert trial_message("  Hi  ") == "Hi Test message."
     got = trial_speakers(["notify.alexa_media_kitchen", "notify.alexa_media_kitchen", "notify.alexa_media_last_called",
-                         "notify.mobile_app_phone", "light.turn_on", 5, "notify.alexa_media_Bad Name", "notify.alexa_media_everywhere"])
+                         "notify.mobile_app_phone", "light.turn_on", 5, "notify.alexa_media_Bad Name",
+                         "notify.alexa_media_everywhere"])
     assert got == ["notify.alexa_media_kitchen", "notify.alexa_media_everywhere"]
     assert trial_speakers(None) == [] and trial_speakers("notify.alexa_media_kitchen") == []
