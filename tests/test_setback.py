@@ -116,6 +116,7 @@ def test_the_overrun_is_the_setting(monkeypatch, tmp_path):
 
 def test_a_wrong_kind_of_entity_is_refused_when_the_config_is_read():
     import pytest
+
     from pe_core.config import ConfigError
     with pytest.raises(ConfigError):
         parse_config({"inputs": {"heating_setback": {"entity": "light.kitchen"}}})
