@@ -129,3 +129,64 @@ def trial_speakers(services) -> list[str]:
 def trial_message(intro: str = "") -> str:
     """What the test button says: the opening words, then "Test message."."""
     return f"{intro.strip()} Test message.".strip()
+
+
+# ---- when a grid event has finished ---------------------------------------------------------------------------------
+def event_summary(records: list[dict], start: datetime, end: datetime) -> dict | None:
+    """What the half-hours of a grid event recorded: house and car use, grid export, what the event pays. None when no
+    record falls inside the event. `records` are cost records (`pe_core/energy.py` and `costs.py`), any days."""
+    rows = [r for r in records if start <= datetime.fromisoformat(r["start"]) < end]
+    if not rows:
+        return None
+
+    def total(key):
+        return sum(float(r.get(key) or 0.0) for r in rows)
+
+    def event(key):
+        return sum(float((r.get("v") or {}).get(key) or 0.0) for r in rows)
+    return {"house_kwh": total("house"), "car_kwh": total("car"), "export_kwh": total("grid_export"),
+            "event_kwh": event("event_kwh"), "gross": event("event_gross"), "net": event("event_net"),
+            "half_hours": len(rows)}
+
+
+def _kwh(x: float) -> str:
+    return f"{x:.1f} kilowatt hours"
+
+
+HEAT = {
+    "restored": "The heating set-back is back to off, as it was before, so the heating is back on its programme.",
+    "already_on": "The heating set-back was already on before the event, so I've left it on.",
+    "user_override": "The heating set-back was switched off during the event, so I've left it off.",
+}
+
+
+def finish_message(intro: str, start: datetime, end: datetime, now: datetime, tz: tzinfo | None, summary: dict | None,
+                   heat: str | None, car: str | None, car_mode: str | None = None) -> str:
+    """What is said when a grid event has finished: what the house used, what was exported, what it should pay, and
+    anything PowerEngine switched for the event, with the state it is back to. `heat` and `car` are the notes of
+    `setback.Setback` and `carstop.CarStop` for this event (None: PowerEngine did nothing there, so nothing is said)."""
+    ls = start.astimezone(tz) if tz else start
+    ln = now.astimezone(tz) if tz else now
+    gap = (ln.date() - ls.date()).days
+    day = "today" if gap == 0 else ("yesterday" if gap == 1 else ls.strftime("%A"))
+    out = [intro.strip()] if intro.strip() else []
+    out.append(f"The grid event at {_clock(ls)} {day} is over.")
+    if summary:
+        use = f"The house used {_kwh(summary['house_kwh'])}"
+        if summary["car_kwh"] > 0.05:
+            use += f", and the car {_kwh(summary['car_kwh'])}"
+        out.append(f"{use}, and we exported {_kwh(summary['export_kwh'])}.")
+        if summary["gross"] > 0.005:
+            pay = f"It should pay about £{summary['gross']:.2f}"
+            if summary["net"] > 0.005 and abs(summary["gross"] - summary["net"]) >= 0.01:
+                pay += f", or £{summary['net']:.2f} after the battery energy it used"
+            out.append(pay + ".")
+    if heat in HEAT:
+        out.append(HEAT[heat])
+    if car == "restored":
+        out.append(f"The car charger is back to {car_mode or 'its usual mode'}, as it was before.")
+    elif car == "already_stopped":
+        out.append("The car charger was already stopped before the event, so I've left it stopped.")
+    elif car == "user_changed":
+        out.append("The car charger mode was changed during the event, so I've left it as it is.")
+    return " ".join(out)

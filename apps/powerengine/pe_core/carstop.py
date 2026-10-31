@@ -47,6 +47,8 @@ class CarStop:
         self.previous = previous
         self.again = 0
         self.last: datetime | None = None
+        self.note: str | None = None       # what happened this event, for the finish announcement
+        self.mode_before: str | None = None  # ...and the mode it found: "restored" gives the mode put back
 
     def to_dict(self) -> dict:
         return {"held": self.held, "previous": self.previous}
@@ -68,8 +70,10 @@ class CarStop:
                 return None
             if not self.held:
                 if is_stopped:
+                    self.note = "already_stopped"
                     return None                    # already stopped by someone else: leave it as it is
                 self.held, self.previous, self.again, self.last = True, cur, 0, now
+                self.note, self.mode_before = "stopped", cur
                 return Action(stopped, f"grid event: the car charger was {cur}, now stopped until the event ends")
             if (not is_stopped
                     and (self.last is None or (now - self.last).total_seconds() >= MIN_GAP_S)):
@@ -81,6 +85,8 @@ class CarStop:
             return None                            # nothing of ours to undo (or can't tell yet: stay held)
         previous, self.held, self.previous = self.previous, False, None
         if not is_stopped:
+            self.note = "user_changed"
             return None                            # someone changed it since: that choice stands
         option = _match(options, previous) or _match(options, FALLBACK) or previous or FALLBACK
+        self.note, self.mode_before = "restored", option
         return Action(option, f"grid event over: the car charger is back to {option}")
