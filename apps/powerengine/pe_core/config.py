@@ -170,7 +170,7 @@ SETTING_TEXT = {
                           "below it, not even for a grid event. Engine v1 uses its Minimum reserve instead."),
     "other_controller": ("Other battery controller", "",
                          "Whether anything else also controls the battery. With none, PowerEngine does not check or "
-                         "need the handover guards below, and Active is allowed as far as they are concerned. With "
+                         "need the handover guards below, and Active is allowed. With "
                          "Predbat or another controller, PowerEngine stays Passive unless the guard entities show "
                          "that controller is switched off or read only. If you have not chosen, PowerEngine goes "
                          "by the guards you have mapped."),
@@ -178,7 +178,7 @@ SETTING_TEXT = {
                "Which engine plans and decides. Engine v1 plans in half-hours. Engine v2 works out what a stored "
                "kWh is worth and acts when a condition is met. Engine v2 has settings profiles (for "
                "example the 2.1 beta one, which follows its own plan). Switching changes neither Active, Passive nor "
-               "Pause; each engine keeps its own settings."),
+               "Pause; each engine keeps its settings."),
     "smart_max_requests_per_day": ("Requests per day", "requests",
                                    "The most times a day PowerEngine changes the car's ready-by time to ask for "
                                    "slots. Each change makes the supplier re-plan the car's charging."),
@@ -207,9 +207,7 @@ SETTING_TEXT = {
                              "How long before a grid event to start protecting charge."),
     "axle_margin_soc": ("Grid-event safety margin", "%",
                         "Extra charge kept above what a grid event needs."),
-    "heating_pump_overrun_min": ("Heating pump overrun", "min",
-                                 "With the heating set-back on, the heating is turned down this long before a grid "
-                                 "event starts, so the boiler's pump has stopped by the time it begins."),
+    "heating_pump_overrun_min": ("Heating pump overrun", "min", "Heating is turned down this long before an event."),
     "main_fuse_a": ("Main supply fuse", "A",
                     "Rating of the main fuse at the supply cutout. PowerEngine plans grid charging so house + car + "
                     "battery import stays under 90% of it (230 V), reducing battery charging first. Change it if "
@@ -230,12 +228,12 @@ SETTING_TEXT = {
                           "A guide, not a limit. Outside the fixed overnight window a sale may go up to 5 points "
                           "below this (paying the outside-band cost) so a cycle can use whole half-hours; the refill "
                           "may depend on smart-charge slots that can be withdrawn, so never lower. Inside the "
-                          "overnight window, where the refill is guaranteed, selling may go lower when it still pays."),
+                          "overnight window, where the refill is guaranteed, selling may go lower if it pays."),
     "arbitrage_max_soc": ("Arbitrage band: top", "%",
                           "A guide, not a limit. With arbitrage on, grid charging (smart slots included) may run up "
                           "to 5 points past this (paying the outside-band cost) so a cycle can use whole half-hours; "
-                          "the final top-up of the overnight window fills to the day's grid-charge target. Solar can "
-                          "still fill it higher. 100 allows full charges any time."),
+                          "the overnight window's final top-up fills to the day's grid-charge target. Solar can "
+                          "fill it higher. 100 allows full charges any time."),
     "arbitrage_band_penalty_p": ("Arbitrage outside-band cost", "p/kWh",
                                  "Extra cost counted for each kWh arbitrage moves outside the band. Higher keeps "
                                  "cycles inside it more strictly; 0 ignores the band."),
@@ -292,7 +290,7 @@ SETTING_TEXT = {
                        "Force charge / Force discharge / Off through the inverter integration's Battery control "
                        "override "
                        "(temporary settings, no EEPROM writes), re-sent every RAM refresh; if PowerEngine stops, "
-                       "the inverter returns to Self-Use by itself within about 5 minutes. Tested on the Tests tab."),
+                       "the inverter returns to Self-Use by itself within about 5 minutes."),
     "ram_refresh_min": ("RAM refresh", "min",
                         "With RAM remote control: how often the current command is re-sent. Must stay well inside "
                         "the inverter's remote-control timeout (about 5 minutes on the inverter tested)."),
@@ -306,8 +304,8 @@ SETTING_TEXT = {
                   "after a restart."),
     "overnight_window": ("Overnight window", "",
                          "The regular cheap overnight rate that the plan can rely on every night. Learned: "
-                         "PowerEngine works it out from the rates it has seen (the half-hours that were cheapest on "
-                         "every one of the last 14 days), so smart-charge slots that move about are left out. Fixed "
+                         "worked out from the half-hours that were cheapest on "
+                         "every one of the last 14 days, so moving smart-charge slots are left out. Fixed "
                          "times: use the two times below instead, for a new install, a tariff with no integration, or "
                          "if the learned window looks wrong."),
     "house_load_includes_ev": ("House load includes the car charger", "",

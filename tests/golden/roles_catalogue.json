@@ -379,7 +379,7 @@
    {
     "key": "ev_charger_status",
     "label": "Charger status",
-    "description": "What the charger is doing, for the status view.",
+    "description": "What the charger is doing.",
     "kind": "text",
     "suggest": [
      "^sensor\\.myenergi_zappi_[0-9]+_status$"
@@ -397,7 +397,7 @@
    {
     "key": "ev_energy_today",
     "label": "Car energy today",
-    "description": "Energy into the car today, for its share of costs.",
+    "description": "Energy into the car today.",
     "kind": "energy",
     "suggest": [
      "^sensor\\.myenergi_zappi_.*_energy_used_today$"
@@ -406,7 +406,7 @@
    {
     "key": "ev_charge_mode",
     "label": "Charger mode",
-    "description": "Charger mode (e.g. Eco+), for the status view.",
+    "description": "Charger mode (e.g. Eco+).",
     "kind": "text",
     "required": "no",
     "domains": [
@@ -420,7 +420,7 @@
    {
     "key": "ev_session_energy",
     "label": "Charge this session",
-    "description": "Energy added this session, for the status tile.",
+    "description": "Energy added this session.",
     "kind": "energy",
     "required": "no",
     "suggest": [
@@ -443,7 +443,7 @@
    {
     "key": "smart_state",
     "label": "Smart-charge state",
-    "description": "EDF's smart-charging state, for the status view.",
+    "description": "EDF's smart-charging state.",
     "kind": "text",
     "required": "no",
     "suggest": [
@@ -497,8 +497,8 @@
    },
    {
     "key": "heating_setback",
-    "label": "Heating set-back switch",
-    "description": "Switch that turns the heating down (e.g. input_boolean.heating_off): on before an event, off after.",
+    "label": "Heating set-back",
+    "description": "Switch that turns the heating down.",
     "kind": "control",
     "required": "no",
     "domains": [
