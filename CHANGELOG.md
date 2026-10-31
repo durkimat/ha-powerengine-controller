@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.181 (beta)
+
+### Behaviour changes
+
+- **The engine comparison's replayed days now lose what your system really loses.** The nightly comparison replays each finished day on the engines in a simulated house. Its battery had only the typed-in efficiency (90% round trip by default), while your system, measured from your own records, is 76% grid to grid (94% at the battery, 89% in and 90% out through the inverter), holds 16.8 kWh rather than the 18 typed in, and charges and discharges at about 4.8 kW. A replayed day therefore earned about £1.45 a day more than the same day metered. The replay now works these out from your cost records before the day being replayed, the same way the app does, so the gap is about £0.44 a day on the seven days checked. Anything you fixed in the config yourself stands, and switching `use_measured` off for an input keeps your typed figure. The result file records what was used (`round_trip`). Nothing about how the battery is controlled changes.
+
+### Behind the scenes
+
+- New `pe_core/compare/efficiency.py`; `replay_config` takes the measured figures; tests in `tests/test_compare_inputs.py`.
+
 ## 0.9.180 (beta)
 
 ### Behaviour changes
