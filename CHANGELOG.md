@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.178 (beta)
+
+### Behaviour changes
+
+- **Forecast against actual, recorded.** Engine v2 now keeps what it expected at every re-plan (the battery level 30, 60, 120 and 240 minutes ahead, the smart slots it counted on, the sun and the house load) and the real level, price, sun and house load every five minutes. `sensor.pe_diag_forecast` (and the diagnostics file) score the last 7 days: how far the expected level was from the real one at each distance ahead, how often the real level fell outside the low-to-high range, how often a half-hour counted on as a smart slot really had the slot price (by how far ahead it was counted, against the odds used), and how the expected sun and house load compared with what happened. The first figures appear after a few hours; the useful ones after a week.
+- **A smart-charge window that slides forward is no longer a change.** EDF re-lists a running dispatch from the current half-hour every half-hour (19:30-04:30, then 20:00-04:30), which re-planned the battery 39 times on 31 Oct for nothing the plan could use. Engine v2 now compares the hours the slots cover, so only hours added, withdrawn or cut short count as the slots changing.
+- **The slot tracker no longer calls a re-listed window cancelled.** A listing that is replaced by the same dispatch starting later is now "superseded" and says nothing about whether slots happen. The Health tab shows the count.
+
+### Behind the scenes
+
+- New `pe_core/forecastlog.py` (files under `costs/forecastlog/`, kept 30 days); tests in `tests/test_forecastlog.py`, `tests/test_engine_v2_observe.py` and `tests/test_slots.py`.
+
 ## 0.9.177 (beta)
 
 ### Behaviour changes
