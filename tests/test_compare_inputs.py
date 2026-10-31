@@ -299,3 +299,35 @@ def test_load_day_gives_a_one_day_pack_the_world_can_play(tmp_path):
     assert DemoWorld(di.pack, daymod.KEY, di.tz, lambda: di.start).soc == pytest.approx(PACK["days"]["car"]["soc"][0])
     assert di.snapshot.profile_at(di.start + timedelta(minutes=5)) is not None
     assert isinstance(date.fromisoformat(di.pack["days"][daymod.KEY]["recorded"]), date)
+
+
+# --- thin days: 90% coverage replays, with the thin half-hours scaled up ---
+
+def _thin(recs, which, seconds):
+    out = [dict(r) for r in recs]
+    for i in which:
+        out[i]["seconds"] = seconds
+    return out
+
+
+def test_a_day_measured_for_ninety_per_cent_is_replayable_and_scaled():
+    recs = records_from_pack(PACK, "car", DAY)
+    for r in recs:
+        r["seconds"] = 1800.0
+    thin = _thin(recs, range(0, 48, 3), 1620.0)                       # a sixth of the half-hours lose 3 minutes
+    assert packmod.day_complete(thin, LONDON) is None                 # still 98%
+    thin = _thin(recs, range(0, 48, 2), 1500.0)                       # half of them lose 5 minutes: 91.7%
+    assert packmod.day_complete(thin, LONDON) == "under 95% coverage"
+    assert packmod.day_complete(thin, LONDON, daymod.REPLAY_MIN_COVER) is None
+    scaled, n = daymod.fill_thin(thin)
+    assert n == 24 and all(r["seconds"] == 1800.0 for r in scaled)
+    assert scaled[0]["house"] == pytest.approx(recs[0]["house"] * 1800 / 1500)
+    assert scaled[1]["house"] == recs[1]["house"] and thin[0]["house"] == recs[0]["house"]     # the input is untouched
+
+
+def test_a_half_hour_measured_for_under_ten_minutes_refuses_the_day():
+    recs = records_from_pack(PACK, "car", DAY)
+    for r in recs:
+        r["seconds"] = 1800.0
+    assert daymod.thin_reason(recs) is None
+    assert "1 half-hour(s) measured for under 10 minutes" == daymod.thin_reason(_thin(recs, [5], 500.0))

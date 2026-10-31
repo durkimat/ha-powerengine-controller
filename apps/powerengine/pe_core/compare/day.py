@@ -84,6 +84,32 @@ def metered_cost(records: list[dict]) -> float:
     return total
 
 
+REPLAY_MIN_COVER = 0.90          # a day measured for this much of its seconds can be replayed (thin half-hours scaled)
+MIN_HALF_SECONDS = 600           # ...but a half-hour measured for less than this (10 minutes) is too thin to scale
+SCALED = ("s_h", "s_c", "s_b", "s_e", "b_h", "b_c", "b_e", "g_h", "g_c", "g_b", "grid_import", "grid_export", "house",
+          "car", "solar", "battery_in", "battery_out", "unallocated_src", "unallocated_sink")
+
+
+def fill_thin(records: list[dict]) -> tuple[list[dict], int]:
+    """The records with each half-hour measured for under its full 1800 seconds scaled up to the whole half-hour (the
+    energy measured in the seconds that were read, taken as typical of the rest). Returns (records, how many were
+    scaled). A half-hour with under MIN_HALF_SECONDS is left as it is; `thin_reason` refuses the day for those."""
+    out, n = [], 0
+    for r in records:
+        sec = float(r.get("seconds") or 0.0)
+        if MIN_HALF_SECONDS <= sec < 1795:
+            k = 1800.0 / sec
+            r = {**r, **{f: r[f] * k for f in SCALED if isinstance(r.get(f), (int, float))}, "seconds": 1800.0}
+            n += 1
+        out.append(r)
+    return out, n
+
+
+def thin_reason(records: list[dict]) -> str | None:
+    thin = [r for r in records if float(r.get("seconds") or 0.0) < MIN_HALF_SECONDS]
+    return f"{len(thin)} half-hour(s) measured for under {MIN_HALF_SECONDS // 60} minutes" if thin else None
+
+
 def load_day(costs_dir: str, day: date, tz_name: str | None = None) -> DayInput:
     """Everything a replay of `day` needs, or raises Refused(status, reason)."""
     data = load_snapshot(costs_dir, day)
@@ -96,9 +122,13 @@ def load_day(costs_dir: str, day: date, tz_name: str | None = None) -> DayInput:
     if why:
         raise Refused("no_snapshot", why)
     records = read_records(costs_dir, day)
-    why = day_complete(records, tz) if records else "no cost records for the day"
+    why = day_complete(records, tz, REPLAY_MIN_COVER) if records else "no cost records for the day"
     if why:
         raise Refused("incomplete", f"records incomplete: {why}")
+    why = thin_reason(records)
+    if why:
+        raise Refused("incomplete", f"records incomplete: {why}")
+    records, _scaled = fill_thin(records)
     pack = {"version": 1, "tz": str(tz.key), "source": "real day",
             "days": {KEY: day_from_records(records, "", "", 1.0, tz)}}
     engine, live = day_engine(records)

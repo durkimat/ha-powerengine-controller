@@ -133,13 +133,13 @@ def day_stats(records: list[dict]) -> dict:
     }
 
 
-def day_complete(records: list[dict], tz=TZ) -> str | None:
+def day_complete(records: list[dict], tz=TZ, min_cover: float = 0.95) -> str | None:
     """None if the day is complete, else why not: 48 records on consecutive half-hours from local midnight, at least
-    95 % of the day's seconds covered, no duplicate starts."""
+    `min_cover` of the day's seconds covered (95 % unless told otherwise), no duplicate starts."""
     if len(records) != 48:
         return f"{len(records)} records, not 48"
-    if sum(r.get("seconds") or 0 for r in records) < 0.95 * 86400:
-        return "under 95% coverage"
+    if sum(r.get("seconds") or 0 for r in records) < min_cover * 86400:
+        return f"under {min_cover:.0%} coverage"
     starts = [_local(r["start"], tz) for r in records]
     if len(set(starts)) != 48:
         return "duplicate starts"

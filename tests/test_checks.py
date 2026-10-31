@@ -96,3 +96,13 @@ def test_car_inputs_unavailable_do_not_block_control():
     assert blocking(results, req) == [] and summarise(results, req) == "warnings"
     results["battery_soc"] = (UNAVAILABLE, "unavailable")
     assert blocking(results, req) == ["battery_soc"]                     # the inverter's own inputs still block
+
+
+def test_the_grid_event_sensors_are_degradable_so_an_axle_outage_does_not_stop_control():
+    from pe_core.checks import UNAVAILABLE, UNMAPPED, blocking, degraded
+    req = ["axle_event_active", "axle_event_start", "axle_event_end", "battery_soc"]
+    results = {"axle_event_active": (UNAVAILABLE, "x"), "axle_event_start": (UNAVAILABLE, "x"),
+               "axle_event_end": (UNAVAILABLE, "x"), "battery_soc": ("ok", "ok")}
+    assert blocking(results, req) == [] and degraded(results, req) == req[:3]
+    results["axle_event_end"] = (UNMAPPED, "")
+    assert blocking(results, req) == ["axle_event_end"]                  # unmapped still blocks
