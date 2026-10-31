@@ -6,6 +6,7 @@ reminder is said once. Nothing is said outside the allowed hours (later than `ea
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, tzinfo
 
 GRACE_MIN = 20            # a reminder that is later than this after its time is dropped, not said late
@@ -109,3 +110,21 @@ def message(hours_before: float, start: datetime, end: datetime | None, now: dat
     elif hours_before <= 2.5 and last in (TIGHT, SHORT):
         out.append("Please start turning off things you don't need.")
     return " ".join(out)
+
+
+_SPEAKER = re.compile(r"^notify\.alexa_media_[a-z0-9_]+$")
+
+
+def trial_speakers(services) -> list[str]:
+    """The speakers a test may use: Alexa Media Player's notify services only (the reply-on-last-speaker one needs a
+    command to have just been heard, so it is no use here), whatever the event carried."""
+    out = []
+    for s in services if isinstance(services, (list, tuple)) else []:
+        if isinstance(s, str) and _SPEAKER.match(s) and s != "notify.alexa_media_last_called" and s not in out:
+            out.append(s)
+    return out
+
+
+def trial_message(intro: str = "") -> str:
+    """What the test button says: the opening words, then "Test message."."""
+    return f"{intro.strip()} Test message.".strip()
