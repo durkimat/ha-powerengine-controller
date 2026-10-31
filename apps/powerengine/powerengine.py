@@ -128,6 +128,8 @@ from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue, is_forbidden_control
 from pe_core.schedule import forecast_writes, periods, settled, urgent
+from pe_core.setback import Setback
+from pe_core.setback import window as setback_window
 from pe_core.simhistory import History, months_wanted, parse_upload
 from pe_core.simjob import SimContext, SimStore
 from pe_core.simjob import run as sim_run
@@ -730,6 +732,7 @@ class PowerEngine(hass.Hass):
                 self._watch_events(readings)
                 self._announce_event(readings)
                 self._car_stop_step(readings)
+                self._heating_setback_step(readings)
                 self._track_slots(readings)
                 self._snapshot_forecast(readings)
                 self._smart_step(readings)
@@ -2281,6 +2284,59 @@ class PowerEngine(hass.Hass):
                     json.dump(stop.to_dict(), fh)
             except OSError as err:
                 self.log(f"Could not save the car charger state: {err!r}", level="WARNING")
+
+    def _setback_file(self):
+        return os.path.join(os.path.dirname(self._save_path()), "heating_setback.json")
+
+    def _setback_state(self):
+        """What PowerEngine has switched on, kept on disk so a restart mid-event still switches it off."""
+        sb = self.__dict__.get("_setback")
+        if sb is None:
+            try:
+                with open(self._setback_file(), encoding="utf-8") as fh:
+                    sb = Setback.from_dict(json.load(fh))
+            except (OSError, ValueError, AttributeError):
+                sb = Setback()
+            self._setback = sb
+        return sb
+
+    def _heating_setback_step(self, r):
+        """Turn the owner's heating set-back switch on `heating_pump_overrun_min` before a grid event starts and off
+        when it ends (pe_core/setback.py), so the boiler's pump isn't drawing power during the event. Active mode
+        only."""
+        if self._demo or self.cfg is None:
+            return
+        sb = self._setback_state()
+        eid = self._role_entity("heating_setback")
+        feats = self.cfg.features
+        if not eid or eid.split(".")[0] not in ("switch", "input_boolean"):
+            return
+        lead = float(self.cfg.safety.get("heating_pump_overrun_min", 15))
+        win = setback_window(r.axle_start, r.axle_end, lead)
+        want = bool(feats.get("axle") and feats.get("axle_heating_setback", False) and win is not None
+                    and win[0] <= r.now < win[1] and self.mode.effective == "active" and not self._test_running())
+        if not (want or sb.held):
+            return
+        try:
+            state = self.get_state(eid)
+        except Exception:
+            state = None
+        before = sb.to_dict()
+        event = r.axle_start.isoformat() if r.axle_start else None
+        action = sb.step(want, event, state, lead)
+        if action is not None:
+            try:
+                self.call_service(f"{eid.split('.')[0]}/{action.service}", entity_id=eid)
+                self.log(f"Heating set-back: {action.text}")
+                self._logbook(f"Heating set-back: {action.text}")
+            except Exception as err:
+                self.log(f"Heating set-back: could not {action.service} {eid}: {err!r}", level="WARNING")
+        if sb.to_dict() != before:
+            try:
+                with open(self._setback_file(), "w", encoding="utf-8") as fh:
+                    json.dump(sb.to_dict(), fh)
+            except OSError as err:
+                self.log(f"Could not save the heating set-back state: {err!r}", level="WARNING")
 
     # --- inverter writes (EEPROM wear) ---------------------------------------------------
 

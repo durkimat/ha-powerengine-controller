@@ -26,7 +26,8 @@ def installed_version(path: str) -> str | None:
 # the app starts to need something a newer card does. The card holds the matching MIN_APP_VERSION for the other way.
 # 0.9.174 is the card whose Notifications section edits the Alexa announcements (an older card's save would drop them).
 # 0.9.175 moves them to their own Announcements section, with the test announcement button (the app answers its event).
-MIN_CARD_VERSION = "0.9.175"
+# 0.9.179 adds the heating set-back (an older card's save would drop its feature switch and switch entity).
+MIN_CARD_VERSION = "0.9.179"
 
 _DOTTED = re.compile(r"^\s*v?(\d+(?:\.\d+)*)\s*$")
 
