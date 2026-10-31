@@ -89,6 +89,12 @@ class HalfHour:
     tb_c: float | None = None          # estimated battery temperature
     noted: bool = False
     bms_lim: dict = field(default_factory=dict)   # whole SoC % (80+) -> lowest BMS charge limit seen there, W
+    miss: dict = field(default_factory=dict)      # seconds not counted, by why (a reading missing, a gap, a late start)
+
+    def lose(self, why: str, seconds: float) -> None:
+        """Note time that is not in `seconds`, and why (so an incomplete day can say what it lacked)."""
+        if seconds > 0:
+            self.miss[why] = self.miss.get(why, 0.0) + seconds
 
     def note_limit(self, soc: float | None, charge_w: float | None) -> None:
         """The battery's own charge limit at this level (kept from 80%, where it starts to taper), for learning."""
@@ -118,7 +124,13 @@ class HalfHour:
         self.export_rate = r.export_rate if r.export_rate is not None else self.export_rate
         if r.standing_charge is not None:
             self.standing = r.standing_charge
-        if dt_s <= 0 or None in (r.grid_power, r.battery_power, r.house_power):
+        if dt_s <= 0:
+            return
+        absent = [name for name, v in (("grid_power", r.grid_power), ("battery_power", r.battery_power),
+                                       ("house_power", r.house_power)) if v is None]
+        if absent:
+            for name in absent:
+                self.lose(name, dt_s)
             return
         h = dt_s / 3600 / 1000                         # W -> kWh over dt
         car_w = (r.ev_power or 0.0) if r.ev_state() == "charging" else 0.0
@@ -149,6 +161,8 @@ class HalfHour:
             "temp_c": self.temp_c, "tb_c": self.tb_c}.items()})
         if self.bms_lim:
             d["bms_lim"] = {str(k): v for k, v in sorted(self.bms_lim.items())}
+        if self.miss:
+            d["miss"] = {k: round(v) for k, v in sorted(self.miss.items())}
         d["fv"] = str(FLOW_VERSION)            # replaced by the cost book's full flow id
         return d
 
@@ -174,7 +188,11 @@ class Recorder:
             done, self.current = self.current, None
         if self.current is None:
             self.current = HalfHour(start)
+            if self.last is None and (r.now - start).total_seconds() > 5:
+                self.current.lose("late_start", (r.now - start).total_seconds())      # the app began part-way through
         dt = (r.now - self.last).total_seconds() if self.last else 0.0
+        if dt > MAX_GAP_S:
+            self.current.lose("gap", dt)                      # the app was not reading (a stall, or it was restarting)
         self.current.add(r, dt if dt <= MAX_GAP_S else 0.0)
         self.last = r.now
         return done

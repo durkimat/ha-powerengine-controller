@@ -25,6 +25,7 @@ from pe_core import (
     __version__,
     bms,
     clock,
+    coverage,
     damping,
     diagnostics,
     earlytarget,
@@ -164,6 +165,8 @@ SIM_SLICE_SECONDS = 2.0           # work per callback, then hand AppDaemon back 
 CONTROL_STRATEGY = "rolling"      # "rolling" | "block": decided by #44 (EEPROM writes) before Active ships
 BATTERY_VOLTS = 52.0              # nominal, for converting power to the inverter's current settings
 CYCLE_SECONDS = 30
+EVENT_ROLES = ("axle_event_active", "axle_event_start", "axle_event_end", "axle_direction")
+EVENT_HOLD_S = 900          # the grid-event sensors may be unavailable this long before their last reading is dropped
 STICK_WARMUP = timedelta(minutes=5)   # after a start, no mid-slot stickiness while the plan's inputs load
 REPLAN_SECONDS = 300
 HISTORY_DAYS = 14
@@ -626,6 +629,26 @@ class PowerEngine(hass.Hass):
 
     # --- mapping checks and mode -----------------------------------------------------
 
+    def _state_all(self, eid):
+        """A state with its attributes, as `get_state(eid, attribute="all")` gives it, except that the grid-event
+        sensors are held at their last good reading for up to EVENT_HOLD_S when they report "unavailable". The Axle
+        integration is unavailable for a few minutes around 03:00 most nights; without this the app declared its
+        inputs not ready and switched remote control Off in the middle of the overnight charge (31 Oct 2026, 03:06).
+        An event is announced hours ahead, so a reading a few minutes old is as good. "unknown" is not held: it is
+        what the sensors say when no event is scheduled."""
+        st = self.get_state(eid, attribute="all")
+        if self.cfg is None or eid not in {self._role_entity(r) for r in EVENT_ROLES}:
+            return st
+        held = self.__dict__.setdefault("_event_held", {})
+        now = datetime.now(timezone.utc)
+        if not (isinstance(st, dict) and st.get("state") == "unavailable") and st is not None:
+            held[eid] = (now, st)
+            return st
+        kept = held.get(eid)
+        if kept is not None and (now - kept[0]).total_seconds() <= EVENT_HOLD_S:
+            return kept[1]
+        return st
+
     def _evaluate(self):
         checks, required = {}, []
         if self.cfg is not None:
@@ -637,7 +660,7 @@ class PowerEngine(hass.Hass):
                 spec = self.cfg.inputs.get(role.key)
                 state = None
                 if spec and "entity" in spec:
-                    state = self.get_state(spec["entity"], attribute="all")
+                    state = self._state_all(spec["entity"])
                     if state is None and role.group == "handover":       # AppDaemon lost track: ask HA
                         live = self._guard_state(spec["entity"])
                         if live not in (UNVERIFIED, "unknown", "unavailable", "None"):
@@ -655,10 +678,10 @@ class PowerEngine(hass.Hass):
         down = degraded(checks, required)
         if bool(down) != bool(getattr(self, "_degraded", [])):
             if down:
-                self.log(f"Car charger inputs unavailable ({', '.join(down)}); control carries on with the car "
-                         "assumed not charging", level="WARNING")
+                self.log(f"Inputs unavailable ({', '.join(down)}); control carries on, assuming the car is not "
+                         "charging and no grid event is running", level="WARNING")
             else:
-                self.log("Car charger inputs back")
+                self.log("Car charger and grid-event inputs back")
         self._degraded = down
         self._watch_inputs(checks, required)
         guards, absent = guard_status(self.cfg, self._guard_state) if self.cfg is not None else ([], [])
@@ -724,7 +747,7 @@ class PowerEngine(hass.Hass):
         self._publish_package()                            # whether Home Assistant has loaded the package files
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
-                readings = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None,
+                readings = read(self.cfg, self._state_all, None,
                                 self._tariff(), self._events(), self._ev(), self._forecast())
                 self._record_load(readings)
                 self._grid_check(readings)
@@ -964,7 +987,7 @@ class PowerEngine(hass.Hass):
         if not self._v2_lock.acquire(blocking=False):
             return
         try:
-            r = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None,
+            r = read(self.cfg, self._state_all, None,
                      self._tariff(), self._events(), self._ev(), self._forecast())
             eng = self._engine_v2()
             method = self._control_method()
@@ -3319,7 +3342,7 @@ class PowerEngine(hass.Hass):
 
     def _battery_now(self):
         try:
-            r = read(self.cfg, lambda eid: self.get_state(eid, attribute="all"), None,
+            r = read(self.cfg, self._state_all, None,
                      self._tariff(), self._events(), self._ev(), self._forecast())
             return {"soc": r.battery_soc, "battery_w": r.battery_power, "grid_w": r.grid_power}
         except Exception:
@@ -4333,6 +4356,8 @@ class PowerEngine(hass.Hass):
             if self.__dict__.get("_fcsnap") else None,
             "v2_history": s(lambda: v2history.summary(self._v2hist.folder, self.tz)) if self.__dict__.get("_v2hist")
             else None,
+            "coverage": s(lambda: coverage.summary(self.costbook.folder, datetime.now(timezone.utc).astimezone(
+                self.tz or timezone.utc).date())) if self.costbook is not None else None,
             "forecast_log": s(lambda: forecastlog.summary(self._flog.folder, datetime.now(timezone.utc).astimezone(
                 self.tz or timezone.utc).date())) if self.__dict__.get("_flog") else None,
             "early_target": s(lambda: {**self._early.summary(), "records": self._early.records[-60:]}),

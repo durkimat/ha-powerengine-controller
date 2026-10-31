@@ -92,8 +92,11 @@ def check(role: Role, spec: dict[str, Any] | None, state: dict[str, Any] | None,
 
 
 # Required inputs whose brief outage doesn't stop control: the car charger's readings come from a cloud service
-# (myenergi) that blips; control carries on with the car assumed not charging. Unmapped still counts as missing.
-DEGRADABLE_GROUPS = frozenset({"ev"})
+# (myenergi) that blips; control carries on with the car assumed not charging. The grid-event sensors (Axle) go
+# unavailable for minutes around 03:00 most nights: the app holds their last reading for 15 minutes
+# (`_state_all`), and after that carries on with no event assumed rather than stopping the battery's control.
+# Unmapped still counts as missing.
+DEGRADABLE_GROUPS = frozenset({"ev", "axle"})
 DEGRADED = (UNAVAILABLE, STALE)
 
 
