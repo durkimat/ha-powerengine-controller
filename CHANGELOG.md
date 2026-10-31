@@ -2,6 +2,12 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.176 (beta)
+
+### Behaviour changes
+
+- **Alexa speaker groups are listed apart from single speakers.** On the Config page the Announcements speaker list now has "Single speakers" and "Speaker groups" headings, with "Everywhere" under the groups. Ticking a group as well as a speaker that belongs to it makes that speaker say the announcement twice, so the page now warns about that. The app is unchanged in this release; the change is in the card.
+
 ## 0.9.175 (beta)
 
 ### Behaviour changes
