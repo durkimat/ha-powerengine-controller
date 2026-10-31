@@ -72,7 +72,8 @@ def _clock(t: datetime) -> str:
 def _span(minutes: float) -> str:
     m = int(round(minutes))
     h, m = divmod(m, 60)
-    parts = ([f"{h} hour" + ("s" if h != 1 else "")] if h else []) + ([f"{m} minute" + ("s" if m != 1 else "")] if m else [])
+    parts = ([f"{h} hour" + ("s" if h != 1 else "")] if h else []) + (
+        [f"{m} minute" + ("s" if m != 1 else "")] if m else [])
     return " ".join(parts) or "a short time"
 
 
