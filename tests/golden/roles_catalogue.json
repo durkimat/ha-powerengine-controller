@@ -496,6 +496,17 @@
     "unknown_ok": true
    },
    {
+    "key": "heating_setback",
+    "label": "Heating set-back switch",
+    "description": "Switch that turns the heating down (e.g. input_boolean.heating_off): on before an event, off after.",
+    "kind": "control",
+    "required": "no",
+    "domains": [
+     "switch",
+     "input_boolean"
+    ]
+   },
+   {
     "key": "free_power_active",
     "label": "Free power now",
     "description": "On during a free-electricity session.",
@@ -1117,6 +1128,11 @@
    [
     "^sensor\\.axle_vpp_axle_import_export$"
    ],
+   [],
+   null
+  ],
+  "heating_setback": [
+   [],
    [],
    null
   ],

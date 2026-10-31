@@ -180,6 +180,9 @@ _BASE_ROLES: tuple[Role, ...] = (
          "timestamp", required="axle", suggest=(r"^sensor\.axle_vpp_axle_end_time_friendly$",)),
     Role("axle_direction", "axle", "Grid event direction", "Import or export (only export is acted on).",
          "text", required="no", unknown_ok=True, suggest=(r"^sensor\.axle_vpp_axle_import_export$",)),
+    Role("heating_setback", "axle", "Heating set-back switch",
+         "Switch that turns the heating down (e.g. input_boolean.heating_off): on before an event, off after.",
+         "control", required="no", domains=("switch", "input_boolean")),
     # --- free power ---
     Role("free_power_active", "free", "Free power now", "On during a free-electricity session.",
          "binary", required="free_power", domains=("binary_sensor",),
