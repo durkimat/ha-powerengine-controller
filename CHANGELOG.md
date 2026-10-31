@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.175 (beta)
+
+### Behaviour changes
+
+- **Test announcement button.** The Config page can now play a test on your Alexa speakers: "Daddybot here. Test message." (your own opening words, then "Test message."). It uses the speakers ticked on the page at that moment, so you can try a new speaker before saving, and it ignores the allowed hours.
+- **Announcements have their own section.** The Alexa settings have moved out of Notifications into their own "Announcements" heading, away from the Engine v1 and Engine v2 settings. They work with either engine and are separate from Home Assistant's notification area. Nothing about how they behave has changed, and your saved settings carry over.
+
+### Behind the scenes
+
+- New `pe_alexa_test` event (admin only, like the other Config page buttons) and `pe_alexa_test_result` answer; the app only accepts Alexa Media Player `notify.alexa_media_*` services in it.
+
 ## 0.9.174 (beta)
 
 ### Behaviour changes

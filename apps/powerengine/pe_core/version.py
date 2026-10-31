@@ -25,7 +25,8 @@ def installed_version(path: str) -> str | None:
 # powerengine-engine-compare-card, which the dashboard's Engine v1, Engine v2 and Costs pages hold. Raise it only when
 # the app starts to need something a newer card does. The card holds the matching MIN_APP_VERSION for the other way.
 # 0.9.174 is the card whose Notifications section edits the Alexa announcements (an older card's save would drop them).
-MIN_CARD_VERSION = "0.9.174"
+# 0.9.175 moves them to their own Announcements section, with the test announcement button (the app answers its event).
+MIN_CARD_VERSION = "0.9.175"
 
 _DOTTED = re.compile(r"^\s*v?(\d+(?:\.\d+)*)\s*$")
 

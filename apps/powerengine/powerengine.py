@@ -52,6 +52,8 @@ from pe_core.announce import allowed as alexa_allowed
 from pe_core.announce import due as alexa_due
 from pe_core.announce import message as alexa_message
 from pe_core.announce import readiness as alexa_readiness
+from pe_core.announce import trial_message as alexa_trial_message
+from pe_core.announce import trial_speakers as alexa_trial_speakers
 from pe_core.carstop import CarStop
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
@@ -175,6 +177,8 @@ DEMO_EVENT, DEMO_RESULT_EVENT = "pe_demo", "pe_demo_result"
 OVERRIDE_EVENT, OVERRIDE_RESULT_EVENT = "pe_override", "pe_override_result"
 HISTORY_DAY_EVENT = "pe_history_day"
 V2_HISTORY_DAY_EVENT = "pe_v2_history_day"
+# the Config page's test announcement (admin only)
+ALEXA_TEST_EVENT, ALEXA_TEST_RESULT_EVENT = "pe_alexa_test", "pe_alexa_test_result"
 V2_REPLAN_EVENT = "pe_v2_replan"        # the plan card's "Re-plan now" button (admin only: HA's fire_event needs admin)
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
@@ -511,6 +515,7 @@ class PowerEngine(hass.Hass):
         self._flows_cache = {}                               # day -> (grid flows, when read): the history's real timing
         self.listen_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
         self.listen_event(self._on_v2_replan, V2_REPLAN_EVENT)
+        self.listen_event(self._on_alexa_test, ALEXA_TEST_EVENT)
         self.run_every(self._publish_v2_history, "now+65", 900)
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
@@ -2162,6 +2167,36 @@ class PowerEngine(hass.Hass):
         if said:
             self.notifier.mark(key, r.now)
             self.log(f"Alexa announced ({h:g} h before) on {said} of {len(a['services'])}: {text}")
+
+    def _on_alexa_test(self, event_name, data, kwargs):
+        """The Config page's "Play a test announcement" (pe_alexa_test {services, intro}): say "<intro> Test message."
+        on the speakers ticked there, now, whatever the allowed hours say. It is not an announcement for any event, so
+        nothing is marked as sent."""
+        if event_name != ALEXA_TEST_EVENT:
+            return
+        data = data or {}
+        services = alexa_trial_speakers(data.get("services"))
+        if not services:
+            self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False, message="No Alexa speaker was ticked.")
+            return
+        intro = data.get("intro")
+        text = alexa_trial_message(intro[:80] if isinstance(intro, str) else "")
+        said, failed = [], []
+        for service in services:
+            try:
+                self.call_service(service.replace(".", "/", 1), message=text, data={"type": "announce"})
+                said.append(service)
+            except Exception as err:
+                failed.append(service)
+                self.log(f"Alexa test: could not announce via {service}: {err!r}", level="WARNING")
+        self.log(f"Alexa test announced on {len(said)} of {len(services)}: {text}")
+        if said:
+            note = f" ({len(failed)} failed: see the log)" if failed else ""
+            self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=True,
+                            message=f"Sent to {len(said)} of {len(services)} speakers: \"{text}\"{note}")
+        else:
+            self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False,
+                            message="Home Assistant would not play it on any speaker. See the AppDaemon log.")
 
     # --- the car charger during a grid event (pe_core/carstop.py) -----------------------
 
