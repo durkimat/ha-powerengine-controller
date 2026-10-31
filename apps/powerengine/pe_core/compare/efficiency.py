@@ -33,7 +33,8 @@ def _records(costs_dir: str, day: date, days: int) -> list[dict]:
 
 
 def round_trip(costs_dir: str, day: date, battery: dict) -> dict | None:
-    """{"round_trip": 0.76, "battery": 0.94, "charge_conv": 0.894, "discharge_conv": 0.904, "days": 30} from the cost
+    """{"round_trip": 0.76, "battery": 0.94, "charge_conv": 0.894, "discharge_conv": 0.904, "days": 30, and when
+    measured "capacity_kwh", "max_charge_w", "max_discharge_w"} from the cost
     records of the days before `day`, or None when they do not show enough (fewer than MIN_MEASURE_DAYS complete days,
     too little cycling, or too few full-rate half-hours to learn the conversion). `battery` is `settings.battery_of`."""
     records = _records(costs_dir, day, MEASURE_DAYS)
@@ -53,5 +54,13 @@ def round_trip(costs_dir: str, day: date, battery: dict) -> dict | None:
     one_way = measured["efficiency"] * (lr.charge_conv * lr.discharge_conv) ** 0.5
     if not 0.7 <= one_way <= 1.0:
         return None
-    return {"round_trip": round(one_way * one_way, 4), "battery": measured["efficiency"],
-            "charge_conv": lr.charge_conv, "discharge_conv": lr.discharge_conv, "days": measured["days"]}
+    out = {"round_trip": round(one_way * one_way, 4), "battery": measured["efficiency"],
+           "charge_conv": lr.charge_conv, "discharge_conv": lr.discharge_conv, "days": measured["days"]}
+    if measured.get("capacity_measured") and measured.get("capacity_kwh"):
+        out["capacity_kwh"] = measured["capacity_kwh"]               # what the battery holds, not what was typed in
+    rated_c, rated_d = battery["charge_limit_w"], battery["discharge_limit_w"]
+    if lr.max_charge_kw and 0.5 * rated_c <= lr.max_charge_kw * 1000 <= 1.2 * rated_c:
+        out["max_charge_w"] = round(lr.max_charge_kw * 1000)       # the fastest it has really charged
+    if lr.max_discharge_kw and 0.5 * rated_d <= lr.max_discharge_kw * 1000 <= 1.2 * rated_d:
+        out["max_discharge_w"] = round(lr.max_discharge_kw * 1000)
+    return out

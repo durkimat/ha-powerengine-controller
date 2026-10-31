@@ -65,7 +65,7 @@ def scenario_for(day_input, save_dir: str, tmp: str, hours: float = 24.0) -> Sce
     # the world loses what the real system loses: the battery's measured efficiency times the inverter's conversion
     trip = efficiency.round_trip(os.path.join(save_dir, "costs"), day_input.day, settings.battery_of(texts["v2"]))
     if trip is not None:
-        texts = {e: settings.replay_config(owner, template, e, trip["round_trip"]) for e in ("v1", "v2")}
+        texts = {e: settings.replay_config(owner, template, e, trip) for e in ("v1", "v2")}
     day_input.round_trip = trip
     extra = {}
     state = os.path.join(save_dir, STATE_FILE)

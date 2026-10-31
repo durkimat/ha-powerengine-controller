@@ -22,18 +22,26 @@ FROM_TEMPLATE = ("solar_plants", "notifications")
 DROPPED = ("site", "devices", "remove_entities")
 
 
-def replay_config(owner: dict | None, template: dict, engine: str, round_trip: float | None = None) -> str:
+def replay_config(owner: dict | None, template: dict, engine: str, measured: dict | None = None) -> str:
     """The config.yaml text for a replay on `engine` ("v1" or "v2"). With no owner config it is the template's own.
-    `round_trip` (0 to 1, grid to grid, see `compare.efficiency`) is the battery's efficiency for the replay's world and
-    plan unless the owner fixed one in their config."""
+    `measured` (see `compare.efficiency`) is what the owner's own days show of the battery: the grid-to-grid round trip
+    (unless the owner fixed one), and the capacity and the rates it has really reached, which stand in for the figures
+    typed in the way the app uses them (unless the owner switched `use_measured` off for that input)."""
     tmpl = copy.deepcopy(template)
     cfg = copy.deepcopy(owner) if owner else copy.deepcopy(tmpl)
     inputs = copy.deepcopy(tmpl.get("inputs") or {})
     for role, spec in ((owner or {}).get("inputs") or {}).items():
         if isinstance(spec, dict) and "value" in spec:             # a fixed figure (battery size, power limits...)
             inputs[role] = copy.deepcopy(spec)
-    if round_trip is not None and "battery_round_trip" not in inputs:
-        inputs["battery_round_trip"] = {"value": round(100 * round_trip, 2)}
+    if measured:
+        if "battery_round_trip" not in inputs:
+            inputs["battery_round_trip"] = {"value": round(100 * measured["round_trip"], 2)}
+        for role, key in (("battery_capacity", "capacity_kwh"), ("battery_max_charge_power", "max_charge_w"),
+                          ("battery_max_discharge_power", "max_discharge_w")):
+            spec = inputs.get(role)
+            if key in measured and isinstance(spec, dict) and "value" in spec \
+                    and spec.get("use_measured", True) is not False:
+                inputs[role] = {**spec, "value": measured[key]}
     cfg["inputs"] = inputs
     for key in FROM_TEMPLATE:
         if key in tmpl:
