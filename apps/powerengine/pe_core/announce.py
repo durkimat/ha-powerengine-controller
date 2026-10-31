@@ -72,7 +72,7 @@ def _clock(t: datetime) -> str:
 def _span(minutes: float) -> str:
     m = int(round(minutes))
     h, m = divmod(m, 60)
-    parts = ([f"{h} hour" + ("s" if h != 1 else "")] if h else []) + ([f"{m} minutes"] if m else [])
+    parts = ([f"{h} hour" + ("s" if h != 1 else "")] if h else []) + ([f"{m} minute" + ("s" if m != 1 else "")] if m else [])
     return " ".join(parts) or "a short time"
 
 
@@ -91,8 +91,8 @@ def message(hours_before: float, start: datetime, end: datetime | None, now: dat
         out.append(f"Heads up. There's a grid event {day} at {_clock(ls)}"
                    + (f", lasting {_span((le - ls).total_seconds() / 60)}." if le else "."))
     else:
-        n = round(hours_before)
-        out.append(f"The grid event starts in {n} hour{'s' if n != 1 else ''}, at {_clock(ls)}.")
+        wait = _span(round(hours_before * 12) * 5) if hours_before < 1 else _span(round(hours_before * 2) * 30)
+        out.append(f"The grid event starts in {wait}, at {_clock(ls)}.")
     if soc is not None:
         level = f"The battery is at {soc:.0f} percent"
         if hours_before > 0 and ready["at_start"] is not None:

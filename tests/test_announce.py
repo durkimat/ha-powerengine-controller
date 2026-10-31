@@ -111,3 +111,12 @@ def test_trial_announcement_text_and_speakers():
                          "notify.alexa_media_everywhere"])
     assert got == ["notify.alexa_media_kitchen", "notify.alexa_media_everywhere"]
     assert trial_speakers(None) == [] and trial_speakers("notify.alexa_media_kitchen") == []
+
+
+def test_reminders_under_an_hour_say_minutes():
+    ready = {"state": READY, "at_start": 79.0}
+    say = lambda h: message(h, START, END, START - timedelta(hours=h), UK, 95.0, ready)   # noqa: E731
+    assert "starts in 30 minutes, at 8 pm" in say(0.5)
+    assert "starts in 15 minutes, at 8 pm" in say(0.25)
+    assert "starts in 1 hour, at 8 pm" in say(1) and "starts in 2 hours, at 8 pm" in say(2)
+    assert "starts in 1 hour 30 minutes, at 8 pm" in say(1.5)
