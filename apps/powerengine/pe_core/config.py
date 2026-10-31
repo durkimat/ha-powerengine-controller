@@ -158,7 +158,7 @@ _NOTIFY_SERVICE = re.compile(r"^notify\.[a-z0-9_]+$")
 # Alexa announcements: nothing is spoken before the earliest time (later at weekends) or after the latest
 ALEXA_DEFAULT = {"services": ["notify.alexa_media_everywhere"], "hours_before": [8, 5, 2, 1, 0],
                  "earliest_weekday": "07:30", "earliest_weekend": "09:00", "latest": "21:00",
-                 "intro": "Daddybot here."}
+                 "intro": "Daddybot here.", "finish": True}
 NOTIFY_DEFAULT = "persistent_notification"      # HA's own notification area (the bell); no phone needed
 
 # Labels and one-line help for the config page (kept next to the defaults they describe).
@@ -587,7 +587,9 @@ def _parse_alexa(raw: Any) -> dict[str, Any]:
     intro = cfg["intro"]
     if not isinstance(intro, str) or len(intro) > 80:
         raise ConfigError("notifications.alexa.intro must be text of at most 80 characters (empty for none)")
-    return {"services": list(dict.fromkeys(services)), "intro": intro.strip(),
+    if not isinstance(cfg["finish"], bool):
+        raise ConfigError("notifications.alexa.finish must be true or false")
+    return {"services": list(dict.fromkeys(services)), "intro": intro.strip(), "finish": cfg["finish"],
             "hours_before": sorted({float(h) for h in hours}, reverse=True),
             "earliest_weekday": _clock_minutes("earliest_weekday", cfg["earliest_weekday"]),
             "earliest_weekend": _clock_minutes("earliest_weekend", cfg["earliest_weekend"]),

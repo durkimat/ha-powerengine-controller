@@ -52,6 +52,8 @@ from pe_core.adapters.publish import ad_would_alter, select_publisher
 from pe_core.adapters.solcast import ROLES as FORECAST_ROLES
 from pe_core.announce import allowed as alexa_allowed
 from pe_core.announce import due as alexa_due
+from pe_core.announce import event_summary as alexa_event_summary
+from pe_core.announce import finish_message as alexa_finish_message
 from pe_core.announce import message as alexa_message
 from pe_core.announce import readiness as alexa_readiness
 from pe_core.announce import trial_message as alexa_trial_message
@@ -166,6 +168,7 @@ CONTROL_STRATEGY = "rolling"      # "rolling" | "block": decided by #44 (EEPROM 
 BATTERY_VOLTS = 52.0              # nominal, for converting power to the inverter's current settings
 CYCLE_SECONDS = 30
 EVENT_ROLES = ("axle_event_active", "axle_event_start", "axle_event_end", "axle_direction")
+FINISH_KEEP_H = 14          # a grid event's summary not yet spoken (quiet hours) is dropped after this long
 EVENT_HOLD_S = 900          # the grid-event sensors may be unavailable this long before their last reading is dropped
 STICK_WARMUP = timedelta(minutes=5)   # after a start, no mid-slot stickiness while the plan's inputs load
 REPLAN_SECONDS = 300
@@ -756,6 +759,7 @@ class PowerEngine(hass.Hass):
                 self._announce_event(readings)
                 self._car_stop_step(readings)
                 self._heating_setback_step(readings)
+                self._event_finish_step(readings)
                 self._track_slots(readings)
                 self._snapshot_forecast(readings)
                 self._smart_step(readings)
@@ -2292,7 +2296,7 @@ class PowerEngine(hass.Hass):
             options = self.get_state(eid, attribute="options")
         except Exception:
             options = None
-        before = stop.to_dict()
+        before, note_before = stop.to_dict(), stop.note
         action = stop.step(r.now, want, r.ev_mode, options if isinstance(options, list) else None)
         if action is not None:
             try:
@@ -2301,6 +2305,8 @@ class PowerEngine(hass.Hass):
                 self._logbook(f"Car charger: {action.text}")
             except Exception as err:
                 self.log(f"Car charger: could not set {eid} to {action.option}: {err!r}", level="WARNING")
+        if stop.note != note_before and stop.note is not None and r.axle_start:
+            self._run_note(r, "car", stop.note, stop.mode_before)
         if stop.to_dict() != before:
             try:
                 with open(self._car_stop_file(), "w", encoding="utf-8") as fh:
@@ -2344,9 +2350,11 @@ class PowerEngine(hass.Hass):
             state = self.get_state(eid)
         except Exception:
             state = None
-        before = sb.to_dict()
+        before, note_before = sb.to_dict(), sb.note
         event = r.axle_start.isoformat() if r.axle_start else None
         action = sb.step(want, event, state, lead)
+        if sb.note != note_before and sb.note is not None and r.axle_start:
+            self._run_note(r, "heat", sb.note)
         if action is not None:
             try:
                 self.call_service(f"{eid.split('.')[0]}/{action.service}", entity_id=eid)
@@ -2360,6 +2368,103 @@ class PowerEngine(hass.Hass):
                     json.dump(sb.to_dict(), fh)
             except OSError as err:
                 self.log(f"Could not save the heating set-back state: {err!r}", level="WARNING")
+
+    # --- the announcement when a grid event has finished (pe_core/announce.py) ---------------
+
+    def _event_run_file(self):
+        return os.path.join(os.path.dirname(self._save_path()), "event_run.json")
+
+    def _event_run(self) -> dict:
+        """The grid event being followed: its start and end, what PowerEngine did for it, and whether it has been
+        announced. Kept on disk so a restart mid-event, or before the summary is spoken, loses nothing."""
+        run = self.__dict__.get("_run")
+        if run is None:
+            try:
+                with open(self._event_run_file(), encoding="utf-8") as fh:
+                    run = json.load(fh)
+            except (OSError, ValueError):
+                run = {}
+            self._run = run if isinstance(run, dict) else {}
+        return self._run
+
+    def _save_event_run(self):
+        try:
+            with open(self._event_run_file(), "w", encoding="utf-8") as fh:
+                json.dump(self._event_run(), fh)
+        except OSError as err:
+            self.log(f"Could not save the grid event record: {err!r}", level="WARNING")
+
+    def _follow_event(self, r) -> dict:
+        """The record of the event `r` shows (the current or next one), started afresh if it is a different one."""
+        run = self._event_run()
+        if run.get("start") != r.axle_start.isoformat():
+            run = self._run = {"start": r.axle_start.isoformat(), "end": r.axle_end.isoformat(), "done": False}
+        elif r.axle_end:
+            run["end"] = r.axle_end.isoformat()
+        return run
+
+    def _run_note(self, r, key, note, extra=None):
+        if not (r.axle_start and r.axle_end):
+            return
+        run = self._follow_event(r)
+        run[key] = note
+        if extra is not None:
+            run[f"{key}_mode"] = extra
+        self._save_event_run()
+
+    def _event_finish_step(self, r):
+        """When a grid event has finished, say how it went on the Alexa speakers: what the house used, what was
+        exported, what it should pay, and anything PowerEngine switched for it with the state it is back to. Said once,
+        inside the allowed hours (kept until they come, up to FINISH_KEEP_H hours)."""
+        if self._demo or self.cfg is None:
+            return
+        if r.axle_active and r.axle_start and r.axle_end:
+            before = dict(self._event_run())
+            self._follow_event(r)
+            if self._event_run() != before:
+                self._save_event_run()
+            return
+        run = self._event_run()
+        if not run.get("start") or run.get("done"):
+            return
+        start, end = datetime.fromisoformat(run["start"]), datetime.fromisoformat(run["end"])
+        ready = end.replace(minute=0 if end.minute == 0 else 30, second=0, microsecond=0)
+        if end.minute not in (0, 30) or end.second:
+            ready += timedelta(minutes=30)
+        if r.now < end or r.now < ready + timedelta(seconds=45):
+            return                                    # not over yet, or the last half-hour is not recorded yet
+        n = self.cfg.notifications
+        a = n["alexa"]
+        if (r.now - end) > timedelta(hours=FINISH_KEEP_H) or not (n["events"].get("alexa") and a.get("finish", True)):
+            run["done"] = True
+            self._save_event_run()
+            return
+        if not alexa_allowed(r.now, self.tz, a["earliest_weekday"], a["earliest_weekend"], a["latest"]):
+            return                                    # spoken when the allowed hours come
+        days = {start.astimezone(self.tz).date(), end.astimezone(self.tz).date()} if self.tz else {start.date()}
+        records = []
+        try:
+            for d in sorted(days):
+                records += self.costbook.day_records(d) if self.costbook is not None else []
+        except Exception as err:
+            self.log(f"Could not read the event's cost records: {err!r}", level="WARNING")
+        summary = alexa_event_summary(records, start, end)
+        if summary is None and (r.now - end) < timedelta(minutes=5):
+            return                                    # wait a little for the cost records
+        text = alexa_finish_message(a["intro"], start, end, r.now, self.tz, summary, run.get("heat"), run.get("car"),
+                                    run.get("car_mode"))
+        said = 0
+        for service in a["services"]:
+            try:
+                self.call_service(service.replace(".", "/", 1), message=text, data={"type": "announce"})
+                said += 1
+            except Exception as err:
+                self.log(f"Could not announce via {service}: {err!r}", level="WARNING")
+        if said:
+            run["done"] = True
+            self._save_event_run()
+            self.log(f"Alexa announced the grid event summary on {said} of {len(a['services'])}: {text}")
+            self._logbook(f"Grid event summary announced: {text}")
 
     # --- inverter writes (EEPROM wear) ---------------------------------------------------
 

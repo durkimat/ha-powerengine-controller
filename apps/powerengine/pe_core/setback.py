@@ -30,6 +30,10 @@ def window(start: datetime | None, end: datetime | None, lead_min: float) -> tup
     return start - timedelta(minutes=lead_min), end
 
 
+# what `Setback.note` can be
+NOTES = ("set_back", "already_on", "user_override", "restored")
+
+
 @dataclass
 class Action:
     service: str                        # "turn_on" or "turn_off"
@@ -40,6 +44,7 @@ class Setback:
     def __init__(self, held: bool = False, handled: str | None = None):
         self.held = held                # PowerEngine turned the switch on and has not yet turned it off
         self.handled = handled          # the event (its start, iso) already acted on or left alone: once is enough
+        self.note: str | None = None    # what happened this event, for the finish announcement (see `NOTES`)
 
     def to_dict(self) -> dict:
         return {"held": self.held, "handled": self.handled}
@@ -60,14 +65,17 @@ class Setback:
             if self.handled != event:
                 self.handled = event
                 if cur == "on":
+                    self.note = "already_on"
                     return None                             # already on, someone else's: leave it as it is
-                self.held = True
+                self.held, self.note = True, "set_back"
                 return Action("turn_on", f"grid event: heating set back {lead_min:g} min before it starts")
             if self.held and cur == "off":                  # turned off during the set-back: that choice stands
-                self.held = False
+                self.held, self.note = False, "user_override"
             return None
         if self.held:
             self.held = False
             if cur == "on":
+                self.note = "restored"
                 return Action("turn_off", "grid event over: heating set-back ended")
+            self.note = "user_override"
         return None
