@@ -27,14 +27,6 @@ null
 "warning": "[info] PowerEngine x.y.z starting"
 },
 {
-"t": "2026-09-27T19:30:00+00:00",
-"warning": "sensor.pe_map_catalogue: attributes are 15096 bytes, near Home Assistant's 16384-byte limit (over it, HA stops recording this sensor's history)"
-},
-{
-"t": "2026-09-27T19:30:00+00:00",
-"warning": "sensor.pe_map_settings: attributes are 15201 bytes, near Home Assistant's 16384-byte limit (over it, HA stops recording this sensor's history)"
-},
-{
 "t": "2026-09-27T19:31:00+00:00",
 "event": [
 "set",
