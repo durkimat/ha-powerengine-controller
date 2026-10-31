@@ -3,7 +3,8 @@
 Every planned dispatch PowerEngine sees gets a record, updated each cycle:
     planned     announced, not started yet (or in progress)
     done        ran to its end (confirmed if EDF lists it as completed)
-    cancelled   disappeared before it started
+    cancelled   disappeared before it started, and nothing replaced it
+    superseded  disappeared before it started, but a listing of the same dispatch replaced it (EDF slides the window)
     cut_short   disappeared while it was running (e.g. car unplugged, or finished and EDF stopped it)
 While a slot is running, the car's charging energy is added up, so each slot ends with how much the car really
 drew. This is the history the slot-certainty score (backlog #14) will be built on.
@@ -58,6 +59,16 @@ def learn_min_charge(slots: dict[str, dict], setting: float = DEFAULT_MIN_CHARGE
     return round(min(max(value, max(1.0, 0.5 * setting)), 2 * setting), 1), n
 
 
+RELIST = timedelta(minutes=30)           # a new listing this close in start and end is the same dispatch, re-listed
+
+
+def _relisted(planned: list[Window], start: datetime, end: datetime) -> bool:
+    """Is there a planned window that is the same dispatch as one that has just vanished: it starts within half an hour
+    of the old start and ends within half an hour of the old end? EDF re-lists a dispatch with a new start and energy
+    every half-hour (19:30-04:30, then 20:00-04:30), which is not the dispatch being withdrawn."""
+    return any(abs(w.start - start) <= RELIST and abs(w.end - end) <= RELIST for w in planned)
+
+
 class SlotTracker:
     def __init__(self, path: str | None = None):
         self.path = path
@@ -109,6 +120,10 @@ class SlotTracker:
                 if now >= start and nxt is not None:
                     # EDF re-lists a running dispatch from the current half-hour: the same slot, carrying on
                     rec["status"], rec["end"], rec["continued"] = "done", nxt.start.isoformat(), True
+                elif now < start and _relisted(planned, start, end):
+                    # EDF re-lists the window with a new start (and energy) every half-hour: this listing was
+                    # replaced, not withdrawn. It says nothing about whether slots happen.
+                    rec["status"] = "superseded"
                 else:
                     rec["status"] = "cut_short" if now >= start else "cancelled"
                 rec["ended"] = now.isoformat(timespec="seconds")
@@ -178,6 +193,7 @@ class SlotTracker:
             "done_no_car": len([r for r in finished if r["status"] == "done" and not drew(r, min_charge_min)]),
             "min_charge_min": min_charge_min,
             "cancelled": len([r for r in finished if r["status"] == "cancelled"]),
+            "superseded": len([r for r in finished if r["status"] == "superseded"]),
             "cut_short": len([r for r in finished if r["status"] == "cut_short"]),
             # what EDF planned for the slots that ran (a withdrawn slot never ran, and EDF re-plans often: counting
             # those, and each re-listing of the same hours, gave 5345 kWh over 14 days)

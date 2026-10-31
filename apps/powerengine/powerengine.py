@@ -29,6 +29,7 @@ from pe_core import (
     diagnostics,
     earlytarget,
     fcsnap,
+    forecastlog,
     gridcheck,
     hapackage,
     inuse,
@@ -457,12 +458,14 @@ class PowerEngine(hass.Hass):
             self._refresh_months()
         except Exception as err:
             self.log(f"Could not open the cost book: {err!r}", level="WARNING")
-        self._fcsnap, self._v2hist, self._warned_days = None, None, {}
+        self._fcsnap, self._v2hist, self._flog, self._warned_days = None, None, None, {}
         if self.costbook is not None:
             try:                      # forecast snapshots (never in a demo) and engine v2's history, beside the costs
                 if not self._demo:
                     self._fcsnap = fcsnap.SnapshotWriter(os.path.join(self.costbook.folder, "snapshots"), self.tz)
                 self._v2hist = V2History(os.path.join(self.costbook.folder, "v2history"), self.tz)
+                if not self._demo:
+                    self._flog = forecastlog.ForecastLog(os.path.join(self.costbook.folder, "forecastlog"), self.tz)
             except Exception as err:
                 self.log(f"Could not set up the forecast snapshots or engine v2 history: {err!r}", level="WARNING")
         self._publish_v2_settings()
@@ -517,6 +520,7 @@ class PowerEngine(hass.Hass):
         self.listen_event(self._on_v2_replan, V2_REPLAN_EVENT)
         self.listen_event(self._on_alexa_test, ALEXA_TEST_EVENT)
         self.run_every(self._publish_v2_history, "now+65", 900)
+        self.run_every(self._publish_forecast_score, "now+240", 3600)
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
         self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
@@ -971,6 +975,7 @@ class PowerEngine(hass.Hass):
                     attrs = {**attrs, "choice": self._engine_choice(), "profile": self._engine_profile()}
                 self._publish_if_changed(key, state, attrs)
             self._record_v2_history(r.now, out, send, preview, r)
+            self._record_forecast_log(r.now, out, r)
             if not preview:
                 if send:
                     self._note_command(out.decision)
@@ -1528,7 +1533,7 @@ class PowerEngine(hass.Hass):
         try:
             if prune:
                 self.costbook.prune(self._today())
-                for keeper in (self.__dict__.get("_fcsnap"), self.__dict__.get("_v2hist")):
+                for keeper in (self.__dict__.get("_fcsnap"), self.__dict__.get("_v2hist"), self.__dict__.get("_flog")):
                     if keeper is not None:
                         keeper.prune(self._today())
             self._months = self.costbook.months(self._today())
@@ -1939,6 +1944,35 @@ class PowerEngine(hass.Hass):
             if self._engine_profile() is not None:
                 info["profile"] = self._engine_profile()
         return info
+
+    def _record_forecast_log(self, now, out, readings):
+        """Forecast against actual (pe_core/forecastlog.py): the plan each time it is made, and the real level, price,
+        sun and house load every five minutes. A failure warns once a day and the cycle goes on."""
+        log = self.__dict__.get("_flog")
+        if log is None:
+            return
+        try:
+            if out.revalued and out.value is not None:
+                obs = out.observation
+                level = obs.level_filtered if obs.level_filtered is not None else obs.level_reported
+                log.plan(now, level, out.value)
+            log.actual(now, readings)
+        except Exception as err:
+            self._warn_daily("flog", f"Could not record the forecast log: {err!r}")
+
+    def _publish_forecast_score(self, *args, **kwargs):
+        """sensor.pe_diag_forecast: how the expected battery level compared with the real one over the last 7 days."""
+        log = self.__dict__.get("_flog")
+        if log is None or self._get_publisher() is None:
+            return
+        try:
+            today = datetime.now(timezone.utc).astimezone(self.tz or timezone.utc).date()
+            sc = log.score(7, today)
+            lv = sc["level"].get("+120 min")
+            state = (f"+2 h: off by {lv['mean_abs_error']} points on average" if lv else "collecting")
+            self._publish_state("diag_forecast", state, {"days": 7, **sc})
+        except Exception as err:
+            self._warn_daily("flog_score", f"Could not score the forecast log: {err!r}")
 
     def _record_v2_history(self, now, out, send, preview, readings=None):
         h = self.__dict__.get("_v2hist")
@@ -4243,6 +4277,8 @@ class PowerEngine(hass.Hass):
             if self.__dict__.get("_fcsnap") else None,
             "v2_history": s(lambda: v2history.summary(self._v2hist.folder, self.tz)) if self.__dict__.get("_v2hist")
             else None,
+            "forecast_log": s(lambda: forecastlog.summary(self._flog.folder, datetime.now(timezone.utc).astimezone(
+                self.tz or timezone.utc).date())) if self.__dict__.get("_flog") else None,
             "early_target": s(lambda: {**self._early.summary(), "records": self._early.records[-60:]}),
             "engine_compare": s(self._compare_bundle),
             "attribute_sizes": s(lambda: diagnostics.largest_attrs(self.__dict__.get("_attr_sizes", {}))),

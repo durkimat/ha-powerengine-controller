@@ -159,3 +159,19 @@ def test_learning_waits_for_evidence_then_moves_a_little_and_is_bounded():
     for r in odd.values():
         r["confirmed"] = False
     assert learn_min_charge(odd, 2.0) == (2.0, 0)
+
+
+def test_a_listing_replaced_by_the_same_dispatch_starting_later_is_superseded_not_cancelled():
+    tr = SlotTracker()
+    run(tr, range(0, 24), [W(30, 540)])                                 # listed from 22:30 to 07:00
+    run(tr, range(24, 28), [W(60, 540)])                                # re-listed from 23:00, same end, less energy
+    assert tr.slots[W(30, 540).start.isoformat()]["status"] == "superseded"
+    s = tr.summary(T0 + 30 * M)
+    assert s["superseded"] == 1 and s["cancelled"] == 0
+
+
+def test_a_window_withdrawn_for_good_is_still_cancelled():
+    tr = SlotTracker()
+    run(tr, range(0, 24), [W(30, 540)])
+    run(tr, range(24, 28), [W(400, 460)])                               # a different, unrelated window
+    assert tr.slots[W(30, 540).start.isoformat()]["status"] == "cancelled"
