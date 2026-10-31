@@ -218,6 +218,21 @@ def test_smart_slot_added_changes_slots_and_the_boundaries_make_slot_events():
     assert timedelta(minutes=2) <= start - T0 <= timedelta(minutes=2, seconds=10)
 
 
+def test_a_window_that_slides_forward_is_not_a_change_but_new_hours_are():
+    """EDF re-lists a running dispatch from the current half-hour with a smaller energy: the hours are the same."""
+    half = timedelta(minutes=30)
+    start = T0.replace(minute=0, second=0, microsecond=0)
+    end = start + timedelta(hours=9)
+    o = Observer(SETTINGS)
+    o.update(inp(start + timedelta(minutes=5), dispatches=[Window(start, end, -63.0)]), None, None)
+    slid = run(o, start + timedelta(minutes=35), 120, dispatches=[Window(start + half, end, -59.5)])
+    assert "slots_changed" not in kinds(slid)
+    extended = run(o, start + timedelta(minutes=40), 120, dispatches=[Window(start + half, end + half, -61.0)])
+    assert kinds(extended).count("slots_changed") == 1
+    shorter = run(o, start + timedelta(minutes=50), 120, dispatches=[Window(start + half, end - half, -55.0)])
+    assert kinds(shorter).count("slots_changed") == 1
+
+
 def test_a_price_boundary_gives_a_price_event():
     o = Observer(SETTINGS)
     rates = [Window(T0 - timedelta(hours=1), T0 + timedelta(minutes=1), 0.30),

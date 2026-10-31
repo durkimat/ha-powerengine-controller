@@ -231,6 +231,25 @@ class Observer:
                 out.append([w.start.timestamp(), e, None if w.value is None else round(float(w.value), 5)])
         return sorted(out)
 
+    @staticmethod
+    def _coverage_sig(ws, now_ts: float) -> list:
+        """The stretches of time smart slots cover from the half-hour in progress on, joined where they touch. EDF
+        re-lists a running dispatch from the current half-hour every half-hour (19:30-04:30, then 20:00-04:30, with a
+        smaller energy), which changes every window's start and energy and nothing the plan can use: the hours covered
+        are the same. Only a change to those hours counts as the slots having changed."""
+        floor = now_ts - now_ts % 1800
+        spans = sorted([max(w.start.timestamp(), floor), w.end.timestamp()] for w in ws or []
+                       if w.end.timestamp() > now_ts)
+        out: list = []
+        for a, b in spans:
+            if b <= a:
+                continue
+            if out and a <= out[-1][1]:
+                out[-1][1] = max(out[-1][1], b)
+            else:
+                out.append([a, b])
+        return out
+
     def _data_events(self, inp: StepInput, ts: float, ev, first: bool) -> None:
         r = inp.readings
         prev_ts = self.prev.get("now", ts)
@@ -245,11 +264,11 @@ class Observer:
             if changed:
                 ev("prices_published", "New prices have been published")
 
-        # smart slots changed (added, moved, withdrawn, cut short)
-        dsig = self._windows_sig(r.dispatches, ts)
+        # smart slots changed (hours added, withdrawn or cut short; a window sliding forward is not a change)
+        dsig = self._coverage_sig(r.dispatches, ts)
         old = self.stable.get("slots")
         if old is not None:
-            old["v"] = [w for w in old["v"] if w[1] > ts]
+            old["v"] = [[max(w[0], ts - ts % 1800), w[1]] for w in old["v"] if w[1] > ts]
         committed, changed = self._settle("slots", dsig, ts, DEBOUNCE_S)
         if changed:
             ev("slots_changed", "The smart-charge slots have changed")
