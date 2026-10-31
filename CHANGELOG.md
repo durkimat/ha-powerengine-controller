@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.177 (beta)
+
+### Behaviour changes
+
+- **Alexa reminders under an hour say minutes.** A reminder set for 0.5 or 0.25 hours before a grid event used to say "starts in 0 hours". It now says "starts in 30 minutes" or "starts in 15 minutes", and "1 hour 30 minutes" for 1.5. Reminders of one hour or more are worded as before.
+
+### Behind the scenes
+
+- `announce._span` pluralises minutes ("1 minute"); the under-an-hour wording is tested in `tests/test_announce.py`.
+
 ## 0.9.176 (beta)
 
 ### Behaviour changes
