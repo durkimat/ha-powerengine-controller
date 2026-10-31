@@ -4357,7 +4357,7 @@ class PowerEngine(hass.Hass):
             "v2_history": s(lambda: v2history.summary(self._v2hist.folder, self.tz)) if self.__dict__.get("_v2hist")
             else None,
             "coverage": s(lambda: coverage.summary(self.costbook.folder, datetime.now(timezone.utc).astimezone(
-                self.tz or timezone.utc).date())) if self.costbook is not None else None,
+                self.tz or timezone.utc).date())) if self.__dict__.get("costbook") is not None else None,
             "forecast_log": s(lambda: forecastlog.summary(self._flog.folder, datetime.now(timezone.utc).astimezone(
                 self.tz or timezone.utc).date())) if self.__dict__.get("_flog") else None,
             "early_target": s(lambda: {**self._early.summary(), "records": self._early.records[-60:]}),
