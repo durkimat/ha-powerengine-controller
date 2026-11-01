@@ -2,6 +2,12 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.189 (beta)
+
+### Behaviour changes
+
+- **Costs page on a phone:** the top of the page takes far less room. "Expand all / Collapse all" now share one row with the Alignment switch, and the period buttons sit in an even grid. Needs card 0.9.189.
+
 ## 0.9.188 (beta)
 
 ### Behaviour changes
