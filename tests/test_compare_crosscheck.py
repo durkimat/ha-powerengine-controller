@@ -42,7 +42,7 @@ def test_the_runner_agrees_with_the_tool_within_a_penny(tmp_path):
         snap["entries"].append({"at": t.isoformat(), "states": {}, "profile": prof})
     snap["entries"].sort(key=lambda e: e["at"])
     path.write_text(json.dumps(snap))
-    assert run.run_day(str(save), DAY, hours=HOURS) == 0
+    assert run.run_day(str(save), DAY, hours=HOURS, what_if=False) == 0
     got = json.loads((save / "costs" / "compare" / "2026-10-06.json").read_text())
     assert got["status"] == "ok"
 

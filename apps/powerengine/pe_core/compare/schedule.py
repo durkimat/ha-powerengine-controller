@@ -42,6 +42,7 @@ class Scheduler:
         self.python = python or sys.executable
         self.nice = nice
         self.queue: deque[date] = deque()
+        self.forced: set[date] = set()        # days asked for by hand: run even when they already have a result
         self.events: list[dict] = []          # runs that ended (or never started) since the last poll()
         self.proc = None
         self.day: date | None = None
@@ -63,6 +64,20 @@ class Scheduler:
         yesterday = today - timedelta(days=1)
         days = [yesterday] if results.needs_run(self.costs, yesterday) else []
         return days + self.missing(today)[:EXTRA_PER_NIGHT]
+
+    def recheck(self, day: date, today: date) -> str | None:
+        """Compare `day` again now, by request. Returns why not, or None when it is queued (or started)."""
+        if not (today - timedelta(days=LOOKBACK_DAYS) <= day < today):
+            return f"only the last {LOOKBACK_DAYS} finished days can be compared again"
+        if not self.has_snapshot(day):
+            return "there is no forecast record for that day"
+        if day == self.day or day in self.queue:
+            return "that day is already waiting or running"
+        self.forced.add(day)
+        self.queue.append(day)
+        if not self.running:
+            self._next()
+        return None
 
     # --- the job --------------------------------------------------------------------------------------------------
     @property
@@ -97,7 +112,8 @@ class Scheduler:
     def _next(self) -> None:
         while self.queue and not self.running:
             day = self.queue.popleft()
-            if not results.needs_run(self.costs, day) or self.busy():
+            if (day not in self.forced and not results.needs_run(self.costs, day)) or self.busy():
+                self.forced.discard(day)
                 continue
             self._start(day)
 
@@ -181,6 +197,7 @@ class Scheduler:
                     ended = self._finish(day, "failed", f"the runner stopped (exit {rc}): {self._tail()}"[:300],
                                          started)
             if ended is not None:
+                self.forced.discard(day)
                 self.proc, self.day, self.started = None, None, None
                 self._close()
                 self._lock(None)

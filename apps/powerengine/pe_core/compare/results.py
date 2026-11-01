@@ -107,7 +107,7 @@ def build_result(day_input, outcome: dict, took_s: float, made_at: str | None = 
         out["profile"] = day_input.profile
     try:
         stats = day_input.pack["days"][next(iter(day_input.pack["days"]))]["stats"]
-        why = whymod.build(runs["v2"], runs["bound"], day_input.tz, stats.get("axle_kwh"))
+        why = whymod.build(runs["v2"], runs["bound"], day_input.tz, stats.get("axle_kwh"), outcome.get("what_if"))
     except (AttributeError, KeyError, StopIteration, TypeError):
         why = None
     if why:
