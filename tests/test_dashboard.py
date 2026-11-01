@@ -1,3 +1,6 @@
+import types
+from datetime import datetime
+
 import yaml
 
 from pe_core.dashboard import SOURCE, sync_dashboard
@@ -184,7 +187,7 @@ def test_costs_tab_templates_read_the_new_waterfall_steps():
 
     from pe_core.costs import waterfall
     d = yaml.safe_load(open(SOURCE))
-    cards = [c for v in d["views"] for s in v.get("sections", []) for c in s.get("cards", [])]
+    cards = _all_cards(d)
     texts = [c["content"] for c in cards if c.get("type") == "markdown"]
     headline = next(t for t in texts if "macro headline" in t)
     for old in ("Day-to-day cost", "Battery carry-over", "Battery on self-use", "self-use"):
@@ -196,11 +199,23 @@ def test_costs_tab_templates_read_the_new_waterfall_steps():
     attrs = {"periods": {p: waterfall(days, p) for p in ("yesterday", "week", "month", "days30")}}
     env = jinja2.Environment()
     env.globals["state_attr"] = lambda ent, attr: attrs.get(attr) if ent == "sensor.pe_cost_waterfall" else None
+    nothing = types.SimpleNamespace(pe_cost_today=None, pe_event_last=None)          # no day recorded yet today
+    env.globals["states"] = types.SimpleNamespace(sensor=nothing)
+    env.globals["now"] = lambda: datetime(2026, 10, 11, 12, 0)
     ctx = lambda t: " ".join(env.from_string(t.replace("<<tariff>>", "EDF tariff").replace(  # noqa: E731
         "<<event>>", "Axle").replace("<<supplier>>", "EDF")).render().split())
     text = ctx(headline)
     # week: 7 days x (10, 4.5 paid): none 70, solar+tariff 49, saved 3.5 x 7 = 24.5 from the battery and PowerEngine
     assert "Last 7 days: you paid £31.50" in text and "£49.00" in text and "saved £17.50" in text
+
+
+def _all_cards(d):
+    """Every card of every view, including those inside a section card's own `cards`."""
+    def walk(cards):
+        for c in cards:
+            yield c
+            yield from walk(c.get("cards") or [])
+    return list(walk(c for v in d["views"] for s in v.get("sections", []) for c in s.get("cards", [])))
 
 
 def _costs_view():
@@ -241,7 +256,7 @@ def test_costs_page_no_longer_describes_the_old_cost_layers():
     for stale in ("Unexplained", "Carried in battery", "How the layers", "Battery control", "carry-over", "S0",
                   "Ledger correction", "first-in-first-out"):
         assert stale not in view, stale
-    assert "Savings by day (the waterfall's steps)" in view and "How the numbers are worked out" in view
+    assert "Savings by day (the waterfall's steps)" in view and "**How the numbers are worked out**" in view
 
 
 def test_plan_actions_table_renders_when_a_window_has_no_optional_key():
@@ -268,8 +283,7 @@ def test_savings_breakdown_folds_and_adds_up_to_the_powerengine_step():
 
     from pe_core.costs import waterfall
     d = yaml.safe_load(open(SOURCE))
-    cards = [c for v in d["views"] for s in v.get("sections", []) for c in s.get("cards", [])]
-    card = next(c for c in cards if c.get("type") == "markdown" and "How yesterday's" in c["content"])
+    card = next(c for c in _all_cards(d) if c.get("type") == "markdown" and "How yesterday's" in c["content"])
     assert "<details>" in card["content"] and "<details open" not in card["content"]
     # 7 Oct 2026: the waterfall said PowerEngine saved 2.98
     day = {"date": "2026-10-07", "complete": True, "energy": {"battery_in": 13.2, "battery_out": 23.2},
