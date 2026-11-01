@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.185 (beta)
+
+### Behaviour changes
+
+- **The Costs page folds.** Each part of the page is now a section you can open and close: Where the savings came from, Engines compared, Last 7 days day by day, Special events and a Reference section (what the bars mean, how the numbers are worked out, energy by day). Reference starts closed; the others start open. What you open or close is remembered on that device, and "Expand all" / "Collapse all" sit under the page title. The cards inside a section are drawn when it is first opened.
+- **Less repeating.** "Today so far" is now the first line of the summary at the top instead of a separate box. The three overlapping explanations of the bars (the list under the waterfall, "What the bars mean", the day-by-day intro) are one Reference section. "Savings by day" now sits with the day-by-day chart.
+
+### Behind the scenes
+
+- New cards `powerengine-section-card` (title, key, open, cards) and `powerengine-section-tools`; needs card 0.9.185 (the app asks for it).
+
 ## 0.9.184 (beta)
 
 ### Behaviour changes
