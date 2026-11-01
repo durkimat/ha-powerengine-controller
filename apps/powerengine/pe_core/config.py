@@ -42,6 +42,7 @@ KNOWN_KEYS = frozenset(
         "inputs",
         "solar_plants",
         "devices",
+        "free_power_loads",
         "system",
         "features",
         "safety",
@@ -376,6 +377,17 @@ class Device:
     inputs: dict[str, Any] = field(default_factory=dict)
 
 
+FREE_LOAD_DOMAINS = ("switch", "input_boolean")     # what can be turned on and off with turn_on / turn_off
+
+
+@dataclass(frozen=True)
+class FreeLoad:
+    """Something the owner wants running while there is free power (an immersion heater, say): PowerEngine turns it on
+    when an EDF free-electricity session starts and off when it ends (pe_core/freeloads.py)."""
+    entity: str
+    name: str = ""
+
+
 DEVICE_INPUTS = {"battery_soc": "battery", "battery_power": "battery", "solar_power": "solar"}   # input -> capability
 DEVICE_CONTROLS = ("read_only",)           # "controlled" arrives with M3; only the main inverter is driven until then
 
@@ -448,6 +460,7 @@ class Config:
     inputs: dict[str, Any] = field(default_factory=dict)
     solar_plants: tuple[SolarPlant, ...] = ()
     devices: tuple[Device, ...] = ()
+    free_power_loads: tuple[FreeLoad, ...] = ()        # switched on while free power is on offer (freeloads.py)
     site: Site = field(default_factory=Site)
     engine_v2: V2Settings = field(default_factory=V2Settings)
     v2_profile: str = DEFAULT_PROFILE                  # the engine v2 profile in use (built in, or one of v2_profiles)
@@ -709,12 +722,43 @@ def parse_config(data: Any) -> Config:
         inputs=dict(inputs),
         solar_plants=_parse_plants(data.get("solar_plants")),
         devices=_parse_devices(data.get("devices")),
+        free_power_loads=_parse_free_loads(data.get("free_power_loads")),
         site=_parse_site(data.get("site")),
         engine_v2=engine_v2,
         v2_profile=v2_profile,
         v2_profiles=v2_profiles,
         raw=data,
     )
+
+
+def _parse_free_loads(data: Any) -> tuple[FreeLoad, ...]:
+    if data is None:
+        return ()
+    if not isinstance(data, list):
+        raise ConfigError("'free_power_loads' must be a list")
+    loads, seen = [], set()
+    for i, item in enumerate(data, start=1):
+        if isinstance(item, str):                         # the short form: just the entity
+            item = {"entity": item}
+        if not isinstance(item, dict):
+            raise ConfigError(f"free power load #{i} must be an entity or a mapping with 'entity'")
+        unknown = sorted(set(item) - {"entity", "name"}, key=str)
+        if unknown:
+            raise ConfigError(f"free power load #{i}: unknown key(s) {', '.join(map(str, unknown))}")
+        eid = item.get("entity")
+        if not isinstance(eid, str) or not _ENTITY_ID.match(eid):
+            raise ConfigError(f"free power load #{i}: 'entity' must be an entity id like switch.immersion_heater")
+        if eid.split(".")[0] not in FREE_LOAD_DOMAINS:
+            raise ConfigError(f"free power load '{eid}': only {' and '.join(FREE_LOAD_DOMAINS)} entities can be "
+                              f"turned on and off")
+        if eid in seen:
+            raise ConfigError(f"free power load '{eid}' is listed twice")
+        seen.add(eid)
+        name = item.get("name") or ""
+        if not isinstance(name, str):
+            raise ConfigError(f"free power load '{eid}': 'name' must be text")
+        loads.append(FreeLoad(entity=eid, name=name.strip()))
+    return tuple(loads)
 
 
 def _parse_devices(data: Any) -> tuple[Device, ...]:
