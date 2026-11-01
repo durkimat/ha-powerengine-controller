@@ -225,7 +225,12 @@ def test_cost_waterfall_entity_only_with_scenario_params(tmp_path):
     state, attrs = with_sp["cost_waterfall"]
     assert isinstance(state, (int, float))
     periods = attrs["periods"]
-    assert set(periods) == {"yesterday", "week", "month", "days30"}
+    assert set(periods) == {"today", "yesterday", "week", "month", "days30"}
+    assert periods["today"]["days"] == 0                     # the newest day is finished: nothing "so far"
+    assert attrs["names"] == {"tariff": "EDF tariff", "event": "Axle"}
+    assert attrs["daily"][-1]["done"] is True
+    assert set(attrs["daily"][-1]) == {"date", "done", "none", "solar", "tariff", "actual_adj", "carry",
+                                       "events_metered", "axle_income"}
     for p in periods.values():
         assert p["steps"][0]["label"] == "No solar or battery"
         assert p["steps"][-1]["label"] == "You paid"
@@ -594,6 +599,18 @@ def test_waterfall_steps_chain_exactly():
     by = {s["label"]: s["value"] for s in w["steps"]}
     assert by["PowerEngine"] == round(round(3.111 + 4.201 + 0.501 - 0.201, 2) - round(6.333 + 7.001, 2), 2)
     assert by["Axle & free power"] == round(0.6, 2)
+
+
+def test_waterfall_today_is_the_unfinished_day_only():
+    from pe_core.costs import daily_rows, waterfall
+    days = [_day("2026-09-21", none=5.0), _day("2026-09-22", complete=False, none=2.0, solar=1.0)]
+    w = waterfall(days, "today")
+    assert (w["days"], w["from"], w["to"]) == (1, "2026-09-22", "2026-09-22")
+    assert w["steps"][0]["value"] == 2.0
+    assert waterfall(days, "yesterday")["to"] == "2026-09-21"
+    assert waterfall(days[:1], "today")["days"] == 0          # no unfinished day yet
+    rows = daily_rows(days)
+    assert [r["done"] for r in rows] == [True, False] and rows[1]["solar"] == 1.0
 
 
 def test_waterfall_omits_events_step_when_zero():

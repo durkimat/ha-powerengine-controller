@@ -12,9 +12,10 @@ import json
 import os
 from datetime import date, datetime, timedelta
 
-from .costs import METHOD_VERSION, SimDefault, day_summary, process, steps, waterfall
+from .costs import METHOD_VERSION, SimDefault, daily_rows, day_summary, process, steps, waterfall
 from .energy import FLOW_VERSION, HalfHour
 from .ledger import Ledger
+from .names import N
 from .readings import Readings
 from .tariff import cheap_tods, chosen_window, rates_at, reclassify
 
@@ -391,7 +392,7 @@ class CostBook:
         return [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in m.items()} for m in by.values()]
 
 
-WATERFALL_PERIODS = ("yesterday", "week", "month", "days30")
+WATERFALL_PERIODS = ("today", "yesterday", "week", "month", "days30")
 WATERFALL_WINDOW_DAYS = 31   # enough for the 'days30' period, whatever SHOW_DAYS (cost_days) is
 
 
@@ -432,7 +433,10 @@ def cost_entity_states(book: CostBook, today: date, months: list[dict] | None = 
         # up to 31 days of summaries for the waterfall, independent of however many cost_days shows (SHOW_DAYS)
         wf_days = book.recent(today, days=WATERFALL_WINDOW_DAYS, scenario_params=scenario_params)
         periods = {p: waterfall(wf_days, p) for p in WATERFALL_PERIODS}
-        out["cost_waterfall"] = (-_step_value(periods["yesterday"], "PowerEngine"), {"periods": periods})
+        # `daily` and `names` let the card total any range of dates (a custom period) with the same steps
+        out["cost_waterfall"] = (-_step_value(periods["yesterday"], "PowerEngine"),
+                                 {"periods": periods, "daily": daily_rows(wf_days),
+                                  "names": {"tariff": N("tariff"), "event": N("event")}})
     return out
 
 
