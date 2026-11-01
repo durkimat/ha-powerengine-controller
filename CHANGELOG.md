@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.187 (beta)
+
+### Behaviour changes
+
+- **One period for the whole Costs page.** A picker at the top (Today, Yesterday, 7 days, This month, 30 days, Custom with From and To dates) sets the period for the summary, the savings waterfall, Day by day, Engines compared and Special events. The old top box ("Today so far" and the three headline lines) is gone: the summary under the picker says in words what the chosen period came to, and when the period includes today it adds today's half-hours and event details. Your choice is remembered on that device.
+- **Day by day follows the picker.** It replaces the fixed 7-day chart, the "Savings by day" table and the PowerEngine step breakdown with one card: a chart (the five lines per day, tap a day for its figures), the day-by-day table with a total row, and a "Show how the PowerEngine step splits" tick for the carried-in / battery itself / timing columns. It reads "paid you £x" for a day that paid you.
+- **Engines compared and Special events follow it too.** Engines compared shows the compared days inside the period and totals just those (the comparison only covers the last 7 days, and says so). Special events adds a line for the events in the period (the last three months are listed day by day).
+
+### Behind the scenes
+
+- `sensor.pe_cost_waterfall` `daily` rows also carry `self_use_adj`, `bin` and `bout`; `sensor.pe_event_months` lists `ev_days` (possibly empty) for each of the last three months. New cards `powerengine-costs-period-card` and `powerengine-costs-days-card`; the waterfall, engines and events cards take `shared: true`. Needs card 0.9.187 (the app asks for it).
+
 ## 0.9.186 (beta)
 
 ### Behaviour changes
