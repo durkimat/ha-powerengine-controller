@@ -1,6 +1,3 @@
-import types
-from datetime import datetime
-
 import yaml
 
 from pe_core.dashboard import SOURCE, sync_dashboard
@@ -72,7 +69,7 @@ def test_charts_have_a_phone_version():
     walk(d)
     desk = [c for q, c in pairs if "min-width" in q]
     phone = [c for q, c in pairs if "max-width" in q]
-    assert len(desk) == len(phone) == 5
+    assert len(desk) == len(phone) == 4
     for a, b in zip(desk, phone, strict=True):
         assert a["series"] == b["series"]
         assert sum(y.get("show", True) for y in b["yaxis"]) == 1
@@ -181,33 +178,6 @@ def test_sync_dashboard_splices_card_and_writes_only_on_change(tmp_path):
     assert "# BEGIN energy-flow" in updated and "# END energy-flow" in updated
 
 
-def test_costs_tab_templates_read_the_new_waterfall_steps():
-    """The waterfall's headline renders against the real step labels (no old steps)."""
-    import jinja2
-
-    from pe_core.costs import waterfall
-    d = yaml.safe_load(open(SOURCE))
-    cards = _all_cards(d)
-    texts = [c["content"] for c in cards if c.get("type") == "markdown"]
-    headline = next(t for t in texts if "macro headline" in t)
-    for old in ("Day-to-day cost", "Battery carry-over", "Battery on self-use", "self-use"):
-        assert old not in headline, old
-
-    days = [{"date": f"2026-09-{n:02d}", "complete": True, "scenarios": {
-        "none": 10.0, "solar": 8.0, "tariff": 7.0, "self_use_adj": 6.0, "actual_adj": 4.0, "carry": 0.5,
-        "events_metered": 0.0, "axle_income": 0.0}} for n in range(1, 11)]
-    attrs = {"periods": {p: waterfall(days, p) for p in ("yesterday", "week", "month", "days30")}}
-    env = jinja2.Environment()
-    env.globals["state_attr"] = lambda ent, attr: attrs.get(attr) if ent == "sensor.pe_cost_waterfall" else None
-    nothing = types.SimpleNamespace(pe_cost_today=None, pe_event_last=None)          # no day recorded yet today
-    env.globals["states"] = types.SimpleNamespace(sensor=nothing)
-    env.globals["now"] = lambda: datetime(2026, 10, 11, 12, 0)
-    ctx = lambda t: " ".join(env.from_string(t.replace("<<tariff>>", "EDF tariff").replace(  # noqa: E731
-        "<<event>>", "Axle").replace("<<supplier>>", "EDF")).render().split())
-    text = ctx(headline)
-    # week: 7 days x (10, 4.5 paid): none 70, solar+tariff 49, saved 3.5 x 7 = 24.5 from the battery and PowerEngine
-    assert "Last 7 days: you paid £31.50" in text and "£49.00" in text and "saved £17.50" in text
-
 
 def _all_cards(d):
     """Every card of every view, including those inside a section card's own `cards`."""
@@ -224,23 +194,10 @@ def _costs_view():
     return text[start:text.index("  - title: Health\n")]
 
 
-def test_costs_chart_shows_the_last_seven_complete_days_never_today():
-    """The daily chart is the waterfall's 'Last 7 days' day by day: complete days only, 7 of them, the window ending
-    at noon on the last complete day (end of today minus 36 h) on desktop and phone alike."""
-    view = _costs_view()
-    assert view.count("filter(d => d.scenarios && d.complete).slice(-7)") == 5        # one per series
-    assert "Date.now()" not in view
-    assert view.count('offset: "-36h"') == 1 and view.count('"offset": "-36h"') == 1
-    assert view.count("graph_span: 7d") == 1 and view.count('graph_span: "7d"') == 1
-
 
 def test_last_bar_is_the_waterfalls_you_paid_with_the_events_in():
     """Day by day, the last bar is what the waterfall ends on: PowerEngine plus the event half-hours less the
     event payment (costs._steps_for's r6), so the bars and the waterfall always agree."""
-    view = _costs_view()
-    assert 'name: "Net cost (below 0 = paid to you)"' in view
-    assert ("d.scenarios.actual_adj + d.scenarios.carry + d.scenarios.events_metered - d.scenarios.axle_income"
-            in view)
     from pe_core.costs import waterfall
     day = {"date": "2026-10-03", "complete": True, "scenarios": {
         "none": 6.40, "solar": 5.0, "tariff": 3.0, "actual_adj": 2.5, "carry": 0.0,
@@ -256,7 +213,7 @@ def test_costs_page_no_longer_describes_the_old_cost_layers():
     for stale in ("Unexplained", "Carried in battery", "How the layers", "Battery control", "carry-over", "S0",
                   "Ledger correction", "first-in-first-out"):
         assert stale not in view, stale
-    assert "Savings by day (the waterfall's steps)" in view and "**How the numbers are worked out**" in view
+    assert "**How the numbers are worked out**" in view
 
 
 def test_plan_actions_table_renders_when_a_window_has_no_optional_key():
@@ -276,35 +233,6 @@ def test_plan_actions_table_renders_when_a_window_has_no_optional_key():
     assert "**self-use** |" in out and "**self-use** (manual) |" in out
 
 
-def test_savings_breakdown_folds_and_adds_up_to_the_powerengine_step():
-    """The fold-out under 'Where the savings came from' splits the PowerEngine step into carried-in energy, the
-    battery itself and PowerEngine's timing; the three add up to the waterfall's step, and it is collapsed."""
-    import jinja2
-
-    from pe_core.costs import waterfall
-    d = yaml.safe_load(open(SOURCE))
-    card = next(c for c in _all_cards(d) if c.get("type") == "markdown" and "How yesterday's" in c["content"])
-    assert "<details>" in card["content"] and "<details open" not in card["content"]
-    # 7 Oct 2026: the waterfall said PowerEngine saved 2.98
-    day = {"date": "2026-10-07", "complete": True, "energy": {"battery_in": 13.2, "battery_out": 23.2},
-           "scenarios": {"none": 4.23, "solar": 3.76, "tariff": 3.52, "self_use_adj": 1.56, "actual_adj": 1.24,
-                         "carry": -0.7, "events_metered": 0.0, "axle_income": 0.0}}
-    step = next(s["value"] for s in waterfall([day], "yesterday")["steps"] if s["label"] == "PowerEngine")
-    assert step == -2.98
-    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
-    env.globals["state_attr"] = lambda _e, k: [day] if k == "days" else None
-    env.globals["is_state"] = lambda _e, _v: True
-    env.filters["timestamp_custom"] = lambda ts, fmt: "Wed 07 Oct"
-    env.globals["as_timestamp"] = lambda _s: 0
-    text = " ".join(env.from_string(card["content"]).render().split())
-    assert "How yesterday's £2.98 was made: £0.70 from energy carried in, £1.96 from the battery itself, " \
-           "£0.32 from PowerEngine's timing" in text
-    assert "| Wed 07 Oct | **£2.98** | £0.70 | £1.96 | £0.32 | 13.2 / 23.2 |" in text
-    # an old day without self_use_adj is skipped, and with no days at all nothing renders
-    env.globals["state_attr"] = lambda _e, k: [{"date": "x", "complete": True, "scenarios": {"none": 1}}] \
-        if k == "days" else None
-    assert "details" not in env.from_string(card["content"]).render()
-
 
 def test_one_engine_tab_is_written_for_the_engine_in_use():
     from pe_core.dashboard import render
@@ -319,3 +247,22 @@ def test_one_engine_tab_is_written_for_the_engine_in_use():
     other = lambda ts: [t for t in ts if not t.startswith("Engine")]    # noqa: E731
     assert other(v2) == other(v1)                                          # the rest of the pages is the same
     assert "powerengine-v2-plan-card" not in render(text, engine="v1")
+
+
+def test_costs_page_follows_one_shared_period():
+    """The picker sets the period; the waterfall, day-by-day, engines and events cards follow it (shared: true), and the
+    old fixed 7-day pieces (headline text, chart, day table, step breakdown) are gone."""
+    d = yaml.safe_load(open(SOURCE))
+    costs = next(v for v in d["views"] if v["title"] == "Costs")
+    cards = _all_cards({"views": [costs]})
+    types = {c.get("type"): c for c in cards}
+    assert "custom:powerengine-costs-period-card" in types
+    for t in ("custom:powerengine-waterfall-card", "custom:powerengine-engine-compare-card",
+              "custom:powerengine-events-card"):
+        assert types[t].get("shared") is True and "period" not in types[t], t
+    assert "custom:powerengine-costs-days-card" in types
+    charts = {c.get("card", {}).get("type") for c in cards if c.get("type") == "conditional"}
+    assert "custom:apexcharts-card" not in charts
+    view = _costs_view()
+    for gone in ("Today so far", "How yesterday's", "macro headline"):
+        assert gone not in view, gone

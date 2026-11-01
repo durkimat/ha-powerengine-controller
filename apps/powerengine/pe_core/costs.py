@@ -338,11 +338,21 @@ DAILY_FIELDS = ("none", "solar", "tariff", "actual_adj", "carry", "events_metere
 def daily_rows(days_summaries: list[dict]) -> list[dict]:
     """Each day's waterfall inputs, so a card can add up any range of dates itself (see _steps_for).
 
-    Oldest first, today (still unfinished) included with done=False. Days without scenarios are left out.
+    Oldest first, today (still unfinished) included with done=False. Days without scenarios are left out. Besides the
+    waterfall's fields each row has `self_use_adj` (a plain self-use battery's cost, to split the PowerEngine step) and
+    the battery energy in and out (`bin`, `bout`, kWh).
     """
-    return [{"date": d["date"], "done": bool(d.get("complete")),
-             **{k: round(d["scenarios"].get(k, 0.0), 4) for k in DAILY_FIELDS}}
-            for d in days_summaries if d.get("scenarios")]
+    out = []
+    for d in days_summaries:
+        sc = d.get("scenarios")
+        if not sc:
+            continue
+        energy = d.get("energy") or {}
+        out.append({"date": d["date"], "done": bool(d.get("complete")),
+                    **{k: round(sc.get(k, 0.0), 4) for k in (*DAILY_FIELDS, "self_use_adj")},
+                    "bin": round(energy.get("battery_in") or 0.0, 2),
+                    "bout": round(energy.get("battery_out") or 0.0, 2)})
+    return out
 
 
 def _steps_for(chosen: list[dict]) -> list[dict]:

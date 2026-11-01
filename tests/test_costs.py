@@ -230,7 +230,7 @@ def test_cost_waterfall_entity_only_with_scenario_params(tmp_path):
     assert attrs["names"] == {"tariff": "EDF tariff", "event": "Axle"}
     assert attrs["daily"][-1]["done"] is True
     assert set(attrs["daily"][-1]) == {"date", "done", "none", "solar", "tariff", "actual_adj", "carry",
-                                       "events_metered", "axle_income"}
+                                       "events_metered", "axle_income", "self_use_adj", "bin", "bout"}
     for p in periods.values():
         assert p["steps"][0]["label"] == "No solar or battery"
         assert p["steps"][-1]["label"] == "You paid"
@@ -771,5 +771,22 @@ def test_months_list_the_days_with_events_for_the_last_three_months(tmp_path):
     assert by[today.strftime("%Y-%m")]["ev_days"] == [[today.isoformat(), 3.46, 6.9, 2.1, 4.8, 1.0, 0.2]]
     old = (today - timedelta(days=200)).strftime("%Y-%m")
     assert by[old]["axle_kwh"] == 3.46 and "ev_days" not in by[old]            # older months keep only their totals
+    assert by[today.strftime("%Y-%m")]["ev_days"] and all("ev_days" in by[k] for k in list(by)[-3:])
     attrs = cost_entity_states(book, today, months)["event_months"][1]
     assert attrs["names"] == {"event": "Axle"}
+
+
+def test_the_peparts_split_of_a_day_adds_up_to_the_powerengine_step():
+    """The card splits the PowerEngine step into energy carried in, the battery itself and PowerEngine's timing
+    (peParts in the card); the three always add up to the waterfall's step for the day."""
+    from pe_core.costs import daily_rows, waterfall
+    day = {"date": "2026-10-07", "complete": True, "energy": {"battery_in": 13.2, "battery_out": 23.2},
+           "scenarios": {"none": 4.23, "solar": 3.76, "tariff": 3.52, "self_use_adj": 1.56, "actual_adj": 1.24,
+                         "carry": -0.7, "events_metered": 0.0, "axle_income": 0.0}}
+    row = daily_rows([day])[0]
+    assert (row["bin"], row["bout"]) == (13.2, 23.2)
+    carried, plain = -row["carry"], row["tariff"] - row["self_use_adj"]
+    timing = row["self_use_adj"] - row["actual_adj"]
+    step = next(s["value"] for s in waterfall([day], "yesterday")["steps"] if s["label"] == "PowerEngine")
+    assert round(carried + plain + timing, 2) == -step == 2.98
+    assert (round(carried, 2), round(plain, 2), round(timing, 2)) == (0.70, 1.96, 0.32)
