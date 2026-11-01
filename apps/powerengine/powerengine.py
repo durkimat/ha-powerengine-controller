@@ -24,6 +24,7 @@ import appdaemon.plugins.hass.hassapi as hass
 from pe_core import (
     __version__,
     bms,
+    chunks,
     clock,
     coverage,
     damping,
@@ -407,8 +408,8 @@ class PowerEngine(hass.Hass):
         self._get_publisher().available(True)
         self._publish_state("diag_version", __version__)
         self._publish_state("diag_started", datetime.now(timezone.utc).isoformat(timespec="seconds"))
-        self._publish_state("map_catalogue", str(len(ROLES)), catalogue())
-        self._publish_state("map_settings", str(len(settings_catalogue()["safety"])), settings_catalogue())
+        self._publish_chunked("map_catalogue", str(len(ROLES)), catalogue())
+        self._publish_chunked("map_settings", str(len(settings_catalogue()["safety"])), settings_catalogue())
         self._last_checks = None
         self._published = {}
         self._decision, self._since = None, None
@@ -4858,6 +4859,21 @@ class PowerEngine(hass.Hass):
                          f"{diagnostics.ATTR_LIMIT}-byte limit (over it, HA stops recording this sensor's history)",
                          level="WARNING")
             pub.publish(key, state, payload)
+
+    def _publish_chunked(self, key, state, attributes):
+        """A catalogue on one sensor, or on numbered ones when it is too big for one (chunks.py). Unused parts are
+        emptied so a list that shrank leaves nothing stale."""
+        parts = chunks.split(attributes)
+        if len(parts) > chunks.MAX_PARTS:
+            self.log(f"sensor.pe_{key}: needs {len(parts)} parts, only {chunks.MAX_PARTS} exist", level="ERROR")
+            parts = parts[:chunks.MAX_PARTS]
+        for n in range(1, chunks.MAX_PARTS + 1):
+            name = chunks.part_key(key, n)
+            if n <= len(parts):
+                items = sum(len(v) for v in parts[n - 1].values() if isinstance(v, list))
+                self._publish_state(name, state if n == 1 else str(items), parts[n - 1])
+            elif n > 1:
+                self._publish_state(name, "0", {})
 
     def _publish_status(self):
         """The Monitoring page's Mode tile: one word, coloured by the dashboard. Stopped (writes couldn't be confirmed)
