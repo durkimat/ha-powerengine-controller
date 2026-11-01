@@ -382,7 +382,8 @@ def waterfall(days_summaries: list[dict], period: str) -> dict:
     """Sum day_scenarios() over a period into a savings waterfall's steps (GBP, running totals chain exactly).
 
     days_summaries: day_summary() dicts with a 'scenarios' field (see day_scenarios), oldest first, as
-    CostBook.recent() returns them. period: 'today' (the day so far), 'yesterday', 'week' (last 7 complete days), 'month' (this calendar
+    CostBook.recent() returns them. period: 'today' (the day so far), 'yesterday', 'week' (last 7 complete
+    days), 'month' (this calendar
     month's complete days so far, the month of the last day in days_summaries) or 'days30' (last 30 complete
     days). Steps: total 'No solar or battery', then 'Solar', 'EDF tariff' and 'PowerEngine' (the battery and
     PowerEngine together: the real cost of the normal half-hours, carry-over included, against solar and the tariff
