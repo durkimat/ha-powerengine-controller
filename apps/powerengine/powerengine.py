@@ -117,6 +117,7 @@ from pe_core.forecast import (
     profile_from_means,
     slot_start,
 )
+from pe_core.freeloads import FreeLoadState
 from pe_core.health import WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_plan, day_view
@@ -763,6 +764,7 @@ class PowerEngine(hass.Hass):
                 self._announce_event(readings)
                 self._car_stop_step(readings)
                 self._heating_setback_step(readings)
+                self._free_loads_step(readings)
                 self._event_finish_step(readings)
                 self._track_slots(readings)
                 self._snapshot_forecast(readings)
@@ -2372,6 +2374,57 @@ class PowerEngine(hass.Hass):
                     json.dump(sb.to_dict(), fh)
             except OSError as err:
                 self.log(f"Could not save the heating set-back state: {err!r}", level="WARNING")
+
+    def _free_loads_file(self):
+        return os.path.join(os.path.dirname(self._save_path()), "free_loads.json")
+
+    def _free_load_states(self) -> dict:
+        """What PowerEngine has switched on for free power, by entity, kept on disk so a restart mid-session still
+        switches it off."""
+        st = self.__dict__.get("_free_loads")
+        if st is None:
+            try:
+                with open(self._free_loads_file(), encoding="utf-8") as fh:
+                    raw = json.load(fh)
+            except (OSError, ValueError):
+                raw = {}
+            raw = raw if isinstance(raw, dict) else {}
+            st = self._free_loads = {eid: FreeLoadState.from_dict(v) for eid, v in raw.items()}
+        return st
+
+    def _free_loads_step(self, r):
+        """Turn each switch in `free_power_loads` on while a free-electricity session is running and off when it ends
+        (pe_core/freeloads.py). Active mode only; a switch already on is left alone."""
+        if self._demo or self.cfg is None or not self.cfg.free_power_loads:
+            return
+        states = self._free_load_states()
+        want = bool(r.free_active and self.mode.effective == "active" and not self._test_running())
+        before = {eid: s.to_dict() for eid, s in states.items()}
+        for load in self.cfg.free_power_loads:
+            st = states.setdefault(load.entity, FreeLoadState())
+            if not (want or st.held or st.seen):
+                continue
+            try:
+                state = self.get_state(load.entity)
+            except Exception:
+                state = None
+            action = st.step(want, state)
+            if action is None:
+                continue
+            label = load.name or load.entity
+            try:
+                self.call_service(f"{load.entity.split('.')[0]}/{action.service}", entity_id=load.entity)
+                self.log(f"Free power: {label}: {action.text}")
+                self._logbook(f"Free power: {label}: {action.text}")
+            except Exception as err:
+                st.held, st.seen = (False, False) if action.service == "turn_on" else (True, st.seen)   # try again
+                self.log(f"Free power: could not {action.service} {load.entity}: {err!r}", level="WARNING")
+        if {eid: s.to_dict() for eid, s in states.items()} != before:
+            try:
+                with open(self._free_loads_file(), "w", encoding="utf-8") as fh:
+                    json.dump({eid: s.to_dict() for eid, s in states.items()}, fh)
+            except OSError as err:
+                self.log(f"Could not save the free power switch state: {err!r}", level="WARNING")
 
     # --- the announcement when a grid event has finished (pe_core/announce.py) ---------------
 
@@ -4302,6 +4355,9 @@ class PowerEngine(hass.Hass):
             old_devices = self.cfg.raw.get("devices") if self.cfg else None
             if old_devices is not None and "devices" not in new:     # a card that doesn't know devices keeps them
                 new = {**new, "devices": old_devices}
+            old_loads = self.cfg.raw.get("free_power_loads") if self.cfg else None
+            if old_loads is not None and "free_power_loads" not in new:   # the cards don't edit these yet: keep them
+                new = {**new, "free_power_loads": old_loads}
             if self.cfg and "v2_split" in self.cfg.raw and "v2_split" not in new:
                 new = {**new, "v2_split": self.cfg.raw["v2_split"]}      # the mark that v2 has its own settings
             new, switched = self._site_guard(new)

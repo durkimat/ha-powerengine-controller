@@ -69,6 +69,22 @@ Each mapped input becomes a sensor, `sensor.pe_state_dev_<id>_soc`, `_battery_po
 the total solar. A save that has no `devices` key keeps the saved ones (an older card); an empty list removes them. The card's
 "Your system" block has an "Other devices" list to add, edit and remove them (app and card 0.9.93 or newer).
 
+## Switches to run during free power
+
+List the switches that should run while EDF's free electricity is on offer under `free_power_loads` in `config.yaml`:
+
+```yaml
+free_power_loads:
+  - entity: switch.immersion_heater
+    name: Immersion heater        # optional, for the log
+```
+
+PowerEngine turns each one on when a free-power session starts and off when it ends, in Active mode only. A switch that
+was already on is left alone, and a switch you turn off yourself during the session stays off until the next one.
+Only `switch` and `input_boolean` entities are accepted. What PowerEngine has switched on is kept in
+`free_loads.json` next to `config.yaml`, so a restart in the middle of a session still turns it off afterwards.
+The Config page does not edit this list yet and keeps it when it saves.
+
 ## What the card reads
 
 `sensor.pe_diag_version` attributes: `site` (the current values), `site_options` (per key, a list of
