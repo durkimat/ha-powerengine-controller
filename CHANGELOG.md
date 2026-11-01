@@ -2,6 +2,17 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.184 (beta)
+
+### Behaviour changes
+
+- **More days in "Engines compared".** A day refused under the old rules is checked again the next night (up to five days a night), so the days skipped for "under 95% coverage" get compared now that 90% is enough. A half-hour measured for 5 minutes or more is now scaled up (it was 10), and such a day is marked **≈** in the table, with the reason on hover. A skipped day now says how much was measured ("under 90% coverage (87% measured)"). A 25-hour day (the clocks going back) is replayed with its repeated hour left out, and marked ≈.
+- **"You were paid", not "You paid −£x".** The Daily cost chart's last series is now "Net cost (below 0 = paid to you)", the Savings by day table says "paid you £x", and the waterfall's last bar shows the amount without a minus when the period paid you.
+
+### Behind the scenes
+
+- Result files carry `rules` (2); `results.needs_run` and `results.stale` decide re-checks; `day.fold_repeated_hour`; the sensor rows carry `scaled` and `note`. `docs/RELEASING.md` records that the session may approve a release you asked for.
+
 ## 0.9.183 (beta)
 
 ### Behaviour changes
