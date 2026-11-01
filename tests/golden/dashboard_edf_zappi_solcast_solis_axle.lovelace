@@ -1050,48 +1050,9 @@ views:
             grid_options: {columns: full, rows: 1}
           - type: custom:powerengine-section-tools
             grid_options: {columns: full, rows: 1}
-          - type: markdown
+          - type: custom:powerengine-costs-period-card
+            entity: sensor.pe_cost_waterfall
             grid_options: {columns: full}
-            content: |-
-              {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
-              {%- macro sv(steps, label) -%}{%- for s in steps if s.label == label -%}{{ s.value }}{%- endfor -%}{%- endmacro %}
-              {%- macro headline(p, label) %}
-              {%- if p and p.days %}
-              {%- set paid = (p.steps[-1].value) | float(0) %}
-              {%- set has_axle = 'Axle' in p.steps[-1].label %}
-              {%- set no_batt = sv(p.steps, 'No solar or battery') | float(0) %}
-              {%- set solar_step = sv(p.steps, 'Solar') | float(0) %}
-              {%- set tariff_step = sv(p.steps, 'EDF tariff') | float(0) %}
-              {%- set pe_step = sv(p.steps, 'PowerEngine') | float(0) %}
-              {%- set solar_tariff = no_batt + solar_step + tariff_step %}
-
-              **{{ label }}: {{ 'you were paid ' ~ gbp(-paid) if paid < -0.005 else 'you paid ' ~ gbp(paid) }}**{{ " after Axle's payments" if has_axle else "" }}. With no solar or battery it would have been {{ gbp(no_batt) }}, with solar and your EDF tariff alone {{ gbp(solar_tariff) }}. **The battery and PowerEngine saved {{ gbp(-pe_step) }}** on top of that.
-              {%- endif %}
-              {%- endmacro %}
-              {%- set periods = state_attr('sensor.pe_cost_waterfall', 'periods') or {} %}
-              {%- set t = states.sensor.pe_cost_today %}
-              {%- set sc = t.attributes.scenarios if t and t.attributes.scenarios is defined else none %}
-              {%- if sc %}
-              {%- set ev = t.attributes.events or {} %}
-              {%- set e = states.sensor.pe_event_last %}
-              {%- set today = now().strftime('%Y-%m-%d') %}
-              **Today so far: {{ 'you have been paid ' ~ gbp(-(sc.paid | float(0))) if (sc.paid | float(0)) < -0.005 else 'you have paid ' ~ gbp(sc.paid) }}**{{ " after Axle's payments" if ev.axle is defined else "" }}. With no solar or battery it would have been {{ gbp(sc.none) }}. This covers {{ t.attributes.half_hours }} of the day's 48 half-hours, with the standing charge for the whole day.
-              {%- if ev.axle is defined %}
-              Axle exported {{ ev.axle.kwh }} kWh today and paid you {{ gbp(ev.axle.gross) }} ({{ gbp(ev.axle.net) }} net of the battery energy it used).
-              {%- if e and e.attributes.type == 'axle' and e.attributes.date == today %} The last event ran from {{ e.attributes.time }} to {{ as_timestamp(e.attributes.end) | timestamp_custom('%H:%M') }}.{% endif %}
-              {%- endif %}
-              {%- if ev.free_power is defined %}
-              Free power today: {{ ev.free_power.kwh }} kWh, a net {{ gbp(ev.free_power.net) }}.
-              {%- endif %}
-              {%- else %}
-              **Today so far:** nothing recorded yet.
-              {%- endif %}
-              {{- headline(periods.yesterday, 'Yesterday') }}
-              {{- headline(periods.week, 'Last 7 days') }}
-              {{- headline(periods.month, 'This month') }}
-              {%- if not periods %}
-              **No complete days yet.** The savings waterfall appears after the first full day.
-              {%- endif %}
       - type: grid
         column_span: 3
         cards:
@@ -1104,52 +1065,7 @@ views:
               - type: custom:powerengine-waterfall-card
                 grid_options: {columns: full}
                 entity: sensor.pe_cost_waterfall
-                period: week
-              # how the PowerEngine step was made: folded by default so the page stays short (the summary line carries the headline numbers)
-              - type: markdown
-                grid_options: {columns: full}
-                content: |-
-                  {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
-                  {%- macro kwh(v) -%}{{ '%.1f' | format(v | float(0)) }}{%- endmacro %}
-                  {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
-                  {%- set ns = namespace(n=0, tot=0.0, carried=0.0, plain=0.0, pe=0.0, cin=0.0, cout=0.0, y=none) %}
-                  {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse if d.complete and d.scenarios and d.scenarios.self_use_adj is defined %}{% if ns.n < 7 %}
-                  {%- set sc = d.scenarios %}{% set e = d.energy or {} %}
-                  {%- set carried = 0 - (sc.carry | float(0)) %}
-                  {%- set plain = (sc.tariff | float(0)) - (sc.self_use_adj | float(0)) %}
-                  {%- set pe = (sc.self_use_adj | float(0)) - (sc.actual_adj | float(0)) %}
-                  {%- if ns.n == 0 %}{% set ns.y = {'date': d.date, 'tot': carried + plain + pe, 'carried': carried, 'plain': plain, 'pe': pe} %}{% endif %}
-                  {%- set ns.tot = ns.tot + carried + plain + pe %}{% set ns.carried = ns.carried + carried %}{% set ns.plain = ns.plain + plain %}{% set ns.pe = ns.pe + pe %}
-                  {%- set ns.cin = ns.cin + (e.battery_in | float(0)) %}{% set ns.cout = ns.cout + (e.battery_out | float(0)) %}
-                  {%- set ns.n = ns.n + 1 %}
-                  {%- endif %}{% endfor %}
-                  {%- if ns.y %}
-                  <details><summary><b>How yesterday's {{ gbp(ns.y.tot) }} was made: {{ gbp(ns.y.carried) }} from energy carried in, {{ gbp(ns.y.plain) }} from the battery itself, {{ gbp(ns.y.pe) }} from PowerEngine's timing</b></summary>
-
-                  The "PowerEngine" step on the chart is everything the battery and PowerEngine did together. Here it is split into three parts that add up to it (negative means that part cost money):
-
-                  - **Energy carried in:** battery energy bought on an earlier day (usually overnight at the cheap rate) and used in this one. Its cost was counted on the day it was bought, so it flatters the day it is used and evens out over a week. Negative means the day topped the battery up for tomorrow.
-                  - **The battery itself:** what a plain self-use battery of the same size would have saved from the same starting charge (solar charges it, it covers the house, no grid charging), allowing for how full each ends.
-                  - **PowerEngine's timing:** what PowerEngine's choices added on top of that plain battery: charging at the cheapest rates, holding energy for the dear half-hours, exporting at the best price. Negative means it did worse than plain self-use that day, for example when the sun or the load was not as forecast.
-
-                  | Day | PowerEngine step | Energy carried in | The battery itself | PowerEngine's timing | Battery in / out (kWh) |
-                  |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
-                  {%- set ns.n = 0 %}
-                  {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse if d.complete and d.scenarios and d.scenarios.self_use_adj is defined %}{% if ns.n < 7 %}
-                  {%- set sc = d.scenarios %}{% set e = d.energy or {} %}
-                  {%- set carried = 0 - (sc.carry | float(0)) %}
-                  {%- set plain = (sc.tariff | float(0)) - (sc.self_use_adj | float(0)) %}
-                  {%- set pe = (sc.self_use_adj | float(0)) - (sc.actual_adj | float(0)) %}
-                  | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }} | **{{ gbp(carried + plain + pe) }}** | {{ gbp(carried) }} | {{ gbp(plain) }} | {{ gbp(pe) }} | {{ kwh(e.battery_in) }} / {{ kwh(e.battery_out) }} |
-                  {%- set ns.n = ns.n + 1 %}
-                  {%- endif %}{% endfor %}
-                  | **Last {{ ns.n }} days** | **{{ gbp(ns.tot) }}** | **{{ gbp(ns.carried) }}** | **{{ gbp(ns.plain) }}** | **{{ gbp(ns.pe) }}** | **{{ kwh(ns.cin) }} / {{ kwh(ns.cout) }}** |
-
-                  Each part is rounded, so a row can differ from its total by a penny. These figures come from your meters and the battery's own charge, not a re-run: PowerEngine's timing is measured against a simulated plain battery, so it also picks up luck (a better or worse day than forecast) as well as skill.
-
-                  "Engines compared, same day" below is a different measure. It replays the day from the morning's forecast with a simulated battery that has no taper or BMS limits, so its savings for the same day will not match this table. Use it to compare engines with each other, and this table for what your meters saw.
-                  </details>
-                  {%- endif %}
+                shared: true
       - type: grid
         column_span: 3
         cards:
@@ -1162,116 +1078,19 @@ views:
               - type: custom:powerengine-engine-compare-card
                 entity: sensor.pe_cost_engines
                 grid_options: {columns: full}
+                shared: true
       - type: grid
         column_span: 3
         cards:
           - type: custom:powerengine-section-card
-            title: Last 7 days, day by day
+            title: Day by day
             key: costs-days
             open: true
             grid_options: {columns: full}
             cards:
-              # the last 7 complete days: the same days as the waterfall's "Last 7 days", and never today (a day that is
-              # not over yet always looks cheap). Columns sit at each day's midnight, so the window ends at noon on the
-              # last complete day: end of today minus 36 h.
-              # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis
-              - type: conditional
-                grid_options: {columns: full, rows: auto}
-                conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
-                card:
-                  type: custom:apexcharts-card
-                  grid_options: {columns: full, rows: auto}
-                  graph_span: 7d
-                  span:
-                    end: day
-                    offset: "-36h"
-                  header:
-                    show: true
-                    title: Daily cost by scenario
-                    show_states: false
-                  apex_config:
-                    chart: {height: 380}
-                    legend: {show: true}
-                    tooltip: {shared: true}
-                    xaxis: {labels: {format: "ddd dd"}}
-                  yaxis:
-                    - decimals: 2
-                      apex_config: {title: {text: "£ per day"}}
-                  series: &chart_scenario_series
-                    - entity: sensor.pe_cost_days
-                      show: {legend_value: false}
-                      name: "No solar or battery"
-                      type: column
-                      color: "#8d6e63"
-                      extend_to: false
-                      data_generator: |
-                        return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.none]);
-                    - entity: sensor.pe_cost_days
-                      show: {legend_value: false}
-                      name: "Solar"
-                      type: column
-                      color: "#fdd835"
-                      extend_to: false
-                      data_generator: |
-                        return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.solar]);
-                    - entity: sensor.pe_cost_days
-                      show: {legend_value: false}
-                      name: "+ EDF tariff"
-                      type: column
-                      color: "#26a69a"
-                      extend_to: false
-                      data_generator: |
-                        return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), d.scenarios.tariff]);
-                    - entity: sensor.pe_cost_days
-                      show: {legend_value: false}
-                      name: "PowerEngine"
-                      type: column
-                      color: "#424242"
-                      extend_to: false
-                      data_generator: |
-                        return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), Math.round((d.scenarios.actual_adj + d.scenarios.carry) * 100) / 100]);
-                    - entity: sensor.pe_cost_days
-                      show: {legend_value: false}
-                      name: "Net cost (below 0 = paid to you)"
-                      type: column
-                      color: "#7e57c2"
-                      extend_to: false
-                      data_generator: |
-                        return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), Math.round((d.scenarios.actual_adj + d.scenarios.carry + d.scenarios.events_metered - d.scenarios.axle_income) * 100) / 100]);
-              - type: conditional
-                grid_options: {columns: full, rows: auto}
-                conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
-                card:
-                  type: "custom:apexcharts-card"
-                  grid_options: {"columns": "full", "rows": "auto"}
-                  graph_span: "7d"
-                  span: {"end": "day", "offset": "-36h"}
-                  header: {"show": true, "title": "Daily cost by scenario", "show_states": false}
-                  apex_config: {"chart": {"height": 380, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true}, "xaxis": {"labels": {"format": "ddd dd", "style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
-                  yaxis: [{"decimals": 2, "apex_config": {"labels": {"style": {"fontSize": "10px"}}}}]
-                  series: *chart_scenario_series
-              - type: markdown
+              - type: custom:powerengine-costs-days-card
+                entity: sensor.pe_cost_waterfall
                 grid_options: {columns: full}
-                content: |-
-                  {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
-                  {%- macro sv(steps, label) -%}{%- for s in steps if s.label == label -%}{{ s.value }}{%- endfor -%}{%- endmacro %}
-                  {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
-                  {%- set w = (state_attr('sensor.pe_cost_waterfall', 'periods') or {}).week %}
-                  {%- macro net(v) -%}{% set v = v | float(0) %}{{ ('paid you ' ~ gbp(-v)) if v < -0.005 else gbp(v) }}{%- endmacro %}
-                  **Savings by day (the waterfall's steps)**
-
-                  The same steps as "Where the savings came from", one row per complete day (today is left out until it is over). The first column is the cost with no solar or battery; each step after it is what that step saved (negative) or added, and the last column is what you paid.
-
-                  | Day | No solar or battery | Solar | EDF tariff | PowerEngine | Axle & free power | You paid (or were paid) |
-                  |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
-                  {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse if d.complete and d.scenarios %}{% set sc = d.scenarios %}{% set pe = (sc.actual_adj | float(0)) + (sc.carry | float(0)) %}{% set ev = (sc.events_metered | float(0)) - (sc.axle_income | float(0)) %}
-                  | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }} | {{ gbp(sc.none) }} | {{ gbp((sc.solar | float(0)) - (sc.none | float(0))) }} | {{ gbp((sc.tariff | float(0)) - (sc.solar | float(0))) }} | {{ gbp(pe - (sc.tariff | float(0))) }} | {{ gbp(ev) }} | **{{ net(pe + ev) }}** |
-                  {%- endfor %}
-                  {%- if w and w.days %}
-                  | **Last {{ w.days }} days** | **{{ gbp(sv(w.steps, 'No solar or battery')) }}** | **{{ gbp(sv(w.steps, 'Solar')) }}** | **{{ gbp(sv(w.steps, 'EDF tariff')) }}** | **{{ gbp(sv(w.steps, 'PowerEngine')) }}** | **{{ gbp(sv(w.steps, 'Axle & free power')) }}** | **{{ net(w.steps[-1].value) }}** |
-                  {%- endif %}
-
-                  The last row is the waterfall's "Last 7 days" figures; it can differ from the sum of the last 7 rows by a penny, because each day is rounded. {% if states('sensor.pe_state_operation_mode') != 'active' %}PowerEngine is in Passive mode, so the PowerEngine column shows what your current setup (for example another controller or your automations) actually did, not PowerEngine.{% endif %}
       - type: grid
         column_span: 3
         cards:
@@ -1293,6 +1112,7 @@ views:
                   {%- endif %}
               - type: custom:powerengine-events-card
                 entity: sensor.pe_event_months
+                shared: true
                 grid_options: {columns: full}
               - type: markdown
                 grid_options: {columns: full}
@@ -1326,7 +1146,7 @@ views:
                   | PowerEngine | What your normal half-hours really cost, from the meters, with your battery and PowerEngine's control. Energy bought for later or used from earlier counts on the day it was bought or used. The energy Axle exported and the free-power half-hours are not in this bar. |
                   | Net cost | The PowerEngine bar plus the energy Axle exported and the free-power half-hours: their metered cost, less Axle's own £/kWh payment. It is the last bar of the waterfall, "You paid" (or "You were paid" when it is below zero), and the chart's last series. On a day with no events it is the same as the PowerEngine bar. |
 
-                  These are the same lines as the savings chart above, day by day, for the same last 7 complete days (today is left out until it is over), and the last bar is its final figure, so the two always agree. All use the same measured house, car and solar. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated.
+                  The Day by day chart draws these same lines for each day of the chosen period, and its last bar is the final figure, so it always agrees with the waterfall. All use the same measured house, car and solar. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated.
               - type: markdown
                 grid_options: {columns: full}
                 content: |-

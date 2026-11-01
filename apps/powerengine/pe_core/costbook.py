@@ -384,9 +384,11 @@ class CostBook:
                 mo["standing"] += s.get("standing", 0.0)
                 mo["s0"] += s["s0"]
                 mo["days"] += 1
+                if d >= keep_from:
+                    mo.setdefault("ev_days", [])
                 if s["events"] and d >= keep_from:
                     ax, fp = s["events"].get("axle") or {}, s["events"].get("free_power") or {}
-                    mo.setdefault("ev_days", []).append([
+                    mo["ev_days"].append([
                         d.isoformat(), *(round(ax.get(k, 0.0), 2) for k in ("kwh", "gross", "energy", "net")),
                         round(fp.get("kwh", 0.0), 2), round(fp.get("net", 0.0), 2)])
                 for kind, e in s["events"].items():
