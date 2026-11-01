@@ -35,8 +35,8 @@ def test_the_runner_compares_a_day_and_writes_the_result_file(tmp_path):
     assert run.run_day(str(save), DAY, hours=2, say=messages.append) == 0
     path = save / "costs" / "compare" / "2026-10-06.json"
     r = json.loads(path.read_text())
-    assert set(r) == {"version", "day", "status", "reason", "took_s", "made_at", "in_control", "live", "selfuse", "v1",
-                      "v2", "bound", "metered", "calibration"}
+    assert set(r) == {"version", "rules", "day", "status", "reason", "took_s", "made_at", "in_control", "live",
+                      "selfuse", "v1", "v2", "bound", "metered", "calibration"}
     assert (r["version"], r["day"], r["status"], r["reason"], r["in_control"], r["live"]) == (
         1, "2026-10-06", "ok", "", "v1", True)
     assert set(r["selfuse"]) == {"cost", "end_soc"}

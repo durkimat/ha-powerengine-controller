@@ -39,6 +39,10 @@ def day_row(day: date, result: dict | None, has_snapshot: bool) -> dict:
                v1_flips=v1.get("flips"), v2_flips=v2.get("flips"), calib=_calib(result))
     if result.get("profile") is not None:
         row["profile"] = result["profile"]
+    if result.get("scaled"):
+        row["scaled"] = result["scaled"]
+    if result.get("note"):
+        row["note"] = str(result["note"])[:80]
     row["best"] = tag_best(row["v1"], row["v2"])
     if row["v1"] is not None and row["v2"] is not None:
         row["diff"] = round(row["v2"] - row["v1"], 3)

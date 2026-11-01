@@ -142,7 +142,7 @@ def outcome():
 
 def test_the_result_file_is_built_as_designed():
     r = results.build_result(DI, outcome(), 411.6, made_at="2026-10-07T03:40:00+00:00")
-    assert r == {"version": 1, "day": "2026-10-06", "status": "ok", "reason": "", "took_s": 412,
+    assert r == {"version": 1, "rules": 2, "day": "2026-10-06", "status": "ok", "reason": "", "took_s": 412,
                  "made_at": "2026-10-07T03:40:00+00:00", "in_control": "v2", "live": True,
                  "selfuse": {"cost": 3.123, "end_soc": 41.0},
                  "v1": {"cost": 1.951, "end_soc": 52.0, "saving": 1.3, "flips": 2, "modes": 9},

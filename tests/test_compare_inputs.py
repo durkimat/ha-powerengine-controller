@@ -317,7 +317,7 @@ def test_a_day_measured_for_ninety_per_cent_is_replayable_and_scaled():
     thin = _thin(recs, range(0, 48, 3), 1620.0)                       # a sixth of the half-hours lose 3 minutes
     assert packmod.day_complete(thin, LONDON) is None                 # still 98%
     thin = _thin(recs, range(0, 48, 2), 1500.0)                       # half of them lose 5 minutes: 91.7%
-    assert packmod.day_complete(thin, LONDON) == "under 95% coverage"
+    assert packmod.day_complete(thin, LONDON) .startswith("under 95% coverage (")
     assert packmod.day_complete(thin, LONDON, daymod.REPLAY_MIN_COVER) is None
     scaled, n = daymod.fill_thin(thin)
     assert n == 24 and all(r["seconds"] == 1800.0 for r in scaled)
@@ -325,12 +325,30 @@ def test_a_day_measured_for_ninety_per_cent_is_replayable_and_scaled():
     assert scaled[1]["house"] == recs[1]["house"] and thin[0]["house"] == recs[0]["house"]     # the input is untouched
 
 
-def test_a_half_hour_measured_for_under_ten_minutes_refuses_the_day():
+def test_a_half_hour_measured_for_under_five_minutes_refuses_the_day():
     recs = records_from_pack(PACK, "car", DAY)
     for r in recs:
         r["seconds"] = 1800.0
     assert daymod.thin_reason(recs) is None
-    assert "1 half-hour(s) measured for under 10 minutes" == daymod.thin_reason(_thin(recs, [5], 500.0))
+    assert daymod.thin_reason(_thin(recs, [5], 315.0)) is None             # 5 minutes or more is scaled up
+    assert "1 half-hour(s) measured for under 5 minutes" == daymod.thin_reason(_thin(recs, [5], 250.0))
+
+
+def test_a_25_hour_day_is_folded_to_48_half_hours():
+    recs = records_from_pack(PACK, "car", DAY)
+    london = ZoneInfo("Europe/London")
+    # the clocks going back: 00:00 BST .. 01:30 BST, then 01:00 GMT again, so 50 records
+    start = datetime(2026, 10, 25, 0, 0, tzinfo=london)
+    fifty = []
+    for i in range(50):
+        r = dict(recs[i % 48])
+        r["start"] = (start.astimezone(timezone.utc) + timedelta(minutes=30 * i)).isoformat()
+        fifty.append(r)
+    folded, did = daymod.fold_repeated_hour(fifty, london)
+    assert did and len(folded) == 48
+    assert [r["start"] for r in folded[:4]] == [r["start"] for r in fifty[:4]]
+    assert folded[4]["start"] == fifty[6]["start"]                          # 01:00 GMT is skipped
+    assert daymod.fold_repeated_hour(recs, london) == (recs, False)         # an ordinary day is untouched
 
 
 # --- the replay world's efficiency -------------------------------------------------------------------------------
