@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.190 (beta)
+
+### Behaviour changes
+
+- **No more size limit on the input and settings catalogues.** Home Assistant drops a sensor's history attributes above 16 KB, and both catalogues were within about 500 bytes of that. A catalogue too big for one sensor is now split across numbered sensors (`sensor.pe_map_catalogue_2` to `_4`, `sensor.pe_map_settings_2` to `_4`). Today both still fit in one, so nothing visibly changes. Needs card 0.9.190.
+
+### Behind the scenes
+
+- `pe_core/chunks.py` splits and joins; `Entities` gains the six overflow sensors; tests grow each catalogue to three times its size and check every part stays under the limit and joins back unchanged.
+
 ## 0.9.189 (beta)
 
 ### Behaviour changes

@@ -120,6 +120,11 @@ ENTITIES: tuple[EntityDef, ...] = (
               {"icon": "mdi:tune-variant", "entity_category": "diagnostic"}),
     EntityDef("sensor", "map_catalogue", "Input catalogue",
               {"icon": "mdi:format-list-bulleted", "entity_category": "diagnostic"}),
+    # overflow parts of the two catalogues above, used only when one outgrows a sensor's attribute limit (chunks.py)
+    *(EntityDef("sensor", f"{base}_{n}", f"{name} (part {n})",
+                {"icon": "mdi:format-list-bulleted", "entity_category": "diagnostic"})
+      for base, name in (("map_settings", "Settings catalogue"), ("map_catalogue", "Input catalogue"))
+      for n in range(2, 5)),
     EntityDef("sensor", "state_operation_mode", "Operation mode",
               {"icon": "mdi:power-settings",
                "device_class": "enum", "options": ["unconfigured", "passive", "active", "paused"]}),
