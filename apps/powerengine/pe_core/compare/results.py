@@ -9,6 +9,7 @@ import os
 from datetime import date, datetime, timedelta, timezone
 
 VERSION = 1
+RULES = 2                               # bumped when the rules for refusing a day change; older refusals are re-checked
 KEEP_DAYS = 30
 STATUSES = ("ok", "no_snapshot", "incomplete", "failed")
 TIE_GBP = 0.01                          # within 1p: a tie
@@ -45,6 +46,16 @@ def has_result(costs_dir: str, day) -> bool:
     return os.path.exists(result_path(costs_dir, day))
 
 
+def stale(costs_dir: str, day) -> bool:
+    """A day refused as incomplete under older rules (see RULES): worth another look."""
+    res = read_result(costs_dir, day)
+    return bool(res) and res.get("status") == "incomplete" and int(res.get("rules") or 1) < RULES
+
+
+def needs_run(costs_dir: str, day) -> bool:
+    return not has_result(costs_dir, day) or stale(costs_dir, day)
+
+
 def prune(costs_dir: str, today: date) -> None:
     cutoff = (today - timedelta(days=KEEP_DAYS)).isoformat()
     folder = compare_dir(costs_dir)
@@ -66,8 +77,8 @@ def now_iso() -> str:
 
 def refused_result(day, status: str, reason: str, took_s: float = 0.0, made_at: str | None = None) -> dict:
     """A day that was not compared: why."""
-    return {"version": VERSION, "day": day if isinstance(day, str) else day.isoformat(), "status": status,
-            "reason": reason[:300], "took_s": round(took_s), "made_at": made_at or now_iso()}
+    return {"version": VERSION, "rules": RULES, "day": day if isinstance(day, str) else day.isoformat(),
+            "status": status, "reason": reason[:300], "took_s": round(took_s), "made_at": made_at or now_iso()}
 
 
 def _r(x, places=3):
@@ -83,14 +94,19 @@ def build_result(day_input, outcome: dict, took_s: float, made_at: str | None = 
         return {"cost": _r(run["cost_gbp"]), "end_soc": _r(run["end_soc"], 1), "saving": _r(run["adj_save_gbp"]),
                 "flips": run.get("flip_flops"), "modes": run.get("mode_changes")}
     su, bound = runs["selfuse"], runs["bound"]
-    out = {"version": VERSION, "day": day_input.day.isoformat(), "status": "ok", "reason": "", "took_s": round(took_s),
-           "made_at": made_at or now_iso(), "in_control": day_input.in_control, "live": day_input.live,
+    out = {"version": VERSION, "rules": RULES, "day": day_input.day.isoformat(), "status": "ok", "reason": "",
+           "took_s": round(took_s), "made_at": made_at or now_iso(),
+           "in_control": day_input.in_control, "live": day_input.live,
            "selfuse": {"cost": _r(su["cost_gbp"]), "end_soc": _r(su["end_soc"], 1)},
            "v1": engine("v1"), "v2": engine("v2"),
            "bound": {"cost": _r(bound["cost_gbp"]), "saving": _r(bound["adj_save_gbp"])},
            "metered": {"cost": _r(day_input.metered_gbp)}, "calibration": None}
     if day_input.profile is not None:
         out["profile"] = day_input.profile
+    if getattr(day_input, "scaled", 0):
+        out["scaled"] = day_input.scaled
+    if getattr(day_input, "note", ""):
+        out["note"] = day_input.note
     if getattr(day_input, "round_trip", None):
         out["round_trip"] = day_input.round_trip
     if day_input.live and day_input.in_control in ("v1", "v2"):

@@ -78,7 +78,7 @@ def days(n):
 def test_tonight_is_yesterday_then_the_newest_missing_day(tmp_path):
     d = days(7)
     sched, _, _ = setup(tmp_path, snapshots=[d[0], d[2], d[3], d[5]], done=[d[3]])
-    assert sched.plan(TODAY) == [d[0], d[2]]                  # yesterday, then ONE more: the newest without a result
+    assert sched.plan(TODAY) == [d[0], d[2], d[5]]            # yesterday, then those without a result, newest first
     sched2, _, _ = setup(tmp_path / "b", snapshots=[d[1]], done=[d[0]])
     assert sched2.plan(TODAY) == [d[1]]                       # yesterday done already
     sched3, _, _ = setup(tmp_path / "c", snapshots=[])
@@ -222,3 +222,18 @@ def test_finished_days_are_never_started_again(tmp_path):
     d = days(2)
     sched, _, _ = setup(tmp_path, snapshots=[d[1]], done=[d[0], d[1]])
     assert sched.nightly(TODAY) == [] and FakeProc.made == []
+
+
+def test_a_day_refused_under_older_rules_is_checked_again_once(tmp_path):
+    d = days(7)
+    sched, _, costs = setup(tmp_path, snapshots=[d[0], d[1], d[2], d[3]])
+    for day, rules in ((d[1], None), (d[2], 2), (d[3], None)):
+        res = {"version": 1, "day": day.isoformat(), "status": "incomplete", "reason": "under 95% coverage",
+               "took_s": 0, "made_at": "x"}
+        if rules:
+            res["rules"] = rules
+        results.write_result(costs, day, res)
+    results.write_result(costs, d[0], {"version": 1, "day": d[0].isoformat(), "status": "ok", "made_at": "x"})
+    # old refusals (no `rules`) come round again; one made under the current rules, or a result that worked, does not
+    assert sched.plan(TODAY) == [d[1], d[3]]
+    assert results.needs_run(costs, d[1]) and not results.needs_run(costs, d[2]) and not results.needs_run(costs, d[0])

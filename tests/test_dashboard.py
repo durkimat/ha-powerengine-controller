@@ -223,7 +223,7 @@ def test_last_bar_is_the_waterfalls_you_paid_with_the_events_in():
     """Day by day, the last bar is what the waterfall ends on: PowerEngine plus the event half-hours less the
     event payment (costs._steps_for's r6), so the bars and the waterfall always agree."""
     view = _costs_view()
-    assert 'name: "You paid"' in view
+    assert 'name: "Net cost (below 0 = paid to you)"' in view
     assert ("d.scenarios.actual_adj + d.scenarios.carry + d.scenarios.events_metered - d.scenarios.axle_income"
             in view)
     from pe_core.costs import waterfall

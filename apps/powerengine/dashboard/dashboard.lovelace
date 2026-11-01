@@ -1236,7 +1236,7 @@ views:
                     return (entity.attributes.days || []).filter(d => d.scenarios && d.complete).slice(-7).map(d => [new Date(d.date + "T00:00:00").getTime(), Math.round((d.scenarios.actual_adj + d.scenarios.carry) * 100) / 100]);
                 - entity: sensor.pe_cost_days
                   show: {legend_value: false}
-                  name: "You paid"
+                  name: "Net cost (below 0 = paid to you)"
                   type: column
                   color: "#7e57c2"
                   extend_to: false
@@ -1268,7 +1268,7 @@ views:
               | Solar | Your solar covers the house first, the surplus is exported; no battery. |
               | + <<tariff>> | The same, but grid energy is priced at the real half-hourly rates (smart slots, overnight, peak). |
               | PowerEngine | What your normal half-hours really cost, from the meters, with your battery and PowerEngine's control. Energy bought for later or used from earlier counts on the day it was bought or used. The energy <<event>> exported and the free-power half-hours are not in this bar. |
-              | You paid | The PowerEngine bar plus the energy <<event>> exported and the free-power half-hours: their metered cost, less <<event>>'s own £/kWh payment. This is the savings chart's "You paid" figure. On a day with no events it is the same as the PowerEngine bar. Below zero means the day paid you. |
+              | Net cost | The PowerEngine bar plus the energy <<event>> exported and the free-power half-hours: their metered cost, less <<event>>'s own £/kWh payment. This is the savings chart's "You paid" figure. On a day with no events it is the same as the PowerEngine bar. Below zero means the day paid you. |
 
               These are the same lines as the savings chart above, day by day, for the same last 7 complete days (today is left out until it is over), and the last bar is its final figure, so the two always agree. All use the same measured house, car and solar. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated.
       - type: grid
@@ -1315,15 +1315,16 @@ views:
               {%- macro sv(steps, label) -%}{%- for s in steps if s.label == label -%}{{ s.value }}{%- endfor -%}{%- endmacro %}
               {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
               {%- set w = (state_attr('sensor.pe_cost_waterfall', 'periods') or {}).week %}
+              {%- macro net(v) -%}{% set v = v | float(0) %}{{ ('paid you ' ~ gbp(-v)) if v < -0.005 else gbp(v) }}{%- endmacro %}
               The same steps as "Where the savings came from", one row per complete day (today is left out until it is over). The first column is the cost with no solar or battery; each step after it is what that step saved (negative) or added, and the last column is what you paid.
 
-              | Day | No solar or battery | Solar | <<tariff>> | PowerEngine | <<event>> & free power | You paid |
+              | Day | No solar or battery | Solar | <<tariff>> | PowerEngine | <<event>> & free power | You paid (or were paid) |
               |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
               {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse if d.complete and d.scenarios %}{% set sc = d.scenarios %}{% set pe = (sc.actual_adj | float(0)) + (sc.carry | float(0)) %}{% set ev = (sc.events_metered | float(0)) - (sc.axle_income | float(0)) %}
-              | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }} | {{ gbp(sc.none) }} | {{ gbp((sc.solar | float(0)) - (sc.none | float(0))) }} | {{ gbp((sc.tariff | float(0)) - (sc.solar | float(0))) }} | {{ gbp(pe - (sc.tariff | float(0))) }} | {{ gbp(ev) }} | **{{ gbp(pe + ev) }}** |
+              | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }} | {{ gbp(sc.none) }} | {{ gbp((sc.solar | float(0)) - (sc.none | float(0))) }} | {{ gbp((sc.tariff | float(0)) - (sc.solar | float(0))) }} | {{ gbp(pe - (sc.tariff | float(0))) }} | {{ gbp(ev) }} | **{{ net(pe + ev) }}** |
               {%- endfor %}
               {%- if w and w.days %}
-              | **Last {{ w.days }} days** | **{{ gbp(sv(w.steps, 'No solar or battery')) }}** | **{{ gbp(sv(w.steps, 'Solar')) }}** | **{{ gbp(sv(w.steps, '<<tariff>>')) }}** | **{{ gbp(sv(w.steps, 'PowerEngine')) }}** | **{{ gbp(sv(w.steps, '<<event>> & free power')) }}** | **{{ gbp(w.steps[-1].value) }}** |
+              | **Last {{ w.days }} days** | **{{ gbp(sv(w.steps, 'No solar or battery')) }}** | **{{ gbp(sv(w.steps, 'Solar')) }}** | **{{ gbp(sv(w.steps, '<<tariff>>')) }}** | **{{ gbp(sv(w.steps, 'PowerEngine')) }}** | **{{ gbp(sv(w.steps, '<<event>> & free power')) }}** | **{{ net(w.steps[-1].value) }}** |
               {%- endif %}
 
               The last row is the waterfall's "Last 7 days" figures; it can differ from the sum of the last 7 rows by a penny, because each day is rounded. {% if states('sensor.pe_state_operation_mode') != 'active' %}PowerEngine is in Passive mode, so the PowerEngine column shows what your current setup (for example another controller or your automations) actually did, not PowerEngine.{% endif %}

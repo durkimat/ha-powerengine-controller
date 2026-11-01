@@ -19,7 +19,7 @@ from .snapfeed import snapshot_path
 
 LIMIT = timedelta(minutes=90)
 LOOKBACK_DAYS = 7
-EXTRA_PER_NIGHT = 1            # days filled besides yesterday, newest first (the oldest go last)
+EXTRA_PER_NIGHT = 4            # days filled besides yesterday, newest first (the oldest go last)
 LOG_TAIL = 6                   # lines of the runner's output in the warning when a run fails
 LOCK = "running.json"
 
@@ -53,14 +53,15 @@ class Scheduler:
         return os.path.exists(snapshot_path(self.costs, day))
 
     def missing(self, today: date) -> list[date]:
-        """Days of the last week (not yesterday) that have a forecast record and no result, newest first."""
+        """Days of the last week (not yesterday) that have a forecast record and no result, or a refusal made under
+        older rules, newest first."""
         days = [today - timedelta(days=n) for n in range(2, LOOKBACK_DAYS + 1)]
-        return [d for d in days if self.has_snapshot(d) and not results.has_result(self.costs, d)]
+        return [d for d in days if self.has_snapshot(d) and results.needs_run(self.costs, d)]
 
     def plan(self, today: date) -> list[date]:
         """Tonight's days: yesterday (always, unless it has a result), then the newest missing one."""
         yesterday = today - timedelta(days=1)
-        days = [] if results.has_result(self.costs, yesterday) else [yesterday]
+        days = [yesterday] if results.needs_run(self.costs, yesterday) else []
         return days + self.missing(today)[:EXTRA_PER_NIGHT]
 
     # --- the job --------------------------------------------------------------------------------------------------
@@ -96,7 +97,7 @@ class Scheduler:
     def _next(self) -> None:
         while self.queue and not self.running:
             day = self.queue.popleft()
-            if results.has_result(self.costs, day) or self.busy():
+            if not results.needs_run(self.costs, day) or self.busy():
                 continue
             self._start(day)
 

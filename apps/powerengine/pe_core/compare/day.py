@@ -32,6 +32,8 @@ class DayInput:
     metered_gbp: float
     profile: str | None = None       # engine v2's settings profile the records name ("mixed" if it changed), if any
     round_trip: dict | None = None   # the grid-to-grid efficiency the replay used, and its sources (efficiency.py)
+    scaled: int = 0                  # half-hours measured for part of the time that were scaled up to the whole
+    note: str = ""                   # anything about the day the table should say (a 25-hour day)
 
 
 class Refused(Exception):
@@ -86,7 +88,7 @@ def metered_cost(records: list[dict]) -> float:
 
 
 REPLAY_MIN_COVER = 0.90          # a day measured for this much of its seconds can be replayed (thin half-hours scaled)
-MIN_HALF_SECONDS = 600           # ...but a half-hour measured for less than this (10 minutes) is too thin to scale
+MIN_HALF_SECONDS = 300           # ...but a half-hour measured for less than this (5 minutes) is too thin to scale
 SCALED = ("s_h", "s_c", "s_b", "s_e", "b_h", "b_c", "b_e", "g_h", "g_c", "g_b", "grid_import", "grid_export", "house",
           "car", "solar", "battery_in", "battery_out", "unallocated_src", "unallocated_sink")
 
@@ -111,6 +113,23 @@ def thin_reason(records: list[dict]) -> str | None:
     return f"{len(thin)} half-hour(s) measured for under {MIN_HALF_SECONDS // 60} minutes" if thin else None
 
 
+def fold_repeated_hour(records: list[dict], tz) -> tuple[list[dict], bool]:
+    """A 25-hour day (the clocks go back) has two 01:00-02:00 hours, 50 records. Keep the first pass of each local
+    half-hour so the day has 48, as the replay needs. Returns (records, folded)."""
+    if len(records) != 50:
+        return records, False
+    seen, out = set(), []
+    for r in records:
+        try:
+            key = datetime.fromisoformat(str(r["start"]).replace("Z", "+00:00")).astimezone(tz).replace(tzinfo=None)
+        except (KeyError, ValueError):
+            return records, False
+        if key not in seen:
+            seen.add(key)
+            out.append(r)
+    return (out, True) if len(out) == 48 else (records, False)
+
+
 def load_day(costs_dir: str, day: date, tz_name: str | None = None) -> DayInput:
     """Everything a replay of `day` needs, or raises Refused(status, reason)."""
     data = load_snapshot(costs_dir, day)
@@ -122,15 +141,16 @@ def load_day(costs_dir: str, day: date, tz_name: str | None = None) -> DayInput:
     why = snap.refusal(start)
     if why:
         raise Refused("no_snapshot", why)
-    records = read_records(costs_dir, day)
+    records, folded = fold_repeated_hour(read_records(costs_dir, day), tz)
     why = day_complete(records, tz, REPLAY_MIN_COVER) if records else "no cost records for the day"
     if why:
         raise Refused("incomplete", f"records incomplete: {why}")
     why = thin_reason(records)
     if why:
         raise Refused("incomplete", f"records incomplete: {why}")
-    records, _scaled = fill_thin(records)
+    records, scaled = fill_thin(records)
     pack = {"version": 1, "tz": str(tz.key), "source": "real day",
             "days": {KEY: day_from_records(records, "", "", 1.0, tz)}}
     engine, live = day_engine(records)
-    return DayInput(day, tz, start, records, pack, snap, engine, live, metered_cost(records), day_profile(records))
+    return DayInput(day, tz, start, records, pack, snap, engine, live, metered_cost(records), day_profile(records),
+                    scaled=scaled, note="25-hour day: the repeated hour was left out" if folded else "")

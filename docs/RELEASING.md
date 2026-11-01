@@ -16,7 +16,8 @@ long as one CI run (about 10 minutes) instead of about 27. A card release works 
 6. Start `release.yml` (ref `main`) with the inputs below (`prepared` is on by default) and, when you want main's own CI to
    pass before the release exists, `wait_main_ci: true` (off by default; it costs about 5 to 11 minutes; a failure leaves main
    merged and no release, fix forward in a new PR). Use `dry_run: true` the first time anything about the workflow changes.
-7. The owner presses **Approve and deploy**. The workflow then verifies the bump and that the branch is not behind main,
+7. The owner presses **Approve and deploy** (since 1 Nov 2026 the owner has also allowed the session to approve a release
+   he asked for in chat, with `gh api -X POST repos/<repo>/actions/runs/<id>/pending_deployments`, once CI is green on both repos). The workflow then verifies the bump and that the branch is not behind main,
    checks the PR head is the commit it checked out, waits for CI on it (done already, so no wait), squash-merges pinned to
    that commit, optionally waits for main's CI, and creates the release.
 

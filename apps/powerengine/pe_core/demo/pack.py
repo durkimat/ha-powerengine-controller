@@ -138,8 +138,9 @@ def day_complete(records: list[dict], tz=TZ, min_cover: float = 0.95) -> str | N
     `min_cover` of the day's seconds covered (95 % unless told otherwise), no duplicate starts."""
     if len(records) != 48:
         return f"{len(records)} records, not 48"
-    if sum(r.get("seconds") or 0 for r in records) < min_cover * 86400:
-        return f"under {min_cover:.0%} coverage"
+    cover = sum(r.get("seconds") or 0 for r in records) / 86400
+    if cover < min_cover:
+        return f"under {min_cover:.0%} coverage ({cover:.0%} measured)"
     starts = [_local(r["start"], tz) for r in records]
     if len(set(starts)) != 48:
         return "duplicate starts"
