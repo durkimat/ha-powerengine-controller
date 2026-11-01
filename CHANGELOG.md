@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.183 (beta)
+
+### Behaviour changes
+
+- **Savings waterfall: Today and Custom.** The "where the savings came from" chart has a **Today** button (the day so far, with the whole day's standing charge, like "Today so far" on the cost sensor) and a **Custom** button that takes a From and To date. Custom covers the last 31 days, today included, and uses the same steps as the fixed periods. Needs the card update too.
+
+### Behind the scenes
+
+- `sensor.pe_cost_waterfall` gains a `today` period, a `daily` list (each day's waterfall inputs, 4 decimals, `done` false for today) and `names` (the tariff and event labels), so the card can total any range itself. `costs.daily_rows`; tests in `tests/test_costs.py`.
+
 ## 0.9.182 (beta)
 
 ### Behaviour changes
