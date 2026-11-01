@@ -8,6 +8,8 @@ import json
 import os
 from datetime import date, datetime, timedelta, timezone
 
+from . import why as whymod
+
 VERSION = 1
 RULES = 2                               # bumped when the rules for refusing a day change; older refusals are re-checked
 KEEP_DAYS = 30
@@ -103,6 +105,13 @@ def build_result(day_input, outcome: dict, took_s: float, made_at: str | None = 
            "metered": {"cost": _r(day_input.metered_gbp)}, "calibration": None}
     if day_input.profile is not None:
         out["profile"] = day_input.profile
+    try:
+        stats = day_input.pack["days"][next(iter(day_input.pack["days"]))]["stats"]
+        why = whymod.build(runs["v2"], runs["bound"], day_input.tz, stats.get("axle_kwh"))
+    except (AttributeError, KeyError, StopIteration, TypeError):
+        why = None
+    if why:
+        out["why"] = why
     if getattr(day_input, "scaled", 0):
         out["scaled"] = day_input.scaled
     if getattr(day_input, "note", ""):

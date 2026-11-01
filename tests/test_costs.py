@@ -751,3 +751,25 @@ def test_free_power_half_hour_is_still_owned_whole():
     sc = day_scenarios(records, capacity=10, eff=0.95, floor_soc=12, max_kw=5, includes_ev=False, standing=0.0)
     assert sc["none"] == pytest.approx(0.30)
     assert sc["events_metered"] == pytest.approx(1.0 * 0.20, abs=0.001)
+
+
+def test_months_list_the_days_with_events_for_the_last_three_months(tmp_path):
+    from pe_core.costbook import CostBook, cost_entity_states
+    book = CostBook(str(tmp_path), UTC)
+    today = T0.date()
+
+    def summary(day, _today, **_):
+        ev = {}
+        if day in (today, today - timedelta(days=70), today - timedelta(days=200)):
+            ev = {"axle": {"kwh": 3.456, "gross": 6.9, "energy": 2.1, "net": 4.8, "metered": 0.3},
+                  "free_power": {"kwh": 1.0, "net": 0.2, "metered": 0.0}}
+        return {"actual": 1.0, "standing": 0.5, "s0": 2.0, "events": ev}
+    book.summary = summary
+    months = book.months(today)
+    by = {m["month"]: m for m in months}
+    book.recent = lambda *a, **k: []                  # the entity states do not need the daily list here
+    assert by[today.strftime("%Y-%m")]["ev_days"] == [[today.isoformat(), 3.46, 6.9, 2.1, 4.8, 1.0, 0.2]]
+    old = (today - timedelta(days=200)).strftime("%Y-%m")
+    assert by[old]["axle_kwh"] == 3.46 and "ev_days" not in by[old]            # older months keep only their totals
+    attrs = cost_entity_states(book, today, months)["event_months"][1]
+    assert attrs["names"] == {"event": "Axle"}

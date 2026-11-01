@@ -1285,20 +1285,18 @@ views:
                 grid_options: {columns: full}
                 content: |-
                   {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
-                  {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
                   {%- set e = states.sensor.pe_event_last %}
                   {%- if e and e.attributes.type is defined %}
                   **Last event:** {{ 'Axle export' if e.attributes.type == 'axle' else 'Free power' }} on {{ as_timestamp(e.attributes.date) | timestamp_custom('%a %d %b') }} from {{ e.attributes.time }}: {{ e.attributes.kwh }} kWh, worth {{ gbp(e.attributes.gross) }} ({{ gbp(e.attributes.net) }} net).
                   {%- else %}
                   No Axle or free-power events recorded yet.
                   {%- endif %}
-
-                  | Month | Axle kWh | Axle paid you | Energy it used | Axle net | Free power | Day-to-day energy (metered) | Standing charge |
-                  |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
-                  {%- for m in (state_attr('sensor.pe_event_months', 'months') or []) | reverse %}
-                  | {{ as_timestamp(m.month ~ '-01') | timestamp_custom('%b %Y') }} | {{ '%.1f' | format(m.axle_kwh | default(0) | float(0)) }} | {{ gbp(m.axle_gross) }} | {{ gbp(m.axle_energy) }} | **{{ gbp(m.axle_net) }}** | {{ gbp(m.free_power_net) }} | {{ gbp((m.actual | float(0)) - (m.standing | default(0) | float(0))) }} | {{ gbp(m.standing) }} |
-                  {%- endfor %}
-
+              - type: custom:powerengine-events-card
+                entity: sensor.pe_event_months
+                grid_options: {columns: full}
+              - type: markdown
+                grid_options: {columns: full}
+                content: |-
                   - **Axle paid you:** kWh exported in Axle events × (£1 from Axle + EDF's export rate).
                   - **Energy it used:** what that energy was worth otherwise. Battery energy is costed at the overnight rate it's refilled at, including the battery's losses. Solar is costed at the export rate it would have earned anyway.
                   - **Axle net:** the difference, what the events really added.

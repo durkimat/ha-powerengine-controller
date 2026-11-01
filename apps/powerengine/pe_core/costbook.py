@@ -363,8 +363,11 @@ class CostBook:
         return out
 
     def months(self, today: date, months: int = 12) -> list[dict]:
-        """Everyday totals and event totals per calendar month (rolling 12 months)."""
+        """Everyday totals and event totals per calendar month (rolling 12 months). The last EVENT_DAYS_MONTHS months
+        also list their days with events (`ev_days`: date, Axle kWh, paid, energy used, net, free-power kWh, net)."""
         by: dict[str, dict] = {}
+        keep_from = date(today.year, today.month, 1) - timedelta(days=31 * (EVENT_DAYS_MONTHS - 1))
+        keep_from = date(keep_from.year, keep_from.month, 1)
         y, m = today.year, today.month - (months - 1)
         while m <= 0:
             m, y = m + 12, y - 1
@@ -381,6 +384,11 @@ class CostBook:
                 mo["standing"] += s.get("standing", 0.0)
                 mo["s0"] += s["s0"]
                 mo["days"] += 1
+                if s["events"] and d >= keep_from:
+                    ax, fp = s["events"].get("axle") or {}, s["events"].get("free_power") or {}
+                    mo.setdefault("ev_days", []).append([
+                        d.isoformat(), *(round(ax.get(k, 0.0), 2) for k in ("kwh", "gross", "energy", "net")),
+                        round(fp.get("kwh", 0.0), 2), round(fp.get("net", 0.0), 2)])
                 for kind, e in s["events"].items():
                     mo[f"{kind}_net"] = mo.get(f"{kind}_net", 0.0) + e["net"]
                     mo[f"{kind}_kwh"] = mo.get(f"{kind}_kwh", 0.0) + e["kwh"]
@@ -391,6 +399,8 @@ class CostBook:
             d += timedelta(days=1)
         return [{k: (round(v, 2) if isinstance(v, float) else v) for k, v in m.items()} for m in by.values()]
 
+
+EVENT_DAYS_MONTHS = 3        # months (this one and the two before) whose days with events are listed
 
 WATERFALL_PERIODS = ("today", "yesterday", "week", "month", "days30")
 WATERFALL_WINDOW_DAYS = 31   # enough for the 'days30' period, whatever SHOW_DAYS (cost_days) is
@@ -427,7 +437,7 @@ def cost_entity_states(book: CostBook, today: date, months: list[dict] | None = 
                       {"days": days, "method": METHOD_VERSION,
                        "ledger_kwh": round(book.ledger.kwh, 2), "ledger_value": round(book.ledger.value, 2)}),
         "event_last": (ev["net"] if ev else "unknown", ev or {}),
-        "event_months": (month_events, {"months": months or []}),
+        "event_months": (month_events, {"months": months or [], "names": {"event": N("event")}}),
     }
     if scenario_params is not None:
         # up to 31 days of summaries for the waterfall, independent of however many cost_days shows (SHOW_DAYS)

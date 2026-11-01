@@ -75,6 +75,7 @@ class Account:
         self.world, self.event_value, self.plus = world, event_value, event_plus_export
         self.import_kwh = self.export_kwh = self.event_kwh = self.cost = 0.0
         self.event_pay = self.peak_charge_kwh = 0.0
+        self.halves: dict[str, list] = {}           # half-hour start (iso) -> [cost GBP, in a grid event]
         self.min_soc = world.soc
         self.soc0 = world.soc
         orig = world._integrate
@@ -98,14 +99,18 @@ class Account:
         self.export_kwh += exp
         self.event_kwh += ev
         self.event_pay += ev * pay
-        self.cost += imp * act - (exp - ev) * exr - ev * pay
+        step = imp * act - (exp - ev) * exr - ev * pay
+        self.cost += step
+        half = self.halves.setdefault(row["start"].isoformat(), [0.0, bool(row["axle"])])
+        half[0] += step
         if act >= PEAK_P:                                     # grid energy that went into the battery, at the peak
             self.peak_charge_kwh += min(f["charge_w"] * dt_h / 1000, imp)
 
     def summary(self):
         return {"cost_gbp": self.cost, "import_kwh": self.import_kwh, "export_kwh": self.export_kwh,
                 "event_kwh": self.event_kwh, "event_pay_gbp": self.event_pay, "peak_charge_kwh": self.peak_charge_kwh,
-                "min_soc": self.min_soc, "end_soc": self.world.soc, "start_soc": self.soc0}
+                "min_soc": self.min_soc, "end_soc": self.world.soc, "start_soc": self.soc0,
+                "halves": [(start, c, ev) for start, (c, ev) in self.halves.items()]}
 
 
 def mode_key(world) -> str:
@@ -356,14 +361,21 @@ def perfect_bound(sc: Scenario, facts, settings) -> dict:
         recs, total = value._forward(core, soc0 / 100 * facts.capacity_kwh, "mid")
         cash = 0.0
         peak = 0.0
+        event_kwh = 0.0
+        halves: dict[str, list] = {}
         for rec in recs:
             S = core.segs[rec["k"]]
-            cash += rec["imp"] * rec["imp_p"] - (rec["exp"] - rec["evx"]) * S.export_p - rec["evx"] * S.event_p
+            step = rec["imp"] * rec["imp_p"] - (rec["exp"] - rec["evx"]) * S.export_p - rec["evx"] * S.event_p
+            cash += step
+            event_kwh += rec["evx"]
+            half = halves.setdefault(S.seg.start.isoformat(), [0.0, bool(S.seg.event)])
+            half[0] += step / 100
             if rec["imp_p"] >= PEAK_P * 100:
                 peak += max(0.0, rec["gtb"])
         out.update(cost_gbp=cash / 100, end_soc=recs[-1]["e1"] / facts.capacity_kwh * 100, peak_charge_kwh=peak,
                    mode_changes=sum(1 for a, b in zip(recs, recs[1:], strict=False) if a["mode"] != b["mode"]),
                    min_soc=min(min(r["e0"], r["e1"]) for r in recs) / facts.capacity_kwh * 100, exact=True,
+                   event_kwh=event_kwh, halves=[(start, c, ev) for start, (c, ev) in halves.items()],
                    check_total=abs(total - vr.cost_expected_p))
     except Exception as err:                                  # the private records changed: use the public figure
         tv = value._terminal_p(fc, facts, settings)
