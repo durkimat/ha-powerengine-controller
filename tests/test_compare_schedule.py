@@ -237,3 +237,15 @@ def test_a_day_refused_under_older_rules_is_checked_again_once(tmp_path):
     # old refusals (no `rules`) come round again; one made under the current rules, or a result that worked, does not
     assert sched.plan(TODAY) == [d[1], d[3]]
     assert results.needs_run(costs, d[1]) and not results.needs_run(costs, d[2]) and not results.needs_run(costs, d[0])
+
+
+def test_a_day_can_be_compared_again_by_request(tmp_path):
+    d = days(7)
+    sched, _, costs = setup(tmp_path, snapshots=[d[0], d[1], d[2]], done=[d[1]])
+    assert "last 7" in sched.recheck(TODAY - timedelta(days=20), TODAY)           # too old
+    assert "forecast record" in sched.recheck(d[3], TODAY)                         # nothing to replay from
+    assert "finished" not in (sched.recheck(d[1], TODAY) or "")                    # a done day is accepted...
+    assert sched.running and sched.day == d[1]                                     # ...and started at once
+    assert "already" in sched.recheck(d[1], TODAY)                                 # but not twice
+    assert sched.recheck(d[2], TODAY) is None and list(sched.queue) == [d[2]]      # the next waits its turn
+    assert results.has_result(costs, d[1])                                         # the old result stays until the new one

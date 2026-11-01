@@ -47,3 +47,12 @@ def test_the_sensor_row_carries_the_why():
            "v2": {"saving": 1.5}, "bound": {"saving": 2.0}, "why": {"gap": 0.5, "parts": [], "lines": ["x"]}}
     row = sensor.day_row(datetime(2026, 10, 29).date(), res, True)
     assert row["why"]["lines"] == ["x"]
+
+
+def test_a_real_sun_what_if_adds_a_sentence_either_way():
+    run = _run({40: 0.5}, end_soc=40.0)
+    bad = _run({40: 1.5}, end_soc=40.0)
+    assert why.build(bad, run, LONDON, what_if={"saving": 2.0, "delta": 0.8})["lines"][-1].startswith(
+        "Given the real sun and house use as the forecast, v2 would have saved £0.80 more")
+    assert "about the same" in why.build(bad, run, LONDON, what_if={"saving": 1.0, "delta": 0.01})["lines"][-1]
+    assert "what_if" not in why.build(bad, run, LONDON)

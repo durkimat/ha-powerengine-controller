@@ -34,7 +34,7 @@ def block_totals(halves: list[tuple[str, float, bool]], tz) -> dict[str, float]:
     return out
 
 
-def build(v2: dict, bound: dict, tz, real_event_kwh: float | None = None) -> dict | None:
+def build(v2: dict, bound: dict, tz, real_event_kwh: float | None = None, what_if: dict | None = None) -> dict | None:
     """The `why` of a day from the v2 run and the bound (their summaries, with `halves`), or None without halves.
 
     gap is v2's adjusted cost less the bound's: positive means v2 did worse. It is the sum of the parts' cash gaps and
@@ -55,6 +55,8 @@ def build(v2: dict, bound: dict, tz, real_event_kwh: float | None = None) -> dic
                          "bound": _r1(bound.get("event_kwh"))},
            "peak_kwh": {"v2": _r1(v2.get("peak_charge_kwh")), "bound": _r1(bound.get("peak_charge_kwh"))},
            "changes": {"v2": v2.get("mode_changes"), "bound": bound.get("mode_changes")}}
+    if what_if:
+        out["what_if"] = {"real_sun": {"saving": what_if.get("saving"), "delta": what_if.get("delta")}}
     out["lines"] = lines(out)
     return out
 
@@ -82,6 +84,15 @@ def lines(why: dict) -> list[str]:
     es = why["end_soc"]
     if any(k == "end" for _, _, k in items) and es.get("v2") is not None and es.get("bound") is not None:
         out.append(f"v2 ended the day on {es['v2']}% charge, the best possible on {es['bound']}%.")
+    sun = (why.get("what_if") or {}).get("real_sun")
+    if sun and sun.get("delta") is not None:
+        d = sun["delta"]
+        lead = "Given the real sun and house use as the forecast, v2 would have"
+        if abs(d) < SMALL_GBP:
+            out.append(f"{lead} done about the same: the forecast was not the problem.")
+        else:
+            more, what = ("more", "cost") if d > 0 else ("less", "happened to save")
+            out.append(f"{lead} saved £{abs(d):.2f} {more}: that is what the forecast error {what}.")
     pk = why["peak_kwh"]
     if pk.get("v2") is not None and pk.get("bound") is not None and pk["v2"] - pk["bound"] >= 0.5:
         out.append(f"v2 charged {pk['v2']} kWh from the grid at the peak rate, the best possible {pk['bound']} kWh.")

@@ -24,7 +24,7 @@ from datetime import date, datetime
 
 import yaml
 
-from . import efficiency, results, settings
+from . import efficiency, results, settings, whatif
 from .day import KEY, Refused, load_day, metered_cost
 from .replay import Scenario, compare_day
 from .snapfeed import SnapshotFeed
@@ -87,7 +87,8 @@ def scenario_for(day_input, save_dir: str, tmp: str, hours: float = 24.0) -> Sce
                     extra_files=extra)
 
 
-def run_day(save_dir: str, day: date, hours: float = 24.0, out: str | None = None, say=lambda *a: None) -> int:
+def run_day(save_dir: str, day: date, hours: float = 24.0, out: str | None = None, say=lambda *a: None,
+            what_if: bool = True) -> int:
     costs = os.path.join(save_dir, "costs")
     t0 = time.monotonic()
     path = out or results.result_path(costs, day)
@@ -113,6 +114,11 @@ def run_day(save_dir: str, day: date, hours: float = 24.0, out: str | None = Non
         with tempfile.TemporaryDirectory() as tmp:
             sc = scenario_for(day_input, save_dir, tmp, hours)
             outcome = compare_day(sc, say)
+            if what_if:
+                try:                                  # the extra replay is a bonus: its failure never loses the day
+                    outcome["what_if"] = whatif.run_real_sun(sc, day_input, outcome, say)
+                except Exception:
+                    say(traceback.format_exc())
         for name in ("v1", "v2"):
             if outcome["runs"][name].get("real_calls"):
                 raise RuntimeError(f"the {name} replay reached for Home Assistant")
@@ -130,9 +136,10 @@ def main(argv=None) -> int:
     ap.add_argument("--day", required=True, help="the local day to replay, YYYY-MM-DD")
     ap.add_argument("--out", default=None, help="result file (default: <save dir>/costs/compare/<day>.json)")
     ap.add_argument("--hours", type=float, default=24.0, help="replay only this many hours from midnight (tests)")
+    ap.add_argument("--no-what-if", action="store_true", help="skip the extra replay with the real sun and house use")
     a = ap.parse_args(argv)
     return run_day(a.save_dir, date.fromisoformat(a.day), a.hours, a.out,
-                   lambda *m: print(*m, file=sys.stderr, flush=True))
+                   lambda *m: print(*m, file=sys.stderr, flush=True), what_if=not a.no_what_if)
 
 
 if __name__ == "__main__":

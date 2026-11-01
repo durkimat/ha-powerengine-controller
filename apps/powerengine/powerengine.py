@@ -188,6 +188,8 @@ HISTORY_DAY_EVENT = "pe_history_day"
 V2_HISTORY_DAY_EVENT = "pe_v2_history_day"
 # the Config page's test announcement (admin only)
 ALEXA_TEST_EVENT, ALEXA_TEST_RESULT_EVENT = "pe_alexa_test", "pe_alexa_test_result"
+COMPARE_RECHECK_EVENT = "pe_compare_recheck"     # Engines compared's "Compare again" (admin only): {day}
+COMPARE_RECHECK_RESULT = "pe_compare_recheck_result"
 V2_REPLAN_EVENT = "pe_v2_replan"        # the plan card's "Re-plan now" button (admin only: HA's fire_event needs admin)
 CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
 TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
@@ -527,6 +529,7 @@ class PowerEngine(hass.Hass):
         self.listen_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
         self.listen_event(self._on_v2_replan, V2_REPLAN_EVENT)
         self.listen_event(self._on_alexa_test, ALEXA_TEST_EVENT)
+        self.listen_event(self._on_compare_recheck, COMPARE_RECHECK_EVENT)
         self.run_every(self._publish_v2_history, "now+65", 900)
         self.run_every(self._publish_forecast_score, "now+240", 3600)
         self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
@@ -4036,6 +4039,30 @@ class PowerEngine(hass.Hass):
                 self._compare_publish()
         except Exception as err:
             self.log(f"Engine comparison check failed: {err!r}", level="WARNING")
+
+    def _on_compare_recheck(self, event_name, data, kwargs):
+        """Engines compared's "Compare again" (pe_compare_recheck {day}): replay that finished day once more tonight's
+        way, now, in the background (the same runner, one day at a time)."""
+        if event_name != COMPARE_RECHECK_EVENT:
+            return
+        def say(ok, message):
+            self.fire_event(COMPARE_RECHECK_RESULT, ok=ok, message=message, day=str((data or {}).get("day")))
+        if not self._compare_on():
+            return say(False, "The engine comparison is switched off.")
+        try:
+            day = date.fromisoformat(str((data or {}).get("day")))
+        except ValueError:
+            return say(False, "That is not a date.")
+        try:
+            why = self._compare_scheduler().recheck(day, self._today())
+        except Exception as err:
+            self.log(f"Engine comparison: could not queue {day}: {err!r}", level="WARNING")
+            return say(False, "It could not be started. See the AppDaemon log.")
+        if why:
+            return say(False, f"Not started: {why}.")
+        self.log(f"Engine comparison: replaying {day} again, asked for from the card")
+        self._compare_publish()
+        say(True, f"Comparing {day.isoformat()} again. It runs in the background and takes about 15 minutes.")
 
     def _compare_events(self, events):
         for ev in events:
