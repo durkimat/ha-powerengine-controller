@@ -28,7 +28,7 @@ def installed_version(path: str) -> str | None:
 # 0.9.175 moves them to their own Announcements section, with the test announcement button (the app answers its event).
 # 0.9.179 adds the heating set-back (an older card's save would drop its feature switch and switch entity).
 # 0.9.182 adds the grid event summary switch (an older card's save would drop it, and the summary would come back on).
-MIN_CARD_VERSION = "0.9.185"
+MIN_CARD_VERSION = "0.9.186"
 
 _DOTTED = re.compile(r"^\s*v?(\d+(?:\.\d+)*)\s*$")
 
