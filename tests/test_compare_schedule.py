@@ -248,4 +248,4 @@ def test_a_day_can_be_compared_again_by_request(tmp_path):
     assert sched.running and sched.day == d[1]                                     # ...and started at once
     assert "already" in sched.recheck(d[1], TODAY)                                 # but not twice
     assert sched.recheck(d[2], TODAY) is None and list(sched.queue) == [d[2]]      # the next waits its turn
-    assert results.has_result(costs, d[1])                                         # the old result stays until the new one
+    assert results.has_result(costs, d[1])                           # the old result stays until the new one
