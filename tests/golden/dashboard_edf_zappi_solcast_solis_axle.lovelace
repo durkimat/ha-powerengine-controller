@@ -1043,12 +1043,12 @@ views:
           # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
           - type: custom:powerengine-demo-card
             grid_options: {columns: full}
-          # a small alignment switch on the right (from the PowerEngine card bundle); the page header is the title
+          # one slim row: Expand all / Collapse all on the left, the alignment switch on the right (from the PowerEngine
+          # card bundle); the page header is the title
           - type: custom:powerengine-toggle-card
             entity: switch.pe_ui_right_align
             name: Alignment
-            grid_options: {columns: full, rows: 1}
-          - type: custom:powerengine-section-tools
+            tools: true
             grid_options: {columns: full, rows: 1}
           - type: custom:powerengine-costs-period-card
             entity: sensor.pe_cost_waterfall
