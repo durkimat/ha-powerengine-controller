@@ -39,6 +39,8 @@ def day_row(day: date, result: dict | None, has_snapshot: bool) -> dict:
                v1_flips=v1.get("flips"), v2_flips=v2.get("flips"), calib=_calib(result))
     if result.get("profile") is not None:
         row["profile"] = result["profile"]
+    if isinstance(result.get("why"), dict):
+        row["why"] = result["why"]
     if result.get("scaled"):
         row["scaled"] = result["scaled"]
     if result.get("note"):
