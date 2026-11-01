@@ -318,6 +318,8 @@ def steps(summary: dict) -> list[tuple[str, float]]:
 
 def _select_days(days_summaries: list[dict], period: str) -> list[dict]:
     complete = [d for d in days_summaries if d.get("complete") and d.get("scenarios")]
+    if period == "today":      # the day so far: the newest summary, while it is still unfinished
+        return [d for d in days_summaries[-1:] if not d.get("complete") and d.get("scenarios")]
     if period == "yesterday":
         return complete[-1:]
     if period == "week":
@@ -330,13 +332,25 @@ def _select_days(days_summaries: list[dict], period: str) -> list[dict]:
     raise ValueError(f"unknown period {period!r}")
 
 
+DAILY_FIELDS = ("none", "solar", "tariff", "actual_adj", "carry", "events_metered", "axle_income")
+
+
+def daily_rows(days_summaries: list[dict]) -> list[dict]:
+    """Each day's waterfall inputs, so a card can add up any range of dates itself (see _steps_for).
+
+    Oldest first, today (still unfinished) included with done=False. Days without scenarios are left out.
+    """
+    return [{"date": d["date"], "done": bool(d.get("complete")),
+             **{k: round(d["scenarios"].get(k, 0.0), 4) for k in DAILY_FIELDS}}
+            for d in days_summaries if d.get("scenarios")]
+
+
 def _steps_for(chosen: list[dict]) -> list[dict]:
     """The waterfall's steps for some complete days (see waterfall)."""
-    fields = ("none", "solar", "tariff", "actual_adj", "carry", "events_metered", "axle_income")
-    sums = dict.fromkeys(fields, 0.0)
+    sums = dict.fromkeys(DAILY_FIELDS, 0.0)
     for d in chosen:
         sc = d["scenarios"]
-        for key in fields:
+        for key in DAILY_FIELDS:
             sums[key] += sc.get(key, 0.0)
 
     # each running total is rounded once; every step is the difference of two rounded totals, so steps and
@@ -368,7 +382,7 @@ def waterfall(days_summaries: list[dict], period: str) -> dict:
     """Sum day_scenarios() over a period into a savings waterfall's steps (GBP, running totals chain exactly).
 
     days_summaries: day_summary() dicts with a 'scenarios' field (see day_scenarios), oldest first, as
-    CostBook.recent() returns them. period: 'yesterday', 'week' (last 7 complete days), 'month' (this calendar
+    CostBook.recent() returns them. period: 'today' (the day so far), 'yesterday', 'week' (last 7 complete days), 'month' (this calendar
     month's complete days so far, the month of the last day in days_summaries) or 'days30' (last 30 complete
     days). Steps: total 'No solar or battery', then 'Solar', 'EDF tariff' and 'PowerEngine' (the battery and
     PowerEngine together: the real cost of the normal half-hours, carry-over included, against solar and the tariff
