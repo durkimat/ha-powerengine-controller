@@ -83,7 +83,7 @@ PowerEngine turns each one on when a free-power session starts and off when it e
 was already on is left alone, and a switch you turn off yourself during the session stays off until the next one.
 Only `switch` and `input_boolean` entities are accepted. What PowerEngine has switched on is kept in
 `free_loads.json` next to `config.yaml`, so a restart in the middle of a session still turns it off afterwards.
-The Config page does not edit this list yet and keeps it when it saves.
+The Config page edits the same list under Free-power sessions, "Switches to run during free power" (card 0.9.192 or newer); an older card keeps the list when it saves.
 
 ## What the card reads
 
