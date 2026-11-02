@@ -136,6 +136,43 @@ def test_app_follows_an_event_and_announces_it_once_when_it_is_over(monkeypatch,
     assert len(a.calls) == 1
 
 
+def test_the_summary_also_goes_to_whatsapp_when_it_is_on(monkeypatch, tmp_path):
+    group = "120363085203994232@g.us"
+    a = _app(monkeypatch, tmp_path, alexa={"latest": "23:00", "whatsapp": True, "whatsapp_targets": [group]})
+    a._run_note(_r(START + 5 * M, True), "heat", "set_back")
+    a._event_finish_step(_r(START + 5 * M, True))
+    a._event_finish_step(Readings(now=END + 1 * M))
+    (alexa, _), (wa, kw) = a.calls
+    assert alexa == "notify/alexa_media_kitchen" and wa == "whatsapp/send_message" and kw["target"] == group
+    spoken = a.calls[0][1]["message"]
+    assert kw["message"] == spoken and spoken.startswith("Daddybot here. The grid event at 8 pm today is over")
+    a._event_finish_step(Readings(now=END + 2 * M))
+    assert len(a.calls) == 2                                                  # once
+
+
+def test_whatsapp_alone_is_enough_to_count_as_announced(monkeypatch, tmp_path):
+    a = _app(monkeypatch, tmp_path, alexa={"latest": "23:00", "services": [], "whatsapp": True,
+                                           "whatsapp_targets": ["447700900123"]})
+    a._event_finish_step(_r(START + 5 * M, True))
+    a._event_finish_step(Readings(now=END + 1 * M))
+    assert [c[0] for c in a.calls] == ["whatsapp/send_message"]
+    a._event_finish_step(Readings(now=END + 2 * M))
+    assert len(a.calls) == 1                                                  # marked done, not repeated every cycle
+
+
+def test_a_failed_whatsapp_send_is_logged_and_does_not_stop_the_speakers(monkeypatch, tmp_path):
+    a = _app(monkeypatch, tmp_path, alexa={"latest": "23:00", "whatsapp": True, "whatsapp_targets": ["447700900123"]})
+    def call(svc, **kw):
+        if svc.startswith("whatsapp"):
+            raise RuntimeError("gateway down")
+        a.calls.append((svc, kw))
+    a.call_service = call
+    a._event_finish_step(_r(START + 5 * M, True))
+    a._event_finish_step(Readings(now=END + 1 * M))
+    assert [c[0] for c in a.calls] == ["notify/alexa_media_kitchen"]
+    assert any("Could not send to WhatsApp" in m for m in a.logs)
+
+
 def test_app_waits_for_the_allowed_hours_and_can_be_switched_off(monkeypatch, tmp_path):
     a = _app(monkeypatch, tmp_path)                                           # the event ends at 21:00: the latest time
     a._run_note(_r(START, True), "heat", "restored")

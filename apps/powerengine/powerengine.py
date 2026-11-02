@@ -59,6 +59,7 @@ from pe_core.announce import message as alexa_message
 from pe_core.announce import readiness as alexa_readiness
 from pe_core.announce import trial_message as alexa_trial_message
 from pe_core.announce import trial_speakers as alexa_trial_speakers
+from pe_core.announce import whatsapp_targets
 from pe_core.carstop import CarStop
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
@@ -2234,20 +2235,36 @@ class PowerEngine(hass.Hass):
                 said += 1
             except Exception as err:
                 self.log(f"Could not announce via {service}: {err!r}", level="WARNING")
-        if said:
+        texted = self._whatsapp(a, text)
+        if said or texted:
             self.notifier.mark(key, r.now)
-            self.log(f"Alexa announced ({h:g} h before) on {said} of {len(a['services'])}: {text}")
+            self.log(f"Alexa announced ({h:g} h before) on {said} of {len(a['services'])}"
+                     f"{f' and WhatsApp ({texted})' if texted else ''}: {text}")
+
+    def _whatsapp(self, a, text, targets=None):
+        """Send an announcement to the WhatsApp targets (the same words the speakers say) through the WhatsApp
+        integration's whatsapp.send_message. Returns how many targets it reached; never raises."""
+        targets = a["whatsapp_targets"] if targets is None and a.get("whatsapp") else (targets or [])
+        sent = 0
+        for target in targets:
+            try:
+                self.call_service("whatsapp/send_message", target=target, message=text)
+                sent += 1
+            except Exception as err:
+                self.log(f"Could not send to WhatsApp ({target}): {err!r}", level="WARNING")
+        return sent
 
     def _on_alexa_test(self, event_name, data, kwargs):
-        """The Config page's "Play a test announcement" (pe_alexa_test {services, intro}): say "<intro> Test message."
-        on the speakers ticked there, now, whatever the allowed hours say. It is not an announcement for any event, so
-        nothing is marked as sent."""
+        """The Config page's "Play a test announcement" (pe_alexa_test {services, intro, whatsapp}): say "<intro> Test
+        message." on the speakers ticked there and send it to the WhatsApp targets there, now, whatever the allowed
+        hours say. It is not an announcement for any event, so nothing is marked as sent."""
         if event_name != ALEXA_TEST_EVENT:
             return
         data = data or {}
         services = alexa_trial_speakers(data.get("services"))
-        if not services:
-            self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False, message="No Alexa speaker was ticked.")
+        chats = whatsapp_targets(data.get("whatsapp"))
+        if not services and not chats:
+            self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False, message="No Alexa speaker or WhatsApp group was chosen.")
             return
         intro = data.get("intro")
         text = alexa_trial_message(intro[:80] if isinstance(intro, str) else "")
@@ -2259,14 +2276,22 @@ class PowerEngine(hass.Hass):
             except Exception as err:
                 failed.append(service)
                 self.log(f"Alexa test: could not announce via {service}: {err!r}", level="WARNING")
-        self.log(f"Alexa test announced on {len(said)} of {len(services)}: {text}")
-        if said:
-            note = f" ({len(failed)} failed: see the log)" if failed else ""
+        texted = self._whatsapp({}, text, chats)
+        self.log(f"Alexa test announced on {len(said)} of {len(services)} speakers, "
+                 f"WhatsApp {texted} of {len(chats)}: {text}")
+        if said or texted:
+            parts = []
+            if services:
+                parts.append(f"{len(said)} of {len(services)} speakers")
+            if chats:
+                parts.append(f"{texted} of {len(chats)} WhatsApp chats")
+            bad = len(failed) + len(chats) - texted
+            note = f" ({bad} failed: see the log)" if bad else ""
             self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=True,
-                            message=f"Sent to {len(said)} of {len(services)} speakers: \"{text}\"{note}")
+                            message=f"Sent to {' and '.join(parts)}: \"{text}\"{note}")
         else:
             self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False,
-                            message="Home Assistant would not play it on any speaker. See the AppDaemon log.")
+                            message="Home Assistant would not play or send it anywhere. See the AppDaemon log.")
 
     # --- the car charger during a grid event (pe_core/carstop.py) -----------------------
 
@@ -2517,10 +2542,12 @@ class PowerEngine(hass.Hass):
                 said += 1
             except Exception as err:
                 self.log(f"Could not announce via {service}: {err!r}", level="WARNING")
-        if said:
+        texted = self._whatsapp(a, text)
+        if said or texted:
             run["done"] = True
             self._save_event_run()
-            self.log(f"Alexa announced the grid event summary on {said} of {len(a['services'])}: {text}")
+            self.log(f"Alexa announced the grid event summary on {said} of {len(a['services'])}"
+                     f"{f' and WhatsApp ({texted})' if texted else ''}: {text}")
             self._logbook(f"Grid event summary announced: {text}")
 
     # --- inverter writes (EEPROM wear) ---------------------------------------------------

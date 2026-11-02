@@ -91,6 +91,30 @@ def test_alexa_config_defaults_and_validation():
             parse_config({"notifications": {"alexa": bad}})
 
 
+def test_whatsapp_announcement_settings():
+    a = parse_config({}).notifications["alexa"]
+    assert a["whatsapp"] is False and a["whatsapp_targets"] == []
+    group = "120363085203994232@g.us"
+
+    def alexa(**kw):
+        return parse_config({"notifications": {"alexa": kw}}).notifications["alexa"]
+
+    assert alexa(whatsapp=True, whatsapp_targets=[group, f" {group} ", "447700900123"])["whatsapp_targets"] == [
+        group, "447700900123"]
+    assert alexa(whatsapp_targets=[group])["whatsapp"] is False
+    for bad in ({"whatsapp": True}, {"whatsapp": "yes"}, {"whatsapp_targets": group},
+                {"whatsapp_targets": ["Durkin Chat"]}, {"whatsapp": True, "whatsapp_targets": ["12@g.us@"]}):
+        with pytest.raises(ConfigError):
+            alexa(**bad)
+
+
+def test_whatsapp_targets_for_a_test_are_checked():
+    from pe_core.announce import whatsapp_targets
+    group = "120363085203994232@g.us"
+    assert whatsapp_targets([group, group, "447700900123", "x", 5, " 123@g.us "]) == [group, "447700900123", "123@g.us"]
+    assert whatsapp_targets(group) == [] and whatsapp_targets(None) == []
+
+
 def test_alexa_reminders_have_their_own_cap(tmp_path):
     n = Notifier(str(tmp_path / "n.json"))
     now = datetime(2026, 10, 31, 12, tzinfo=timezone.utc)

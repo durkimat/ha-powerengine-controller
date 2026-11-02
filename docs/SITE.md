@@ -85,6 +85,26 @@ Only `switch` and `input_boolean` entities are accepted. What PowerEngine has sw
 `free_loads.json` next to `config.yaml`, so a restart in the middle of a session still turns it off afterwards.
 The Config page edits the same list under Free-power sessions, "Switches to run during free power" (card 0.9.192 or newer); an older card keeps the list when it saves.
 
+## Announcements to WhatsApp
+
+The grid event reminders and the end-of-event summary that go to the Alexa speakers can be sent to WhatsApp too, in the
+same words, at the same times and inside the same allowed hours. It needs a WhatsApp integration in Home Assistant that
+provides the `whatsapp.send_message` action (for example FaserF's ha-whatsapp with its gateway app). In `config.yaml`:
+
+```yaml
+notifications:
+  events:
+    alexa: true            # the switch for the announcements; the speakers list may be empty (WhatsApp only)
+  alexa:
+    whatsapp: true
+    whatsapp_targets:      # group ids (search with the whatsapp.search_groups action) or phone numbers with country code
+      - 120363012345678901@g.us
+```
+
+The Config page has the same under Alexa announcements, "Also send them to WhatsApp" (app and card 0.9.193 or newer). The
+test announcement button sends to WhatsApp as well when it is switched on. WhatsApp may ban an account that sends
+automated messages, so keep the volume low.
+
 ## What the card reads
 
 `sensor.pe_diag_version` attributes: `site` (the current values), `site_options` (per key, a list of

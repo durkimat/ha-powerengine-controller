@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.193 (beta)
+
+### Behaviour changes
+
+- **Announcements can go to WhatsApp as well.** The grid event reminders and the end-of-event summary are now also sent to the WhatsApp groups or numbers in `notifications.alexa.whatsapp_targets`, in the same words and inside the same allowed hours, when `notifications.alexa.whatsapp` is on (off by default). It uses the WhatsApp integration's `whatsapp.send_message`. A send that fails is logged and never stops the speakers. The Alexa speakers list may now be empty, so WhatsApp can be used alone. The test announcement sends to WhatsApp too. See docs/SITE.md. The Config page setting needs card 0.9.193.
+
+### Behind the scenes
+
+- `pe_core/announce.py` gains `whatsapp_targets` (the chats a test may use); `config.py` validates `whatsapp` and `whatsapp_targets`.
+
 ## 0.9.192 (beta)
 
 ### Behaviour changes
