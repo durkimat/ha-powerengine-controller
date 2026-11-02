@@ -4356,7 +4356,7 @@ class PowerEngine(hass.Hass):
             if old_devices is not None and "devices" not in new:     # a card that doesn't know devices keeps them
                 new = {**new, "devices": old_devices}
             old_loads = self.cfg.raw.get("free_power_loads") if self.cfg else None
-            if old_loads is not None and "free_power_loads" not in new:   # the cards don't edit these yet: keep them
+            if old_loads is not None and "free_power_loads" not in new:   # a card older than 0.9.192 doesn't send them: keep them
                 new = {**new, "free_power_loads": old_loads}
             if self.cfg and "v2_split" in self.cfg.raw and "v2_split" not in new:
                 new = {**new, "v2_split": self.cfg.raw["v2_split"]}      # the mark that v2 has its own settings
