@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.192 (beta)
+
+### Behaviour changes
+
+- **Config page: switches to run during free power.** The list can now be edited under Free-power sessions (add a switch, give it a name, remove it) instead of in `config.yaml`. Needs card 0.9.192.
+
+### Behind the scenes
+
+- A card older than 0.9.192 still doesn't send `free_power_loads`, so the app keeps the saved list when it saves.
+
 ## 0.9.191 (beta)
 
 ### Behaviour changes
