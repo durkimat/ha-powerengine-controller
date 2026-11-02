@@ -156,10 +156,12 @@ NOTIFY_EVENTS = {
                                                 "noticeably less, or new tariffs appear."),
 }
 _NOTIFY_SERVICE = re.compile(r"^notify\.[a-z0-9_]+$")
+# a WhatsApp group id (120363012345678901@g.us) or a phone number with its country code (447700900123)
+_WHATSAPP_TARGET = re.compile(r"^(\d+(-\d+)?@g\.us|\d{6,15})$")
 # Alexa announcements: nothing is spoken before the earliest time (later at weekends) or after the latest
 ALEXA_DEFAULT = {"services": ["notify.alexa_media_everywhere"], "hours_before": [8, 5, 2, 1, 0],
                  "earliest_weekday": "07:30", "earliest_weekend": "09:00", "latest": "21:00",
-                 "intro": "Daddybot here.", "finish": True}
+                 "intro": "Daddybot here.", "finish": True, "whatsapp": False, "whatsapp_targets": []}
 NOTIFY_DEFAULT = "persistent_notification"      # HA's own notification area (the bell); no phone needed
 
 # Labels and one-line help for the config page (kept next to the defaults they describe).
@@ -602,7 +604,18 @@ def _parse_alexa(raw: Any) -> dict[str, Any]:
         raise ConfigError("notifications.alexa.intro must be text of at most 80 characters (empty for none)")
     if not isinstance(cfg["finish"], bool):
         raise ConfigError("notifications.alexa.finish must be true or false")
+    if not isinstance(cfg["whatsapp"], bool):
+        raise ConfigError("notifications.alexa.whatsapp must be true or false")
+    targets = cfg["whatsapp_targets"]
+    if not isinstance(targets, list) or not all(isinstance(x, str) and _WHATSAPP_TARGET.match(x.strip())
+                                                for x in targets):
+        raise ConfigError("notifications.alexa.whatsapp_targets must be a list of WhatsApp group ids "
+                          "(like 120363012345678901@g.us) or phone numbers with the country code")
+    targets = list(dict.fromkeys(x.strip() for x in targets))
+    if cfg["whatsapp"] and not targets:
+        raise ConfigError("notifications.alexa.whatsapp is on but whatsapp_targets is empty")
     return {"services": list(dict.fromkeys(services)), "intro": intro.strip(), "finish": cfg["finish"],
+            "whatsapp": cfg["whatsapp"], "whatsapp_targets": targets,
             "hours_before": sorted({float(h) for h in hours}, reverse=True),
             "earliest_weekday": _clock_minutes("earliest_weekday", cfg["earliest_weekday"]),
             "earliest_weekend": _clock_minutes("earliest_weekend", cfg["earliest_weekend"]),

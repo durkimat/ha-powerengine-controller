@@ -126,6 +126,16 @@ def trial_speakers(services) -> list[str]:
     return out
 
 
+def whatsapp_targets(targets) -> list[str]:
+    """The WhatsApp chats a test may send to: valid group ids and phone numbers only, each once."""
+    from pe_core.config import _WHATSAPP_TARGET
+    out = []
+    for t in targets if isinstance(targets, (list, tuple)) else []:
+        if isinstance(t, str) and _WHATSAPP_TARGET.match(t.strip()) and t.strip() not in out:
+            out.append(t.strip())
+    return out
+
+
 def trial_message(intro: str = "") -> str:
     """What the test button says: the opening words, then "Test message."."""
     return f"{intro.strip()} Test message.".strip()
