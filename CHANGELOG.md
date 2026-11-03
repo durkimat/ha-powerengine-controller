@@ -2,6 +2,16 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.199 (beta)
+
+### Behaviour changes
+
+- **Engine v2 now uses its own reserve and its own battery wear cost where the two engines share code.** Before, three places always read engine v1's settings: the check that the inverter is following RAM remote control (it uses the reserve to know the battery has legitimately stopped discharging), the energy flow card's reserve line, and the automatic cheap threshold the car's smart-charge requests use (it counts the battery wear cost). On engine v2 they now use v2's "Your reserve" and "Battery wear"; on engine v1 nothing changes.
+
+### Behind the scenes
+
+- `PowerEngine._reserve_soc()` and `_wear_p()` give the running engine's value; `cheap_limit` takes an optional `wear_p`.
+
 ## 0.9.198 (beta)
 
 ### Behaviour changes
