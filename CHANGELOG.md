@@ -2,6 +2,12 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.194 (beta)
+
+### Behaviour changes
+
+- No change to the app itself. This release goes with card 0.9.194, which changes a colour on the Costs page.
+
 ## 0.9.193 (beta)
 
 ### Behaviour changes
