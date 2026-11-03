@@ -223,8 +223,8 @@ class CostBook:
         # readings is shorter than 1800 s, and its successor then looked like a new event (29 Oct 2026: 18:00 was
         # recorded as 1617 s, so 18:30 started "another" event and the whole one showed as one half-hour).
         end = start + timedelta(seconds=1800)
-        vals = {"kwh": v["event_kwh"], "gross": v["event_gross"], "energy": v.get("event_energy", 0.0),
-                "net": v["event_net"]}
+        vals = {"kwh": v["event_kwh"], "pay": v.get("event_pay", 0.0), "gross": v["event_gross"],
+                "energy": v.get("event_energy", 0.0), "net": v["event_net"]}
         ev = self.last_event
         if ev and ev.get("type") == v["event"] and ev.get("end") and \
                 abs((datetime.fromisoformat(ev["end"]) - start).total_seconds()) < 120:
@@ -364,7 +364,8 @@ class CostBook:
 
     def months(self, today: date, months: int = 12) -> list[dict]:
         """Everyday totals and event totals per calendar month (rolling 12 months). The last EVENT_DAYS_MONTHS months
-        also list their days with events (`ev_days`: date, Axle kWh, paid, energy used, net, free-power kWh, net)."""
+        also list their days with events (`ev_days`: date, Axle kWh, Axle plus export, energy used, net, free-power
+        kWh, net, Axle's pay)."""
         by: dict[str, dict] = {}
         keep_from = date(today.year, today.month, 1) - timedelta(days=31 * (EVENT_DAYS_MONTHS - 1))
         keep_from = date(keep_from.year, keep_from.month, 1)
@@ -377,7 +378,8 @@ class CostBook:
             if s:
                 key = d.strftime("%Y-%m")
                 mo = by.setdefault(key, {"month": key, "actual": 0.0, "standing": 0.0, "s0": 0.0,
-                                         "axle_kwh": 0.0, "axle_gross": 0.0, "axle_energy": 0.0, "axle_net": 0.0,
+                                         "axle_kwh": 0.0, "axle_pay": 0.0, "axle_gross": 0.0, "axle_energy": 0.0,
+                                         "axle_net": 0.0,
                                          "free_power_kwh": 0.0, "free_power_net": 0.0, "event_metered": 0.0,
                                          "days": 0})
                 mo["actual"] += s["actual"]
@@ -390,11 +392,12 @@ class CostBook:
                     ax, fp = s["events"].get("axle") or {}, s["events"].get("free_power") or {}
                     mo["ev_days"].append([
                         d.isoformat(), *(round(ax.get(k, 0.0), 2) for k in ("kwh", "gross", "energy", "net")),
-                        round(fp.get("kwh", 0.0), 2), round(fp.get("net", 0.0), 2)])
+                        round(fp.get("kwh", 0.0), 2), round(fp.get("net", 0.0), 2), round(ax.get("pay", 0.0), 2)])
                 for kind, e in s["events"].items():
                     mo[f"{kind}_net"] = mo.get(f"{kind}_net", 0.0) + e["net"]
                     mo[f"{kind}_kwh"] = mo.get(f"{kind}_kwh", 0.0) + e["kwh"]
                     if kind == "axle":
+                        mo["axle_pay"] += e.get("pay", 0.0)
                         mo["axle_gross"] += e["gross"]
                         mo["axle_energy"] += e.get("energy", 0.0)
                     mo["event_metered"] += e["metered"]

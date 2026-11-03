@@ -155,7 +155,8 @@ def event_summary(records: list[dict], start: datetime, end: datetime) -> dict |
     def event(key):
         return sum(float((r.get("v") or {}).get(key) or 0.0) for r in rows)
     return {"house_kwh": total("house"), "car_kwh": total("car"), "export_kwh": total("grid_export"),
-            "event_kwh": event("event_kwh"), "gross": event("event_gross"), "net": event("event_net"),
+            "event_kwh": event("event_kwh"), "pay": event("event_pay"), "export": event("event_export"),
+            "gross": event("event_gross"), "net": event("event_net"),
             "half_hours": len(rows)}
 
 
@@ -187,9 +188,12 @@ def finish_message(intro: str, start: datetime, end: datetime, now: datetime, tz
             use += f", and the car {_kwh(summary['car_kwh'])}"
         out.append(f"{use}, and we exported {_kwh(summary['export_kwh'])}.")
         if summary["gross"] > 0.005:
-            pay = f"It should pay about £{summary['gross']:.2f}"
+            # what the event pays and what the supplier's export rate adds are two things: say them apart
+            pay = f"The event should pay about £{summary['pay']:.2f}"
+            if summary["export"] >= 0.005:
+                pay += f", and the export rate adds about £{summary['export']:.2f}"
             if summary["net"] > 0.005 and abs(summary["gross"] - summary["net"]) >= 0.01:
-                pay += f", or £{summary['net']:.2f} after the battery energy it used"
+                pay += f", or £{summary['net']:.2f} in all after the battery energy it used"
             out.append(pay + ".")
     if heat in HEAT:
         out.append(HEAT[heat])

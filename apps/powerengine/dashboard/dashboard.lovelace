@@ -1110,7 +1110,7 @@ views:
                   {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
                   {%- set e = states.sensor.pe_event_last %}
                   {%- if e and e.attributes.type is defined %}
-                  **Last event:** {{ '<<event>> export' if e.attributes.type == 'axle' else 'Free power' }} on {{ as_timestamp(e.attributes.date) | timestamp_custom('%a %d %b') }} from {{ e.attributes.time }}: {{ e.attributes.kwh }} kWh, worth {{ gbp(e.attributes.gross) }} ({{ gbp(e.attributes.net) }} net).
+                  **Last event:** {{ '<<event>> export' if e.attributes.type == 'axle' else 'Free power' }} on {{ as_timestamp(e.attributes.date) | timestamp_custom('%a %d %b') }} from {{ e.attributes.time }}: {{ e.attributes.kwh }} kWh, {% if e.attributes.type == 'axle' and e.attributes.pay is defined %}paid {{ gbp(e.attributes.pay) }} plus {{ gbp(e.attributes.gross - e.attributes.pay) }} export rate{% else %}worth {{ gbp(e.attributes.gross) }}{% endif %} ({{ gbp(e.attributes.net) }} net).
                   {%- else %}
                   No <<event>> or free-power events recorded yet.
                   {%- endif %}
@@ -1121,7 +1121,7 @@ views:
               - type: markdown
                 grid_options: {columns: full}
                 content: |-
-                  - **<<event>> paid you:** kWh exported in <<event>> events × (£1 from <<event>> + <<supplier>>'s export rate).
+                  - **<<event>> pays:** £1 for each kWh exported in <<event>> events. **Export rate on top:** <<supplier>>'s export rate on the same kWh, paid by <<supplier>>, not <<event>>.
                   - **Energy it used:** what that energy was worth otherwise. Battery energy is costed at the overnight rate it's refilled at, including the battery's losses. Solar is costed at the export rate it would have earned anyway.
                   - **<<event>> net:** the difference, what the events really added.
                   - **Free power:** kWh used in free-power sessions × the rate you'd otherwise have paid.

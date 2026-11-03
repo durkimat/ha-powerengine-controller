@@ -78,7 +78,7 @@ class HalfHour:
     seconds: float = 0.0
     soc_start: float | None = None
     soc_end: float | None = None
-    axle: bool = False
+    axle_s: float = 0.0               # seconds of the half-hour a grid event ran (counted with `seconds`)
     free: bool = False
     import_rate: float | None = None   # last rate seen (fallback when the rate list is missing)
     export_rate: float | None = None
@@ -118,7 +118,6 @@ class HalfHour:
             self.soc_start = r.battery_soc
         if r.battery_soc is not None:
             self.soc_end = r.battery_soc
-        self.axle = self.axle or r.axle_active
         self.free = self.free or r.free_active
         self.import_rate = r.import_rate if r.import_rate is not None else self.import_rate
         self.export_rate = r.export_rate if r.export_rate is not None else self.export_rate
@@ -148,6 +147,8 @@ class HalfHour:
         self.car += car_w * h
         self.solar += solar_w * h
         self.seconds += dt_s
+        if r.axle_active:
+            self.axle_s += dt_s
 
     def as_dict(self) -> dict:
         d = {k: round(v, 5) for k, v in self.kwh.items()}
@@ -156,7 +157,8 @@ class HalfHour:
             "house": self.house, "car": self.car, "solar": self.solar, "battery_in": self.battery_in,
             "battery_out": self.battery_out, "unallocated_src": self.unallocated_src,
             "unallocated_sink": self.unallocated_sink, "seconds": self.seconds, "soc_start": self.soc_start,
-            "soc_end": self.soc_end, "axle": self.axle, "free": self.free, "import_rate": self.import_rate,
+            "soc_end": self.soc_end, "axle": self.axle_s >= 0.5 * max(self.seconds, 1.0),
+            "axle_s": self.axle_s, "free": self.free, "import_rate": self.import_rate,
             "export_rate": self.export_rate, "standing": self.standing, "cmd": self.cmd, "cmd_kw": self.cmd_kw,
             "temp_c": self.temp_c, "tb_c": self.tb_c}.items()})
         if self.bms_lim:
