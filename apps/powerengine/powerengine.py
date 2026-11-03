@@ -10,6 +10,7 @@ feature is on, EDF smart-charge requests) behind the handover guards, the pause 
 import asyncio
 import copy
 import dataclasses
+import hashlib
 import inspect
 import json
 import os
@@ -51,7 +52,6 @@ from pe_core.adapters.null import NULL as NULL_ADAPTERS
 from pe_core.adapters.options import site_options
 from pe_core.adapters.publish import ad_would_alter, select_publisher
 from pe_core.adapters.solcast import ROLES as FORECAST_ROLES
-from pe_core.announce import allowed as alexa_allowed
 from pe_core.announce import due as alexa_due
 from pe_core.announce import event_summary as alexa_event_summary
 from pe_core.announce import finish_message as alexa_finish_message
@@ -71,11 +71,11 @@ from pe_core.compare.snapfeed import snapshot_path
 from pe_core.config import (
     DEFAULT_PATHS,
     LOCATION_LAG_H,
-    NOTIFY_DEFAULT,
     ConfigError,
     Site,
     load_config,
     other_controller,
+    parse_channel,
     parse_config,
     required_roles,
     settings_catalogue,
@@ -133,6 +133,7 @@ from pe_core.planner import make_plan, params_from, plan_entity_states, slot_cer
 from pe_core.readings import read
 from pe_core.replay import Timeline, flow_id, history_entities, replay
 from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue, is_forbidden_control
+from pe_core.router import Message, Outbox, channels_for, is_open, kind_list, public_model, render
 from pe_core.schedule import forecast_writes, periods, settled, urgent
 from pe_core.setback import Setback
 from pe_core.setback import window as setback_window
@@ -191,6 +192,9 @@ HISTORY_DAY_EVENT = "pe_history_day"
 V2_HISTORY_DAY_EVENT = "pe_v2_history_day"
 # the Config page's test announcement (admin only)
 ALEXA_TEST_EVENT, ALEXA_TEST_RESULT_EVENT = "pe_alexa_test", "pe_alexa_test_result"
+# a message from elsewhere, and the Config page's test of a notification channel
+NOTIFY_EVENT = "pe_notify"
+NOTIFY_TEST_EVENT, NOTIFY_TEST_RESULT_EVENT = "pe_notify_test", "pe_notify_test_result"
 COMPARE_RECHECK_EVENT = "pe_compare_recheck"     # Engines compared's "Compare again" (admin only): {day}
 COMPARE_RECHECK_RESULT = "pe_compare_recheck_result"
 V2_REPLAN_EVENT = "pe_v2_replan"        # the plan card's "Re-plan now" button (admin only: HA's fire_event needs admin)
@@ -532,6 +536,9 @@ class PowerEngine(hass.Hass):
         self.listen_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
         self.listen_event(self._on_v2_replan, V2_REPLAN_EVENT)
         self.listen_event(self._on_alexa_test, ALEXA_TEST_EVENT)
+        self.listen_event(self._on_notify_test, NOTIFY_TEST_EVENT)
+        self.run_every(self._publish_notify_cycle, "now+50", 900)
+        self.listen_event(self._on_pe_notify, NOTIFY_EVENT)
         self.listen_event(self._on_compare_recheck, COMPARE_RECHECK_EVENT)
         self.run_every(self._publish_v2_history, "now+65", 900)
         self.run_every(self._publish_forecast_score, "now+240", 3600)
@@ -767,6 +774,7 @@ class PowerEngine(hass.Hass):
                 self._heating_setback_step(readings)
                 self._free_loads_step(readings)
                 self._event_finish_step(readings)
+                self._flush_held(readings.now)
                 self._track_slots(readings)
                 self._snapshot_forecast(readings)
                 self._smart_step(readings)
@@ -2119,36 +2127,155 @@ class PowerEngine(hass.Hass):
         except Exception as err:
             self._warn_daily("v2recent_pub", f"Could not build engine v2's recent hours: {err!r}")
 
-    # --- notifications (HA companion app) ------------------------------------------------
+    # --- notifications: messages routed to channels (pe_core/router.py) --------------------
+
+    def _outbox(self):
+        """What the router remembers (held messages, kinds seen, the last deliveries), kept beside the config."""
+        box = self.__dict__.get("_box")
+        if box is None:
+            try:
+                path = os.path.join(os.path.dirname(self._save_path()), "notify_outbox.json")
+            except Exception:
+                path = None
+            box = self._box = Outbox(path)
+        return box
 
     def _notify(self, event, msg):
-        """Send (key, title, message) if that kind of notification is on and it hasn't been sent already."""
+        """Send (key, title, message) of this kind of message to the channels the rules name, once per key."""
         if not msg or self.cfg is None:
             return
-        n = self.cfg.notifications
         key, title, message = msg
         now = datetime.now(timezone.utc)
-        if not n["service"] or not n["events"].get(event) or not self.notifier.should_send(key, now):
+        if not self.notifier.should_send(key, now):
             return
-        try:
-            if n["service"] == NOTIFY_DEFAULT:
-                self.call_service("persistent_notification/create", title=title, message=message,
-                                  notification_id=_notice_id(key))
-            else:
-                self.call_service(n["service"].replace(".", "/", 1), title=title, message=message)
+        if self._deliver(Message(event, key, title, message), now):
             self.notifier.mark(key, now)
             self.log(f"Notified: {title}")
+
+    def _publish_notify(self):
+        """sensor.pe_ui_notify: the channels and rules, the kinds of message that can be routed, what is held and
+        the last deliveries, for the Config page."""
+        if self.cfg is None:
+            return
+        try:
+            box = self._outbox()
+            snap = box.snapshot()
+            self._publish_state("ui_notify", str(len(box.held)), {
+                "model": public_model(self.cfg.notifications), "kinds": kind_list(box.seen),
+                "held": snap["held"], "log": snap["log"]})
         except Exception as err:
-            self.log(f"Could not send a notification via {n['service']}: {err!r}", level="WARNING")
+            self.log(f"Could not publish the notification settings: {err!r}", level="WARNING")
+
+    def _publish_notify_cycle(self, kwargs):
+        self._publish_notify()
+
+    def _deliver(self, msg, now=None):
+        """Put a message on every channel its rules name: now if the channel's hours are open, else held until they
+        open or skipped (the channel's choice). True when it is dealt with (sent, held or skipped); False when no rule
+        takes it or every send failed, so the caller may try again."""
+        now = now or datetime.now(timezone.utc)
+        model, box, tz = self.cfg.notifications, self._outbox(), getattr(self, "tz", None)
+        box.see(msg, now)
+        names = channels_for(model, msg.kind)
+        if not names:
+            self._publish_notify()                         # a kind seen for the first time is listed
+            return False
+        handled = False
+        for name in names:
+            ch = model["channels"][name]
+            if not is_open(ch, now, tz):
+                if ch["outside_hours"] == "hold" and (msg.expires is None or msg.expires > now):
+                    box.hold(name, msg, now)
+                    box.record(now, msg, name, "held", "outside this channel's hours")
+                    self.log(f"Held for {ch['label']} until its hours open: {msg.title}")
+                else:
+                    box.record(now, msg, name, "skipped", "outside this channel's hours")
+                handled = True
+                continue
+            sent, tried = self._send(name, ch, msg, now)
+            box.record(now, msg, name, "sent" if sent else "failed", f"{sent} of {tried}")
+            handled = handled or sent > 0
+        self._publish_notify()
+        return handled
+
+    def _send(self, name, ch, msg, now, held_at=None):
+        """The HA calls that put a message on a channel: (how many reached, how many tried). Never raises."""
+        title, body = render(ch, msg, held_at, now, getattr(self, "tz", None))
+        kind = ch["type"]
+        if kind == "bell":
+            calls = [("persistent_notification/create", {"title": title, "message": body,
+                                                         "notification_id": _notice_id(msg.key)},
+                      "send a notification")]
+        elif kind == "notify":
+            calls = [(ch["service"].replace(".", "/", 1), {"title": title, "message": body},
+                      f"send a notification via {ch['service']}")]
+        elif kind == "alexa":
+            calls = [(x.replace(".", "/", 1), {"message": body, "data": {"type": "announce"}}, f"announce via {x}")
+                     for x in ch["services"]]
+        else:
+            calls = [("whatsapp/send_message", {"target": t, "message": body}, f"send to WhatsApp ({t})")
+                     for t in ch["targets"]]
+        sent = 0
+        for svc, kw, what in calls:
+            try:
+                self.call_service(svc, **kw)
+                sent += 1
+            except Exception as err:
+                self.log(f"Could not {what}: {err!r}", level="WARNING")
+        return sent, len(calls)
+
+    def _flush_held(self, now):
+        """Send what was held for a channel whose hours have opened (one per channel each time, marked as held)."""
+        box = self._outbox()
+        if not box.held:
+            return
+        for name, ch, msg, held_at in box.release(now, self.cfg.notifications, getattr(self, "tz", None)):
+            sent, tried = self._send(name, ch, msg, now, held_at)
+            box.record(now, msg, name, "released" if sent else "failed", f"{sent} of {tried}")
+            self.log(f"Sent the held message to {ch['label']}: {msg.title}")
+        self._publish_notify()
 
     def _clear_notice(self, key):
-        """The problem behind a notification is over: allow it again, and take it out of HA's notification area."""
+        """The problem behind a notification is over: allow it again, take it out of HA's notification area and forget
+        it if it is still held."""
         self.notifier.clear(key)
-        if self.cfg is not None and self.cfg.notifications["service"] == NOTIFY_DEFAULT:
+        self._outbox().cancel(key)
+        if self.cfg is not None and any(c["type"] == "bell" for c in self.cfg.notifications["channels"].values()):
             try:
                 self.call_service("persistent_notification/dismiss", notification_id=_notice_id(key))
             except Exception as err:
                 self.log(f"Could not dismiss a notification: {err!r}", level="WARNING")
+
+    def _on_pe_notify(self, event_name, data, kwargs):
+        """A message from elsewhere (the family dashboard, an automation): the event pe_notify with kind, text and
+        optionally title, speech, chat, key, source, label and hold_hours. It goes where the rules send that kind;
+        a kind never seen before is listed on the Config page so a rule can be made for it."""
+        if self.cfg is None:
+            return
+        data = data or {}
+        kind, text = data.get("kind"), data.get("text")
+        if not (isinstance(kind, str) and re.fullmatch(r"[a-z0-9_]{1,40}", kind) and isinstance(text, str)
+                and text.strip()):
+            self.log("pe_notify ignored: it needs a kind (lowercase letters, digits, underscores) and some text",
+                     level="WARNING")
+            return
+
+        def short(name, limit):
+            v = data.get(name)
+            return v.strip()[:limit] if isinstance(v, str) and v.strip() else None
+        now = datetime.now(timezone.utc)
+        key = short("key", 100) or hashlib.sha1(f"{kind}|{text}|{now:%Y%m%d%H%M}".encode()).hexdigest()[:16]
+        hours = data.get("hold_hours")
+        msg = Message(kind, key if key.startswith("ext:") else f"ext:{key}", short("title", 120) or kind,
+                      text.strip()[:1000], short("speech", 1000), short("chat", 1000),
+                      short("source", 30) or "external", short("label", 60),
+                      now + timedelta(hours=min(float(hours), 72)) if isinstance(hours, (int, float))
+                      and not isinstance(hours, bool) and hours > 0 else None)
+        if not self.notifier.should_send(msg.key, now):
+            return
+        if self._deliver(msg, now):
+            self.notifier.mark(msg.key, now)
+            self.log(f"Notified ({msg.source}): {msg.title}")
 
     def _guard_state(self, eid):
         """A guard's state. AppDaemon's copy of HA's states can miss an entity that was re-created after it started
@@ -2204,21 +2331,17 @@ class PowerEngine(hass.Hass):
             self._notify("free_power", free_message(r.free_start, r.free_end, r.now, self.tz))
 
     def _announce_event(self, r):
-        """Alexa reminders for a grid event: hours before it (default 8, 5, 2, 1 and as it starts), each said once,
-        never outside the allowed hours. Says the battery level and whether it looks ready (pe_core/announce.py)."""
+        """Reminders for a grid event: hours before it (default 8, 5, 2, 1 and as it starts), each sent once to the
+        channels the rules name for them (the Alexa speakers, WhatsApp, ...), which hold or skip one outside their
+        hours. Says the battery level and whether it looks ready (pe_core/announce.py)."""
         n = self.cfg.notifications
-        if not n["events"].get("alexa") or not (r.axle_start and r.axle_end):
+        if not (r.axle_start and r.axle_end) or not channels_for(n, "grid_reminder"):
             return
-        a = n["alexa"]
-        h = alexa_due(r.axle_start, r.axle_end, r.now, a["hours_before"])
+        h = alexa_due(r.axle_start, r.axle_end, r.now, n["reminder_hours"])
         if h is None:
             return
         key = f"alexa:{r.axle_start.isoformat()}:{h:g}"
         if not self.notifier.should_send(key, r.now):
-            return
-        if not alexa_allowed(r.now, self.tz, a["earliest_weekday"], a["earliest_weekend"], a["latest"]):
-            self.notifier.mark(key, r.now)                       # too early or late: skip it, never say it later
-            self.log(f"Alexa reminder {h:g} h before the grid event skipped: outside the allowed hours")
             return
         timeline = (self._published.get("v2_timeline") or (None, None))[1]
         need = None
@@ -2227,37 +2350,16 @@ class PowerEngine(hass.Hass):
         except Exception:
             pass
         ready = alexa_readiness(timeline, r.axle_start, r.axle_end, r.battery_soc, need)
-        text = alexa_message(h, r.axle_start, r.axle_end, r.now, self.tz, r.battery_soc, ready, a["intro"])
-        said = 0
-        for service in a["services"]:
-            try:
-                self.call_service(service.replace(".", "/", 1), message=text, data={"type": "announce"})
-                said += 1
-            except Exception as err:
-                self.log(f"Could not announce via {service}: {err!r}", level="WARNING")
-        texted = self._whatsapp(a, text)
-        if said or texted:
+        text = alexa_message(h, r.axle_start, r.axle_end, r.now, self.tz, r.battery_soc, ready)
+        msg = Message("grid_reminder", key, "Grid event reminder", text, speech=text, expires=r.axle_start)
+        if self._deliver(msg, r.now):
             self.notifier.mark(key, r.now)
-            self.log(f"Alexa announced ({h:g} h before) on {said} of {len(a['services'])}"
-                     f"{f' and WhatsApp ({texted})' if texted else ''}: {text}")
-
-    def _whatsapp(self, a, text, targets=None):
-        """Send an announcement to the WhatsApp targets (the same words the speakers say) through the WhatsApp
-        integration's whatsapp.send_message. Returns how many targets it reached; never raises."""
-        targets = a["whatsapp_targets"] if targets is None and a.get("whatsapp") else (targets or [])
-        sent = 0
-        for target in targets:
-            try:
-                self.call_service("whatsapp/send_message", target=target, message=text)
-                sent += 1
-            except Exception as err:
-                self.log(f"Could not send to WhatsApp ({target}): {err!r}", level="WARNING")
-        return sent
+            self.log(f"Grid event reminder ({h:g} h before): {text}")
 
     def _on_alexa_test(self, event_name, data, kwargs):
-        """The Config page's "Play a test announcement" (pe_alexa_test {services, intro, whatsapp}): say "<intro> Test
-        message." on the speakers ticked there and send it to the WhatsApp targets there, now, whatever the allowed
-        hours say. It is not an announcement for any event, so nothing is marked as sent."""
+        """The older Config page's "Play a test announcement" (pe_alexa_test {services, intro, whatsapp}): say "<intro>
+        Test message." on the speakers ticked there and send it to the WhatsApp targets there, now, whatever the hours
+        say. Nothing is marked as sent."""
         if event_name != ALEXA_TEST_EVENT:
             return
         data = data or {}
@@ -2267,31 +2369,49 @@ class PowerEngine(hass.Hass):
             self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False, message="No Alexa speaker or WhatsApp group was chosen.")
             return
         intro = data.get("intro")
-        text = alexa_trial_message(intro[:80] if isinstance(intro, str) else "")
-        said, failed = [], []
-        for service in services:
-            try:
-                self.call_service(service.replace(".", "/", 1), message=text, data={"type": "announce"})
-                said.append(service)
-            except Exception as err:
-                failed.append(service)
-                self.log(f"Alexa test: could not announce via {service}: {err!r}", level="WARNING")
-        texted = self._whatsapp({}, text, chats)
-        self.log(f"Alexa test announced on {len(said)} of {len(services)} speakers, "
-                 f"WhatsApp {texted} of {len(chats)}: {text}")
-        if said or texted:
+        intro = intro[:80].strip() if isinstance(intro, str) else ""
+        text = alexa_trial_message(intro)
+        base = {"label": "", "intro": intro, "hours": None, "outside_hours": "hold"}
+        speakers = self._send("test", {**base, "type": "alexa", "services": services}, self._test_message(),
+                              datetime.now(timezone.utc)) if services else (0, 0)
+        texted = self._send("test", {**base, "type": "whatsapp", "targets": chats}, self._test_message(),
+                            datetime.now(timezone.utc)) if chats else (0, 0)
+        self.log(f"Alexa test announced on {speakers[0]} of {len(services)} speakers, "
+                 f"WhatsApp {texted[0]} of {len(chats)}: {text}")
+        if speakers[0] or texted[0]:
             parts = []
             if services:
-                parts.append(f"{len(said)} of {len(services)} speakers")
+                parts.append(f"{speakers[0]} of {len(services)} speakers")
             if chats:
-                parts.append(f"{texted} of {len(chats)} WhatsApp chats")
-            bad = len(failed) + len(chats) - texted
+                parts.append(f"{texted[0]} of {len(chats)} WhatsApp chats")
+            bad = len(services) + len(chats) - speakers[0] - texted[0]
             note = f" ({bad} failed: see the log)" if bad else ""
             self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=True,
                             message=f"Sent to {' and '.join(parts)}: \"{text}\"{note}")
         else:
             self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False,
                             message="Home Assistant would not play or send it anywhere. See the AppDaemon log.")
+
+    @staticmethod
+    def _test_message():
+        return Message("test", "test", "PowerEngine test", "Test message.", speech="Test message.")
+
+    def _on_notify_test(self, event_name, data, kwargs):
+        """The Config page's "Send a test" for a channel (pe_notify_test {channel: {...}}): "Test message." to that
+        channel as set on the page (saved or not), now, whatever its hours say. Nothing is marked as sent."""
+        if event_name != NOTIFY_TEST_EVENT:
+            return
+        try:
+            ch = parse_channel((data or {}).get("channel"), "test")
+        except ConfigError as err:
+            self.fire_event(NOTIFY_TEST_RESULT_EVENT, ok=False, message=str(err))
+            return
+        sent, tried = self._send("test", ch, self._test_message(), datetime.now(timezone.utc))
+        self.log(f"Test message to a {ch['type']} channel: {sent} of {tried}")
+        self.fire_event(NOTIFY_TEST_RESULT_EVENT, ok=sent > 0,
+                        message=(f"Sent to {sent} of {tried}." + (" See the AppDaemon log for the ones that failed."
+                                                                  if sent < tried else "")) if tried else
+                        "There is nothing to send to.")
 
     # --- the car charger during a grid event (pe_core/carstop.py) -----------------------
 
@@ -2495,9 +2615,9 @@ class PowerEngine(hass.Hass):
         self._save_event_run()
 
     def _event_finish_step(self, r):
-        """When a grid event has finished, say how it went on the Alexa speakers: what the house used, what was
-        exported, what it should pay, and anything PowerEngine switched for it with the state it is back to. Said once,
-        inside the allowed hours (kept until they come, up to FINISH_KEEP_H hours)."""
+        """When a grid event has finished, say how it went: what the house used, what was exported, what it should pay,
+        and anything PowerEngine switched for it with the state it is back to. Sent once to the channels the rules name
+        for it, which hold it until their hours open (up to FINISH_KEEP_H hours) or skip it."""
         if self._demo or self.cfg is None:
             return
         if r.axle_active and r.axle_start and r.axle_end:
@@ -2515,14 +2635,10 @@ class PowerEngine(hass.Hass):
             ready += timedelta(minutes=30)
         if r.now < end or r.now < ready + timedelta(seconds=45):
             return                                    # not over yet, or the last half-hour is not recorded yet
-        n = self.cfg.notifications
-        a = n["alexa"]
-        if (r.now - end) > timedelta(hours=FINISH_KEEP_H) or not (n["events"].get("alexa") and a.get("finish", True)):
+        if (r.now - end) > timedelta(hours=FINISH_KEEP_H) or not channels_for(self.cfg.notifications, "grid_summary"):
             run["done"] = True
             self._save_event_run()
             return
-        if not alexa_allowed(r.now, self.tz, a["earliest_weekday"], a["earliest_weekend"], a["latest"]):
-            return                                    # spoken when the allowed hours come
         days = {start.astimezone(self.tz).date(), end.astimezone(self.tz).date()} if self.tz else {start.date()}
         records = []
         try:
@@ -2533,22 +2649,15 @@ class PowerEngine(hass.Hass):
         summary = alexa_event_summary(records, start, end)
         if summary is None and (r.now - end) < timedelta(minutes=5):
             return                                    # wait a little for the cost records
-        text = alexa_finish_message(a["intro"], start, end, r.now, self.tz, summary, run.get("heat"), run.get("car"),
+        text = alexa_finish_message("", start, end, r.now, self.tz, summary, run.get("heat"), run.get("car"),
                                     run.get("car_mode"))
-        said = 0
-        for service in a["services"]:
-            try:
-                self.call_service(service.replace(".", "/", 1), message=text, data={"type": "announce"})
-                said += 1
-            except Exception as err:
-                self.log(f"Could not announce via {service}: {err!r}", level="WARNING")
-        texted = self._whatsapp(a, text)
-        if said or texted:
+        msg = Message("grid_summary", f"alexa:summary:{run['start']}", "Grid event summary", text, speech=text,
+                      expires=end + timedelta(hours=FINISH_KEEP_H))
+        if self._deliver(msg, r.now):
             run["done"] = True
             self._save_event_run()
-            self.log(f"Alexa announced the grid event summary on {said} of {len(a['services'])}"
-                     f"{f' and WhatsApp ({texted})' if texted else ''}: {text}")
-            self._logbook(f"Grid event summary announced: {text}")
+            self.log(f"Grid event summary: {text}")
+            self._logbook(f"Grid event summary: {text}")
 
     # --- inverter writes (EEPROM wear) ---------------------------------------------------
 
@@ -4492,6 +4601,7 @@ class PowerEngine(hass.Hass):
         if self.cfg is not None:
             self._publish_names()                          # the site's adapters may have changed
             self._publish_v2_settings()
+            self._publish_notify()
             self._publish_if_changed("state_engine", self._engine_name(), self._engine_attrs())    # the choice, now
             if self._engine_name() != engine_before:
                 self._engine_switched(choice_before)

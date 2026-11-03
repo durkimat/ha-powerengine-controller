@@ -5,6 +5,7 @@ import pytest
 
 from pe_core.announce import READY, SHORT, TIGHT, allowed, due, message, readiness, trial_message, trial_speakers
 from pe_core.config import ConfigError, parse_config
+from pe_core.config import _parse_legacy_notifications as legacy_notifications
 from pe_core.notify import Notifier
 
 UK = ZoneInfo("Europe/London")
@@ -73,17 +74,16 @@ def test_messages():
 
 
 def test_alexa_config_defaults_and_validation():
-    cfg = parse_config({})
-    a = cfg.notifications["alexa"]
-    assert cfg.notifications["events"]["alexa"] is False
+    old = legacy_notifications({})
+    a = old["alexa"]
+    assert old["events"]["alexa"] is False
     assert a["intro"] == "Daddybot here." and a["services"] == ["notify.alexa_media_everywhere"]
     assert a["hours_before"] == [8, 5, 2, 1, 0]
     assert (a["earliest_weekday"], a["earliest_weekend"], a["latest"]) == (450, 540, 1260)
     mine = {"hours_before": [1, 0], "latest": "20:30", "services": ["notify.alexa_media_kitchen"] * 2}
-    b = parse_config({"notifications": {"events": {"alexa": True}, "alexa": mine}})
-    assert b.notifications["alexa"]["hours_before"] == [1.0, 0.0] and b.notifications["alexa"]["latest"] == 1230
-    assert b.notifications["alexa"]["services"] == ["notify.alexa_media_kitchen"]
-    assert parse_config({"notifications": {"alexa": {"intro": ""}}}).notifications["alexa"]["intro"] == ""
+    b = legacy_notifications({"events": {"alexa": True}, "alexa": mine})["alexa"]
+    assert b["hours_before"] == [1.0, 0.0] and b["latest"] == 1230 and b["services"] == ["notify.alexa_media_kitchen"]
+    assert legacy_notifications({"alexa": {"intro": ""}})["alexa"]["intro"] == ""
     bads = ({"latest": "9pm"}, {"services": "notify.alexa_media_kitchen"}, {"services": ["alexa"]},
             {"hours_before": []}, {"colour": 1}, {"intro": "x" * 81}, {"intro": 5})
     for bad in bads:
@@ -92,12 +92,12 @@ def test_alexa_config_defaults_and_validation():
 
 
 def test_whatsapp_announcement_settings():
-    a = parse_config({}).notifications["alexa"]
+    a = legacy_notifications({})["alexa"]
     assert a["whatsapp"] is False and a["whatsapp_targets"] == []
     group = "120363085203994232@g.us"
 
     def alexa(**kw):
-        return parse_config({"notifications": {"alexa": kw}}).notifications["alexa"]
+        return legacy_notifications({"alexa": kw})["alexa"]
 
     assert alexa(whatsapp=True, whatsapp_targets=[group, f" {group} ", "447700900123"])["whatsapp_targets"] == [
         group, "447700900123"]

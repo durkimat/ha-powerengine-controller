@@ -14,6 +14,7 @@ from datetime import datetime
 from .names import N
 
 DAILY_CAP = 10
+EXT_DAILY_CAP = 30            # messages from elsewhere (key starts "ext:") are counted on their own
 
 
 class Notifier:
@@ -32,7 +33,13 @@ class Notifier:
     def should_send(self, key: str, now: datetime) -> bool:
         if key.startswith("alexa:"):                              # spoken reminders have their own schedule
             return key not in self.sent
-        return key not in self.sent and self.per_day.get(now.date().isoformat(), 0) < DAILY_CAP
+        counter, cap = self._counter(key, now)
+        return key not in self.sent and self.per_day.get(counter, 0) < cap
+
+    @staticmethod
+    def _counter(key: str, now: datetime) -> tuple[str, int]:
+        day = now.date().isoformat()
+        return (f"ext:{day}", EXT_DAILY_CAP) if key.startswith("ext:") else (day, DAILY_CAP)
 
     def mark(self, key: str, now: datetime) -> None:
         day = now.date().isoformat()
@@ -40,7 +47,9 @@ class Notifier:
         if key.startswith("alexa:"):
             self.save()
             return
-        self.per_day = {d: n for d, n in self.per_day.items() if d >= day} | {day: self.per_day.get(day, 0) + 1}
+        counter, _ = self._counter(key, now)
+        self.per_day = {d: n for d, n in self.per_day.items() if d.removeprefix("ext:") >= day} | {
+            counter: self.per_day.get(counter, 0) + 1}
         if len(self.sent) > 500:                                  # keep the newest keys
             self.sent = dict(sorted(self.sent.items(), key=lambda kv: kv[1])[-300:])
         self.save()

@@ -177,9 +177,12 @@ def test_app_waits_for_the_allowed_hours_and_can_be_switched_off(monkeypatch, tm
     a = _app(monkeypatch, tmp_path)                                           # the event ends at 21:00: the latest time
     a._run_note(_r(START, True), "heat", "restored")
     a._event_finish_step(Readings(now=END + 1 * M))
-    assert a.calls == []                                                      # too late tonight: kept
-    a._event_finish_step(Readings(now=END + timedelta(hours=12)))             # 09:00 the next morning (a Sunday)
-    assert len(a.calls) == 1 and "8 pm yesterday" in a.calls[0][1]["message"]
+    assert a.calls == []                                                      # too late tonight: held
+    assert len(a._outbox().held) == 1                                         # held until the hours open
+    a._flush_held(END + timedelta(hours=12))                                  # 09:00 the next morning (a Sunday)
+    assert a.calls[0][1]["message"].startswith(
+        "Daddybot here. Held message from 9:01 pm yesterday. The grid event at 8 pm today is over.")
+    assert len(a.calls) == 1
     b = _app(monkeypatch, tmp_path / "x" if False else tmp_path, alexa={"finish": False})
     b._run = None
     b._run_note(_r(START, True), "heat", "restored")

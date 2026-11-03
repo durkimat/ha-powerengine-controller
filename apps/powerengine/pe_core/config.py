@@ -545,13 +545,154 @@ def _parse_plants(data: Any) -> tuple[SolarPlant, ...]:
     return tuple(plants)
 
 
+CHANNEL_TYPES = ("bell", "notify", "alexa", "whatsapp")
+_CHANNEL_NAME = re.compile(r"^[a-z0-9_]{1,30}$")
+_KIND = re.compile(r"^[a-z0-9_]{1,40}$")
+_NEW_NOTIFICATION_KEYS = {"channels", "rules", "reminder_hours"}
+_OLD_NOTIFICATION_KEYS = {"service", "events", "alexa"}
+_LEGACY_KINDS = ("health", "inputs", "axle", "free_power", "daily", "simulator")
+
+
 def _parse_notifications(raw: Any) -> dict[str, Any]:
+    """The notification settings as channels (where messages can go) and rules (which kinds go where). The older
+    `service` / `events` / `alexa` settings still load, and are turned into the same channels and rules."""
     raw = raw or {}
     if not isinstance(raw, dict):
         raise ConfigError("'notifications' must be a mapping")
-    unknown = sorted(set(raw) - {"service", "events", "alexa"})
+    unknown = sorted(set(raw) - _NEW_NOTIFICATION_KEYS - _OLD_NOTIFICATION_KEYS)
     if unknown:
         raise ConfigError(f"unknown notification setting(s): {', '.join(unknown)}")
+    if set(raw) & _NEW_NOTIFICATION_KEYS:
+        if set(raw) & _OLD_NOTIFICATION_KEYS:
+            raise ConfigError("notifications has both channels/rules and the older service/events/alexa settings: "
+                              "use one or the other")
+        return _parse_channels_and_rules(raw)
+    return _legacy_model(_parse_legacy_notifications(raw))
+
+
+def _parse_hours(raw: Any, where: str) -> dict[str, int] | None:
+    if raw in (None, {}):
+        return None
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where}.hours must be a mapping with weekday_from, weekend_from and until")
+    unknown = sorted(set(raw) - {"weekday_from", "weekend_from", "until"})
+    if unknown:
+        raise ConfigError(f"unknown {where}.hours setting(s): {', '.join(unknown)}")
+    weekday = _clock_minutes("weekday_from", raw.get("weekday_from", "00:00"), where + ".hours")
+    weekend = _clock_minutes("weekend_from", raw.get("weekend_from", raw.get("weekday_from", "00:00")),
+                             where + ".hours")
+    until = 1440 if raw.get("until") in (None, "24:00") else _clock_minutes("until", raw["until"], where + ".hours")
+    return {"weekday_from": weekday, "weekend_from": weekend, "until": until}
+
+
+def parse_channel(raw: Any, name: str) -> dict[str, Any]:
+    """One channel: its type, where it sends to, the opening words, the hours it may be used and what to do with a
+    message outside them (hold it until they open, or skip it)."""
+    where = f"notifications.channels.{name}"
+    if not _CHANNEL_NAME.match(str(name)):
+        raise ConfigError(f"a channel name must be lowercase letters, digits and underscores (up to 30), not {name!r}")
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where} must be a mapping")
+    kind = raw.get("type")
+    if kind not in CHANNEL_TYPES:
+        raise ConfigError(f"{where}.type must be one of {', '.join(CHANNEL_TYPES)}")
+    own = {"bell": set(), "notify": {"service"}, "alexa": {"services"}, "whatsapp": {"targets"}}[kind]
+    unknown = sorted(set(raw) - {"type", "label", "intro", "hours", "outside_hours"} - own)
+    if unknown:
+        raise ConfigError(f"unknown {where} setting(s): {', '.join(unknown)}")
+    intro = raw.get("intro", "")
+    if not isinstance(intro, str) or len(intro) > 80:
+        raise ConfigError(f"{where}.intro must be text of at most 80 characters (empty for none)")
+    label = raw.get("label", name)
+    if not isinstance(label, str) or not 0 < len(label.strip()) <= 40:
+        raise ConfigError(f"{where}.label must be a short name")
+    outside = raw.get("outside_hours", "hold")
+    if outside not in ("hold", "skip"):
+        raise ConfigError(f"{where}.outside_hours must be hold (send when the hours open) or skip")
+    out: dict[str, Any] = {"type": kind, "label": label.strip(), "intro": intro.strip(),
+                           "hours": _parse_hours(raw.get("hours"), where), "outside_hours": outside}
+    if kind == "notify":
+        service = raw.get("service")
+        if not isinstance(service, str) or not _NOTIFY_SERVICE.match(service):
+            raise ConfigError(f"{where}.service must be a notify service, e.g. notify.mobile_app_my_phone")
+        out["service"] = service
+    elif kind == "alexa":
+        services = raw.get("services")
+        if (not isinstance(services, list) or not services
+                or not all(isinstance(x, str) and _NOTIFY_SERVICE.match(x) for x in services)):
+            raise ConfigError(f"{where}.services must be a list of notify services, e.g. [notify.alexa_media_kitchen]")
+        out["services"] = list(dict.fromkeys(services))
+    elif kind == "whatsapp":
+        targets = raw.get("targets")
+        if (not isinstance(targets, list) or not targets
+                or not all(isinstance(x, str) and _WHATSAPP_TARGET.match(x.strip()) for x in targets)):
+            raise ConfigError(f"{where}.targets must be a list of WhatsApp group ids "
+                              "(like 120363012345678901@g.us) or phone numbers with the country code")
+        out["targets"] = list(dict.fromkeys(x.strip() for x in targets))
+    return out
+
+
+def _parse_channels_and_rules(raw: dict) -> dict[str, Any]:
+    raw_channels = raw.get("channels") or {}
+    if not isinstance(raw_channels, dict):
+        raise ConfigError("'notifications.channels' must be a mapping of name to channel")
+    channels = {str(name): parse_channel(spec, str(name)) for name, spec in raw_channels.items()}
+    raw_rules = raw.get("rules") or []
+    if not isinstance(raw_rules, list):
+        raise ConfigError("'notifications.rules' must be a list")
+    rules = []
+    for i, rule in enumerate(raw_rules, 1):
+        if not isinstance(rule, dict) or set(rule) - {"events", "to"}:
+            raise ConfigError(f"notifications.rules[{i}] must have events and to")
+        events, to = rule.get("events"), rule.get("to")
+        if not isinstance(events, list) or not events or not all(isinstance(e, str) and _KIND.match(e) for e in events):
+            raise ConfigError(f"notifications.rules[{i}].events must be a list of message kinds, e.g. [health]")
+        if not isinstance(to, list) or not to or not all(isinstance(c, str) for c in to):
+            raise ConfigError(f"notifications.rules[{i}].to must be a list of channel names")
+        missing = [c for c in to if c not in channels]
+        if missing:
+            raise ConfigError(f"notifications.rules[{i}] sends to {', '.join(missing)}, which is not a channel")
+        rules.append({"events": list(dict.fromkeys(events)), "to": list(dict.fromkeys(to))})
+    hours = raw.get("reminder_hours", ALEXA_DEFAULT["hours_before"])
+    if (not isinstance(hours, list) or not hours
+            or not all(isinstance(h, (int, float)) and not isinstance(h, bool) and 0 <= h <= 48 for h in hours)):
+        raise ConfigError("notifications.reminder_hours must be a list of hours between 0 and 48")
+    return {"format": "channels", "channels": channels, "rules": rules,
+            "reminder_hours": sorted({float(h) for h in hours}, reverse=True)}
+
+
+def _legacy_model(old: dict[str, Any]) -> dict[str, Any]:
+    """The older settings as channels and rules: the HA notification area or phone for the events switched on, and the
+    Alexa speakers and WhatsApp (with the Alexa hours and opening words) for the grid event reminders and summary."""
+    base = {"label": "", "intro": "", "hours": None, "outside_hours": "hold"}
+    channels: dict[str, Any] = {}
+    rules: list[dict] = []
+    service = old["service"]
+    main = "bell" if service == NOTIFY_DEFAULT else ("phone" if service else None)
+    if main == "bell":
+        channels["bell"] = {**base, "type": "bell", "label": "HA notifications"}
+    elif main:
+        channels["phone"] = {**base, "type": "notify", "label": "Phone", "service": service}
+    kinds = [k for k in _LEGACY_KINDS if old["events"].get(k)]
+    if main and kinds:
+        rules.append({"events": kinds, "to": [main]})
+    a = old["alexa"]
+    hours = {"weekday_from": a["earliest_weekday"], "weekend_from": a["earliest_weekend"], "until": a["latest"]}
+    spoken = []
+    if a["services"]:
+        channels["alexa"] = {**base, "type": "alexa", "label": "Alexa", "services": a["services"],
+                             "intro": a["intro"], "hours": dict(hours)}
+        spoken.append("alexa")
+    if a["whatsapp"] and a["whatsapp_targets"]:
+        channels["whatsapp"] = {**base, "type": "whatsapp", "label": "WhatsApp", "targets": a["whatsapp_targets"],
+                                "intro": a["intro"], "hours": dict(hours)}
+        spoken.append("whatsapp")
+    if old["events"].get("alexa") and spoken:
+        rules.append({"events": ["grid_reminder"] + (["grid_summary"] if a["finish"] else []), "to": spoken})
+    return {"format": "legacy", "channels": channels, "rules": rules, "reminder_hours": a["hours_before"]}
+
+
+def _parse_legacy_notifications(raw: dict) -> dict[str, Any]:
     # "persistent_notification" = HA's notification area (the default); "off" (or "") = none; else a notify service
     service = raw.get("service", NOTIFY_DEFAULT)
     if service in ("", None, "off"):
@@ -572,14 +713,14 @@ def _parse_notifications(raw: Any) -> dict[str, Any]:
     return {"service": service, "events": events, "alexa": _parse_alexa(raw.get("alexa"))}
 
 
-def _clock_minutes(name: str, value: Any) -> int:
+def _clock_minutes(name: str, value: Any, where: str = "notifications.alexa") -> int:
     try:
         h, m = str(value).split(":")
         h, m = int(h), int(m)
     except ValueError:
-        raise ConfigError(f"notifications.alexa.{name} must be a time like 07:30") from None
+        raise ConfigError(f"{where}.{name} must be a time like 07:30") from None
     if not (0 <= h < 24 and 0 <= m < 60):
-        raise ConfigError(f"notifications.alexa.{name} must be a time like 07:30")
+        raise ConfigError(f"{where}.{name} must be a time like 07:30")
     return h * 60 + m
 
 

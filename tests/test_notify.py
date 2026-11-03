@@ -10,12 +10,14 @@ NOW = datetime(2026, 9, 26, 9, 0, tzinfo=timezone.utc)
 
 def test_notifications_go_to_the_ha_notification_area_by_default_and_are_validated():
     cfg = parse_config({})
-    assert cfg.notifications["service"] == "persistent_notification" and cfg.notifications["events"]["health"] is True
-    assert parse_config({"notifications": {"service": "off"}}).notifications["service"] == ""
-    assert parse_config({"notifications": {"service": ""}}).notifications["service"] == ""
-    assert cfg.notifications["events"]["daily"] is False
+    assert cfg.notifications["channels"]["bell"]["type"] == "bell"
+    assert cfg.notifications["rules"][0] == {"events": ["health", "inputs", "axle", "free_power", "simulator"],
+                                             "to": ["bell"]}                        # the daily summary is off
+    assert parse_config({"notifications": {"service": "off"}}).notifications["rules"] == []
+    assert "bell" not in parse_config({"notifications": {"service": ""}}).notifications["channels"]
     cfg = parse_config({"notifications": {"service": "notify.mobile_app_pixel", "events": {"daily": True}}})
-    assert cfg.notifications["events"]["daily"] is True
+    assert cfg.notifications["channels"]["phone"]["service"] == "notify.mobile_app_pixel"
+    assert "daily" in cfg.notifications["rules"][0]["events"]
     for bad in ({"service": "light.kitchen"}, {"events": {"spam": True}}, {"events": {"axle": "yes"}}, {"x": 1}):
         with pytest.raises(ConfigError):
             parse_config({"notifications": bad})

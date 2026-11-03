@@ -224,6 +224,9 @@ HISTORY_ENTITIES: tuple[EntityDef, ...] = (
     # The last 18 hours as run, whatever day the picker shows: the plan chart's scrollback.
     EntityDef("sensor", "v2_recent", "Engine v2 recent", {"icon": "mdi:history"}),
     EntityDef("sensor", "v2_flows", "Engine v2 grid flows", {"icon": "mdi:transmission-tower"}),
+    # Where messages can go and which go where, with what is held and the last deliveries: the Config page's
+    # Notifications section reads it.
+    EntityDef("sensor", "ui_notify", "Notifications", {"icon": "mdi:bell-ring"}),
 )
 
 # Entities an earlier release published that no longer exist. The app retires them at every start (the retained
