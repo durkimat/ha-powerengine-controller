@@ -138,3 +138,13 @@ def test_grid_charging_is_limited_by_the_fuse():
     assert d60.action == GRID_CHARGE and d60.power_w == 4020 and "60 A fuse" in d60.reason
     d80 = decide(r, cfg80)                                        # 16.56 kW: room for the full 4.8 kW
     assert d80.action == GRID_CHARGE and d80.power_w is None
+
+
+def test_cheap_limit_counts_the_wear_it_is_given():
+    from pe_core.decide import cheap_limit
+    from pe_core.tariff import Window
+    rates = [Window(NOW + timedelta(hours=h), NOW + timedelta(hours=h + 1), 0.30 if h % 2 else 0.05) for h in range(24)]
+    r = R(rates=rates)
+    cfg = dataclasses.replace(CFG, safety={**CFG.safety, "battery_wear_p": 2.0, "cheap_threshold_p": 30.0})
+    assert cheap_limit(r, cfg) == cheap_limit(r, cfg, 2.0)
+    assert cheap_limit(r, cfg, 0.0) != cheap_limit(r, cfg, 20.0)

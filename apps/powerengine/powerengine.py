@@ -839,6 +839,19 @@ class PowerEngine(hass.Hass):
         engine 2.1 beta is engine v2 with a profile of settings, so it is "v2" everywhere the app asks)."""
         return "v1" if self._engine_choice() == "v1" else "v2"
 
+    def _reserve_soc(self):
+        """The reserve the running engine keeps back in normal running: engine v2's own, else engine v1's Minimum
+        reserve. What the code shared by both engines (the RAM follow check, the energy flow card) compares against."""
+        if self._engine_name() == "v2":
+            return float(self.cfg.engine_v2.reserve_soc)
+        return float(self.cfg.safety.get("min_reserve_soc", 12))
+
+    def _wear_p(self):
+        """The battery wear cost (p/kWh) of the running engine: engine v2's, else engine v1's Battery wear cost."""
+        if self._engine_name() == "v2":
+            return float(self.cfg.engine_v2.wear_p)
+        return float(self.cfg.safety.get("battery_wear_p", 2.0))
+
     def _v2_preview_on(self):
         """True while engine v1 is in control and the preview setting is on: engine v2 then works out its decision
         in its tick, publishes its sensors and sends nothing."""
@@ -3100,7 +3113,7 @@ class PowerEngine(hass.Hass):
                     ram.done(now, str(self._today()), want, why)
                     if why == "change" and want.power_role:        # and once more once the mode has landed
                         self.run_in(self._ram_relatch, 5, role=want.power_role, watts=want.watts)
-                floor = float(self.cfg.safety.get("min_reserve_soc", 12))
+                floor = self._reserve_soc()
                 expected = ramcontrol.inverter_expected_w(
                     ram.sent, bms.expected_w(ram.sent, limits),
                     float(self.cfg.safety.get("inverter_max_output_w", 6000)), r.solar_power)
@@ -3932,7 +3945,7 @@ class PowerEngine(hass.Hass):
             return
         st = self.get_state(eid, attribute="all") or {}
         options = self._tariff().ready_by_options(st)
-        cheap_p = cheap_limit(r, self.cfg)
+        cheap_p = cheap_limit(r, self.cfg, self._wear_p())
         safety, feats = self.cfg.safety, self.cfg.features
         worth = worth_asking(r.ev_state(), r.dispatches, r.now,
                              r.import_rate is not None and r.import_rate * 100 <= cheap_p, r.battery_soc,
@@ -4404,7 +4417,7 @@ class PowerEngine(hass.Hass):
             capacity_wh = round(self._control_params(self._last_readings).capacity_kwh * 1000 / 100) * 100
         else:
             capacity_wh = 18000
-        reserve_soc = self.cfg.safety.get("min_reserve_soc", 12) if self.cfg else 12
+        reserve_soc = self._reserve_soc() if self.cfg else 12
         has_ev = bool(self._role_entity("ev_charge_power")) if self.cfg else False
         return energy_flow_card(plants, capacity_wh, reserve_soc, has_ev, self._inverter().card_model)
 

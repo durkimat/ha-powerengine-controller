@@ -313,3 +313,18 @@ def test_live_v2_says_it_is_not_a_preview(v2_run):
     assert v2_run["app"]._published["v2_mode"][1]["preview"] is False
     expected = {"v2_available": True, "choice": "v2", "profile": "defaults"}
     assert v2_run["app"]._published["state_engine"] == ("v2", expected)
+
+
+# --- what the code both engines share compares against: the running engine's own reserve and wear ---------------
+
+def test_the_shared_code_uses_the_running_engines_own_reserve_and_wear(tmp_path, mp):
+    v1 = simulate(tmp_path, mp, 0.05)["app"]
+    assert v1._reserve_soc() == float(v1.cfg.safety["min_reserve_soc"])
+    assert v1._wear_p() == float(v1.cfg.safety["battery_wear_p"])
+    mp.undo()
+    sys.modules.pop("powerengine", None)
+    (tmp_path / "v2").mkdir()
+    v2 = simulate(tmp_path / "v2", mp, 0.05, engine="v2")["app"]
+    assert v2._engine_name() == "v2"
+    assert v2._reserve_soc() == float(v2.cfg.engine_v2.reserve_soc)
+    assert v2._wear_p() == float(v2.cfg.engine_v2.wear_p)

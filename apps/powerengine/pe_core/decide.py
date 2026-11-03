@@ -66,13 +66,15 @@ def _static(cfg: Config, role: str, default: float) -> float:
         return default
 
 
-def cheap_limit(r: Readings, cfg: Config) -> float:
-    """Cheap-import threshold now (p/kWh): automatic from the next 24 hours' prices, or the fixed setting."""
+def cheap_limit(r: Readings, cfg: Config, wear_p: float | None = None) -> float:
+    """Cheap-import threshold now (p/kWh): automatic from the next 24 hours' prices, or the fixed setting. `wear_p` is
+    the battery wear cost to count (the running engine's own); engine v1's setting when not given."""
     s = cfg.safety
     if not cfg.features.get("auto_cheap_threshold", True):
         return s["cheap_threshold_p"]
     ahead = [w.value for w in r.rates if w.end > r.now and w.start < r.now + timedelta(hours=24)]
-    return cheap_threshold(ahead, s["cheap_threshold_p"], wear_p=s.get("battery_wear_p", 2.0))
+    wear = s.get("battery_wear_p", 2.0) if wear_p is None else wear_p
+    return cheap_threshold(ahead, s["cheap_threshold_p"], wear_p=wear)
 
 
 def axle_power_w(cfg: Config) -> float:
