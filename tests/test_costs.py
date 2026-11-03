@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from pe_core.costs import SimDefault, day_summary, process, steps
+from pe_core.costs import SimDefault, day_summary, event_share, process, steps
 from pe_core.energy import FLOWS, Recorder, allocate
 from pe_core.ledger import Ledger
 from pe_core.readings import Readings, Window
@@ -79,6 +79,19 @@ def test_standard_rate_for_a_smart_slot_is_the_peak_rate():
     assert not night.smart_slot and night.standard == CHEAP
     peak = rates_at(T0 + timedelta(hours=18), d1 + d2, window, EXP, None)
     assert peak.standard == peak.actual == PEAK
+
+
+def test_recorder_counts_the_seconds_a_grid_event_ran_not_just_that_it_touched_the_half_hour():
+    rec = Recorder()
+    done = None
+    for i in range(66):                              # 0:00 .. 32:30 every 30 s; the event starts at 30:00
+        t_i = T0 + timedelta(seconds=30 * i)
+        done = rec.add(R(t_i, axle_active=t_i >= T0 + timedelta(minutes=30))) or done
+    assert done is not None and done.start == T0
+    d = done.as_dict()
+    # the reading at 30:00 closes the half-hour with the event already on: 30 s of 1800, no part of the event
+    assert d["axle_s"] <= 30 and d["axle"] is False and event_share(d) == 0.0
+    assert rec.current.axle_s >= 120 and event_share(rec.current.as_dict()) == 1.0     # all it has covered so far
 
 
 # --- ledger ------------------------------------------------------------------------------
@@ -159,6 +172,36 @@ def test_axle_energy_is_costed_at_the_overnight_rate_with_losses_and_solar_at_ex
     assert ev["gross"] == pytest.approx(3.0 * (1.0 + EXP), abs=0.01)
     assert ev["energy"] == pytest.approx(energy, abs=0.01)
     assert ev["net"] == pytest.approx(3.0 * (1.0 + EXP) - energy, abs=0.01)
+
+
+def test_the_event_pays_per_kwh_and_the_export_rate_is_counted_separately():
+    axle = rec(b_e=2.0)
+    axle["axle"] = True
+    records, _ = run([(axle, Rates(PEAK, PEAK, CHEAP, EXP, False))])
+    ev = day_summary(records, complete=False)["events"]["axle"]
+    assert ev["pay"] == pytest.approx(2.0) and ev["gross"] == pytest.approx(2.0 * (1.0 + EXP))
+    without, _ = run([(axle, Rates(PEAK, PEAK, CHEAP, EXP, False))], axle_plus_export=False)
+    ev = day_summary(without, complete=False)["events"]["axle"]
+    assert ev["pay"] == pytest.approx(2.0) and ev["gross"] == pytest.approx(2.0)
+
+
+def test_an_event_that_only_touched_a_half_hour_does_not_make_it_an_event_half_hour():
+    # 1 Nov 2026: a sample at the edge of the event flagged the half-hour before it, and 2 kWh sold on the ordinary
+    # schedule were counted as the event's
+    edge = rec(b_e=2.0)
+    edge["axle"], edge["axle_s"] = False, 15.0
+    records, _ = run([(edge, Rates(PEAK, PEAK, CHEAP, EXP, False))])
+    assert records[0]["v"]["event"] is None and "events" not in day_summary(records, complete=False) or \
+        "axle" not in day_summary(records, complete=False)["events"]
+
+
+def test_a_half_hour_partly_in_the_event_counts_that_part_of_its_export():
+    half = rec(b_e=2.0, soc_start=50, soc_end=50)
+    half["axle"], half["axle_s"] = True, 900.0
+    records, _ = run([(half, Rates(PEAK, PEAK, CHEAP, EXP, False))])
+    ev = day_summary(records, complete=False)["events"]["axle"]
+    assert ev["kwh"] == pytest.approx(1.0) and ev["pay"] == pytest.approx(1.0)
+    assert day_summary(records, complete=False)["unexplained"] == pytest.approx(0, abs=0.011)     # the rest is everyday
 
 
 def test_standing_charge_counts_once_per_complete_day():
@@ -761,14 +804,14 @@ def test_months_list_the_days_with_events_for_the_last_three_months(tmp_path):
     def summary(day, _today, **_):
         ev = {}
         if day in (today, today - timedelta(days=70), today - timedelta(days=200)):
-            ev = {"axle": {"kwh": 3.456, "gross": 6.9, "energy": 2.1, "net": 4.8, "metered": 0.3},
+            ev = {"axle": {"kwh": 3.456, "pay": 3.46, "gross": 6.9, "energy": 2.1, "net": 4.8, "metered": 0.3},
                   "free_power": {"kwh": 1.0, "net": 0.2, "metered": 0.0}}
         return {"actual": 1.0, "standing": 0.5, "s0": 2.0, "events": ev}
     book.summary = summary
     months = book.months(today)
     by = {m["month"]: m for m in months}
     book.recent = lambda *a, **k: []                  # the entity states do not need the daily list here
-    assert by[today.strftime("%Y-%m")]["ev_days"] == [[today.isoformat(), 3.46, 6.9, 2.1, 4.8, 1.0, 0.2]]
+    assert by[today.strftime("%Y-%m")]["ev_days"] == [[today.isoformat(), 3.46, 6.9, 2.1, 4.8, 1.0, 0.2, 3.46]]
     old = (today - timedelta(days=200)).strftime("%Y-%m")
     assert by[old]["axle_kwh"] == 3.46 and "ev_days" not in by[old]            # older months keep only their totals
     assert by[today.strftime("%Y-%m")]["ev_days"] and all("ev_days" in by[k] for k in list(by)[-3:])

@@ -29,7 +29,8 @@ from .ledger import Ledger
 from .names import N
 from .tariff import Rates
 
-METHOD_VERSION = 8        # 3: export rate falls back to your current one when history had none
+EVENT_SHARE_MIN = 0.03      # a half-hour with less of a grid event than this is not part of it
+METHOD_VERSION = 9        # 3: export rate falls back to your current one when history had none
                           # 4: Axle exports also earn the export rate (EDF pays it on top of Axle's £1)
                           # 5: not used (day_scenarios() is computed live from the records, no re-value needed)
                           # 6: an Axle event's energy is costed at the overnight rate (battery, with losses) and the
@@ -62,6 +63,17 @@ class SimDefault:
 
 def _basis(lots) -> float:
     return sum(x.kwh * x.basis for x in lots)
+
+
+def event_share(rec: dict) -> float:
+    """The part of a half-hour a grid event ran: 1 for a record that only says it did (older records, the demo), else
+    the seconds it ran over the seconds recorded. A sample at the very edge of an event used to make the neighbouring
+    half-hour a whole event one (1 Nov 2026: 2 kWh sold before the event counted as the event's); under 3% is none."""
+    ran = rec.get("axle_s")
+    if ran is None:
+        return 1.0 if rec.get("axle") else 0.0
+    share = min(1.0, float(ran) / max(rec.get("seconds") or 0.0, 1.0))
+    return share if share >= EVENT_SHARE_MIN else 0.0
 
 
 def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: float, eff: float,
@@ -128,25 +140,29 @@ def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: 
         "ledger_kwh": ledger.kwh, "ledger_value": ledger.value, "sim_kwh": sim.kwh,
         "correction_kwh": correction_kwh, "correction": correction_value,
     }
-    event = "axle" if rec.get("axle") else ("free_power" if rec.get("free") else None)
+    share = event_share(rec)
+    event = "axle" if share else ("free_power" if rec.get("free") else None)
     out["event"] = event
     if event == "axle":
-        exported = k["b_e"] + k["s_e"]
+        # a half-hour only partly in the event counts that part of its export (the rest stays everyday)
+        exported = (k["b_e"] + k["s_e"]) * share
         out["event_kwh"] = exported
-        per_kwh = axle_value + (exp if axle_plus_export else 0.0)   # Axle's payment, plus the supplier's export rate
-        out["event_gross"] = exported * per_kwh
+        out["event_pay"] = exported * axle_value                    # what Axle pays, per kWh exported
+        # the supplier's export rate on the same energy
+        out["event_export"] = exported * exp if axle_plus_export else 0.0
+        out["event_gross"] = out["event_pay"] + out["event_export"]
         # what the energy was worth otherwise: battery energy at the overnight rate it's refilled at (with the
         # round-trip loss), solar at the export rate it would have earned anyway
-        out["event_energy"] = k["b_e"] / rte * ovn + k["s_e"] * exp
+        out["event_energy"] = (k["b_e"] / rte * ovn + k["s_e"] * exp) * share
         out["event_net"] = out["event_gross"] - out["event_energy"]
         # Axle owns only what it exported. Take that energy back out of the everyday layers (its export revenue, and
         # the battery energy it used up), so the rest of the half-hour stays everyday: they still add up as before
-        ev_battery = k["b_e"] * (1 - e_grid_share) * exp - _basis(e_solar_lots)
-        ev_arbitrage = k["b_e"] * e_grid_share * exp - _basis(e_grid_lots)
-        out["solar"] -= k["s_e"] * exp
+        ev_battery = (k["b_e"] * (1 - e_grid_share) * exp - _basis(e_solar_lots)) * share
+        ev_arbitrage = (k["b_e"] * e_grid_share * exp - _basis(e_grid_lots)) * share
+        out["solar"] -= k["s_e"] * exp * share
         out["battery"] -= ev_battery
         out["arbitrage"] -= ev_arbitrage
-        out["stored"] += _basis(used_e)
+        out["stored"] += _basis(used_e) * share
         out["actual"] += exported * exp
         out["event_metered"] = -exported * exp
     elif event == "free_power":
@@ -272,9 +288,10 @@ def day_summary(records: list[dict], standing_per_day: float | None = None, comp
             energy[key] += (v.get("correction_kwh", 0.0) if key == "correction_kwh" else (r.get(key) or 0.0))
         if v.get("event"):
             e = events.setdefault(v["event"], {"kwh": 0.0, "gross": 0.0, "energy": 0.0, "net": 0.0,
-                                               "metered": 0.0})
+                                               "metered": 0.0, "pay": 0.0})
             e["kwh"] += v.get("event_kwh", 0.0)
             e["gross"] += v.get("event_gross", 0.0)
+            e["pay"] += v.get("event_pay", 0.0)
             e["net"] += v.get("event_net", 0.0)
             e["energy"] += v.get("event_energy", 0.0)
             e["metered"] += v.get("event_metered", v.get("actual", 0.0))

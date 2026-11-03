@@ -17,13 +17,14 @@ M = timedelta(minutes=1)
 
 def record(start, **kw):
     r = {"start": start.isoformat(), "house": 0.5, "car": 0.0, "grid_export": 2.6, "seconds": 1800,
-         "v": {"event_kwh": 2.4, "event_gross": 2.76, "event_net": 2.60}}
+         "v": {"event_kwh": 2.4, "event_pay": 2.4, "event_export": 0.36, "event_gross": 2.76, "event_net": 2.60}}
     r.update(kw)
     return r
 
 
 RECORDS = [record(START - 30 * M), record(START), record(START + 30 * M, house=0.7, grid_export=2.2,
-                                                         v={"event_kwh": 2.2, "event_gross": 2.53, "event_net": 2.40}),
+                                                         v={"event_kwh": 2.2, "event_pay": 2.2, "event_export": 0.33,
+                                                            "event_gross": 2.53, "event_net": 2.40}),
            record(END)]
 
 
@@ -31,6 +32,7 @@ def test_summary_adds_up_the_half_hours_of_the_event_only():
     s = event_summary(RECORDS, START, END)
     assert s["half_hours"] == 2 and round(s["house_kwh"], 2) == 1.2 and round(s["export_kwh"], 2) == 4.8
     assert round(s["event_kwh"], 2) == 4.6 and round(s["gross"], 2) == 5.29 and round(s["net"], 2) == 5.0
+    assert round(s["pay"], 2) == 4.6 and round(s["export"], 2) == 0.69
     assert event_summary(RECORDS, START + 5 * 60 * M, END + 5 * 60 * M) is None
 
 
@@ -38,8 +40,8 @@ def test_the_message_says_what_the_house_used_what_was_exported_and_what_it_shou
     s = event_summary(RECORDS, START, END)
     text = finish_message("Daddybot here.", START, END, END + M, UK, s, None, None)
     assert text == ("Daddybot here. The grid event at 8 pm today is over. The house used 1.2 kilowatt hours, and we "
-                    "exported 4.8 kilowatt hours. It should pay about £5.29, or £5.00 after the battery energy it "
-                    "used.")
+                    "exported 4.8 kilowatt hours. The event should pay about £4.60, and the export rate adds "
+                    "about £0.69, or £5.00 in all after the battery energy it used.")
 
 
 def test_it_says_what_was_turned_back_and_to_what():
