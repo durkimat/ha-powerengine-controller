@@ -7,8 +7,9 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
+from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode
 
-from .const import CONF_SETTINGS_DIR, DEFAULT_SETTINGS_FOLDER, DOMAIN
+from .const import CONF_MODE, CONF_SETTINGS_DIR, DOMAIN, MODE_LIVE, MODE_SHADOW
 
 
 class PowerEngineConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -17,7 +18,7 @@ class PowerEngineConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
             return self.async_create_entry(title="PowerEngine", data={}, options=_options(user_input))
-        return self.async_show_form(step_id="user", data_schema=_schema(self.hass.config.path(DEFAULT_SETTINGS_FOLDER)))
+        return self.async_show_form(step_id="user", data_schema=_schema(MODE_LIVE, ""))
 
     async def async_step_import(self, user_input: dict[str, Any]) -> ConfigFlowResult:
         return await self.async_step_user(user_input)
@@ -32,14 +33,22 @@ class PowerEngineOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
             return self.async_create_entry(data=_options(user_input))
-        current = self.config_entry.options.get(CONF_SETTINGS_DIR) or self.hass.config.path(DEFAULT_SETTINGS_FOLDER)
-        return self.async_show_form(step_id="init", data_schema=_schema(current))
+        options = self.config_entry.options
+        return self.async_show_form(step_id="init", data_schema=_schema(options.get(CONF_MODE, MODE_LIVE),
+                                                                         options.get(CONF_SETTINGS_DIR, "")))
 
 
-def _schema(default: str) -> vol.Schema:
-    return vol.Schema({vol.Required(CONF_SETTINGS_DIR, default=default): str})
+def _schema(mode: str, folder: str) -> vol.Schema:
+    return vol.Schema({
+        vol.Required(CONF_MODE, default=mode): SelectSelector(SelectSelectorConfig(
+            options=[MODE_LIVE, MODE_SHADOW], translation_key=CONF_MODE, mode=SelectSelectorMode.LIST)),
+        vol.Optional(CONF_SETTINGS_DIR, default=folder): str,
+    })
 
 
 def _options(user_input: dict[str, Any]) -> dict[str, Any]:
+    options: dict[str, Any] = {CONF_MODE: user_input.get(CONF_MODE, MODE_LIVE)}
     folder = str(user_input.get(CONF_SETTINGS_DIR, "")).strip()
-    return {CONF_SETTINGS_DIR: folder} if folder else {}
+    if folder:
+        options[CONF_SETTINGS_DIR] = folder
+    return options

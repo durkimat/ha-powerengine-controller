@@ -28,7 +28,8 @@ from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
+from .const import CONF_MODE, DOMAIN, MODE_SHADOW
+from .shadow import SHADOW_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
 NOTHING = (None, "", "unknown", "None", "none")
@@ -36,8 +37,15 @@ NUMERIC_DEVICE_CLASSES = {c for c in SensorDeviceClass if c not in (
     SensorDeviceClass.ENUM, SensorDeviceClass.TIMESTAMP, SensorDeviceClass.DATE)}
 
 
+def is_shadow(entry: ConfigEntry) -> bool:
+    return entry.options.get(CONF_MODE) == MODE_SHADOW
+
+
 def device_info(entry: ConfigEntry) -> DeviceInfo:
-    return DeviceInfo(identifiers={(DOMAIN, entry.entry_id)}, name="PowerEngine", manufacturer="PowerEngine",
+    """One device for everything the engine makes; a shadow run's is its own, so it never mixes with the live one."""
+    shadow = is_shadow(entry)
+    return DeviceInfo(identifiers={(DOMAIN, f"{entry.entry_id}_shadow" if shadow else entry.entry_id)},
+                      name="PowerEngine (shadow)" if shadow else "PowerEngine", manufacturer="PowerEngine",
                       model="Engine process", configuration_url="https://github.com/durkimat/ha-powerengine-controller")
 
 
@@ -46,6 +54,9 @@ class NativeEntities:
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass, self.entry = hass, entry
+        self.shadow = is_shadow(entry)
+        self.prefix = SHADOW_PREFIX if self.shadow else "pe_"          # sensor.pe_<key>, or the shadow's own ids
+        self.unique_prefix = "powerengine_shadow_" if self.shadow else "powerengine_"
         self.entities: dict[str, PowerEngineEntity] = {}
         self.adders: dict[str, Callable[[list], None]] = {}
         self.online = True
@@ -66,7 +77,7 @@ class NativeEntities:
                "switch": PowerEngineSwitch}.get(component)
         if cls is None:
             raise ValueError(f"no native {component} entities")
-        entity_id = f"{component}.pe_{key}"
+        entity_id = f"{component}.{self.prefix}{key}"
         entity = self.entities.get(entity_id)
         if entity is None:
             entity = self.entities[entity_id] = cls(self, entity_id, key, name, options)
@@ -111,7 +122,7 @@ class PowerEngineEntity(Entity):
         self._native = native
         self.entity_id = entity_id
         self._key = key
-        self._attr_unique_id = f"powerengine_{key}"
+        self._attr_unique_id = f"{native.unique_prefix}{key}"
         self._attr_device_info = device_info(native.entry)
         self._state: str | None = None
         self._attrs: dict[str, Any] = {}

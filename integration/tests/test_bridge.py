@@ -2,8 +2,6 @@
 server, asking for states, calling services, hearing changes and events."""
 
 import asyncio
-import pathlib
-import sys
 import threading
 import time
 
@@ -13,9 +11,6 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, async_
 
 from custom_components.powerengine import const
 from custom_components.powerengine.const import DOMAIN
-
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "apps" / "powerengine"))
-
 from pe_core.host_socket import HostError, SocketHost  # noqa: E402
 
 

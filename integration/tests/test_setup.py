@@ -30,7 +30,8 @@ async def wait_for(hass, condition, timeout=40.0, what="condition"):
 
 
 def engine(hass):
-    return hass.states.get("sensor.powerengine_engine")
+    """The engine's status sensor (a shadow run's device is named for it, so its id is different)."""
+    return hass.states.get("sensor.powerengine_engine") or hass.states.get("sensor.powerengine_shadow_engine")
 
 
 async def start(hass, tmp_path, **options):
@@ -40,10 +41,10 @@ async def start(hass, tmp_path, **options):
     return entry
 
 
-async def running(hass):
+async def running(hass, version_entity="sensor.pe_diag_version"):
     await wait_for(hass, lambda: engine(hass) and engine(hass).state == "running", what="the engine to run")
-    await wait_for(hass, lambda: hass.states.get("sensor.pe_diag_version") is not None
-                   and hass.states.get("sensor.pe_diag_version").state not in ("unknown", "unavailable"),
+    await wait_for(hass, lambda: hass.states.get(version_entity) is not None
+                   and hass.states.get(version_entity).state not in ("unknown", "unavailable"),
                    what="the engine's entities")
 
 

@@ -49,9 +49,13 @@ class EngineSensor(SensorEntity):
         started = None
         if supervisor.started_at:
             started = datetime.fromtimestamp(supervisor.started_at, timezone.utc).isoformat()
-        return {"installed_version": supervisor.installed, "running_version": supervisor.running,
-                "update_pending": supervisor.update_needed(), "restarts": supervisor.restarts,
-                "last_exit_status": supervisor.exit_code, "started": started}
+        attributes = {"installed_version": supervisor.installed, "running_version": supervisor.running,
+                      "update_pending": supervisor.update_needed(), "restarts": supervisor.restarts,
+                      "last_exit_status": supervisor.exit_code, "started": started, "mode": "live"}
+        ledger = self._runtime.home.ledger
+        if ledger is not None:                                      # a shadow run: what it asked for and was refused
+            attributes.update(mode="shadow", shadow=ledger.summary())
+        return attributes
 
     async def async_added_to_hass(self) -> None:
         @callback

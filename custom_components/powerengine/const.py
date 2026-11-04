@@ -3,7 +3,10 @@
 DOMAIN = "powerengine"
 
 CONF_SETTINGS_DIR = "settings_dir"
+CONF_MODE = "mode"
+MODE_LIVE, MODE_SHADOW = "live", "shadow"   # shadow: beside the live PowerEngine, on its own copy, changing nothing
 DEFAULT_SETTINGS_FOLDER = "powerengine"     # under Home Assistant's config folder, where the app keeps config.yaml
+SHADOW_FOLDER = "powerengine_shadow"        # the shadow's own copy of it
 
 PLATFORMS = ["sensor", "binary_sensor", "switch", "button"]
 
@@ -24,8 +27,10 @@ ISSUE_PROTOCOL = "engine_protocol"
 ISSUE_RUNNING_ELSEWHERE = "running_in_appdaemon"
 ISSUE_CRASHING = "engine_crashing"
 ISSUE_FILES = "engine_files_missing"
+ISSUE_NO_SOURCE = "shadow_no_source"
 
 SERVICE_RESTART_ENGINE = "restart_engine"
+SERVICE_REFRESH_SHADOW = "refresh_shadow"
 
 # the engine's exit statuses (apps/powerengine/engine_main.py)
 EXIT_STOPPED, EXIT_PROTOCOL, EXIT_SECRET, EXIT_UNAVAILABLE = 0, 10, 11, 12

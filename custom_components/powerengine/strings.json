@@ -3,8 +3,8 @@
     "step": {
       "user": {
         "title": "PowerEngine",
-        "description": "PowerEngine runs its engine as a process of Home Assistant. Its settings live in a folder; the one the AppDaemon app already uses is filled in.",
-        "data": { "settings_dir": "Settings folder" }
+        "description": "PowerEngine runs its engine as a process of Home Assistant. Live: the engine in control, which waits while the AppDaemon app is running. Shadow: a second engine on its own copy of the live data, whose entities are separate (sensor.pe_shadow_...) and which sends nothing. Leave the folder empty for the usual one.",
+        "data": { "mode": "Mode", "settings_dir": "Settings folder" }
       }
     }
   },
@@ -12,11 +12,18 @@
     "step": {
       "init": {
         "title": "PowerEngine",
-        "data": { "settings_dir": "Settings folder" }
+        "data": { "mode": "Mode", "settings_dir": "Settings folder" }
       }
     }
   },
+  "selector": {
+    "mode": { "options": { "live": "Live: the engine in control", "shadow": "Shadow: beside the live PowerEngine, sends nothing" } }
+  },
   "issues": {
+    "shadow_no_source": {
+      "title": "The shadow run has no settings to copy",
+      "description": "The shadow run copies the live PowerEngine's folder ({live}), which has no config.yaml. Set PowerEngine up first, then use the refresh_shadow service."
+    },
     "engine_protocol": {
       "title": "Restart Home Assistant to finish updating PowerEngine",
       "description": "The updated engine and the PowerEngine integration speak different versions of their protocol, so the engine has stopped. Restarting Home Assistant loads the new integration and the engine starts again."
@@ -49,6 +56,10 @@
     "restart_engine": {
       "name": "Restart engine",
       "description": "Restart the PowerEngine engine now, for example to start an update that has just been installed."
+    },
+    "refresh_shadow": {
+      "name": "Refresh shadow data",
+      "description": "Stop the shadow engine, copy the live PowerEngine's folder afresh, and start it again."
     }
   }
 }

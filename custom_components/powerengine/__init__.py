@@ -17,7 +17,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import ConfigEntryError
+from homeassistant.exceptions import ConfigEntryError, ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
@@ -25,23 +25,29 @@ from homeassistant.util import dt as dt_util
 
 from .bridge import HassHome
 from .const import (
+    CONF_MODE,
     CONF_SETTINGS_DIR,
     DEFAULT_SETTINGS_FOLDER,
     DOMAIN,
     HEARTBEAT_ENTITY,
     ISSUE_CRASHING,
     ISSUE_FILES,
+    ISSUE_NO_SOURCE,
     ISSUE_PROTOCOL,
     ISSUE_RUNNING_ELSEWHERE,
+    MODE_SHADOW,
     PLATFORMS,
     RUNNING_ELSEWHERE_WITHIN_S,
+    SERVICE_REFRESH_SHADOW,
     SERVICE_RESTART_ENGINE,
+    SHADOW_FOLDER,
     STATUS_NEEDS_RESTART,
     STATUS_WAITING,
 )
 from .host_server import HostServer
 from .native import NativeEntities
 from .protocol import new_secret
+from .shadow import Ledger, clear, seed
 from .supervisor import EngineSupervisor
 
 _LOGGER = logging.getLogger(__name__)
@@ -62,9 +68,23 @@ def signal(entry: ConfigEntry) -> str:
     return f"{DOMAIN}_{entry.entry_id}_status"
 
 
-def settings_path(hass: HomeAssistant, entry: ConfigEntry) -> str:
+def shadow_run(entry: ConfigEntry) -> bool:
+    return entry.options.get(CONF_MODE) == MODE_SHADOW
+
+
+def settings_dir(hass: HomeAssistant, entry: ConfigEntry) -> Path:
+    """Where the engine keeps its settings and data: the live folder, or the shadow's own copy of it."""
     folder = entry.options.get(CONF_SETTINGS_DIR) or entry.data.get(CONF_SETTINGS_DIR)
-    return str(Path(folder or hass.config.path(DEFAULT_SETTINGS_FOLDER)) / "config.yaml")
+    return Path(folder or hass.config.path(SHADOW_FOLDER if shadow_run(entry) else DEFAULT_SETTINGS_FOLDER))
+
+
+def settings_path(hass: HomeAssistant, entry: ConfigEntry) -> str:
+    return str(settings_dir(hass, entry) / "config.yaml")
+
+
+def live_dir(hass: HomeAssistant) -> Path:
+    """The live PowerEngine's folder, which a shadow run copies."""
+    return Path(hass.config.path(DEFAULT_SETTINGS_FOLDER))
 
 
 def running_elsewhere(hass: HomeAssistant) -> bool:
@@ -92,8 +112,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             supervisor.connected()
         changed()
 
+    shadow = shadow_run(entry)
+    folder = settings_dir(hass, entry)
+    if shadow:
+        if folder == live_dir(hass):
+            raise ConfigEntryError("A shadow run needs a folder of its own, not the live one")
+        copied = await hass.async_add_executor_job(seed, live_dir(hass), folder)
+        _LOGGER.info("Shadow run: %s", f"copied {copied} files from {live_dir(hass)} to {folder}" if copied
+                     else f"using {folder}")
+        if (folder / "config.yaml").is_file():
+            ir.async_delete_issue(hass, DOMAIN, ISSUE_NO_SOURCE)
+        else:
+            ir.async_create_issue(hass, DOMAIN, ISSUE_NO_SOURCE, is_fixable=False,
+                                  severity=ir.IssueSeverity.WARNING, translation_key=ISSUE_NO_SOURCE,
+                                  translation_placeholders={"live": str(live_dir(hass))})
+    ledger = Ledger(folder / "shadow_ledger.jsonl", notify=lambda: hass.loop.call_soon_threadsafe(changed)) \
+        if shadow else None
     native = NativeEntities(hass, entry)
-    home = HassHome(hass, native)
+    home = HassHome(hass, native, ledger)
     secret = new_secret()
     server = HostServer(home, secret, on_watch=home.watch, on_listen=home.listen,
                         on_engine=lambda info: hass.loop.call_soon_threadsafe(engine_moved, info))
@@ -113,7 +149,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     supervisor = EngineSupervisor(
         ENGINE_DIR, settings_path(hass, entry), lambda: address, secret,
         running_version=lambda: (server.engine or {}).get("engine"), ask_stop=server.ask_to_stop,
-        on_change=lambda: (changed(), _protocol_issue(hass, supervisor)), on_crashing=crashing)
+        on_change=lambda: (changed(), _protocol_issue(hass, supervisor)), on_crashing=crashing,
+        extra_args=("--shadow",) if shadow else ())
     runtime = Runtime(native, home, server, supervisor, [])
     entry.runtime_data = runtime
 
@@ -121,7 +158,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Every minute: start the engine once nothing else is running PowerEngine; restart it when an update replaced
         its files."""
         if not supervisor.started:
-            if running_elsewhere(hass):
+            if not shadow and running_elsewhere(hass):
                 if supervisor.status != STATUS_WAITING:
                     supervisor.wait_for_other()
                     create_issue(ISSUE_RUNNING_ELSEWHERE, ir.IssueSeverity.WARNING)
@@ -138,8 +175,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def restart_engine(call: ServiceCall) -> None:
         await supervisor.restart()
 
+    async def refresh_shadow(call: ServiceCall) -> None:
+        """Copy the live folder afresh (the shadow starts again from what the live PowerEngine has now)."""
+        if not shadow:
+            raise ServiceValidationError("Only a shadow run has a copy to refresh")
+        await supervisor.stop()
+        await hass.async_add_executor_job(clear, folder)
+        await hass.async_add_executor_job(seed, live_dir(hass), folder)
+        supervisor.start()
+
     if not hass.services.has_service(DOMAIN, SERVICE_RESTART_ENGINE):
         hass.services.async_register(DOMAIN, SERVICE_RESTART_ENGINE, restart_engine, schema=vol.Schema({}))
+    if shadow and not hass.services.has_service(DOMAIN, SERVICE_REFRESH_SHADOW):
+        hass.services.async_register(DOMAIN, SERVICE_REFRESH_SHADOW, refresh_shadow, schema=vol.Schema({}))
+    entry.async_on_unload(entry.add_update_listener(_reload))
 
     async def on_stop(event: Event) -> None:
         await supervisor.stop()
@@ -166,8 +215,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await runtime.supervisor.stop()
     runtime.home.close()
     await hass.async_add_executor_job(runtime.server.stop)
-    for issue in (ISSUE_PROTOCOL, ISSUE_RUNNING_ELSEWHERE, ISSUE_CRASHING):
+    for issue in (ISSUE_PROTOCOL, ISSUE_RUNNING_ELSEWHERE, ISSUE_CRASHING, ISSUE_NO_SOURCE):
         ir.async_delete_issue(hass, DOMAIN, issue)
     if not hass.config_entries.async_loaded_entries(DOMAIN):
         hass.services.async_remove(DOMAIN, SERVICE_RESTART_ENGINE)
+        hass.services.async_remove(DOMAIN, SERVICE_REFRESH_SHADOW)
     return ok
+
+
+async def _reload(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """The settings changed (the mode, the folder): start again with them."""
+    await hass.config_entries.async_reload(entry.entry_id)

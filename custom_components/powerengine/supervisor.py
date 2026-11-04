@@ -67,13 +67,15 @@ class EngineSupervisor:
                  running_version: Callable[[], str | None], ask_stop: Callable[[], Any],
                  on_change: Callable[[], None] | None = None,
                  on_crashing: Callable[[bool], None] | None = None, python: str | None = None,
-                 backoff: tuple[float, ...] = BACKOFF_S, script: str = "engine_main.py"):
+                 backoff: tuple[float, ...] = BACKOFF_S, script: str = "engine_main.py",
+                 extra_args: tuple[str, ...] = ()):
         self.engine_dir, self.settings_path = engine_dir, settings_path
         self._address, self._secret, self._running_version = address, secret, running_version
         self._ask_stop = ask_stop                       # asks the connected engine to stop (it hands the inverter back)
         self._on_change = on_change or (lambda: None)
         self._on_crashing = on_crashing or (lambda crashing: None)
         self._python, self._backoff, self._script = python or sys.executable, backoff, script
+        self._extra_args = tuple(extra_args)                  # e.g. ("--shadow",)
         self.status = STATUS_STOPPED
         self.exit_code: int | None = None
         self.started_at: float | None = None
@@ -209,6 +211,7 @@ class EngineSupervisor:
         env = {**os.environ, "PE_SECRET": self._secret, "PYTHONUNBUFFERED": "1"}
         self._process = await asyncio.create_subprocess_exec(
             self._python, self._script, "--address", self._address(), "--settings", self.settings_path,
+            *self._extra_args,
             cwd=str(self.engine_dir), env=env, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
         self._reader = asyncio.get_running_loop().create_task(self._forward(self._process.stdout))
 
