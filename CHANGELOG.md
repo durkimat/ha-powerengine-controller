@@ -2,6 +2,15 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.204 (beta)
+
+### Behaviour changes
+
+- The log now says where the time goes when the engine's tick is slow ("Slow engine tick: 12.6 s (read 0.1 s, step 0.4 s,
+  publish 0.5 s, hand over 11.5 s, rest 0.1 s)") and names any call to Home Assistant that takes 2 s or more (for
+  example "Slow call to Home Assistant: call_service number/set_value number.solis_... took 4.1 s"). AppDaemon already
+  warns when a callback takes over 10 s, but not why. Nothing else changes.
+
 ## 0.9.203 (beta)
 
 ### Behaviour changes
