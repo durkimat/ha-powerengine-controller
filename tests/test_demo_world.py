@@ -338,7 +338,10 @@ WRITERS = {"call_service", "fire_event", "set_state", "turn_on", "turn_off", "to
 # the only places that may call one, and on what: the app's host (whose methods are the app's own, which demo mode
 # replaces), the app's own methods, the MQTT publisher (never built in demo mode) and the gate itself
 ALLOWED = {("powerengine.py", "self.host"), ("powerengine.py", "self"), ("pe_core/adapters/publish.py", "self.api"),
-           ("pe_core/demo/gate.py", "self._world()")}
+           ("pe_core/demo/gate.py", "self._world()"),
+           # the integration's end of the engine's connection: it acts on Home Assistant for the engine, which has
+           # already been through the gate by then (the engine process is never the demo's host)
+           ("pe_core/host_server.py", "home")}
 
 
 def test_no_direct_call_to_home_assistant_bypasses_the_gate():
