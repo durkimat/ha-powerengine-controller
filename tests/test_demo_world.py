@@ -359,7 +359,7 @@ def test_no_direct_call_to_home_assistant_bypasses_the_gate():
 def test_demo_mode_replaces_every_method_the_app_uses_to_reach_home_assistant():
     src = (APP / "powerengine.py").read_text()
     for name in ("get_state", "get_history", "call_service", "set_state", "fire_event"):
-        assert f"self.{name}" in src.split("def _demo_setup", 1)[1].split("def _demo_world", 1)[0]
+        assert f"{name}=gate.{name}" in src.split("def _demo_setup", 1)[1].split("def _demo_world", 1)[0]
     used = {n.func.attr for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Call)
             and isinstance(n.func, ast.Attribute) and n.func.attr in WRITERS
             and ast.unparse(n.func.value) in ("self", "self.host")}

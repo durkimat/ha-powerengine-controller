@@ -12,9 +12,10 @@ The methods keep AppDaemon's names, arguments and meanings, because that is what
     return one for `cancel_listen_state` and `cancel_listen_event`.
   * `get_state` is synchronous and cheap (a host may answer from a local copy of Home Assistant's states).
 
-`AppDaemonHost` looks each method up on the app at the moment of the call, not when it is built. That keeps the demo,
-which replaces `get_state`, `call_service`, `set_state` and `fire_event` on the app, and the tests, which replace
-whatever they need, working without change.
+`AppDaemonHost` (host_appdaemon.py) looks each method up on the app at the moment of the call, not when it is built,
+so the tests, which replace whatever they need on the app, work without change. Beyond the calls in METHODS a host
+also provides what the engine needs of the place it runs: its own log, the way entity states are written, plugin
+lookups, and the demo's start, exit and replacement of the Home Assistant calls.
 """
 
 from __future__ import annotations
@@ -30,6 +31,8 @@ METHODS = (
     "listen_state", "listen_event", "cancel_listen_state", "cancel_listen_event",
     "run_in", "run_every", "run_daily", "cancel_timer",
 )
+# What a host provides beyond those (see the end of the Host class).
+EXTRAS = ("log", "method", "state_writer", "plugin_api", "start_tracking", "cancel_all", "override", "clear_overrides")
 
 
 @runtime_checkable
@@ -85,27 +88,27 @@ class Host(Protocol):
 
     def cancel_timer(self, handle: Any, **kwargs: Any) -> Any: ...
 
+    # --- beyond the calls above
+    def log(self, msg: str, *args: Any, **kwargs: Any) -> Any:
+        """The host's own log (level="INFO" by default). The engine's `log` adds its diagnostics ring and calls this."""
 
-def _late(name: str) -> Callable:
-    def call(self: AppDaemonHost, *args: Any, **kwargs: Any) -> Any:
-        return getattr(self._app, name)(*args, **kwargs)
-    call.__name__ = name
-    call.__qualname__ = f"AppDaemonHost.{name}"
-    return call
+    def method(self, name: str) -> Callable | None:
+        """The named call as it is now (the demo's replacement if there is one), or None if the host has none."""
 
+    def state_writer(self, told_once: Callable, demo: bool = False) -> Callable | None:
+        """A `set_state(entity_id, state=..., attributes=...)` that writes an entity exactly as given, for the direct
+        publisher; None if the host cannot write states. `told_once(key, message, level)` reports a problem once."""
 
-class AppDaemonHost:
-    """The host when PowerEngine runs as an AppDaemon app: each call goes to the app's AppDaemon method as it is at
-    that moment."""
+    def plugin_api(self, name: str) -> Any:
+        """A plugin's API (the MQTT plugin), or None where the host has no such plugin."""
 
-    def __init__(self, app: Any):
-        self._app = app
+    def start_tracking(self) -> None:
+        """Start recording the timers and listeners registered, for the demo's restart."""
 
-    @property
-    def args(self) -> dict:
-        return self._app.args
+    def cancel_all(self) -> None:
+        """Cancel everything recorded since tracking started."""
 
+    def override(self, **calls: Callable) -> None:
+        """Replace calls (get_state, call_service, ...) until clear_overrides: the demo's gate."""
 
-for _name in METHODS:
-    setattr(AppDaemonHost, _name, _late(_name))
-del _name
+    def clear_overrides(self) -> None: ...

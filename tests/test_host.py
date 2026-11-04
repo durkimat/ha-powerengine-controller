@@ -1,43 +1,46 @@
-"""The Host seam (pe_core/host.py): the app reaches AppDaemon only through `self.host`."""
+"""The Host seam (pe_core/host.py): the engine reaches AppDaemon only through `self.host`, and the engine class does
+not inherit from AppDaemon."""
 
 import ast
 import pathlib
 
 from pe_core import host
 from pe_core.compare.harness import _fake_appdaemon
+from pe_core.host_appdaemon import AppDaemonHost
 
 APP = pathlib.Path(__file__).resolve().parents[1] / "apps" / "powerengine" / "powerengine.py"
 
-# AppDaemon-specific code that still reaches AppDaemon itself (its internals, plugins, the demo's swap of the
-# instance's methods). It moves into the AppDaemon host when the engine becomes its own process; nothing is added here.
-ALLOWED_DIRECT = {
-    "__setattr__", "_track", "_untrack", "_install_tracking", "_timer_gone", "_wipe", "_demo_setup", "log",
-    "_rest_states_poster", "_lossless_set_state", "_quiet_set_state", "_plugin_configured", "_mqtt_api",
-}
-# Names the app inherits from AppDaemon's Hass that the host replaces. (set_state is the publishers' door and is
-# listed above with the code that wraps it.)
-HOST_NAMES = set(host.METHODS) | {"args", "set_state"}
+# Everything the engine used to take from AppDaemon's Hass, by name. None of it may be used on `self` in the engine.
+HASS_NAMES = set(host.METHODS) | {"args", "set_state", "get_plugin_api", "AD", "namespace", "timer_running",
+                                  "entity_exists", "get_now", "listen_log", "run_at", "run_once", "run_hourly",
+                                  "run_minutely", "cancel_listen_log", "get_app", "set_namespace", "get_ad_api"}
+
+
+def _engine_class():
+    tree = ast.parse(APP.read_text(encoding="utf-8"))
+    return next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Engine")
 
 
 def test_the_protocol_the_appdaemon_host_and_the_fake_appdaemon_have_the_same_methods():
     protocol = {n for n, v in vars(host.Host).items()
                 if not n.startswith("_") and (callable(v) or isinstance(v, property))}
-    assert protocol == set(host.METHODS) | {"args"}
+    assert protocol == set(host.METHODS) | set(host.EXTRAS) | {"args"}
+    for name in (*host.METHODS, *host.EXTRAS, "args"):
+        assert hasattr(AppDaemonHost, name), name
     for name in host.METHODS:
-        assert callable(getattr(host.AppDaemonHost, name)), name
         assert callable(getattr(_fake_appdaemon(), name)), f"the fake AppDaemon has no {name}"
 
 
 def test_the_appdaemon_host_is_a_host():
-    assert isinstance(host.AppDaemonHost(_fake_appdaemon()()), host.Host)
+    assert isinstance(AppDaemonHost(_fake_appdaemon()()), host.Host)
 
 
 def test_the_appdaemon_host_calls_the_apps_method_as_it_is_at_that_moment():
     app = _fake_appdaemon()()
-    h = host.AppDaemonHost(app)
+    h = AppDaemonHost(app)
     app.set_fake("sensor.a", "1")
     assert h.get_state("sensor.a") == "1"
-    app.get_state = lambda *a, **k: "swapped"          # what the demo does
+    app.get_state = lambda *a, **k: "swapped"          # what a test does
     assert h.get_state("sensor.a") == "swapped"
     app.args = {"settings_file": "x"}
     assert h.args == {"settings_file": "x"}
@@ -45,25 +48,72 @@ def test_the_appdaemon_host_calls_the_apps_method_as_it_is_at_that_moment():
     assert h.get_timezone() == "Europe/London"
 
 
-def test_the_app_uses_appdaemons_methods_only_through_the_host():
-    """No `self.get_state(...)`, `self.run_in(...)` and the like in PowerEngine, outside the few AppDaemon-specific
-    methods listed in ALLOWED_DIRECT."""
-    tree = ast.parse(APP.read_text(encoding="utf-8"))
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "PowerEngine")
+def test_an_override_replaces_a_call_until_it_is_cleared():
+    app = _fake_appdaemon()()
+    h = AppDaemonHost(app)
+    app.set_fake("sensor.a", "1")
+    h.override(get_state=lambda *a, **k: "gate")
+    assert h.get_state("sensor.a") == "gate" and h.method("get_state")() == "gate"
+    h.clear_overrides()
+    assert h.get_state("sensor.a") == "1"
+
+
+def test_the_engine_does_not_inherit_from_appdaemon():
+    cls = _engine_class()
+    assert cls.bases == []
+    names = {n.id for n in ast.walk(cls) if isinstance(n, ast.Name)}
+    assert "hass" not in names, "the engine must not use AppDaemon's module"
+    assert _only_setattr(cls)
+
+
+def _only_setattr(cls):
+    """super() is allowed only in __setattr__ (it records attributes), which calls object's."""
+    ok = {n.name for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == "__setattr__"}
+    for fn in cls.body:
+        if isinstance(fn, ast.FunctionDef) and fn.name not in ok:
+            for n in ast.walk(fn):
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "super":
+                    return False
+    return True
+
+
+def test_the_engine_uses_appdaemons_methods_only_through_the_host():
+    """No `self.get_state(...)`, `self.run_in(...)`, `self.AD` and the like in the engine."""
+    cls = _engine_class()
+    own = {n.name for n in cls.body if isinstance(n, ast.FunctionDef)}
     leaks = []
     for fn in cls.body:
-        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)) or fn.name in ALLOWED_DIRECT:
+        if not isinstance(fn, ast.FunctionDef):
             continue
         for node in ast.walk(fn):
             if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "self"
-                    and node.attr in HOST_NAMES and node.attr not in {fn.name for fn in cls.body
-                                                                       if isinstance(fn, ast.FunctionDef)}):
+                    and node.attr in HASS_NAMES and node.attr not in own and not isinstance(node.ctx, ast.Store)):
                 leaks.append(f"{fn.name}: self.{node.attr} (line {node.lineno})")
     assert not leaks, "use self.host.<name> instead:\n" + "\n".join(leaks)
 
 
-def test_the_directly_allowed_methods_exist():
+def test_the_appdaemon_app_is_the_engine_with_appdaemons_base():
     tree = ast.parse(APP.read_text(encoding="utf-8"))
-    cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "PowerEngine")
-    defined = {n.name for n in cls.body if isinstance(n, ast.FunctionDef)}
-    assert ALLOWED_DIRECT <= defined, ALLOWED_DIRECT - defined
+    shell = [n for top in tree.body if isinstance(top, ast.If) for n in top.body
+             if isinstance(n, ast.ClassDef) and n.name == "PowerEngine"]
+    assert len(shell) == 1
+    assert [ast.unparse(b) for b in shell[0].bases] == ["Engine", "hass.Hass"]
+
+
+def test_the_engine_hands_itself_to_nothing_that_could_call_appdaemon_through_it():
+    """Adapters were once given the app and called `ha.get_state()` on it, which the demo's replacement of the app's
+    methods reached; now they get the host. `self` may go only to getattr/setattr/hasattr and the host itself."""
+    allowed = {"getattr", "setattr", "hasattr", "AppDaemonHost", "isinstance"}
+    leaks = []
+    for node in ast.walk(_engine_class()):
+        if isinstance(node, ast.Call):
+            args = list(node.args) + [k.value for k in node.keywords]
+            if any(isinstance(a, ast.Name) and a.id == "self" for a in args):
+                callee = ast.unparse(node.func)
+                if callee not in allowed:
+                    leaks.append(f"line {node.lineno}: {callee}(self, ...)")
+            if (isinstance(node.func, ast.Name) and node.func.id in ("getattr", "setattr", "hasattr") and node.args
+                    and isinstance(node.args[0], ast.Name) and node.args[0].id == "self" and len(node.args) > 1
+                    and isinstance(node.args[1], ast.Constant) and node.args[1].value in HASS_NAMES):
+                leaks.append(f"line {node.lineno}: {node.func.id}(self, {node.args[1].value!r})")
+    assert not leaks, "\n".join(leaks)

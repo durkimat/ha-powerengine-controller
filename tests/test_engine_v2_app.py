@@ -287,13 +287,14 @@ def test_engine_2_1_beta_is_engine_v2_with_a_profile_and_switching_to_it_keeps_t
 def test_a_save_is_answered_before_the_reload(v2_run):
     """The card waits for pe_config_result; the reload (inputs, dashboard, a whole cycle) comes after the answer."""
     app = v2_run["app"]
-    order, reload, fire = [], app._reload, app.fire_event
+    order, reload, fire = [], app._reload, app.host.method("fire_event")
     app._reload = lambda: (order.append("reload"), reload())
-    app.fire_event = lambda event, **kw: (order.append(event), fire(event, **kw))
+    app.host.override(fire_event=lambda event, **kw: (order.append(event), fire(event, **kw)))
     try:
         app._on_save("pe_config_save", {"config": json.loads(json.dumps(app.cfg.raw))}, {})
     finally:
-        del app._reload, app.fire_event
+        del app._reload
+        app.host.override(fire_event=fire)
     assert order[:2] == ["pe_config_result", "reload"]
 
 

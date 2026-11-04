@@ -11,6 +11,8 @@ import yaml
 from replay_harness import Clock
 from test_demo_control import BST, send, shape, task_handle, version
 
+from pe_core.host_appdaemon import AppDaemonHost
+
 make = base.make                                            # the fixture, shared with test_demo_control
 
 AT_1640 = datetime(2026, 9, 30, 16, 40, tzinfo=BST)          # the C4 test instance's clock
@@ -49,18 +51,18 @@ def test_no_duplicate_timers_when_the_handles_are_tasks(make):
         assert len(app.timers) == len({t[3] for t in app.timers})
     assert tasks.invalid_cancels == 0                           # every cancel got a real handle, none got a Task
     assert shape(tasks) == shape(plain)
-    assert all(isinstance(h[1], int) for h in tasks.__dict__["_handles"])     # recorded the handle, not the Task
+    assert all(isinstance(h[1], int) for h in tasks.host.handles)     # recorded the handle, not the Task
 
 
 def test_a_task_that_finishes_later_is_recorded_when_it_does(make):
     app = make()
     loop = asyncio.new_event_loop()
     fut = loop.create_future()
-    assert app._track("timer", fut) is fut and app.__dict__["_handles"][-1:] != [("timer", 77, None)]
-    before = len(app.__dict__["_handles"])
+    assert app.host._track("timer", fut) is fut and app.host.handles[-1:] != [("timer", 77, None)]
+    before = len(app.host.handles)
     fut.set_result(77)
     loop.run_until_complete(asyncio.sleep(0))
-    assert len(app.__dict__["_handles"]) == before + 1 and app.__dict__["_handles"][-1] == ("timer", 77, None)
+    assert len(app.host.handles) == before + 1 and app.host.handles[-1] == ("timer", 77, None)
 
 
 def test_a_task_that_finishes_after_a_wipe_is_cancelled_at_once(make):
@@ -69,11 +71,11 @@ def test_a_task_that_finishes_after_a_wipe_is_cancelled_at_once(make):
     app.__dict__["cancel_timer"] = cancelled.append
     loop = asyncio.new_event_loop()
     fut = loop.create_future()
-    app._track("timer", fut)
-    app.__dict__["_wipes"] = app.__dict__.get("_wipes", 0) + 1       # the wipe happened while it was pending
+    app.host._track("timer", fut)
+    app.host.wipes += 1                                      # the wipe happened while it was pending
     fut.set_result(78)
     loop.run_until_complete(asyncio.sleep(0))
-    assert cancelled == [78] and ("timer", 78, None) not in app.__dict__["_handles"]
+    assert cancelled == [78] and ("timer", 78, None) not in app.host.handles
 
 
 def test_a_failed_or_cancelled_task_is_not_recorded(make):
@@ -82,19 +84,19 @@ def test_a_failed_or_cancelled_task_is_not_recorded(make):
     bad, gone = loop.create_future(), loop.create_future()
     bad.set_exception(RuntimeError("no"))
     gone.cancel()
-    before = list(app.__dict__["_handles"])
-    app._track("timer", bad)
-    app._track("timer", gone)
-    assert app.__dict__["_handles"] == before
+    before = list(app.host.handles)
+    app.host._track("timer", bad)
+    app.host._track("timer", gone)
+    assert app.host.handles == before
     bad.exception()
 
 
 def test_cancelling_with_a_task_uses_the_handle_inside_it(make):
     app = make()
-    handle = app.run_every(app._beat, "now+60", 60)
-    before = len(app.__dict__["_handles"])
-    app.cancel_timer(task_handle(handle))
-    assert len(app.__dict__["_handles"]) == before - 1 and app.invalid_cancels == 0
+    handle = app.host.run_every(app._beat, "now+60", 60)
+    before = len(app.host.handles)
+    app.host.cancel_timer(task_handle(handle))
+    assert len(app.host.handles) == before - 1 and app.invalid_cancels == 0
 
 
 # --- 2 and 3. the demo's clock: solar, forecast and events at the right times ------------------------------------
@@ -285,11 +287,11 @@ def test_attributes_appdaemons_set_state_would_change_are_written_exactly_as_giv
     (the config's booleans arrived as text: 'feature ... must be true or false'; a series lost its zeros so the
     solar forecast plotted hours early). Such attributes go to Home Assistant with the exact JSON instead."""
     app = make()
-    monkeypatch.setattr(type(app), "_appdaemon_cleans_attributes", staticmethod(lambda: True))
+    monkeypatch.setattr(AppDaemonHost, "cleans_attributes", staticmethod(lambda: True))
     sent, plain = [], []
-    monkeypatch.setattr(type(app), "_rest_states_poster",
+    monkeypatch.setattr(AppDaemonHost, "rest_states_poster",
                         lambda self: lambda eid, state, attrs: sent.append((eid, state, attrs)))
-    write = app._lossless_set_state(lambda entity_id, **kw: plain.append((entity_id, kw)))
+    write = app.host.lossless_set_state(lambda entity_id, **kw: plain.append((entity_id, kw)), app._told_once)
     attrs = {"config": {"features": {"a": True, "b": False}}, "series": {"solar_kwh": [0.0, 0, 1.5]}}
     write("sensor.pe_map_config", state="ok", attributes=attrs)
     assert sent == [("sensor.pe_map_config", "ok", attrs)] and plain == []
@@ -301,14 +303,14 @@ def test_attributes_appdaemons_set_state_would_change_are_written_exactly_as_giv
 
 def test_without_a_way_round_appdaemon_the_first_altered_write_is_reported_once(make, monkeypatch):
     app = make()
-    monkeypatch.setattr(type(app), "_appdaemon_cleans_attributes", staticmethod(lambda: True))
+    monkeypatch.setattr(AppDaemonHost, "cleans_attributes", staticmethod(lambda: True))
     LOG.clear()
     import sys
     Base = sys.modules["appdaemon.plugins.hass.hassapi"].Hass
     monkeypatch.setattr(Base, "log", lambda self, msg, *a, level="INFO", **k: LOG.append((msg, level)), raising=False)
-    monkeypatch.setattr(type(app), "_rest_states_poster", lambda self: None)
+    monkeypatch.setattr(AppDaemonHost, "rest_states_poster", lambda self: None)
     plain = []
-    write = app._lossless_set_state(lambda entity_id, **kw: plain.append(entity_id))
+    write = app.host.lossless_set_state(lambda entity_id, **kw: plain.append(entity_id), app._told_once)
     for _ in range(3):
         write("sensor.pe_map_config", state="ok", attributes={"f": False})
     assert len(plain) == 3 and sum("AppDaemon's set_state changes" in m for m, _ in LOG) == 1
@@ -316,9 +318,9 @@ def test_without_a_way_round_appdaemon_the_first_altered_write_is_reported_once(
 
 def test_where_appdaemon_does_not_clean_set_state_is_used_as_it_is(make):
     app = make()
-    assert app._rest_states_poster() is None and not app._appdaemon_cleans_attributes()   # (4.4, or none here)
+    assert app.host.rest_states_poster() is None and not app.host.cleans_attributes()   # (4.4, or none here)
     plain = lambda entity_id, **kw: None                                                    # noqa: E731
-    assert app._lossless_set_state(plain) is plain
+    assert app.host.lossless_set_state(plain, app._told_once) is plain
 
 
 def test_a_config_whose_booleans_arrived_as_text_saves(make):
@@ -399,7 +401,7 @@ def test_a_wipe_cancels_each_timer_once_so_appdaemon_logs_no_invalid_handles(mak
     send(app, action="exit")
     send(app, action="start", day="car")
     assert app.invalid_cancels == 0
-    handles = [h[1] for h in app.__dict__["_handles"]]
+    handles = [h[1] for h in app.host.handles]
     assert len(handles) == len(set(handles))
     assert sorted(handles) == sorted(app.live)                  # nothing left over from earlier starts: no leak
 
@@ -415,11 +417,11 @@ def test_a_timer_appdaemon_no_longer_has_is_not_cancelled(make):
 
 def test_a_handle_is_recorded_once(make):
     app = make()
-    n = len(app.__dict__["_handles"])
-    app._track("timer", 555)
-    app._track("timer", 555)
-    app._track("timer", task_handle(555))
-    assert len(app.__dict__["_handles"]) == n + 1
+    n = len(app.host.handles)
+    app.host._track("timer", 555)
+    app.host._track("timer", 555)
+    app.host._track("timer", task_handle(555))
+    assert len(app.host.handles) == n + 1
 
 
 def test_the_mqtt_check_does_not_ask_appdaemon_for_a_plugin_it_has_not_got(make):
