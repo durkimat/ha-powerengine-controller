@@ -117,3 +117,35 @@ def test_the_engine_hands_itself_to_nothing_that_could_call_appdaemon_through_it
                     and isinstance(node.args[1], ast.Constant) and node.args[1].value in HASS_NAMES):
                 leaks.append(f"line {node.lineno}: {node.func.id}(self, {node.args[1].value!r})")
     assert not leaks, "\n".join(leaks)
+
+
+def test_a_slow_call_to_home_assistant_is_logged_with_what_it_was(monkeypatch):
+    import time
+
+    from pe_core import host_appdaemon
+    app = _fake_appdaemon()()
+    logged = []
+    app._hass_log = lambda msg, *a, **k: logged.append(msg)
+    app.call_service = lambda service, **kw: time.sleep(0.03)
+    h = AppDaemonHost(app)
+    h.call_service("number/set_value", entity_id="number.x", value=1)
+    assert logged == []                                              # quick calls say nothing
+    monkeypatch.setattr(host_appdaemon, "SLOW_CALL_S", 0.01)
+    h.call_service("number/set_value", entity_id="number.x", value=1)
+    assert len(logged) == 1 and "call_service number/set_value number.x took 0." in logged[0]
+
+
+def test_a_slow_engine_tick_says_where_the_time_went():
+    import importlib
+    import sys
+    sys.path.insert(0, str(APP.parent))
+    powerengine = importlib.import_module("powerengine")
+    engine = object.__new__(powerengine.Engine)
+    logged = []
+    engine.__dict__["log"] = lambda msg, **k: logged.append(msg)
+    started = powerengine.monotonic() - 12.0
+    engine._note_slow_tick(started, {"read": 0.2, "step": 0.9, "publish": 1.4, "hand over": 11.8})
+    assert logged == ["Slow engine tick: 12.0 s (read 0.2 s, step 0.7 s, publish 0.5 s, hand over 10.4 s, rest 0.2 s)"]
+    logged.clear()
+    engine._note_slow_tick(powerengine.monotonic() - 1.0, {"read": 0.2})
+    assert logged == []
