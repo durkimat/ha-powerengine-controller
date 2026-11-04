@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import re
+import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -34,6 +35,26 @@ _CANCEL = {"timer": "cancel_timer", "event": "cancel_listen_event", "state": "ca
 def _forward(name: str) -> Callable:
     def call(self: AppDaemonHost, *args: Any, **kwargs: Any) -> Any:
         return self.method(name)(*args, **kwargs)
+    call.__name__ = name
+    call.__qualname__ = f"AppDaemonHost.{name}"
+    return call
+
+
+SLOW_CALL_S = 2.0      # a call to Home Assistant slower than this is logged (it holds AppDaemon's one callback thread)
+_TIMED = ("call_service", "get_history", "render_template")
+
+
+def _timed(name: str) -> Callable:
+    def call(self: AppDaemonHost, *args: Any, **kwargs: Any) -> Any:
+        started = time.monotonic()
+        try:
+            return self.method(name)(*args, **kwargs)
+        finally:
+            took = time.monotonic() - started
+            if took >= SLOW_CALL_S:
+                what = args[0] if args and isinstance(args[0], str) else ""
+                target = kwargs.get("entity_id") or ""
+                self.log(f"Slow call to Home Assistant: {name} {what} {target} took {took:.1f} s".replace("  ", " "))
     call.__name__ = name
     call.__qualname__ = f"AppDaemonHost.{name}"
     return call
@@ -286,7 +307,7 @@ class AppDaemonHost:
 for _name in METHODS:
     if _name not in ("run_in", "run_every", "run_daily", "listen_event", "listen_state", "cancel_timer",
                      "cancel_listen_event", "cancel_listen_state"):
-        setattr(AppDaemonHost, _name, _forward(_name))
+        setattr(AppDaemonHost, _name, _timed(_name) if _name in _TIMED else _forward(_name))
 for _name in _TRACKED:
     setattr(AppDaemonHost, _name, _recording(_name))
 for _name in _CANCEL.values():

@@ -16,6 +16,7 @@ import re
 import shutil
 import threading
 from datetime import date, datetime, timedelta, timezone
+from time import monotonic
 from zoneinfo import ZoneInfo
 
 try:
@@ -173,6 +174,7 @@ SIM_SLICE_SECONDS = 2.0           # work per callback, then hand AppDaemon back 
 CONTROL_STRATEGY = "rolling"      # "rolling" | "block": decided by #44 (EEPROM writes) before Active ships
 BATTERY_VOLTS = 52.0              # nominal, for converting power to the inverter's current settings
 CYCLE_SECONDS = 30
+SLOW_TICK_S = 5.0                 # a tick this slow is logged with where the time went (_note_slow_tick)
 EVENT_ROLES = ("axle_event_active", "axle_event_start", "axle_event_end", "axle_direction")
 FINISH_KEEP_H = 14          # a grid event's summary not yet spoken (quiet hours) is dropped after this long
 EVENT_HOLD_S = 900          # the grid-event sensors may be unavailable this long before their last reading is dropped
@@ -922,15 +924,19 @@ class Engine:
             return
         if not self._v2_lock.acquire(blocking=False):
             return
+        started = monotonic()
+        marks = {}                                 # seconds spent in each part, for the log when a tick is slow
         try:
             r = read(self.cfg, self._state_all, None,
                      self._tariff(), self._events(), self._ev(), self._forecast())
+            marks["read"] = monotonic() - started
             eng = self._engine_v2()
             method = self._control_method()
             ram = method == "ram_remote"
             active = self.mode.effective == "active"
             send = active and ram and not preview
             out = eng.step(self._v2_input(r, send, method, preview))
+            marks["step"] = monotonic() - started
             tz = self.tz or timezone.utc
             for key, (state, attrs) in v2publish.entity_states(out, eng, eng.s, tz, preview).items():
                 if key == "state_engine":                      # it also names the choice (v2 or 2.1 beta)
@@ -938,12 +944,14 @@ class Engine:
                 self._publish_if_changed(key, state, attrs)
             self._record_v2_history(r.now, out, send, preview, r)
             self._record_forecast_log(r.now, out, r)
+            marks["publish"] = monotonic() - started
             if not preview:
                 if send:
                     self._note_command(out.decision)
                 else:
                     self.recorder.note(None, None)
                 self._hand_over(r, out.decision, send=ram)   # timed windows: logged, counted, nothing sent
+                marks["hand over"] = monotonic() - started
             else:
                 self._publish_if_changed("state_engine", "v1", self._engine_attrs())   # now says v2_preview
             if (r.now - self._v2_saved).total_seconds() >= V2_SAVE_SECONDS:
@@ -952,6 +960,20 @@ class Engine:
             self.log(f"Engine v2 tick failed: {err!r}", level="WARNING")
         finally:
             self._v2_lock.release()
+            self._note_slow_tick(started, marks)
+
+    def _note_slow_tick(self, started, marks):
+        """AppDaemon runs every callback of the app on one thread, so a long tick holds up the rest. Say where the time
+        went (each part's own time) once a tick has taken SLOW_TICK_S or more."""
+        total = monotonic() - started
+        if total < SLOW_TICK_S:
+            return
+        parts, last = [], 0.0
+        for name, at in marks.items():
+            parts.append(f"{name} {at - last:.1f} s")
+            last = at
+        parts.append(f"rest {total - last:.1f} s")
+        self.log(f"Slow engine tick: {total:.1f} s ({', '.join(parts)})")
 
     # --- manual override (pe_core/override.py, docs/plans/mode-override.md) -------------------------
 
