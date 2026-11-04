@@ -2,6 +2,20 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.202 (beta)
+
+### Behaviour changes
+
+None. This release changes how PowerEngine is put together inside, not what it does.
+
+### Behind the scenes
+
+- The engine no longer inherits from AppDaemon. `powerengine.py` now has an `Engine` class with all of PowerEngine's logic and no AppDaemon base, and a small `PowerEngine` class (the app AppDaemon starts) that is just the engine plus AppDaemon's base. `apps.yaml` is unchanged.
+- Everything that is about AppDaemon rather than PowerEngine moved into `pe_core/host_appdaemon.py`: the record of timers and listeners that the demo's start and exit need, the demo's replacement of the calls that reach Home Assistant, the work-around for AppDaemon 4.5's changes to attributes, and the MQTT plugin lookup.
+- The inverter adapter is now given the host rather than the app.
+- `tests/test_host.py` fails if the engine inherits from AppDaemon again, uses one of its methods directly, or hands itself to code that could call AppDaemon through it.
+- Step 2 of `docs/plans/native-integration.md`: next is the engine's own process.
+
 ## 0.9.201 (beta)
 
 ### Behaviour changes
