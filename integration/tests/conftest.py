@@ -1,9 +1,9 @@
 """Tests of the PowerEngine integration against a real Home Assistant (pytest-homeassistant-custom-component).
 
-They run on the *built* integration (tools/build_integration.py), the same files HACS would install, with the real
-engine as its process. Run them from the repository root with an environment that has Home Assistant:
+They run on custom_components/powerengine as committed (the files HACS installs, made current first), with the real
+engine as its process. Run them with an environment that has Home Assistant (integration/requirements.txt):
 
-    python -m pytest integration/tests
+    cd integration && python -m pytest
 """
 
 import pathlib
@@ -14,10 +14,10 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
-from build_integration import build  # noqa: E402
+from build_integration import sync  # noqa: E402
 
-BUILD = build(ROOT / "integration" / "build")
-sys.path.insert(0, str(BUILD))
+sync()                                     # the generated files (engine/, protocol.py, ...) current, as CI also demands
+sys.path.insert(0, str(ROOT))              # custom_components/ is at the repository root
 
 pytest_plugins = ["pytest_homeassistant_custom_component"]
 

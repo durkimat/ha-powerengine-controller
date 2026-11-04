@@ -3,11 +3,12 @@ them, on one device, with values Home Assistant accepts, and a pause switch that
 
 import logging
 
-from custom_components.powerengine.const import DOMAIN
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from test_bridge import engine_client  # noqa: F401  (a client standing in for the engine)
 from test_setup import running, start
+
+from custom_components.powerengine.const import DOMAIN
 
 
 async def test_the_real_engines_entities_are_in_the_registry_with_the_ids_mqtt_gave_them_on_one_device(hass, tmp_path,

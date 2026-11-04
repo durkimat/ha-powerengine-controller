@@ -1,8 +1,9 @@
 """Setting up from the UI: one entry, the settings folder asked for with the app's own folder filled in."""
 
-from custom_components.powerengine.const import CONF_SETTINGS_DIR, DOMAIN
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResultType
+
+from custom_components.powerengine.const import CONF_SETTINGS_DIR, DOMAIN
 
 
 async def test_the_user_flow_asks_for_the_settings_folder_and_makes_one_entry(hass):

@@ -7,6 +7,7 @@ on:
   pull_request:
     paths:
       - "integration/**"
+      - "custom_components/**"
       - "tools/build_integration.py"
       - "apps/powerengine/engine_main.py"
       - "apps/powerengine/pe_core/protocol.py"
@@ -36,6 +37,6 @@ jobs:
           cache: pip
           cache-dependency-path: integration/requirements.txt
       - run: pip install -r integration/requirements.txt
-      - name: Build and test the integration
+      - name: Test the integration
         working-directory: integration
         run: python -m pytest -q --timeout 180

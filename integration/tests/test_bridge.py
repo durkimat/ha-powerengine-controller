@@ -8,10 +8,11 @@ import threading
 import time
 
 import pytest
-from custom_components.powerengine import const
-from custom_components.powerengine.const import DOMAIN
 from homeassistant.core import Context
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
+
+from custom_components.powerengine import const
+from custom_components.powerengine.const import DOMAIN
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "apps" / "powerengine"))
 

@@ -73,11 +73,13 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT; DRY=0; WORK="$ROOT"
 change_file app_version "$ROOT/apps/powerengine/pe_core/__init__.py" "$VERSION"
 change_file install "$ROOT/docs/INSTALL.md" "$VERSION"
 change_file app_changelog "$ROOT/CHANGELOG.md" "$VERSION" "$NOTES"
+# the Home Assistant integration carries a copy of the engine and its version (tools/build_integration.py)
+python3 "$ROOT/tools/build_integration.py" --sync >/dev/null || die "could not bring custom_components/powerengine up to date"
 
 TITLE="${TITLE:-$(first_line "$NOTES")}"
 [ -n "$SESSION" ] && SESSION_URL="$SESSION"
 msg="$(commit_message "$VERSION${TITLE:+: $TITLE}")"
-git add -- apps/powerengine/pe_core/__init__.py docs/INSTALL.md CHANGELOG.md
+git add -- apps/powerengine/pe_core/__init__.py docs/INSTALL.md CHANGELOG.md custom_components
 git commit -q -F "$msg"
 note "committed $(git rev-parse --short HEAD) on $BRANCH: $VERSION${TITLE:+: $TITLE}"
 if [ "$PUSH" = 1 ]; then git push -q -u origin "$BRANCH" && note "pushed; CI now runs on exactly this commit"; else note "not pushed (--no-push)"; fi

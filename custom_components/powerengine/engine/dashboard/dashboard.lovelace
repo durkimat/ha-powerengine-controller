@@ -1,0 +1,1745 @@
+# PowerEngine dashboard: managed by the PowerEngine app.
+# This file is rewritten whenever PowerEngine is updated; local edits will be lost.
+# Needs: Sunsynk Power Flow Card and ApexCharts Card (HACS). See docs/INSTALL.md, Step 5.
+title: Power Engine
+views:
+  - title: Monitoring
+    path: monitoring
+    icon: mdi:lightning-bolt
+    type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Monitoring"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
+          - type: custom:powerengine-demo-card
+            grid_options: {columns: full}
+          # pause switch on the right: stops all inverter writes in Active mode (hands back to Self-Use once)
+          - type: custom:powerengine-toggle-card
+            title: Power Engine
+            entity: switch.pe_ctl_pause
+            name: Pause control
+            icon_on: mdi:pause-circle
+            icon_off: mdi:play-circle-outline
+            grid_options: {columns: full, rows: 1}
+          # Power Engine's own mode, coloured: green Active, orange Paused, blue Passive, red Blocked (inputs not ready, or Active
+          # refused) or Stopped (inverter writes couldn't be confirmed); neutral "Not set up yet" before there is a config
+          - type: tile
+            entity: sensor.pe_state_status
+            name: Power Engine
+            color: green
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_status
+                state: Active
+          - type: tile
+            entity: sensor.pe_state_status
+            name: Power Engine
+            color: orange
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_status
+                state: Paused
+          - type: tile
+            entity: sensor.pe_state_status
+            name: Power Engine
+            color: blue
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_status
+                state: Passive
+          - type: tile
+            entity: sensor.pe_state_status
+            name: Power Engine
+            color: red
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_status
+                state: [Blocked, Stopped]
+          - type: tile
+            entity: sensor.pe_state_status
+            name: Power Engine
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_status
+                state: Not set up yet
+          # what the inverter is doing, and the manual override button (hides itself on an app without the override)
+          - type: custom:powerengine-override-card
+            grid_options: {columns: full}
+          - type: tile
+            entity: sensor.pe_state_control_method
+            name: Inverter control
+            grid_options: {columns: 3}
+            tap_action:
+              action: navigate
+              navigation_path: health
+          # real EEPROM writes · simulated: what timed windows would have written today on the same plan
+          - type: tile
+            entity: sensor.pe_diag_writes_today
+            name: Writes today (real · sim)
+            state_content: [state, simulated]
+            grid_options: {columns: 3}
+            tap_action:
+              action: navigate
+              navigation_path: health
+          # against no solar or battery, with any Axle / free-power event value included (Costs tab for the detail)
+          - type: tile
+            entity: sensor.pe_cost_saved_today
+            name: Saved today
+            grid_options: {columns: 3}
+            tap_action:
+              action: navigate
+              navigation_path: costs
+          # what is happening now: each tile turns green while it is active (car charging, in a smart-charge slot,
+          # an event or free power under way)
+          - type: tile
+            entity: sensor.pe_state_ev
+            name: Car
+            color: green
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_ev
+                state: Charging
+          - type: tile
+            entity: sensor.pe_state_ev
+            name: Car
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_ev
+                state_not: Charging
+          - type: tile
+            entity: sensor.pe_state_smart_charge
+            name: <<smart_charge>>
+            state_content: [state, detail]
+            color: green
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_smart_charge
+                state: In slot
+          - type: tile
+            entity: sensor.pe_state_smart_charge
+            name: <<smart_charge>>
+            state_content: [state, detail]
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_smart_charge
+                state_not: In slot
+          - type: tile
+            entity: sensor.pe_state_axle
+            name: <<event>>
+            color: green
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_axle
+                state: Event in progress
+          - type: tile
+            entity: sensor.pe_state_axle
+            name: <<event>>
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_axle
+                state_not: Event in progress
+          - type: tile
+            entity: sensor.pe_state_free_power
+            name: Free power
+            color: green
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_free_power
+                state: Free power now
+          - type: tile
+            entity: sensor.pe_state_free_power
+            name: Free power
+            grid_options: {columns: 3}
+            visibility:
+              - condition: state
+                entity: sensor.pe_state_free_power
+                state_not: Free power now
+          # before there is a config there is nothing to check yet
+          - type: tile
+            entity: sensor.pe_diag_health
+            name: Health
+            grid_options: {columns: full}
+            visibility:
+              - condition: state
+                entity: sensor.pe_diag_health
+                state: Not set up yet
+            tap_action:
+              action: navigate
+              navigation_path: health
+          # only when the Health tab has something to say
+          - type: tile
+            entity: sensor.pe_diag_health
+            name: Health needs a look
+            icon: mdi:alert-circle-outline
+            color: red
+            grid_options: {columns: full}
+            visibility:
+              - condition: state
+                entity: sensor.pe_diag_health
+                state_not: ok
+              - condition: state
+                entity: sensor.pe_diag_health
+                state_not: Not set up yet
+            tap_action:
+              action: navigate
+              navigation_path: health
+          # a new release on GitHub (checked every 5 minutes); tap for Configuration, where Update installs it
+          - type: tile
+            entity: sensor.pe_diag_update
+            name: New version available
+            state_content: [latest]
+            icon: mdi:update
+            color: blue
+            grid_options: {columns: full}
+            visibility:
+              - condition: state
+                entity: sensor.pe_diag_update
+                state: available
+            tap_action:
+              action: navigate
+              navigation_path: config
+      - type: grid
+        cards:
+          - type: heading
+            heading: Now
+          - type: markdown
+            content: |-
+              {% set imp = state_attr('sensor.pe_state_import_rate', 'pence') %}
+              {% set until = state_attr('sensor.pe_state_import_rate', 'until') %}
+              {% set nxt = state_attr('sensor.pe_state_import_rate', 'next_rate_pence') %}
+              {% set exp = state_attr('sensor.pe_state_export_rate', 'pence') %}
+              **Import** {{ imp if imp is not none else '–' }}p
+              {%- if state_attr('sensor.pe_state_import_rate', 'in_smart_slot') %} (smart slot){% endif %}
+              {%- if until and nxt is not none %}, then {{ nxt }}p from {{ until }}{% endif %}
+
+              **Export** {{ exp if exp is not none else '–' }}p
+          - type: gauge
+            entity: sensor.pe_state_battery_soc
+            name: Battery charge
+            needle: true
+            min: 0
+            max: 100
+            grid_options: {columns: full}
+            segments:
+              - {from: 0, color: "#e53935"}
+              - {from: 20, color: "#fb8c00"}
+              - {from: 40, color: "#43a047"}
+          - type: gauge
+            entity: sensor.pe_state_battery_power
+            name: Battery
+            needle: true
+            min: -5200
+            max: 5200
+            grid_options: {columns: 6}
+            segments:
+              - {from: -5200, color: "#43a047"}
+              - {from: -150, color: "#9e9e9e"}
+              - {from: 150, color: "#fb8c00"}
+          - type: gauge
+            entity: sensor.pe_state_grid_power
+            name: Grid
+            needle: true
+            min: -6000
+            max: 12000
+            grid_options: {columns: 6}
+            segments:
+              - {from: -6000, color: "#43a047"}
+              - {from: -150, color: "#9e9e9e"}
+              - {from: 150, color: "#e53935"}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set b = states('sensor.pe_state_battery_power') | float(0) %}
+              {%- set g = states('sensor.pe_state_grid_power') | float(0) %}
+              {%- macro kw(x) %}{{ '%.2f' | format(x | abs / 1000) }} kW{% endmacro %}
+              **Battery:** {{ ('charging ' ~ kw(b)) if b < -50 else ('discharging ' ~ kw(b)) if b > 50 else 'idle' }} · **Grid:** {{ ('importing ' ~ kw(g)) if g > 50 else ('exporting ' ~ kw(g)) if g < -50 else 'idle' }}
+              <br><small>Gauges: left of centre = battery charging / grid exporting (green); right = battery discharging (orange) / grid importing (red).</small>
+          - type: gauge
+            entity: sensor.pe_state_solar_power
+            name: Solar
+            needle: true
+            min: 0
+            max: 6000
+            grid_options: {columns: 4}
+            segments:
+              - {from: 0, color: "#9e9e9e"}
+              - {from: 150, color: "#f9a825"}
+          - type: gauge
+            entity: sensor.pe_state_house_power
+            name: House
+            needle: true
+            min: 0
+            max: 10000
+            grid_options: {columns: 4}
+            segments:
+              - {from: 0, color: "#90caf9"}
+              - {from: 3000, color: "#fb8c00"}
+              - {from: 7000, color: "#e53935"}
+          # the car charger's power (7.4 kW is a 32 A charger); the same reading the Car tile above is based on
+          - type: gauge
+            entity: sensor.pe_state_ev_power
+            name: Car
+            needle: true
+            min: 0
+            max: 7400
+            grid_options: {columns: 4}
+            segments:
+              - {from: 0, color: "#9e9e9e"}
+              - {from: 150, color: "#43a047"}
+          - type: markdown
+            content: |-
+              {% set t = state_attr('sensor.pe_state_solar_power', 'forecast_today_kwh') %}
+              {% set m = state_attr('sensor.pe_state_solar_power', 'forecast_tomorrow_kwh') %}
+              **Solar forecast** today {{ t if t is not none else '–' }} kWh · tomorrow {{ m if m is not none else '–' }} kWh
+      - type: grid
+        column_span: 2
+        cards:
+          - type: heading
+            heading: Energy flow
+          # BEGIN energy-flow (generated from your configuration; edits here are replaced)
+          - type: custom:sunsynk-power-flow-card
+            grid_options: {columns: full}
+            cardstyle: lite
+            show_solar: true
+            inverter:
+              model: solis
+              modern: false
+              autarky: "no"
+            battery:
+              energy: 18000
+              shutdown_soc: 12
+              # PowerEngine's battery power is + discharging; this card animates it the other way unless inverted
+              invert_power: true
+            solar:
+              mppts: 1
+            load:
+              show_daily: false
+              additional_loads: 1
+              load1_name: Car
+              load1_icon: mdi:car-electric
+            grid:
+              show_nonessential: false
+            entities:
+              battery_power_190: sensor.pe_state_battery_power
+              battery_soc_184: sensor.pe_state_battery_soc
+              grid_ct_power_172: sensor.pe_state_grid_power
+              # the load circle is the total (house + car); the car is shown as one of the loads within it
+              essential_power: sensor.pe_state_load_power
+              essential_load1: sensor.pe_state_ev_power
+              pv1_power_186: sensor.pe_state_solar_power
+          # END energy-flow
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Activity
+          # today's decisions, newest first, folded away: the summary line is what PowerEngine is doing now; open it for
+          # the reason, the next change and the earlier decisions (a long list by evening)
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set entries = state_attr('sensor.pe_state_activity', 'entries') or [] %}
+              {%- set today = now().strftime('%Y-%m-%d') %}
+              {%- set todays = entries | selectattr('time', 'search', '^' ~ today) | list %}
+              {%- set shown = todays if todays else entries[:1] %}
+              {%- if not shown %}No decisions yet.
+              {%- else %}
+              <details><summary><b>{{ shown[0].hhmm }} · {{ shown[0].text }}</b></summary>
+
+              {%- set m = states('sensor.pe_state_operation_mode') %}
+              {%- if m != 'active' %}
+
+              *{{ state_attr('sensor.pe_state_operation_mode', 'reason') }}*
+              {%- endif %}
+              {%- set nx = states('sensor.pe_plan_next') %}
+              {%- if nx not in ['unknown', 'unavailable', '', 'no change planned'] %}
+
+              Next: {{ nx }}
+              {%- endif %}
+              {%- if shown | count > 1 %}
+
+              <small>Earlier today:</small>
+
+              {% for e in shown[1:] -%}
+              - {{ e.hhmm }} {{ e.text }}
+              {% endfor -%}
+              {%- endif %}
+
+              </details>
+              {%- endif %}
+  # BEGIN view-engine-v1 (the app leaves this page out while engine v2 is the one in use)
+  - title: Engine v1
+    path: plan
+    icon: pe:engine-v1
+    type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Engine v1"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
+          - type: custom:powerengine-demo-card
+            grid_options: {columns: full}
+          # engine badge: Active / Paused / Passive for this engine, and what that means
+          - type: custom:powerengine-engine-badge-card
+            engine: v1
+            grid_options: {columns: full}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {% set made = states('sensor.pe_plan') -%}
+              <details><summary><b>{{ state_attr('sensor.pe_plan_headline', 'text') or 'No plan yet.' }}</b></summary>
+
+              Plan made {{ as_timestamp(made) | timestamp_custom('%H:%M') if made not in ['unknown', 'unavailable', ''] else '–' }}
+              · re-plans every 5 minutes and when prices, slots or events change
+              {%- set alt = state_attr('sensor.pe_plan', 'alternative') %}{% if state_attr('sensor.pe_plan', 'strategy') == 'optimiser' %}
+              · planned by the optimiser (lowest cost, arbitrage band and safety rules included){% if alt %}; the rule-based planner would {{ ('cost £%.2f more' | format(alt.costs_more_by)) if alt.costs_more_by >= 0.01 else 'do as well' }} over the same period{{ (' (it differs in ' ~ alt.half_hours_differ ~ ' half-hours; thin green line on the chart)') if alt.costs_more_by >= 0.01 else '' }}{% endif %}{% endif %}
+              {%- set o = state_attr('sensor.pe_plan', 'optimiser') %}{% if o %}
+              · for comparison (not used), an optimiser finds {{ ('a plan £%.2f cheaper' | format(o.better_by)) if o.better_by >= 0.01 else 'nothing better' }} over the same period{{ (' (it differs in ' ~ o.half_hours_differ ~ ' half-hours; thin green line on the chart)') if o.better_by >= 0.01 else '' }}{% endif %}
+              {%- if state_attr('sensor.pe_plan', 'cheap_p') is not none %}
+              · import counts as cheap at or below {{ state_attr('sensor.pe_plan', 'cheap_p') }}p for this plan{% endif %}
+              · house load learned from {{ state_attr('sensor.pe_plan', 'load_profile_days') or 0 }} days of history
+              {%- if (state_attr('sensor.pe_plan', 'load_profile_days') or 0) < 2 %}
+              · **the load forecast is still learning**, so treat this plan as rough for the first day or two{% endif %}
+              {%- macro money(v) -%}{% set v = v | float(0) %}{{ ('earns £%.2f' | format(-v)) if v < -0.005 else ('costs £%.2f' | format(v)) }}{%- endmacro %}
+              · this plan {{ money(state_attr('sensor.pe_plan', 'cost')) }} over the period; plain self-use {{ money(state_attr('sensor.pe_plan', 'baseline_cost')) }}
+              {%- set extra = state_attr('sensor.pe_plan', 'extra_kwh') | float(0) %}{% if extra | abs >= 0.5 %}
+              · the plan ends with {{ '%.1f' | format(extra | abs) }} kWh {{ 'more' if extra > 0 else 'less' }} in the battery than plain self-use (worth £{{ '%.2f' | format(state_attr('sensor.pe_plan', 'extra_value') | float(0) | abs) }} at the cheapest price), counted in the saving{% endif %}
+              {%- for c in state_attr('sensor.pe_plan', 'slot_certainty') or [] %}
+              · <<dispatch_short>> {{ c.day }} {{ c.from }}–{{ c.to }} at {{ c.slot_p }}p: {{ c.certainty }}% likely to happen (the plan allows for it not happening){% endfor %}
+              {%- set cold = state_attr('sensor.pe_plan', 'cold') %}{% if cold and cold.periods %}
+              · cold battery ({{ cold.battery_c_now }}°C estimated now; caution below {{ cold.threshold_c }}°C{{ ', learned' if cold.learned else '' }}): charging planned at {{ (cold.factor * 100) | round | int }}% of the normal rate {% for p in cold.periods %}{{ p.from }}–{{ p.to }}{{ ', ' if not loop.last else '' }}{% endfor %}{% endif %}
+              {%- if state_attr('sensor.pe_plan', 'estimated_prices_from') %}
+              · prices after {{ as_timestamp(state_attr('sensor.pe_plan', 'estimated_prices_from')) | timestamp_custom('%a %H:%M') }} are estimated (not yet published){% endif %}
+
+              </details>
+          # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
+            card:
+              type: custom:apexcharts-card
+              grid_options: {columns: full, rows: auto}
+              graph_span: 36h
+              span:
+                start: minute
+              now:
+                show: true
+                label: Now
+              header:
+                show: true
+                title: Next 36 hours
+                show_states: false
+              apex_config:
+                chart: {height: 380}
+                legend: {show: true}
+                tooltip:
+                  shared: true
+                  y:
+                    formatter: &plan_hover_formatter |
+                      EVAL:function(val, opts) {
+                        const w = opts && opts.w, i = opts ? opts.seriesIndex : -1;
+                        const name = w && w.config.series[i] ? w.config.series[i].name : "";
+                        if (val === null || val === undefined) return "–";
+                        if (name === "Action") {
+                          const labels = ["Self-use", "Hold", "Grid charge", "Sell", "Force discharge"];
+                          let text = labels[Math.round(val)] || String(val);
+                          try {
+                            const t = w.globals.seriesX[i][opts.dataPointIndex];
+                            const ha = document.querySelector("home-assistant");
+                            const st = ha && ha.hass && ha.hass.states["sensor.pe_plan"];
+                            const win = ((st && st.attributes.windows) || []).find(
+                              (x) => new Date(x.start).getTime() <= t && t < new Date(x.end).getTime());
+                            if (win && win.reason) text += ": " + win.reason;
+                          } catch (e) { /* no reason available */ }
+                          return text;
+                        }
+                        if (name === "Battery" || name === "Alt plan") return Math.round(val) + "%";
+                        if (name === "Planned writes") return Math.round(val) + " writes";
+                        if (name === "Manual override") return val ? "on" : "–";
+                        if (name === "Price") return (Math.round(val * 100) / 100) + "p";
+                        return (Math.round(val * 100) / 100) + " kWh";
+                      }
+              yaxis:
+                # each axis is drawn in the colour of what it measures
+                - id: soc
+                  min: 0
+                  max: 100
+                  decimals: 0
+                  apex_config:
+                    title: {text: "Battery %", style: {color: "#1565c0"}}
+                    labels: {style: {colors: "#1565c0"}}
+                    axisBorder: {show: true, color: "#1565c0", width: 3}
+                - id: price
+                  opposite: true
+                  min: 0
+                  decimals: 0
+                  apex_config:
+                    title: {text: "Import price p/kWh", style: {color: "#fb8c00"}}
+                    labels: {style: {colors: "#fb8c00"}}
+                    axisBorder: {show: true, color: "#fb8c00", width: 3}
+                - id: kwh
+                  opposite: true
+                  min: 0
+                  decimals: 1
+                  apex_config:
+                    title: {text: "kWh per half-hour (solar, load, charge, export)", style: {color: "#757575"}}
+                    labels: {style: {colors: "#757575"}}
+                    axisBorder: {show: true, color: "#757575", width: 3}
+                # planned inverter writes: short bars along the bottom (hidden axis, 0-12 so they stay low)
+                - id: writes
+                  show: false
+                  min: 0
+                  max: 12
+                  decimals: 0
+                # the plan's action for each half-hour, invisible: it's there for the hover text
+                - id: act
+                  show: false
+                  min: 0
+                  max: 40
+              series: &chart_plan_series
+                - entity: sensor.pe_plan
+                  name: Battery
+                  yaxis_id: soc
+                  unit: "%"
+                  type: line
+                  color: "#1565c0"
+                  stroke_width: 4
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    return s.t.map((t, i) => [new Date(t).getTime() + 1800000, s.soc[i]]);
+                - entity: sensor.pe_plan
+                  name: Alt plan
+                  yaxis_id: soc
+                  unit: "%"
+                  type: line
+                  color: "#90caf9"
+                  stroke_width: 1
+                  opacity: 0.6
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const o = (entity.attributes.alternative || entity.attributes.optimiser || {}).soc || [];
+                    return s.t.map((t, i) => [new Date(t).getTime() + 1800000, o[i] ?? null]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan
+                  name: Price
+                  yaxis_id: price
+                  unit: "p/kWh"
+                  type: line
+                  curve: stepline
+                  color: "#fb8c00"
+                  stroke_width: 2
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    return s.t.map((t, i) => [new Date(t).getTime(), s.price_p[i]]);
+                - entity: sensor.pe_plan
+                  name: Solar
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  color: "#fdd835"
+                  opacity: 0.3
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    return s.t.map((t, i) => [new Date(t).getTime(), s.solar_kwh[i]]);
+                - entity: sensor.pe_plan
+                  name: Load
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: line
+                  color: "#9e9e9e"
+                  stroke_width: 1
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    return s.t.map((t, i) => [new Date(t).getTime(), s.load_kwh[i]]);
+                - entity: sensor.pe_plan
+                  name: Charge
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.45
+                  stroke_width: 1
+                  color: "#43a047"
+                  extend_to: false
+                  # a block spanning each half-hour (not a thin bar at its start)
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const pts = s.t.map((t, i) => [new Date(t).getTime(), s.charge_kwh[i]]);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan
+                  name: Export
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.45
+                  stroke_width: 1
+                  color: "#e53935"
+                  extend_to: false
+                  # a block spanning each half-hour (not a thin bar at its start)
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const pts = s.t.map((t, i) => [new Date(t).getTime(), s.discharge_kwh[i]]);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan
+                  name: Solar export
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.9
+                  stroke_width: 1
+                  color: "#f9a825"
+                  extend_to: false
+                  # surplus solar the battery can't take (full, or charging at its limit), as half-hour blocks
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const e = s.solar_export_kwh || [];
+                    const pts = s.t.map((t, i) => [new Date(t).getTime(), e[i] ?? 0]);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan
+                  name: Planned writes
+                  yaxis_id: writes
+                  unit: "writes"
+                  type: column
+                  color: "#8e24aa"
+                  opacity: 0.9
+                  extend_to: false
+                  # inverter writes the plan implies at each half-hour (estimate; real writes only)
+                  data_generator: |
+                    const w = entity.attributes.writes_forecast || {};
+                    return Object.entries(w).map(([t, n]) => [new Date(t).getTime() + 900000, n]);
+                - entity: sensor.pe_plan
+                  name: Manual override
+                  show: {legend_value: false}
+                  yaxis_id: soc
+                  type: area
+                  curve: stepline
+                  color: "#ec407a"
+                  opacity: 0.16
+                  stroke_width: 0
+                  extend_to: false
+                  # the half-hours the owner's override fixes, shaded full height (the series only exists while one is on)
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const m = s.manual || [];
+                    const pts = s.t.map((t, i) => [new Date(t).getTime(), m[i] ?? 0]);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan
+                  name: Action
+                  show: {legend_value: false}
+                  yaxis_id: act
+                  type: line
+                  curve: stepline
+                  color: "#8e24aa"
+                  stroke_width: 0
+                  opacity: 0
+                  extend_to: false
+                  # invisible: it's there for the hover text (action and reason for each half-hour)
+                  data_generator: |
+                    const s = entity.attributes.series || {t: []};
+                    const code = {self_use: 0, hold: 1, grid_charge: 2, export: 3, force_discharge: 4};
+                    return s.t.map((t, i) => [new Date(t).getTime() + 900000, code[s.action[i]] ?? 0]);
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
+            card:
+              type: "custom:apexcharts-card"
+              grid_options: {"columns": "full", "rows": "auto"}
+              graph_span: "18h"
+              span: {"start": "minute"}
+              now: {"show": true, "label": "Now"}
+              header: {"show": true, "title": "Next 18 hours", "show_states": false}
+              apex_config: {"chart": {"height": 420, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "y": {"formatter": *plan_hover_formatter}}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
+              yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#1565c0", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#757575", "fontSize": "10px"}}}, "show": false}, {"id": "writes", "min": 0, "max": 12, "decimals": 0, "show": false}, {"id": "act", "min": 0, "max": 40, "show": false}]
+              series: *chart_plan_series
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Actions
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              | Time | Action | Target | Price | Battery | Why |
+              |---|---|---|---|---|---|
+              {%- for w in state_attr('sensor.pe_plan', 'windows') or [] %}
+              | {{ (w.day ~ ' ') if w.day }}{{ w.from }}–{{ w.to }} | **{{ w.action | replace('_', '-') }}**{{ ' (manual)' if w.get('manual') }} | {{ (w.target_soc | int | string ~ '%') if w.target_soc else '–' }} | {{ w.price }}{{ ' (est.)' if w.estimated else '' }} | {{ w.soc_start }}% → {{ w.soc_end }}% | {{ w.reason }} |
+              {%- endfor %}
+              {%- set more = state_attr('sensor.pe_plan', 'windows_more') | int(0) %}
+              {%- if more %}
+
+              …and {{ more }} more change{{ 's' if more != 1 else '' }} later in the plan (shown on the chart; left out here to keep the sensor within Home Assistant's size limit).
+              {%- endif %}
+              {%- set wf = state_attr('sensor.pe_plan', 'writes_forecast_24h') %}
+              {%- if wf is not none %}
+
+              **Planned inverter writes, next 24 h: {{ wf }}** (purple bars on the chart; an estimate if the plan runs as it stands, not counting replans). Today so far: {{ states('sensor.pe_diag_writes_today') }}.
+              {%- endif %}
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: History
+          # the day: previous / next arrows and a date box (any day the app still holds); hides itself on an older app
+          - type: custom:powerengine-history-date-card
+            entity: sensor.pe_plan_history
+            grid_options: {columns: full}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set h = states.sensor.pe_plan_history %}
+              {%- if h and h.attributes.date is defined %}{% set a = h.attributes %}{% set s = a.summary %}
+              **{{ a.label }}**{{ ' · Engine v1 was passive: its plan at the start of the day' if a.get('in_control') == 'v2' else (' · plan made at the start of the day (no as-run record for this day)' if a.plan == 'Start of day' else '') }}{{ ' · no stored plan for this day' if not a.plan else '' }}
+
+              {%- if s or a.day_import_export_cost is not none %}
+              <details><summary>Plan against actual</summary>
+
+              {%- if s %}
+              Over the {{ s.half_hours }} half-hours the plan covered: the plan expected import/export to cost **£{{ '%.2f' | format(s.plan_cost) }}**, it actually cost **£{{ '%.2f' | format(s.actual_cost) }}** ({{ ('£%.2f more' | format(s.actual_cost - s.plan_cost)) if s.actual_cost > s.plan_cost else ('£%.2f less' | format(s.plan_cost - s.actual_cost)) }}). House load {{ s.plan_load }} kWh forecast, {{ s.actual_load }} kWh actual; solar {{ s.plan_solar }} kWh forecast, {{ s.actual_solar }} kWh actual; battery {{ s.soc_gap }}% from the plan on average.
+              {%- endif %}
+              {%- if a.day_import_export_cost is not none %}
+              Whole day, import minus export (no standing charge): £{{ '%.2f' | format(a.day_import_export_cost) }} from {{ a.recorded_half_hours }} recorded half-hours.
+              {%- endif %}
+
+              </details>
+              {%- endif %}
+              {%- else %}
+              Pick a day above.
+              {%- endif %}
+          # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
+            card:
+              type: custom:apexcharts-card
+              grid_options: {columns: full, rows: auto}
+              graph_span: 24h
+              span:
+                start: day
+              header:
+                show: true
+                title: Battery, prices and grid use (plan dashed, actual solid)
+                show_states: false
+              apex_config:
+                chart: {height: 380}
+                legend: {show: true}
+                tooltip: {shared: true, x: {format: "HH:mm"}}
+                xaxis: {labels: {datetimeFormatter: {day: "HH:mm", hour: "HH:mm"}}}
+              yaxis:
+                - id: soc
+                  min: 0
+                  max: 100
+                  decimals: 0
+                  apex_config:
+                    title: {text: "Battery %", style: {color: "#1565c0"}}
+                    labels: {style: {colors: "#1565c0"}}
+                    axisBorder: {show: true, color: "#1565c0", width: 3}
+                - id: price
+                  opposite: true
+                  min: 0
+                  decimals: 0
+                  apex_config:
+                    title: {text: "Import price p/kWh", style: {color: "#fb8c00"}}
+                    labels: {style: {colors: "#fb8c00"}}
+                    axisBorder: {show: true, color: "#fb8c00", width: 3}
+                - id: kwh
+                  opposite: true
+                  min: 0
+                  decimals: 1
+                  apex_config:
+                    title: {text: "kWh per half-hour", style: {color: "#757575"}}
+                    labels: {style: {colors: "#757575"}}
+                    axisBorder: {show: true, color: "#757575", width: 3}
+              series: &chart_day_series
+                - entity: sensor.pe_plan_history
+                  name: Battery
+                  yaxis_id: soc
+                  unit: "%"
+                  type: line
+                  color: "#1565c0"
+                  stroke_width: 4
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x + 1800000, s.actual_soc[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: Battery plan
+                  yaxis_id: soc
+                  unit: "%"
+                  type: line
+                  color: "#90caf9"
+                  stroke_width: 2
+                  stroke_dash: 5
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x + 1800000, s.plan_soc[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: Price
+                  yaxis_id: price
+                  unit: "p/kWh"
+                  type: line
+                  curve: stepline
+                  color: "#fb8c00"
+                  stroke_width: 2
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x, s.price_p[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: Charge
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.45
+                  stroke_width: 1
+                  color: "#43a047"
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    const pts = s.x.map((x, i) => [x, s.actual_charge[i]]).filter(p => p[1] !== null);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan_history
+                  name: Charge plan
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: line
+                  curve: stepline
+                  stroke_width: 2
+                  stroke_dash: 5
+                  color: "#2e7d32"
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    const pts = s.x.map((x, i) => [x, s.plan_charge[i]]).filter(p => p[1] !== null);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan_history
+                  name: Export
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.45
+                  stroke_width: 1
+                  color: "#e53935"
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    const pts = s.x.map((x, i) => [x, s.actual_bat_export[i]]).filter(p => p[1] !== null);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+                - entity: sensor.pe_plan_history
+                  name: Solar export
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: area
+                  curve: stepline
+                  opacity: 0.9
+                  stroke_width: 1
+                  color: "#f9a825"
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    const pts = s.x.map((x, i) => [x, s.actual_solar_export[i]]).filter(p => p[1] !== null);
+                    if (pts.length) pts.push([pts[pts.length - 1][0] + 1800000, 0]);
+                    return pts;
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
+            card:
+              type: "custom:apexcharts-card"
+              grid_options: {"columns": "full", "rows": "auto"}
+              graph_span: "24h"
+              span: {"start": "day"}
+              header: {"show": true, "title": "Battery, prices and grid use (plan dashed, actual solid)", "show_states": false}
+              apex_config: {"chart": {"height": 420, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"datetimeFormatter": {"day": "HH:mm", "hour": "HH:mm"}, "style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
+              yaxis: [{"id": "soc", "min": 0, "max": 100, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#1565c0", "fontSize": "10px"}}}}, {"id": "price", "opposite": true, "min": 0, "decimals": 0, "apex_config": {"labels": {"style": {"colors": "#fb8c00", "fontSize": "10px"}}}, "show": false}, {"id": "kwh", "opposite": true, "min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"colors": "#757575", "fontSize": "10px"}}}, "show": false}]
+              series: *chart_day_series
+          # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
+            card:
+              type: custom:apexcharts-card
+              grid_options: {columns: full, rows: auto}
+              graph_span: 24h
+              span:
+                start: day
+              header:
+                show: true
+                title: House load and solar (forecast dashed, actual solid)
+                show_states: false
+              apex_config:
+                chart: {height: 240}
+                legend: {show: true}
+                tooltip: {shared: true, x: {format: "HH:mm"}}
+              yaxis:
+                - min: 0
+                  decimals: 1
+                  apex_config: {title: {text: "kWh per half-hour"}}
+              series: &chart_load_series
+                - entity: sensor.pe_plan_history
+                  name: House (actual)
+                  unit: "kWh"
+                  type: line
+                  color: "#616161"
+                  stroke_width: 2
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x, s.actual_load[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: House (forecast)
+                  unit: "kWh"
+                  type: line
+                  color: "#9e9e9e"
+                  stroke_width: 2
+                  stroke_dash: 5
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x, s.plan_load[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: Solar (actual)
+                  unit: "kWh"
+                  type: area
+                  color: "#fdd835"
+                  opacity: 0.3
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x, s.actual_solar[i]]).filter(p => p[1] !== null);
+                - entity: sensor.pe_plan_history
+                  name: Solar (forecast)
+                  unit: "kWh"
+                  type: line
+                  color: "#f9a825"
+                  stroke_width: 2
+                  stroke_dash: 5
+                  extend_to: false
+                  data_generator: |
+                    const s = entity.attributes.series || {x: []};
+                    return s.x.map((x, i) => [x, s.plan_solar[i]]).filter(p => p[1] !== null);
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
+            card:
+              type: "custom:apexcharts-card"
+              grid_options: {"columns": "full", "rows": "auto"}
+              graph_span: "24h"
+              span: {"start": "day"}
+              header: {"show": true, "title": "House load and solar (forecast dashed, actual solid)", "show_states": false}
+              apex_config: {"chart": {"height": 240, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "tooltip": {"shared": true, "x": {"format": "HH:mm"}}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
+              yaxis: [{"min": 0, "decimals": 1, "apex_config": {"labels": {"style": {"fontSize": "10px"}}}}]
+              series: *chart_load_series
+          - type: heading
+            heading: The plan's actions for the day
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set w = state_attr('sensor.pe_plan_history', 'windows') or [] %}
+              {%- if w %}
+              | Time | Action | Target | Battery | Why |
+              |---|---|---|---|---|
+              {%- for x in w %}
+              | {{ x.from }}–{{ x.to }} | **{{ x.action | replace('_', '-') }}** | {{ (x.target_soc | int | string ~ '%') if x.target_soc else '–' }} | {{ x.soc_start }}% → {{ x.soc_end }}% | {{ x.reason }} |
+              {%- endfor %}
+              {%- else %}
+              No actions stored for this day.
+              {%- endif %}
+  # END view-engine-v1
+  # BEGIN view-engine-v2 (the app leaves this page out while engine v1 is the one in use)
+  - title: Engine v2
+    path: engine-v2
+    icon: pe:engine-v2
+    type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Engine v2"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
+          - type: custom:powerengine-demo-card
+            grid_options: {columns: full}
+          # engine badge: Active / Paused / Passive for this engine, and what that means
+          - type: custom:powerengine-engine-badge-card
+            engine: v2
+            grid_options: {columns: full}
+          - type: custom:powerengine-engine-card
+            grid_options: {columns: full}
+          - type: custom:powerengine-v2-plan-card
+            grid_options: {columns: full}
+          - type: custom:powerengine-v2-health-card
+            grid_options: {columns: full}
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: History
+          - type: custom:powerengine-v2-history-card
+            entity: sensor.pe_v2_history
+            grid_options: {columns: full}
+  # END view-engine-v2
+  - title: Costs
+    path: costs
+    icon: mdi:cash-multiple
+    type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Costs"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
+          - type: custom:powerengine-demo-card
+            grid_options: {columns: full}
+          # one slim row: Expand all / Collapse all on the left, the alignment switch on the right (from the PowerEngine
+          # card bundle); the page header is the title
+          - type: custom:powerengine-toggle-card
+            entity: switch.pe_ui_right_align
+            name: Alignment
+            tools: true
+            grid_options: {columns: full, rows: 1}
+          - type: custom:powerengine-costs-period-card
+            entity: sensor.pe_cost_waterfall
+            grid_options: {columns: full}
+      - type: grid
+        column_span: 3
+        cards:
+          - type: custom:powerengine-section-card
+            title: Where the savings came from
+            key: costs-savings
+            open: true
+            grid_options: {columns: full}
+            cards:
+              - type: custom:powerengine-waterfall-card
+                grid_options: {columns: full}
+                entity: sensor.pe_cost_waterfall
+                shared: true
+      - type: grid
+        column_span: 3
+        cards:
+          - type: custom:powerengine-section-card
+            title: Engines compared, same day
+            key: costs-engines
+            open: true
+            grid_options: {columns: full}
+            cards:
+              - type: custom:powerengine-engine-compare-card
+                entity: sensor.pe_cost_engines
+                grid_options: {columns: full}
+                shared: true
+      - type: grid
+        column_span: 3
+        cards:
+          - type: custom:powerengine-section-card
+            title: Day by day
+            key: costs-days
+            open: true
+            grid_options: {columns: full}
+            cards:
+              - type: custom:powerengine-costs-days-card
+                entity: sensor.pe_cost_waterfall
+                grid_options: {columns: full}
+      - type: grid
+        column_span: 3
+        cards:
+          - type: custom:powerengine-section-card
+            title: Special events
+            key: costs-events
+            open: true
+            grid_options: {columns: full}
+            cards:
+              - type: markdown
+                grid_options: {columns: full}
+                content: |-
+                  {%- macro gbp(v) -%}{% set v = v | float(0) %}{{ ('−£%.2f' | format(-v)) if v < -0.005 else ('£%.2f' | format(v | abs if v | abs < 0.005 else v)) }}{%- endmacro %}
+                  {%- set e = states.sensor.pe_event_last %}
+                  {%- if e and e.attributes.type is defined %}
+                  **Last event:** {{ '<<event>> export' if e.attributes.type == 'axle' else 'Free power' }} on {{ as_timestamp(e.attributes.date) | timestamp_custom('%a %d %b') }} from {{ e.attributes.time }}: {{ e.attributes.kwh }} kWh, {% if e.attributes.type == 'axle' and e.attributes.pay is defined %}paid {{ gbp(e.attributes.pay) }} plus {{ gbp(e.attributes.gross - e.attributes.pay) }} export rate{% else %}worth {{ gbp(e.attributes.gross) }}{% endif %} ({{ gbp(e.attributes.net) }} net).
+                  {%- else %}
+                  No <<event>> or free-power events recorded yet.
+                  {%- endif %}
+              - type: custom:powerengine-events-card
+                entity: sensor.pe_event_months
+                shared: true
+                grid_options: {columns: full}
+              - type: markdown
+                grid_options: {columns: full}
+                content: |-
+                  - **<<event>> pays:** £1 for each kWh exported in <<event>> events. **Export rate on top:** <<supplier>>'s export rate on the same kWh, paid by <<supplier>>, not <<event>>.
+                  - **Energy it used:** what that energy was worth otherwise. Battery energy is costed at the overnight rate it's refilled at, including the battery's losses. Solar is costed at the export rate it would have earned anyway.
+                  - **<<event>> net:** the difference, what the events really added.
+                  - **Free power:** kWh used in free-power sessions × the rate you'd otherwise have paid.
+                  - **Day-to-day energy (metered):** the meter's cost for all the other half-hours, without the standing charge (shown next to it).
+
+                  Events are kept out of the day-to-day figures so rare, large payments don't distort them.
+      - type: grid
+        column_span: 3
+        cards:
+          - type: custom:powerengine-section-card
+            title: Reference (what the bars mean, how the numbers are worked out)
+            key: costs-reference
+            open: false
+            grid_options: {columns: full}
+            cards:
+              - type: markdown
+                grid_options: {columns: full}
+                content: |-
+                  **What the bars mean**
+
+                  | Bar | What it assumes |
+                  |---|---|
+                  | No solar or battery | Every kWh from the grid: the house at the standard rate, the car at the overnight rate; plus the standing charge. |
+                  | Solar | Your solar covers the house first, the surplus is exported; no battery. |
+                  | + <<tariff>> | The same, but grid energy is priced at the real half-hourly rates (smart slots, overnight, peak). |
+                  | PowerEngine | What your normal half-hours really cost, from the meters, with your battery and PowerEngine's control. Energy bought for later or used from earlier counts on the day it was bought or used. The energy <<event>> exported and the free-power half-hours are not in this bar. |
+                  | Net cost | The PowerEngine bar plus the energy <<event>> exported and the free-power half-hours: their metered cost, less <<event>>'s own £/kWh payment. It is the last bar of the waterfall, "You paid" (or "You were paid" when it is below zero), and the chart's last series. On a day with no events it is the same as the PowerEngine bar. |
+
+                  The Day by day chart draws these same lines for each day of the chosen period, and its last bar is the final figure, so it always agrees with the waterfall. All use the same measured house, car and solar. Inverter losses fall only on the real figure, so PowerEngine's advantage is slightly understated.
+              - type: markdown
+                grid_options: {columns: full}
+                content: |-
+                  {%- macro k(v) -%}{{ '%.1f' | format(v | float(0)) }}{%- endmacro %}
+                  {%- set a = '---' if is_state('switch.pe_ui_right_align', 'off') else '---:' %}
+                  **Energy by day**
+
+                  | Day | Import | Export | Solar | House | Car | Battery in | Battery out | Battery → export | Unaccounted |
+                  |---|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|{{ a }}|
+                  {%- for d in (state_attr('sensor.pe_cost_days', 'days') or []) | reverse %}{% set e = d.energy or {} %}
+                  | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }}{{ ' (so far)' if not d.complete else '' }} | {{ k(e.grid_import) }} | {{ k(e.grid_export) }} | {{ k(e.solar) }} | {{ k(e.house) }} | {{ k(e.car) }} | {{ k(e.battery_in) }} | {{ k(e.battery_out) }} | {{ k(e.b_e) }} | {{ k(e.unallocated_src) }} |
+                  {%- endfor %}
+
+                  kWh, integrated from the 30-second readings. Compare with the inverter's daily counters to check the sensors. *Unaccounted* is energy supplied (solar, grid, battery) that didn't reach a measured destination: inverter losses, standby and sensor mismatch. If it grows, a sensor probably needs a look. Unlike the cost tables above, this one includes today so far.
+              - type: markdown
+                grid_options: {columns: full}
+                content: |-
+                  **How the numbers are worked out**
+
+                  Each half-hour, PowerEngine splits the energy into flows (solar, battery and grid supplying the house, the car, the battery and export; solar first, then battery, then grid) and values each flow at that half-hour's rates. The waterfall's lines are:
+
+                  - **No solar or battery:** house kWh × the standard rate + car kWh × the overnight rate, plus the standing charge. Assumes the car would otherwise have charged overnight.
+                  - **Solar:** the same, but your solar covers the house (and car) first and the surplus is exported at the export rate.
+                  - **<<tariff>>:** the same again, but grid energy is priced at the real half-hourly rates (smart slots, overnight, peak) instead of the standard rate.
+                  - **PowerEngine:** what your normal half-hours really cost from the meters (metered import × rate − metered export × export rate, plus the standing charge). The step is that figure minus the <<tariff>> line, so it is everything the battery and PowerEngine did, measured, not simulated. Energy bought for later or used from earlier counts on the day it was bought or used, so one day can look dearer or cheaper than the battery really made it; it evens out over a week.
+                  - **<<event>> & free power:** the metered cost of those half-hours, minus <<event>>'s own £1/kWh payments, which are paid off the meter. They are kept out of every other line.
+                  - **You paid:** the sum of all of it: the metered cost of every half-hour plus the standing charge, after <<event>>'s payments.
+
+                  Caveats: half-hour resolution from HA's sensors, which may differ slightly from <<supplier>>'s bill; rates are the ones seen at the time; the value of energy a special event used (shown in the table above) assumes a battery round-trip efficiency of {{ states('sensor.pe_diag_battery_efficiency') }}% ({{ 'measured over the last 30 days' if state_attr('sensor.pe_diag_battery_efficiency', 'measured') else 'the configured figure until 14 full days are recorded' }}). Method version {{ state_attr('sensor.pe_cost_days', 'method') or 1 }}.
+  - title: Health
+    path: health
+    icon: mdi:stethoscope
+    type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Health"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
+          - type: custom:powerengine-demo-card
+            grid_options: {columns: full}
+          - type: tile
+            entity: sensor.pe_diag_heartbeat
+            name: Heartbeat
+            grid_options: {columns: 4}
+          - type: tile
+            entity: binary_sensor.pe_diag_config_ok
+            name: Config OK
+            grid_options: {columns: 4}
+          - type: tile
+            entity: sensor.pe_diag_version
+            name: Version
+            grid_options: {columns: 4}
+          # findings, each with Dismiss (admins): the same finding stays hidden, a new or changed one shows again
+          - type: custom:powerengine-health-card
+            grid_options: {columns: full}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              Running PowerEngine {{ states('sensor.pe_diag_version') }} since {{ as_timestamp(states('sensor.pe_diag_started'), 0) | timestamp_custom('%a %d %b %H:%M') }} · heartbeat {{ relative_time(as_datetime(states('sensor.pe_diag_heartbeat'))) if states('sensor.pe_diag_heartbeat') not in ['unknown', 'unavailable'] else 'missing' }} ago
+          # one-file diagnostics export for uploading when there's no shell (admin only)
+          - type: custom:powerengine-diagnostics-card
+            grid_options: {columns: full}
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Inverter writes today
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set w = states.sensor.pe_diag_writes_today %}
+              {%- if w and w.attributes.by_reason is defined %}{% set a = w.attributes %}
+              **{{ w.state }} inverter write{{ '' if w.state | int == 1 else 's' }} by PowerEngine today** in {{ a.changes }} change{{ '' if a.changes == 1 else 's' }}{% if a.limit %} · daily limit {{ a.limit }} ({{ [a.limit - w.state | int, 0] | max }} left){% endif %}{% if a.observed is not none %} · {{ a.observed }} seen from all sources{% endif %}.
+              {%- if a.staged %} Plus {{ a.staged }} window-time settings staged in HA (these only reach the inverter with the update button, so they aren't counted).{% endif %}
+              {%- if a.ram %} {{ a.ram }} RAM remote-control change{{ '' if a.ram == 1 else 's' }} today (temporary settings, not counted).{% endif %}
+              {%- if a.simulated is not none and a.simulated is defined %}
+
+              **Simulated timed-window writes today: {{ a.simulated }}** — what the inverter's EEPROM would have taken if the same plan had been run on timed windows (with your dampening settings){{ '. You are on RAM control, so these were not written; the plan switches more freely under RAM, so treat this as an upper estimate' if a.method == 'ram_remote' else '' }}.{% endif %}
+              {%- if a.damping is defined %} Dampening: restart hold-off {{ 'on' if a.damping.restart else 'off' }}, burst damping {{ 'on' if a.damping.bursts else 'off' }}{{ (' · ' ~ a.held ~ ' change' ~ ('' if a.held == 1 else 's') ~ ' held back today') if a.held else '' }}.{% endif %}
+              {%- set dw = a.damping_week %}
+              {%- if dw and (dw.none or dw.restart or dw.both) %}
+
+              **Dampening, last {{ dw.days }} days** (modelled: the same plan run on three virtual inverters{{ ', since ' ~ dw.since if dw.since else '' }})
+
+              | Setting | Writes | Saved |
+              |---|---:|---:|
+              | No dampening | {{ dw.none }} | – |
+              | Restart hold-off{{ '' if a.damping.restart else ' (off)' }} | {{ dw.restart }} | {{ dw.saved_restart }} |
+              | + Burst damping{{ '' if a.damping.bursts else ' (off: what it would save)' }} | {{ dw.both }} | {{ dw.saved_bursts }} |
+              {%- endif %}
+              {%- if a.by_reason %}
+
+              | Why | Writes |
+              |---|---:|
+              {%- for r in a.by_reason %}
+              | {{ r.why }} | {{ r.writes }} |
+              {%- endfor %}
+
+              **Latest writes**
+
+              | Time | Setting | Change | Why |
+              |---|---|---|---|
+              {%- for e in a.recent %}
+              | {{ e.time }} | {{ e.setting }} | {{ e.change }} | {{ e.why }} |
+              {%- endfor %}
+              {%- else %}
+
+              No writes yet today.
+              {%- endif %}
+              {%- else %}
+              Today's writes appear after PowerEngine's next write or within 10 minutes.
+              {%- endif %}
+          - type: heading
+            heading: Inverter writes (EEPROM wear)
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set w = states.sensor.pe_diag_inverter_writes %}
+              {%- if w and w.attributes.budget is defined %}{% set o, p = w.attributes.observed, w.attributes.would %}
+              Inverter settings are stored in EEPROM, typically rated for about 100,000 writes.
+
+              | | Writes today | Per day (average) | 100,000 writes would last |
+              |---|---:|---:|---:|
+              | Your current setup (observed) | {{ o.today }} | {{ o.per_day if o.per_day is not none else '–' }} | {{ (o.years ~ ' years') if o.years else ('no writes' if o.per_day == 0 else '–') }} |
+              {%- set m = w.attributes.own %}{% if m and (m.today or m.per_day) %}
+              | PowerEngine's own writes (included above) | {{ m.today }} | {{ m.per_day if m.per_day is not none else '–' }} | {{ (m.years ~ ' years') if m.years else '–' }} |{% endif %}
+              | PowerEngine, rolling 35-minute windows (would) | {{ p.today }} | {{ p.per_day if p.per_day is not none else '–' }} | {{ (p.years ~ ' years') if p.years else ('no writes' if p.per_day == 0 else '–') }} |
+              {%- set b = w.attributes.would_block %}{% if b %}
+              | PowerEngine, one window per block (would) | {{ b.today }} | {{ b.per_day if b.per_day is not none else '–' }} | {{ (b.years ~ ' years') if b.years else ('no writes' if b.per_day == 0 else '–') }} |{% endif %}
+              {%- set sl = w.attributes.would_slots %}{% if sl %}
+              | PowerEngine, all three inverter slots (would) | {{ sl.today }} | {{ sl.per_day if sl.per_day is not none else '–' }} | {{ (sl.years ~ ' years') if sl.years else ('no writes' if sl.per_day == 0 else '–') }} |{% endif %}
+
+              *Observed* counts changes to the inverter's control entities mapped on the Config tab (a press of the timed-window update button is one write; setting a value to what it already is isn't seen, so this can undercount). *All three inverter slots* is the Active design from 0.7.1: the plan's next charge and sell periods are set into the inverter's three charge and three discharge windows and only rewritten when they change, so a repeating night costs next to nothing. *Rolling* was the earlier design: one write to open, roll forward or close a timed window, and one per change of charge current. *One window per block* is the low-write alternative (#44): each window runs to the end of the plan's block and usually expires by itself; safety then comes from an HA automation that closes the windows if PowerEngine stops. Target for 25 years: about 11 a day. Averages use full days since {{ w.attributes.since or 'tracking started' }}.
+              {%- else %}
+              Counting starts once PowerEngine 0.5.3 is running; map the timed-window controls on the Config tab to see what your current setup writes.
+              {%- endif %}
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Battery and losses
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set m = state_attr('sensor.pe_diag_battery_efficiency', 'measured') %}
+              {%- set um = state_attr('sensor.pe_diag_battery_efficiency', 'use_measured') %}
+              **Battery round trip: {{ states('sensor.pe_diag_battery_efficiency') }}%** in use ({{ 'measured over the last 30 days: ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'battery_in_kwh') ~ ' kWh in, ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'battery_out_kwh') ~ ' kWh out' if m and um != false else ('configured figure; measured ' ~ state_attr('sensor.pe_diag_battery_efficiency', 'measured_round_trip') ~ '% (Use measured is off)' if m else state_attr('sensor.pe_diag_battery_efficiency', 'note')) }}).
+
+              {%- set c = states.sensor.pe_diag_battery_capacity %}
+              {%- if c and c.state not in ['unknown', 'unavailable'] %}
+              **Usable capacity: {{ c.state }} kWh** ({{ ('measured, and used for planning' if c.attributes.use_measured != false else 'measured; not used (Use measured is off), the configured ' ~ c.attributes.configured_kwh ~ ' kWh is used') if c.attributes.measured else 'estimate from ' ~ c.attributes.samples ~ ' half-hours; the configured ' ~ c.attributes.configured_kwh ~ ' kWh is used until 14 full days and 100 samples agree within 30%' }}). Highest rates seen: charging {{ c.attributes.max_charge_kw or '–' }} kW, discharging {{ c.attributes.max_discharge_kw or '–' }} kW; lowest charge {{ c.attributes.min_soc_seen if c.attributes.min_soc_seen is not none else '–' }}%.
+              {%- endif %}
+
+              {%- set lp = state_attr('sensor.pe_diag_system_losses', 'percent_yesterday') %}{% set la = state_attr('sensor.pe_diag_system_losses', 'average_percent') %}
+              **System losses yesterday: {{ states('sensor.pe_diag_system_losses') }} kWh{{ (' (' ~ lp ~ '% of the energy handled)') if lp is not none else '' }}** (average {{ state_attr('sensor.pe_diag_system_losses', 'average_kwh') or '–' }} kWh{{ (', ' ~ la ~ '%') if la is not none else '' }} a day): everything supplied (solar, grid, battery) minus everything used, i.e. inverter conversion, standby and heat. The purple line is each day's losses as a share of all the energy handled: it should stay fairly steady, so a jump is the thing to look into.
+          # desktop and tablet (600 px wide or more); the phone version below shares its series, with one axis and a shorter span
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(min-width: 600px) and (min-height: 500px)"}]
+            card:
+              type: custom:apexcharts-card
+              grid_options: {columns: full, rows: auto}
+              graph_span: 30d
+              span:
+                end: day
+              header:
+                show: true
+                title: System losses by day
+                show_states: false
+              apex_config:
+                chart: {height: 240}
+                legend: {show: true}
+                # % labels on the line only (datalabels are switched on per series below)
+                dataLabels:
+                  offsetY: -6
+                  style: {fontSize: "10px"}
+                  background: {enabled: false}
+                  formatter: |
+                    EVAL:function(val) { return val === null || val === undefined ? "" : val + "%"; }
+              yaxis:
+                - id: kwh
+                  decimals: 1
+                  min: 0
+                  apex_config:
+                    title: {text: "kWh", style: {color: "#ef6c00"}}
+                    labels: {style: {colors: "#ef6c00"}}
+                - id: pct
+                  opposite: true
+                  decimals: 0
+                  min: 0
+                  apex_config:
+                    title: {text: "% of energy handled", style: {color: "#6a1b9a"}}
+                    labels: {style: {colors: "#6a1b9a"}}
+              series: &chart_losses_series
+                - entity: sensor.pe_diag_system_losses
+                  name: Losses kWh
+                  yaxis_id: kwh
+                  unit: "kWh"
+                  type: column
+                  color: "#ef6c00"
+                  extend_to: false
+                  show: {legend_value: false}
+                  data_generator: |
+                    const days = entity.attributes.by_day || [];
+                    return days.map(d => [new Date(d[0] + "T12:00:00").getTime(), d[1]]);
+                # steadier than the kWh: a jump here points at a sensor or inverter problem rather than a busy day
+                - entity: sensor.pe_diag_system_losses
+                  name: Losses %
+                  yaxis_id: pct
+                  unit: "%"
+                  type: line
+                  color: "#6a1b9a"
+                  stroke_width: 2
+                  extend_to: false
+                  show: {legend_value: false, datalabels: true}
+                  data_generator: |
+                    const days = entity.attributes.by_day || [];
+                    return days.filter(d => d[2] !== null && d[2] !== undefined)
+                               .map(d => [new Date(d[0] + "T12:00:00").getTime(), d[2]]);
+          - type: conditional
+            grid_options: {columns: full, rows: auto}
+            conditions: [{condition: screen, media_query: "(max-width: 599px), (max-height: 499px)"}]
+            card:
+              type: "custom:apexcharts-card"
+              grid_options: {"columns": "full", "rows": "auto"}
+              graph_span: "14d"
+              span: {"end": "day"}
+              header: {"show": true, "title": "System losses by day", "show_states": false}
+              apex_config: {"chart": {"height": 240, "parentHeightOffset": 0}, "legend": {"show": true, "position": "top", "horizontalAlign": "left", "fontSize": "11px", "itemMargin": {"horizontal": 6, "vertical": 0}, "markers": {"width": 8, "height": 8}}, "dataLabels": {"offsetY": -6, "style": {"fontSize": "10px"}, "background": {"enabled": false}, "formatter": "EVAL:function(val) { return val === null || val === undefined ? \"\" : val + \"%\"; }\n"}, "xaxis": {"labels": {"style": {"fontSize": "10px"}, "hideOverlappingLabels": true}, "tickAmount": 6}, "grid": {"padding": {"left": 4, "right": 18}}}
+              yaxis: [{"id": "kwh", "decimals": 1, "min": 0, "apex_config": {"labels": {"style": {"colors": "#ef6c00", "fontSize": "10px"}}}}, {"id": "pct", "opposite": true, "decimals": 0, "min": 0, "apex_config": {"labels": {"style": {"colors": "#6a1b9a", "fontSize": "10px"}}}, "show": false}]
+              series: *chart_losses_series
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Learned from use
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set l = states.sensor.pe_diag_learned %}
+              {%- if l and l.attributes.rows %}
+              Figures PowerEngine has worked out from the last {{ l.attributes.days }} recorded days. Rates count only half-hours where it asked the inverter for the full rate; *in use* is what the plan uses (a learned figure needs its *Use measured* box, or *Use learned limits* in Features).
+
+              | | Configured | Learned | Half-hours | In use |
+              |---|---|---|---|---|
+              {%- for r in l.attributes.rows %}
+              | {{ r.what }} | {{ r.configured }} | {{ r.learned }} | {{ r.samples }} | {{ r.in_use }} |
+              {%- endfor %}
+              {%- else %}
+              Nothing learned yet: this fills in after the first full day of recording.
+              {%- endif %}
+
+              {%- set t = states.sensor.pe_diag_battery_temperature %}
+              {%- if t and t.state not in ['unknown', 'unavailable'] %}
+
+              **Battery temperature ({{ 'measured' if t.attributes.measured else 'estimated' }}): {{ t.state }}°C** · outside {{ t.attributes.outside_c }}°C ({{ t.attributes.outside_source }}) · cold caution {{ 'ON' if t.attributes.caution_now else 'off' }} (below {{ t.attributes.threshold_c }}°C). Battery location: {{ t.attributes.location }}, so it follows the outside temperature over about {{ t.attributes.lag_h | int }} hours{{ '; the estimate ahead starts from the measured value' if t.attributes.measured else '' }}.
+              {%- endif %}
+          - type: heading
+            heading: Low-write study
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set w = states.sensor.pe_diag_lowwrite %}
+              {%- if w and w.attributes.profiles %}
+              What the plan would earn if it changed the inverter's timed windows less often, over your last {{ w.attributes.days }} recorded days ({{ w.attributes['from'] }} to {{ w.attributes.to }}). Nothing here changes what PowerEngine does.
+
+              | Plan | Saves a day | Of the full plan | Window changes a day | Inverter writes a day |
+              |---|---|---|---|---|
+              {%- for r in w.attributes.profiles %}
+              | {{ r.label }} | £{{ '%.2f' | format(r.saving_gbp_day) }} | {{ (r.kept_pct ~ '%') if r.kept_pct is not none else '' }} | {{ r.changes_day }} | {{ r.writes_day }} |
+              {%- endfor %}
+
+              {{ w.attributes.note }}
+              {%- else %}
+              Nothing yet: this fills in overnight once there are complete recorded days.
+              {%- endif %}
+      - type: grid
+        column_span: 3
+        cards:
+          - type: heading
+            heading: Plan vs what happened
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set a = state_attr('sensor.pe_diag_health', 'accuracy') or [] %}
+              {%- if a %}
+              Each day is compared with the first plan made that day.
+
+              | Day | House load: forecast | actual | Error per half-hour | Solar: forecast | actual | Battery: average gap |
+              |---|---:|---:|---:|---:|---:|---:|
+              {%- for d in a | reverse %}
+              | {{ as_timestamp(d.date) | timestamp_custom('%a %d %b') }} | {{ d.load_forecast }} kWh | {{ d.load_actual }} kWh | {{ (d.load_mae * 1000) | round(0) | int }} Wh | {{ d.solar_forecast }} kWh | {{ d.solar_actual }} kWh | {{ d.soc_mean_error if d.soc_mean_error is not none else '–' }}% |
+              {%- endfor %}
+
+              *Battery: average gap* is how far the real state of charge was from the plan's, averaged over the day. In Passive mode the battery follows your current setup, not the plan, so a gap there is expected; the load and solar columns show how good the forecasts are.
+              {%- else %}
+              Nothing to compare yet: PowerEngine keeps the first plan of each day and compares it the next day.
+              {%- endif %}
+          - type: heading
+            heading: Smart-charge slots
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set s = state_attr('sensor.pe_diag_health', 'slots') %}
+              {%- if s and (s.slots or s.upcoming) %}
+              Last {{ s.days }} days: **{{ s.slots }} slot{{ '' if s.slots == 1 else 's' }}** finished, **{{ s.used }} used by the car**, {{ s.done_no_car }} ran with no car charging, {{ s.cancelled }} cancelled before starting, {{ s.cut_short }} cut short{{ (', ' ~ s.upcoming ~ ' upcoming') if s.upcoming else '' }}. The car drew {{ s.car_kwh }} kWh against {{ s.planned_kwh }} kWh planned by <<supplier>>.
+
+              | Day | Time | What happened | <<supplier>> planned | Car drew | Charging |
+              |---|---|---|---:|---:|---:|
+              {%- for r in s.recent | reverse %}
+              | {{ r.day }} | {{ r.time }} | {{ {'planned': 'upcoming', 'done': 'ran' ~ (' (confirmed)' if r.confirmed else ''), 'cancelled': 'cancelled', 'cut_short': 'cut short'}[r.status] }} | {{ r.planned_kwh if r.planned_kwh is not none else '–' }} kWh | {{ r.car_kwh }} kWh | {{ r.charging_min | round(0) | int }} min |
+              {%- endfor %}
+
+              {%- set c = state_attr('sensor.pe_plan', 'certainty') %}{% if c %}
+              **Slot certainty: {{ (c.overall * 100) | round(0) | int }}%** overall from {{ c.slots }} finished slot{{ '' if c.slots == 1 else 's' }} (starts at 70% and learns as slots finish).{% for g in c.groups %} {{ g.when | capitalize }}, {{ g.notice }}: {{ (g.certainty * 100) | round(0) | int }}% ({{ g.slots }}).{% endfor %} The plan prices each upcoming slot as certainty × slot price + the rest at the normal price, so it only leans on slots that usually happen.
+              {%- endif %}
+              {%- else %}
+              No smart-charge slots seen yet. PowerEngine records each one <<supplier>> plans (and what the car actually drew) from now on.
+              {%- endif %}
+          - type: heading
+            heading: Asking <<supplier>> for slots
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set q = state_attr('sensor.pe_diag_health', 'smart_requests') %}
+              {%- if q and q.recent %}
+              {%- macro r(x) -%}{{ x.tries }} tr{{ 'y' if x.tries == 1 else 'ies' }}{{ (', ' ~ x.won ~ ' got slots (' ~ x.rate ~ '%)') if x.tries else '' }}{%- endmacro %}
+              Last {{ q.days }} days: your current automations {{ r(q.other) }}; PowerEngine {{ r(q.powerengine) }}.{{ (' While Passive or paused it would have asked ' ~ q.would_today ~ ' time' ~ ('' if q.would_today == 1 else 's') ~ ' today.') if q.would_today else '' }}
+
+              | When | Who | Ready-by change | Result | Why |
+              |---|---|---|---|---|
+              {%- for x in q.recent | reverse %}
+              | {{ x.when }} | {{ {'other': 'your automations', 'powerengine': 'PowerEngine', 'would': 'PowerEngine (would)'}[x.by] }} | {{ x.change }} | {{ ('+' ~ x.gained ~ ' / −' ~ (x.lost or 0) ~ ' half-hours') if x.result in ['slots', 'none', 'lost slots'] else x.result }} | {{ x.why }} |
+              {%- endfor %}
+
+              Changing the car's ready-by time prompts <<supplier>> to re-plan, which often adds slots. PowerEngine asks only when it's worth it (car plugged in, no slot soon, battery has room or arbitrage is on), picks the next nearest time, checks 15 minutes later, and backs off (30 minutes, 1, 2, then 4 hours), within the request limits on the Config page (6 a day, 20 minutes apart, by default). It only sends requests in Active mode (not while paused), and not until 15 minutes after a restart of PowerEngine, HA or the <<supplier>> integration. The result counts half-hours of slots gained and lost, since a re-plan can also move or drop slots already planned.
+              {%- else %}
+              No ready-by changes seen yet. PowerEngine records every change (yours or its own) and whether <<supplier>> added slots within 15 minutes.
+              {%- endif %}
+          - type: heading
+            heading: Inverter control preview
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set c = states.sensor.pe_diag_control %}
+              {%- if c and c.attributes.strategy == 'ram_remote' %}
+              {%- set m = states.sensor.pe_state_control_method %}
+              PowerEngine drives the inverter by **RAM remote control** (current decision: **{{ c.attributes.decision | replace('_', '-') }}**): it wants **{{ c.attributes.command }}**; last sent: **{{ m.attributes.command if m else '–' }}**{{ (' at ' ~ as_timestamp(m.attributes.last_sent) | timestamp_custom('%H:%M:%S')) if m and m.attributes.last_sent else '' }}. The inverter is {{ {'ok': 'following it', 'waiting': 'responding (waiting to check)', 'not following': '**not following it**', 'n/a': 'on Self-Use'}[c.attributes.following] | default(c.attributes.following) }}.
+              Force commands are re-sent every {{ m.attributes.refresh_min if m else 1 }} min ({{ m.attributes.ram_refreshes_today if m else 0 }} refreshes and {{ m.attributes.ram_changes_today if m else 0 }} changes today; temporary settings, not EEPROM writes). The timed windows stay closed. If PowerEngine stops, the inverter returns to Self-Use by itself within about 5 minutes.
+              {%- elif c and c.attributes.strategy == 'slots' and c.attributes.rows is defined %}
+              {%- if c.state == 'not mapped' %}
+              Map these control outputs on the Config tab to preview control: {{ c.attributes.missing | join(', ') }}.
+              {%- else %}
+              PowerEngine uses **all three** of the inverter's charge windows and discharge windows, set from the plan (current decision: **{{ c.attributes.decision | replace('_', '-') }}**). Active mode would need **{{ c.state }}** now. Nothing is written in Passive mode.
+
+              | Window | PowerEngine wants | Inverter now |
+              |---|---|---|
+              {%- for r in c.attributes.rows %}
+              | {{ r.kind }} {{ r.slot }} | {{ r.want }} | {{ r.now }}{{ ' ✱' if (r.want | string) != (r.now | string) and r.want != 'unchanged' else '' }} |
+              {%- endfor %}
+
+              ✱ would be written (each changed window's update button is pressed once). While another controller is in control the columns will differ; this is for checking the mapping and what PowerEngine would set.
+              {%- endif %}
+              {%- elif c and c.attributes.settings is defined %}
+              {%- if c.state == 'not mapped' %}
+              Map these control outputs on the Config tab to preview control: {{ c.attributes.missing | join(', ') }}.
+              {%- else %}
+              For the current decision (**{{ c.attributes.decision | replace('_', '-') }}**{{ (', window to ' ~ c.attributes.window_end) if c.attributes.window_end else '' }}), Active mode would need **{{ c.state }}** now. Nothing is written in Passive mode.
+
+              | Setting | PowerEngine wants | Inverter now |
+              |---|---:|---:|
+              {%- for k, v in c.attributes.settings.items() %}
+              | {{ k | replace('timed_', '') | replace('_', ' ') }} | {{ v.want }} | {{ v.now }}{{ ' ✱' if (v.want | string) != (v.now | string) and ((v.want | float(-1)) != (v.now | float(-2))) else '' }} |
+              {%- endfor %}
+
+              ✱ would be written (then the update button pressed once if any window time changes). Strategy: {{ c.attributes.strategy }} windows. While your current setup is in control the two columns will often differ; this table is for checking the mapping and the logic.
+              {%- endif %}
+              {%- else %}
+              The preview appears once PowerEngine has made a decision.
+              {%- endif %}
+          - type: heading
+            heading: Inverter clock
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set k = states.sensor.pe_diag_inverter_clock %}
+              {%- if k and k.state not in ['unknown', 'unavailable'] %}
+              The inverter's clock is **{{ k.state | float | abs | round(0) | int }} s {{ 'ahead of' if k.state | float > 0 else 'behind' }}** Home Assistant (includes a few seconds of polling delay). Its timed windows run on this clock.
+              Last synced: {{ k.attributes.last_sync | as_timestamp | timestamp_custom('%a %d %b %H:%M') if k.attributes.last_sync else 'unknown' }}.
+              {%- if k.attributes.sync_due %} A sync is due ({{ k.attributes.sync_due }}){{ '; PowerEngine does it in Active mode' if states('sensor.pe_state_operation_mode') != 'active' else '' }}.{% endif %}
+              In Active mode PowerEngine syncs it weekly, and within 10 minutes if it drifts by a minute or more (e.g. when the clocks change).
+              {%- else %}
+              Map *Inverter clock* (`sensor.solis_rtc`) and *Sync inverter clock* (`button.solis_sync_rtc`) on the Config tab to check drift.
+              {%- endif %}
+          - type: heading
+            heading: Inputs
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set c = state_attr('sensor.pe_map_config', 'checks') or {} %}
+              {%- set ns = namespace(bad=[], ok=0) %}
+              {%- for k, v in c.items() %}{% if v.status == 'ok' %}{% set ns.ok = ns.ok + 1 %}{% elif v.status != 'unmapped' %}{% set ns.bad = ns.bad + [[k, v]] %}{% endif %}{% endfor %}
+              {{ ns.ok }} input{{ '' if ns.ok == 1 else 's' }} OK{{ ', ' ~ (ns.bad | count) ~ ' need attention:' if ns.bad else '.' }}
+              {%- if ns.bad %}
+
+              | Input | Status | Detail |
+              |---|---|---|
+              {%- for k, v in ns.bad %}
+              | {{ k }} | {{ v.status | replace('_', ' ') }} | {{ v.message }} |
+              {%- endfor %}
+              {%- endif %}
+      - type: grid
+        column_span: 3
+        cards:
+          # PowerEngine's own log (kept across restarts): warnings by default, or all recent lines
+          - type: custom:powerengine-log-card
+            grid_options: {columns: full}
+  - title: Simulator
+    path: simulator
+    icon: mdi:scale-balance
+    type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Simulator"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
+          - type: custom:powerengine-demo-card
+            grid_options: {columns: full}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set s = states.sensor.pe_cost_simulator %}{% set w = state_attr('sensor.pe_cost_simulator', 'window') %}
+              {%- if w and w.days %}
+              {%- set cur = w.ranking | selectattr('id', 'eq', 'current') | first %}
+              **What your last {{ w.days }} days ({{ w.from }} to {{ w.to }}) would have cost on other tariffs**, with the battery run as well as possible on each. Costs are per month (30.4 days), standing charges and export income included.
+
+              {{ 'You were actually paid' if w.actual_per_month < -0.005 else 'You actually paid' }} **£{{ '%.2f' | format(w.actual_per_month | abs) }}** a month{{ ' (estimated for imported days)' if w.actual_estimated else '' }}{% if cur %}; on your tariff with the best battery strategy it would have been **£{{ '%.2f' | format(cur.per_month) }}**, the baseline below{% endif %}.
+              {%- set np = state_attr('sensor.pe_cost_simulator', 'new_products') %}{% if np %}
+
+              New tariffs since the last run: {{ np | map(attribute='name') | join(', ') }}.{% endif %}
+
+              Updated {{ as_timestamp(s.attributes.updated) | timestamp_custom('%a %d %b %H:%M') }} from {{ s.attributes.all_days }} days ({{ s.attributes.imported_days or 0 }} imported from Home Assistant's statistics). Runs each night at 01:30.
+              {%- else %}
+              The Simulator runs each night at 01:30 (switch it on or off under Features on the Config tab). Results appear here the morning after the first run.
+              {%- endif %}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- macro table(w) -%}
+              | # | Tariff | Per month | vs your tariff | Export income | Standing | Notes |
+              |---:|---|---:|---:|---:|---:|---|
+              {%- for r in w.ranking %}
+              | {{ loop.index }} | {{ ('**' ~ r.name ~ '**') if r.id == 'current' else r.name }} | £{{ '%.2f' | format(r.per_month) }} | {{ '–' if r.id == 'current' else (('−£%.2f' | format(-r.vs_current_month)) if r.vs_current_month < 0 else ('+£%.2f' | format(r.vs_current_month))) }} | £{{ '%.2f' | format(r.export_income) }} | £{{ '%.2f' | format(r.standing) }} | {{ r.notes }}{{ ('; ' if r.notes else '') ~ 'some prices estimated' if r.estimated else '' }} |
+              {%- endfor %}
+              {%- endmacro %}
+              {%- set w = state_attr('sensor.pe_cost_simulator', 'window') %}{% set y = state_attr('sensor.pe_cost_simulator_year', 'window') %}
+              {%- if y %}
+              ### Last {{ y.days }} days ({{ y.from }} to {{ y.to }})
+              {{ table(y) }}
+              {%- endif %}
+              {%- if w %}
+              ### Last {{ w.days }} days
+              {{ table(w) }}
+
+              *Export income* and *Standing* are totals for the period. **How it's worked out:** each day's house load, car charging and solar are replayed on each tariff's published rates for that date, with PowerEngine's optimiser running the battery and knowing the day in advance (best achievable). Selling from the battery counts only if Arbitrage is on. The car's charging is moved to each day's cheapest half-hours, except on your own tariff. A tariff launched after a date uses its current prices by time of day (*some prices estimated*). Days imported from Home Assistant's statistics (hourly) are priced on your tariff at today's rates. EDF tariffs keep your export rate; Octopus ones use Octopus's export tariff. Eligibility notes aren't checked.
+              {%- endif %}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set h = state_attr('sensor.pe_cost_simulator_year', 'heat_pump') %}
+              {%- if h and h.rows %}
+              ### With a heat pump
+              Your house loses about **{{ h.hlc_w_per_k | int }} W per °C** (from the settings below), over {{ h.window_days }} days{{ '' if h.full_year else ', not yet a full year, so heating is under-represented until winter days are in' }}. *Saving* compares the heat pump on each tariff with the same tariff plus gas (gas standing charge included, as if the gas supply were removed).
+
+              | Tariff | With heat pump | Without + gas | Saving | Heat pump kWh | Seasonal COP | Payback |
+              |---|---:|---:|---:|---:|---:|---:|
+              {%- for r in h.rows %}
+              | {{ r.name }} | £{{ '%.2f' | format(r.with_hp_month) }}/mo | £{{ '%.2f' | format(r.without_month + r.gas_month) }}/mo | £{{ '%.2f' | format(r.saving_month) }}/mo | {{ r.hp_kwh | int }} | {{ r.scop }} | {{ (r.payback_years ~ ' yr') if r.payback_years else '–' }} |
+              {%- endfor %}
+              {%- endif %}
+          - type: markdown
+            grid_options: {columns: full}
+            content: |-
+              {%- set pl = state_attr('sensor.pe_cost_simulator_year', 'planner') %}
+              {%- if pl and pl.rows %}
+              ### The rule-based planner against the optimiser
+              The rankings above use the optimiser, which plans PowerEngine's battery (with *Optimised planning* on) and here knows each day in advance. The same days are also run by the rule-based planner (the fallback with *Optimised planning* off). The gap is what the optimiser is worth; forecast errors in real life take something off both. Over {{ pl.window_days }} days, per month:
+
+              | Tariff | Optimiser (best achievable) | Rule-based planner | Gap | What you actually paid |
+              |---|---:|---:|---:|---:|
+              {%- for r in pl.rows %}
+              | {{ r.name }} | £{{ '%.2f' | format(r.best_month) }} | £{{ '%.2f' | format(r.planner_month) }} | £{{ '%.2f' | format(r.gap_month) }} | {{ ('£%.2f' | format(r.actual_month)) if r.actual_month is defined else '–' }} |
+              {%- endfor %}
+              {%- endif %}
+              {%- set e = state_attr('sensor.pe_cost_simulator_year', 'equipment') %}
+              {%- if e and e.rows %}
+
+              ### Equipment
+              Each item on your tariff and the best other tariff, against the same tariff without it, over {{ e.window_days }} days{{ '' if e.full_year else ' (payback needs a year of history, so it shows once winter days are in)' }}.
+
+              | Equipment | Tariff | With it | Without | Saving | Cost | Payback |
+              |---|---|---:|---:|---:|---:|---:|
+              {%- for r in e.rows %}
+              | {{ r.label }} | {{ r.name }} | £{{ '%.2f' | format(r.with_month) }}/mo | £{{ '%.2f' | format(r.without_month) }}/mo | £{{ '%.2f' | format(r.saving_month) }}/mo | {{ ('£%d' | format(r.cost)) if r.cost else '–' }} | {{ (r.payback_years ~ ' yr') if r.payback_years else '–' }} |
+              {%- endfor %}
+
+              A second car's *saving* is negative: it's the extra it would cost to charge on each tariff.
+              {%- endif %}
+          - type: custom:powerengine-sim-card
+            grid_options: {columns: full}
+  - title: Config
+    path: config
+    icon: mdi:cog
+    type: sections
+    # page title: on a phone only the tab icons show, so say which page this is
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Configuration"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
+          - type: custom:powerengine-demo-card
+            grid_options: {columns: full}
+          # one-button update, first for a set-up system (the demo banner above hides itself there): HACS checks GitHub now, then the handover package's script installs what's new and
+          # restarts AppDaemon (admins only)
+          - type: custom:powerengine-update-card
+            grid_options: {columns: full}
+          # setup checklist: what PowerEngine needs, with one-button HACS installs (admins only); hides itself once
+          # everything is in place
+          - type: custom:powerengine-setup-card
+            grid_options: {columns: full}
+          # your system: what PowerEngine uses, and a panel to add, edit, replace and remove equipment (a draft until
+          # Apply to System); also exports a device's entity list for hardware PowerEngine doesn't support yet (hides
+          # itself when the app is too old to publish what it needs)
+          - type: custom:powerengine-system-card
+            grid_options: {columns: full}
+          # handover switch to another controller (only with docs/ha/powerengine_predbat_handover.yaml installed; the card hides itself otherwise)
+          - type: custom:powerengine-handover-card
+            grid_options: {columns: full}
+          - type: custom:powerengine-config-card
+            grid_options: {columns: full}
+  - title: Tests
+    path: tests
+    icon: mdi:test-tube
+    type: sections
+    header:
+      layout: start
+      card:
+        type: markdown
+        text_only: true
+        content: "## Tests"
+    max_columns: 3
+    sections:
+      - type: grid
+        column_span: 3
+        cards:
+          # demo banner and start button: hides itself unless PowerEngine is not set up yet or a demo is running
+          - type: custom:powerengine-demo-card
+            grid_options: {columns: full}
+          # supervised inverter tests (admin only; refused unless the handover guards are safe and PowerEngine is
+          # paused): timed windows (current method) and the Solis RAM remote-control registers
+          - type: custom:powerengine-toggle-card
+            grid_options: {columns: full}
+            title: Pause control (must be on to run a test)
+            entity: switch.pe_ctl_pause
+            name: Pause control
+            icon_on: mdi:pause-circle
+            icon_off: mdi:play-circle-outline
+          - type: custom:powerengine-test-card
+            grid_options: {columns: full}
