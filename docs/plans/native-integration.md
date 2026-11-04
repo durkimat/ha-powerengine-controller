@@ -51,8 +51,8 @@ custom_components/powerengine/        thin and stable: a Home Assistant restart 
        guarded, so the engine runs from it in its own process today, and a move would only change which file holds
        it and rewrite about 50 test patches. Revisit when Phase 3 decides how the engine is packaged inside the
        integration.
-3. **The integration (built on the `integration` branch; not released, because HACS needs a place to install it from, see
-   below).** `integration/custom_components/powerengine/` (`integration/README.md` has the file map):
+3. **The integration (built; in the repository at `custom_components/powerengine/`, not yet installed anywhere).**
+   `integration/README.md` has the file map:
    - a minimal config flow (one entry; the settings folder, defaulting to the app's `powerengine` folder);
    - the supervisor: starts the engine as a process of Home Assistant's own Python, forwards its log, restarts it after
      5 s, 10 s, 30 s, 1 min and 5 min if it stops, raises a Repair if it keeps stopping, restarts it when an update
@@ -98,11 +98,14 @@ it is in shadow mode.
 
 ## Risks and open decisions
 
-- **Where HACS installs the integration from (decide before releasing it).** A HACS repository is one category, and
-  `ha-powerengine-controller` is an AppDaemon one. Options: a new repository (`ha-powerengine`, integration category)
-  whose release workflow runs `tools/build_integration.py` and commits `custom_components/powerengine/`; or turn this
-  repository into the integration repository and keep the AppDaemon app as a legacy install. The card (a third HACS
-  entry) could later be registered by the integration itself, so there is one thing to install.
+- **One repository, two ways to install it (decided: the same repository).** `apps/powerengine/` is the AppDaemon app
+  and `custom_components/powerengine/` is the integration; HACS takes the folder for the category it was added as. HACS
+  keeps one entry per repository, so the two can't both be installed through HACS at once: the shadow run installs the
+  integration by hand (copy the folder, restart Home Assistant), and at the cut-over the AppDaemon entry in HACS is
+  removed and the repository added again as an integration. The integration's generated parts (the engine copy, the
+  shared protocol files, the manifest version) are committed and kept current by the release tools and CI
+  (`tools/build_integration.py`). The card (a third HACS entry) could later be registered by the integration itself, so
+  there is one thing to install.
 - The "Entity publishing" setting offers auto, MQTT and direct; under the integration `auto` means native. Nothing in
   the Config page names native yet.
 - `expire_after` (the heartbeat sensor goes unavailable after 5 minutes without a beat under MQTT) is not applied to

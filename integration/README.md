@@ -1,6 +1,6 @@
 # PowerEngine as a Home Assistant integration
 
-The integration in `custom_components/powerengine/` starts the PowerEngine engine as its own process, keeps it running,
+The integration in [`custom_components/powerengine/`](../custom_components/powerengine/) (at the repository root, where HACS looks) starts the PowerEngine engine as its own process, keeps it running,
 and gives it a way to read and act on Home Assistant. Updating PowerEngine then restarts only the engine, not Home
 Assistant. The plan, the phases and how a running system migrates are in
 [docs/plans/native-integration.md](../docs/plans/native-integration.md).
@@ -14,21 +14,25 @@ Assistant. The plan, the phases and how a running system migrates are in
 | `sensor.py`, `binary_sensor.py`, `switch.py`, `button.py` | The platforms (the engine status sensor and "Restart engine" button are the integration's own). |
 | `config_flow.py`, `diagnostics.py`, `strings.json` | Setup (one entry, the settings folder), download diagnostics, Repairs text. |
 
-`protocol.py` and `host_server.py` are **not** in this folder: they are copied from `apps/powerengine/pe_core/` by the
-build, so both ends are written against the same files. `engine/` is the whole app (`apps/powerengine/`), copied in by
-the build too.
-
-## Build and test
+`engine/` (the whole app, `apps/powerengine/`), `protocol.py` and `host_server.py` (from `apps/powerengine/pe_core/`) and
+the manifest's `version` are **generated** by `tools/build_integration.py` and committed, because HACS installs a
+repository's `custom_components` folder as it stands. The release tools run `--sync` after they bump the version, and CI
+(`tests/test_integration_sync.py`) fails a change that leaves them out of date: after changing the app, run
 
 ```bash
-python tools/build_integration.py            # integration/build/custom_components/powerengine/ (what HACS would install)
-python -m venv hav && hav/bin/pip install -r integration/requirements.txt
-cd integration && ../hav/bin/python -m pytest        # the tests build it first, and start the real engine as a process
+python tools/build_integration.py --sync
 ```
 
-The tests run on the built folder, against a real Home Assistant (`pytest-homeassistant-custom-component`), with the
-real engine as the process. The engine's own tests (`pytest` at the repository root) cover the protocol, the socket host
-and the engine process without Home Assistant.
+## Test
+
+```bash
+python -m venv hav && hav/bin/pip install -r integration/requirements.txt
+cd integration && ../hav/bin/python -m pytest        # starts the real engine as a process, in a real Home Assistant
+```
+
+The tests run against Home Assistant (`pytest-homeassistant-custom-component`) with the real engine as the process. The
+engine's own tests (`pytest` at the repository root) cover the protocol, the socket host and the engine process without
+Home Assistant.
 
 ## Safety
 
