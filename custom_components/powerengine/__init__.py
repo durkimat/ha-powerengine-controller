@@ -96,7 +96,7 @@ def running_elsewhere(hass: HomeAssistant) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    if not (ENGINE_DIR / "engine_main.py").is_file():
+    if not await hass.async_add_executor_job((ENGINE_DIR / "engine_main.py").is_file):
         ir.async_create_issue(hass, DOMAIN, ISSUE_FILES, is_fixable=False, severity=ir.IssueSeverity.ERROR,
                               translation_key=ISSUE_FILES)
         raise ConfigEntryError("The engine's files are missing: reinstall PowerEngine in HACS")
@@ -120,7 +120,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         copied = await hass.async_add_executor_job(seed, live_dir(hass), folder)
         _LOGGER.info("Shadow run: %s", f"copied {copied} files from {live_dir(hass)} to {folder}" if copied
                      else f"using {folder}")
-        if (folder / "config.yaml").is_file():
+        if await hass.async_add_executor_job((folder / "config.yaml").is_file):
             ir.async_delete_issue(hass, DOMAIN, ISSUE_NO_SOURCE)
         else:
             ir.async_create_issue(hass, DOMAIN, ISSUE_NO_SOURCE, is_fixable=False,
@@ -153,10 +153,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         extra_args=("--shadow",) if shadow else ())
     runtime = Runtime(native, home, server, supervisor, [])
     entry.runtime_data = runtime
+    await hass.async_add_executor_job(supervisor.refresh_installed)
 
     async def check(now: datetime | None = None) -> None:
         """Every minute: start the engine once nothing else is running PowerEngine; restart it when an update replaced
         its files."""
+        await hass.async_add_executor_job(supervisor.refresh_installed)     # (a file read: not on the event loop)
         if not supervisor.started:
             if not shadow and running_elsewhere(hass):
                 if supervisor.status != STATUS_WAITING:

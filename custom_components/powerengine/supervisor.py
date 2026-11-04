@@ -87,13 +87,21 @@ class EngineSupervisor:
         self._restart_now = asyncio.Event()
         self._stopping = False
         self._connected = False
+        self._installed: str | None = None                  # set by refresh_installed()
         self._stops: deque[float] = deque()
         self._crashing = False
 
     # --- what the integration reads
     @property
     def installed(self) -> str | None:
-        return installed_version(self.engine_dir)
+        """The installed engine's version as last read (`refresh_installed`: reading is a file read, which must not
+        happen on Home Assistant's event loop, where this is asked for every time the status sensor is written)."""
+        return self._installed
+
+    def refresh_installed(self) -> str | None:
+        """Read the installed version from the files now. Blocking: call it in an executor."""
+        self._installed = installed_version(self.engine_dir)
+        return self._installed
 
     @property
     def running(self) -> str | None:

@@ -113,10 +113,24 @@ async def test_a_restart_starts_a_new_engine_without_a_wait(tmp_path):
 async def test_the_installed_version_is_read_from_the_files_and_a_newer_install_is_seen(tmp_path):
     sup, _ = supervisor(tmp_path, "import time; time.sleep(60)")
     assert installed_version(tmp_path) == "1.2.3" and installed_version(tmp_path / "nowhere") is None
+    sup.refresh_installed()
     sup.start()
     await until(lambda: sup.status == const.STATUS_STARTING)
     sup.connected()
     assert not sup.update_needed()
     (tmp_path / "pe_core" / "__init__.py").write_text('__version__ = "1.2.4"\n')
-    assert sup.update_needed()
+    assert not sup.update_needed()                           # not read again until asked to (an executor job)
+    assert sup.refresh_installed() == "1.2.4" and sup.update_needed()
     await sup.stop()
+
+
+async def test_asking_for_the_installed_version_never_reads_a_file(tmp_path, monkeypatch):
+    """The status sensor asks every time it is written, on Home Assistant's event loop, where a file read is a bug."""
+    from custom_components.powerengine import supervisor as module
+    sup, _ = supervisor(tmp_path, "import time; time.sleep(60)")
+    reads = []
+    real = module.installed_version
+    monkeypatch.setattr(module, "installed_version", lambda path: reads.append(path) or real(path))
+    assert sup.installed is None and sup.update_needed() is False and reads == []
+    assert sup.refresh_installed() == "1.2.3" and len(reads) == 1
+    assert sup.installed == "1.2.3" and sup.installed == "1.2.3" and len(reads) == 1
