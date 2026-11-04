@@ -7,11 +7,9 @@ Passive (the default) only monitors and simulates. Active writes the Solis timed
 feature is on, EDF smart-charge requests) behind the handover guards, the pause switch and the daily write limit.
 """
 
-import asyncio
 import copy
 import dataclasses
 import hashlib
-import inspect
 import json
 import os
 import re
@@ -20,7 +18,10 @@ import threading
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-import appdaemon.plugins.hass.hassapi as hass
+try:
+    import appdaemon.plugins.hass.hassapi as hass
+except ImportError:                      # the engine's own process (docs/plans/native-integration.md) has no AppDaemon
+    hass = None
 
 from pe_core import (
     __version__,
@@ -50,7 +51,7 @@ from pe_core.adapters.definition import load_definition
 from pe_core.adapters.kraken import supplier_of
 from pe_core.adapters.null import NULL as NULL_ADAPTERS
 from pe_core.adapters.options import site_options
-from pe_core.adapters.publish import ad_would_alter, select_publisher
+from pe_core.adapters.publish import select_publisher
 from pe_core.adapters.solcast import ROLES as FORECAST_ROLES
 from pe_core.announce import due as alexa_due
 from pe_core.announce import event_summary as alexa_event_summary
@@ -122,7 +123,7 @@ from pe_core.freeloads import FreeLoadState
 from pe_core.health import WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_plan, day_view
-from pe_core.host import AppDaemonHost
+from pe_core.host_appdaemon import AppDaemonHost
 from pe_core.journal import WriteJournal, day_summary, is_staged
 from pe_core.loadstore import LoadStore
 from pe_core.lowwrite import Study as LowWriteStudy
@@ -214,7 +215,7 @@ def _real(writes) -> int:
     """Writes that reach the inverter (staged window times don't until the update button sends them)."""
     return sum(not is_staged(w.role) for w in writes)
 
-class PowerEngine(hass.Hass):
+class Engine:
     _demo = None                     # the demo day when `demo: <day>` is set in apps.yaml (see _demo_setup)
 
     @property
@@ -237,122 +238,15 @@ class PowerEngine(hass.Hass):
         if touched is not None:
             touched.add(name)
 
-    @staticmethod
-    def _resolved(handle):
-        """The handle string behind what AppDaemon returned. AppDaemon 4.4 returns the string; newer versions return
-        an asyncio Task/Future (when the call is made from the event loop) that resolves to it."""
-        if isinstance(handle, asyncio.Future):
-            if handle.done() and not handle.cancelled() and handle.exception() is None:
-                return handle.result()
-            return None
-        return handle
-
-    def _track(self, kind, handle, due=None):
-        handles = self.__dict__.get("_handles")
-        if handles is None or handle is None:
-            return handle
-        if kind == "timer":                             # forget one-off timers that have already run (bounded list)
-            now = datetime.now(timezone.utc)
-            handles[:] = [h for h in handles if not (h[0] == "timer" and h[2] is not None and h[2] < now)]
-        if not isinstance(handle, asyncio.Future) and any(h[1] == handle for h in handles):
-            return handle                                # already recorded (see below)
-        if isinstance(handle, asyncio.Future):
-            real = self._resolved(handle)
-            if real is not None:
-                if not any(h[1] == real for h in handles):
-                    handles.append((kind, real, due))
-            elif not handle.done():
-                generation = self.__dict__.get("_wipes", 0)
-
-                def record(fut, kind=kind, due=due):
-                    real = self._resolved(fut)
-                    live = self.__dict__.get("_handles")
-                    if real is None or live is None:
-                        return
-                    if self.__dict__.get("_wipes", 0) != generation:     # registered before a wipe: cancel it now
-                        cancel = {"timer": self.cancel_timer, "event": self.cancel_listen_event,
-                                  "state": self.cancel_listen_state}[kind]
-                        try:
-                            cancel(real)
-                        except Exception:
-                            pass
-                        return
-                    if not any(h[1] == real for h in live):
-                        live.append((kind, real, due))
-                handle.add_done_callback(record)
-            return handle
-        handles.append((kind, handle, due))
-        return handle
-
-    def _untrack(self, handle):
-        handles = self.__dict__.get("_handles")
-        handle = self._resolved(handle) if isinstance(handle, asyncio.Future) else handle
-        if handles is not None and handle is not None:
-            handles[:] = [h for h in handles if h[1] != handle]
-
-    def _install_tracking(self):
-        """Wrap the scheduling and listening calls (once, on the instance) so their handles are kept in `_handles`."""
-        def timed(orig):
-            def wrapper(callback, delay, **kwargs):
-                due = datetime.now(timezone.utc) + timedelta(seconds=float(delay))
-                return self._track("timer", orig(callback, delay, **kwargs), due)
-            return wrapper
-
-        def tracked(kind, orig):
-            def wrapper(callback, *args, **kwargs):
-                return self._track(kind, orig(callback, *args, **kwargs))
-            return wrapper
-
-        def cancelling(orig):
-            def wrapper(handle, *args, **kwargs):
-                handle = self._resolved(handle) if isinstance(handle, asyncio.Future) else handle
-                self._untrack(handle)
-                return orig(handle, *args, **kwargs)
-            return wrapper
-        d = self.__dict__
-        d["run_in"] = timed(self.run_in)
-        for name in ("run_every", "run_daily"):
-            d[name] = tracked("timer", getattr(self, name))
-        d["listen_event"], d["listen_state"] = tracked("event", self.listen_event), tracked("state", self.listen_state)
-        for name in ("cancel_timer", "cancel_listen_event", "cancel_listen_state"):
-            d[name] = cancelling(getattr(self, name))
-
-    def _timer_gone(self, handle):
-        """True when AppDaemon says this timer is no longer scheduled (it ran, or was cancelled): cancelling it would
-        only log "Invalid callback handle". Where AppDaemon can't say (4.4 has no timer_running), False."""
-        check = getattr(self, "timer_running", None)
-        if check is None:
-            return False
-        try:
-            return check(handle) is False
-        except Exception:
-            return False
-
     def _wipe(self):
         """Undo a previous initialize(): stop and hand back the inverter, cancel every timer and listener it made, and
-        delete every attribute it set (which also puts back the real get_state etc. that demo mode replaced)."""
+        delete every attribute it set, and put back the real calls to Home Assistant that demo mode replaced."""
         try:
             self.terminate()
         except Exception as err:
             self.log(f"Restart: terminate failed: {err!r}", level="WARNING")
-        self.__dict__["_wipes"] = self.__dict__.get("_wipes", 0) + 1
-        now = datetime.now(timezone.utc)
-        cancel = {"timer": self.cancel_timer, "event": self.cancel_listen_event, "state": self.cancel_listen_state}
-        done = set()
-        for kind, handle, due in list(self.__dict__.get("_handles") or []):
-            if handle in done:                              # once each: a second cancel is an "Invalid callback handle"
-                continue
-            done.add(handle)
-            if kind == "timer" and due is not None and due <= now:
-                self._untrack(handle)                       # already ran
-                continue
-            if kind == "timer" and self._timer_gone(handle):
-                self._untrack(handle)
-                continue
-            try:
-                cancel[kind](handle)
-            except Exception:
-                self._untrack(handle)
+        self.host.cancel_all()
+        self.host.clear_overrides()
         for name in list(self.__dict__["_touched"]):
             self.__dict__.pop(name, None)
         self.__dict__["_touched"].clear()
@@ -363,8 +257,8 @@ class PowerEngine(hass.Hass):
             if not any(os.path.isfile(p) for p in ([custom] if custom else list(DEFAULT_PATHS))):
                 # Only an app that isn't set up can switch in and out of the demo, so only then are attributes,
                 # timers and listeners recorded for _wipe(). A configured app runs exactly as before.
-                self.__dict__["_touched"], self.__dict__["_handles"] = set(), []
-                self._install_tracking()
+                self.__dict__["_touched"] = set()
+                self.host.start_tracking()
         else:
             self._wipe()
         self.log(f"PowerEngine {__version__} starting")
@@ -588,7 +482,7 @@ class PowerEngine(hass.Hass):
                 ring.save(self._log_path())
                 self._log_saved = now
             except OSError as err:
-                super().log(f"Could not save the log: {err}", level="WARNING")
+                self.host.log(f"Could not save the log: {err}", level="WARNING")
 
     # --- new releases, straight from GitHub (HACS only looks every few hours) ---------------------------
 
@@ -2768,7 +2662,7 @@ class PowerEngine(hass.Hass):
         key = (site.inverter, site.inverter_firmware)
         held = getattr(self, "_inv", None)
         if held is None or held[0] != key:
-            held = (key, registry.get("inverter", site.inverter)(self, self._role_entity, BATTERY_VOLTS,
+            held = (key, registry.get("inverter", site.inverter)(self.host, self._role_entity, BATTERY_VOLTS,
                                                                  firmware=site.inverter_firmware))
             self._inv = held
         return held[1]
@@ -2886,7 +2780,7 @@ class PowerEngine(hass.Hass):
         assumed = False
         try:
             site = Site()
-            inverter = registry.get("inverter", site.inverter)(self, self._role_entity, BATTERY_VOLTS)
+            inverter = registry.get("inverter", site.inverter)(self.host, self._role_entity, BATTERY_VOLTS)
             firmware = inverter.firmware_detected()
             if firmware is None:                           # not readable: the variant PowerEngine has always used
                 firmware = (load_definition(site.inverter).get("firmware") or {}).get("default")
@@ -4666,12 +4560,12 @@ class PowerEngine(hass.Hass):
     # --- diagnostics export ------------------------------------------------------------------------
 
     def log(self, msg, *args, **kwargs):
-        """AppDaemon's log, also kept in a small in-memory ring for the diagnostics export."""
+        """The host's log, also kept in a small in-memory ring for the diagnostics export."""
         ring = self.__dict__.get("_log_ring")
         if ring is None:
             ring = self.__dict__["_log_ring"] = diagnostics.LogRing()
         ring.add(datetime.now(timezone.utc), kwargs.get("level", "INFO"), msg)
-        return super().log(msg, *args, **kwargs)
+        return self.host.log(msg, *args, **kwargs)
 
     def _diag_bundle(self, now):
         s = diagnostics.safe
@@ -4819,15 +4713,15 @@ class PowerEngine(hass.Hass):
         shutil.copyfile(os.path.join(os.path.dirname(__file__), "demo", "config.template"),
                         os.path.join(demo_dir, "config.yaml"))
         self.paths = [os.path.join(demo_dir, "config.yaml")]
-        real_set = getattr(self, "set_state", None)
+        real_set = self.host.method("set_state")
         gate = self._demo_gate = DemoGate(
-            self._demo_world, getattr(self, "get_state", None),
-            self._lossless_set_state(real_set) if real_set is not None else None,
-            getattr(self, "fire_event", None), self.log,
+            self._demo_world, self.host.method("get_state"),
+            self.host.lossless_set_state(real_set, self._told_once) if real_set is not None else None,
+            self.host.method("fire_event"), self.log,
             allowed_events=(RESULT_EVENT, "pe_test_result", "pe_sim_result", diagnostics.BUNDLE_EVENT,
                             DEMO_RESULT_EVENT))
-        self.get_state, self.get_history, self.call_service = gate.get_state, gate.get_history, gate.call_service
-        self.set_state, self.fire_event = gate.set_state, gate.fire_event
+        self.host.override(get_state=gate.get_state, get_history=gate.get_history, call_service=gate.call_service,
+                           set_state=gate.set_state, fire_event=gate.fire_event)
         self.log(f"Demo mode: the {day} day, simulated home and battery; nothing outside {demo_dir} is changed")
 
     def _real_dir(self):
@@ -4939,72 +4833,10 @@ class PowerEngine(hass.Hass):
         """The one door for every entity the app publishes (MQTT or direct; the core never knows which)."""
         pub = self.__dict__.get("_publisher_obj")
         if pub is None:
-            pub = select_publisher(self._publisher_choice(), getattr(self, "mqtt", None), self._quiet_set_state())
+            pub = select_publisher(self._publisher_choice(), getattr(self, "mqtt", None),
+                                   self.host.state_writer(self._told_once, demo=bool(self._demo)))
             self._publisher_obj = pub
         return pub
-
-    @staticmethod
-    def _appdaemon_cleans_attributes():
-        """Does this AppDaemon clean the payload of set_state (4.5 and later)? 4.4 sends it as given."""
-        try:
-            from appdaemon import utils as ad_utils
-            return hasattr(ad_utils, "clean_http_kwargs")
-        except Exception:
-            return False
-
-    def _rest_states_poster(self):
-        """A function that writes an entity's state and attributes to Home Assistant exactly as given, or None. Newer
-        AppDaemon versions clean the payload of `set_state` on the way (`true` becomes "true"; `false`, `null` and every
-        0 are dropped, so a series loses its zeros and every later value shifts, and the config's booleans arrive as
-        text). This posts to HA's states endpoint with the plugin's own session instead, the way `set_state` does,
-        but with nothing removed. None where its plugin can't be reached."""
-        try:
-            plugin = self.AD.plugins.get_plugin_object(self.namespace)
-            loop, session, base = self.AD.loop, plugin.session, plugin.config.ha_url
-            import aiohttp
-        except Exception:
-            return None
-
-        async def post(entity_id, state, attributes):
-            payload = {"state": "" if state is None else str(state), "attributes": attributes or {}}
-            async with session.post(base / f"api/states/{entity_id}", json=payload,
-                                    timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                resp.raise_for_status()
-
-        def send(entity_id, state, attributes):
-            try:
-                running = asyncio.get_running_loop()
-            except RuntimeError:
-                running = None
-            if running is loop:                             # on AppDaemon's own loop: can't wait for it here
-                loop.create_task(post(entity_id, state, attributes))
-            else:
-                asyncio.run_coroutine_threadsafe(post(entity_id, state, attributes), loop).result(15)
-        return send
-
-    def _lossless_set_state(self, plain):
-        """`plain` (AppDaemon's set_state) for anything it would not alter; the exact REST write for attributes it would
-        (see _rest_states_poster). Only our own `pe_` entities are ever written this way."""
-        if not self._appdaemon_cleans_attributes():
-            return plain
-        post = self._rest_states_poster()
-
-        def set_state(entity_id, **kwargs):
-            attributes = kwargs.get("attributes")
-            if attributes and ad_would_alter(attributes) and re.match(r"^[a-z_]+\.pe_", str(entity_id)):
-                if post is not None:
-                    try:
-                        post(entity_id, kwargs.get("state"), attributes)
-                        return None
-                    except Exception as err:
-                        self._told_once("rest_write", f"Could not write {entity_id} to Home Assistant directly "
-                                                      f"({err!r}); using AppDaemon's set_state instead")
-                else:
-                    self._told_once("rest_altered", "AppDaemon's set_state changes attribute values (true becomes "
-                                                    "text, false, null and 0 are dropped) and this AppDaemon can't be "
-                                                    "bypassed; some PowerEngine attributes may be wrong", "WARNING")
-            return plain(entity_id, **kwargs)
-        return set_state
 
     def _told_once(self, key, message, level="INFO"):
         told = self.__dict__.setdefault("_told", set())
@@ -5012,43 +4844,9 @@ class PowerEngine(hass.Hass):
             told.add(key)
             self.log(message, level=level)
 
-    def _quiet_set_state(self):
-        """set_state for the direct publisher. AppDaemon 4.5 and later warn "Entity ... not found" when set_state
-        creates an entity, unless told `check_existence=False`; we create our own entities, so say so. 4.4 has no such
-        argument (it would become an attribute), so it is only passed where set_state names it."""
-        raw = getattr(self, "set_state", None)
-        if raw is None:
-            return None
-        if not self._demo:                                  # (the demo gate has it underneath: see _demo_setup)
-            raw = self._lossless_set_state(raw)
-        try:
-            named = "check_existence" in inspect.signature(hass.Hass.set_state).parameters
-        except (TypeError, ValueError, AttributeError):
-            named = False
-        if not named:
-            return raw
-
-        def set_state(entity_id, **kwargs):
-            kwargs.setdefault("check_existence", False)
-            return raw(entity_id, **kwargs)
-        return set_state
-
-    def _plugin_configured(self, name):
-        """Is this plugin in AppDaemon's configuration? get_plugin_api logs a WARNING ("Unknown Plugin Configuration")
-        when it isn't, so ask the plugin list first. Where the list can't be read, say yes and let the call decide."""
-        try:
-            plugins = self.AD.plugins
-            for attr in ("config", "plugins"):
-                found = getattr(plugins, attr, None)
-                if isinstance(found, dict):
-                    return name in found
-        except Exception:
-            pass
-        return True
-
     def _mqtt_api(self, quiet=False):
         try:
-            api = self.get_plugin_api("MQTT") if self._plugin_configured("MQTT") else None
+            api = self.host.plugin_api("MQTT")
         except Exception as err:  # plugin not configured
             api = None
             if not quiet:
@@ -5123,3 +4921,12 @@ class PowerEngine(hass.Hass):
         self._get_publisher().retire_all()
         self.log("remove_entities is set: removed all PowerEngine entities. The app is now idle; "
                  "remove it in HACS or set remove_entities: false to bring them back.", level="WARNING")
+
+
+if hass is not None:
+    class PowerEngine(Engine, hass.Hass):
+        """The AppDaemon app (apps.yaml: `class: PowerEngine`): the engine, run by AppDaemon. The engine reaches
+        AppDaemon only through its host (pe_core/host_appdaemon.py)."""
+
+        def _hass_log(self, msg, *args, **kwargs):
+            return hass.Hass.log(self, msg, *args, **kwargs)

@@ -132,7 +132,7 @@ def _fake_appdaemon():
             return "Europe/London"
 
         def render_template(self, template, **kw):
-            return ""
+            raise NotImplementedError("the fake AppDaemon has no templates")     # as when it had no such method
 
         def get_plugin_api(self, name):
             return types.SimpleNamespace(mqtt_publish=self._mqtt_publish)
