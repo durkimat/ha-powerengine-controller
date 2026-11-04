@@ -28,11 +28,15 @@ custom_components/powerengine/        thin and stable: a Home Assistant restart 
 
 1. **A host seam in the app (done in 0.9.201).** Every call to AppDaemon goes through `self.host`
    (`pe_core/host.py`); `tests/test_host.py` fails if a new direct call appears. No change in behaviour.
-2. **Engine process.** Move the AppDaemon-specific code that is left (listed in `tests/test_host.py`
-   `ALLOWED_DIRECT`: the timer and listener tracking the demo's restart needs, the REST and MQTT publishing set-up, the
-   log ring) into the AppDaemon host. Split `powerengine.py` so the app class no longer inherits from AppDaemon's
-   `Hass`. Add a scheduler for `run_in`/`run_every`/`run_daily` on a thread pool, and a socket `Host` with the state
-   copy, service calls and reconnection. A protocol module shared by both sides, with contract tests.
+2. **Engine process.**
+   - **2a (done in 0.9.202):** the AppDaemon-specific code that was left (the demo's timer and listener tracking, the
+     REST and MQTT publishing set-up, the plugin lookup) is in `pe_core/host_appdaemon.py`, and the `Engine` class in
+     `powerengine.py` no longer inherits from AppDaemon's `Hass`; the AppDaemon app is `Engine` plus `Hass`.
+   - **2b:** a scheduler for `run_in`/`run_every`/`run_daily` on a thread pool; a socket `Host` with the state copy,
+     service calls and reconnection; a protocol module shared by both sides, with contract tests. Built and tested, but
+     nothing in a running system uses it until the integration exists. Also move `Engine` out of `powerengine.py`
+     into the engine package (the tests patch names in the `powerengine` module, so that move comes with a test
+     update).
 3. **The integration.** Manifest and a minimal config flow; the supervisor; the bridge; entity platforms built from
    `entities.py` (the set depends on the config, so entities are added and removed as it changes); diagnostics; Repairs.
 4. **Tests.** Entity creation and the bridge with `pytest-homeassistant-custom-component`; the engine against a fake
