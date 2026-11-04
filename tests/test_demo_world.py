@@ -335,9 +335,9 @@ def test_gate_lets_only_pe_states_and_the_cards_answers_out():
 
 WRITERS = {"call_service", "fire_event", "set_state", "turn_on", "turn_off", "toggle", "select_option", "set_value",
            "notify", "persistent_notification", "mqtt_publish", "run_command", "remove_entity", "listen_state_write"}
-# the only places that may call one, and on what: the app's own methods (which demo mode replaces), the MQTT
-# publisher (never built in demo mode) and the gate itself
-ALLOWED = {("powerengine.py", "self"), ("pe_core/adapters/publish.py", "self.api"),
+# the only places that may call one, and on what: the app's host (whose methods are the app's own, which demo mode
+# replaces), the app's own methods, the MQTT publisher (never built in demo mode) and the gate itself
+ALLOWED = {("powerengine.py", "self.host"), ("powerengine.py", "self"), ("pe_core/adapters/publish.py", "self.api"),
            ("pe_core/demo/gate.py", "self._world()")}
 
 
@@ -361,5 +361,5 @@ def test_demo_mode_replaces_every_method_the_app_uses_to_reach_home_assistant():
     for name in ("get_state", "get_history", "call_service", "set_state", "fire_event"):
         assert f"self.{name}" in src.split("def _demo_setup", 1)[1].split("def _demo_world", 1)[0]
     used = {n.func.attr for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Call)
-            and isinstance(n.func, ast.Attribute) and n.func.attr in WRITERS and ast.unparse(n.func.value) == "self"}
+            and isinstance(n.func, ast.Attribute) and n.func.attr in WRITERS and ast.unparse(n.func.value) in ("self", "self.host")}
     assert used <= {"call_service", "fire_event", "mqtt_publish"} | {"set_state"}, used

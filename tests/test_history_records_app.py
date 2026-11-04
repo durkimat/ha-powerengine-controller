@@ -175,6 +175,7 @@ def _hook_app(monkeypatch, tmp_path, states):
         profile=LoadProfile({(False, 0): 400.0}, 10.0), logs=logs, _warned_days={},
         slots=types.SimpleNamespace(slots={"2026-10-07T01:30:00+01:00": {"first_seen": "2026-10-06T19:00:00+01:00"}}))
     app.get_state = lambda eid, attribute=None: states(eid)
+    app.host = app                                       # the app reaches Home Assistant through its host
     app.log = lambda msg, *a, **k: logs.append((k.get("level"), msg))
     for name in ("_snapshot_forecast", "_warn_daily"):
         setattr(app, name, types.MethodType(getattr(pe.PowerEngine, name), app))

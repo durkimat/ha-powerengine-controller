@@ -165,6 +165,7 @@ def app(monkeypatch, tmp_path, controller="none", demo=False, packages=True):
     s.log = lambda msg, level="INFO": s.logs.append((level, msg))
     s._notify = lambda event, msg: s.notes.append(msg)
     s.get_state = lambda eid, **k: "on" if eid in present else None
+    s.host = s                                   # the app reaches Home Assistant through its host
     s._ha_config_dir = lambda: pe.PowerEngine._ha_config_dir(s)
     s._entity_present = lambda eid: pe.PowerEngine._entity_present(s, eid)
     s._publish_package = lambda: pe.PowerEngine._publish_package(s)
