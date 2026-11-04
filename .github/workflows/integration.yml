@@ -1,0 +1,41 @@
+name: Integration tests
+
+# The Home Assistant integration (integration/) against a real Home Assistant, with the real engine as its process. Not
+# a required check: it installs Home Assistant, which takes a few minutes, so it runs only for changes that touch the
+# integration or what it is built from.
+on:
+  pull_request:
+    paths:
+      - "integration/**"
+      - "tools/build_integration.py"
+      - "apps/powerengine/engine_main.py"
+      - "apps/powerengine/pe_core/protocol.py"
+      - "apps/powerengine/pe_core/host_server.py"
+      - "apps/powerengine/pe_core/host_socket.py"
+      - "apps/powerengine/pe_core/host_scheduler.py"
+      - "apps/powerengine/pe_core/adapters/publish.py"
+      - ".github/workflows/integration.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: Integration against Home Assistant
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: integration/requirements.txt
+      - run: pip install -r integration/requirements.txt
+      - name: Build and test the integration
+        working-directory: integration
+        run: python -m pytest -q --timeout 180
