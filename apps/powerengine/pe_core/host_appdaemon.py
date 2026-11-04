@@ -93,6 +93,12 @@ class AppDaemonHost:
     def args(self) -> dict:
         return self._app.args
 
+    @property
+    def background_writes(self) -> bool:
+        """True under the real AppDaemon (it has `AD`), where a call to the inverter waits for the device; the fake the
+        tests use has none, so the tests send in step."""
+        return getattr(self._app, "AD", None) is not None
+
     def log(self, msg: str, *args: Any, **kwargs: Any) -> Any:
         """AppDaemon's own log (the app's `log` is the one that also keeps a ring for the diagnostics export)."""
         return self._app._hass_log(msg, *args, **kwargs)

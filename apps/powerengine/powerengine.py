@@ -62,6 +62,7 @@ from pe_core.announce import readiness as alexa_readiness
 from pe_core.announce import trial_message as alexa_trial_message
 from pe_core.announce import trial_speakers as alexa_trial_speakers
 from pe_core.announce import whatsapp_targets
+from pe_core.background import Worker
 from pe_core.carstop import CarStop
 from pe_core.certainty import Certainty
 from pe_core.checks import OK, blocking, check, degraded, summarise
@@ -174,6 +175,7 @@ SIM_SLICE_SECONDS = 2.0           # work per callback, then hand AppDaemon back 
 CONTROL_STRATEGY = "rolling"      # "rolling" | "block": decided by #44 (EEPROM writes) before Active ships
 BATTERY_VOLTS = 52.0              # nominal, for converting power to the inverter's current settings
 CYCLE_SECONDS = 30
+RAM_SEND_PATIENCE_S = 60          # a remote-control command not landed by then is given up on (_ram_sending)
 SLOW_TICK_S = 5.0                 # a tick this slow is logged with where the time went (_note_slow_tick)
 EVENT_ROLES = ("axle_event_active", "axle_event_start", "axle_event_end", "axle_direction")
 FINISH_KEEP_H = 14          # a grid event's summary not yet spoken (quiet hours) is dropped after this long
@@ -454,6 +456,8 @@ class Engine:
 
     def terminate(self):
         self._save_engine_state()
+        if "_ram_worker_thread" in self.__dict__:
+            self._ram_worker().idle(15)                           # a command on its way (or Off) finishes first
         try:
             sched = self.__dict__.get("_compare")
             if sched is not None:
@@ -3028,26 +3032,31 @@ class Engine:
             self._note_bms_cap(capped)
             active = self.mode.effective == "active"
             if self._test_running():
-                ram.forget()                                   # the test drives remote control itself
+                self._ram_forget()                             # the test drives remote control itself
             elif active and not getattr(self, "_halted", False):
                 if not getattr(self, "_ram_was_on", False):     # taking over: close the timed windows once
                     self.log("RAM remote control takes over: timed windows closed, then left alone")
                     self._release()
                     self._ram_was_on = True
-                    ram.forget()
+                    self._ram_forget()
                 refresh = timedelta(minutes=float(self.cfg.safety.get("ram_refresh_min", 1)))
                 writes, why = ram.step(now, want, refresh)
-                if writes and self._ram_send(writes, rc, why, want):
-                    ram.done(now, str(self._today()), want, why)
-                    if why == "change" and want.power_role:        # and once more once the mode has landed
-                        self.host.run_in(self._ram_relatch, 5, role=want.power_role, watts=want.watts)
+                sending = self._ram_sending()
+                if writes and not sending:
+                    if self._writes_off_thread():
+                        self._ram_send_later(writes, rc, why, want, now)
+                        sending = True
+                    elif self._ram_send(writes, rc, why, want):
+                        self._ram_sent(now, want, why)
                 floor = self._reserve_soc()
                 expected = ramcontrol.inverter_expected_w(
                     ram.sent, bms.expected_w(ram.sent, limits),
                     float(self.cfg.safety.get("inverter_max_output_w", 6000)), r.solar_power)
                 follow = ram.check_following(now, r.battery_power, r.battery_soc, floor, expected)
                 self._bms_sample(now, r, ram, limits, follow, expected)
-                if follow == "not following" and self._ram_step_down(now, ram, r):
+                if sending:
+                    pass                                   # a command is on its way: judge what follows once it landed
+                elif follow == "not following" and self._ram_step_down(now, ram, r):
                     pass                                   # re-sent lower next cycle; reported once by _ram_step_down
                 elif follow == "not following":
                     pw = self.host.get_state(rc.get(ram.sent.power_role)) if ram.sent.power_role else None
@@ -3172,9 +3181,119 @@ class Engine:
         if eid and self.mode.effective == "active":
             try:
                 service, data = self._inverter().service_for(Write(kwargs["role"], kwargs["watts"], "number"))
-                self.host.call_service(service, entity_id=eid, **data)
             except Exception as err:
-                self.log(f"RAM remote control: could not re-send {eid}: {err!r}", level="WARNING")
+                return self.log(f"RAM remote control: could not re-send {eid}: {err!r}", level="WARNING")
+
+            def send():
+                try:
+                    self.host.call_service(service, entity_id=eid, **data)
+                except Exception as err:
+                    said = f"RAM remote control: could not re-send {eid}: {err!r}"      # (err is gone after this block)
+                    self.host.run_in(lambda kw: self.log(said, level="WARNING"), 0)
+            if self._writes_off_thread():
+                self._ram_worker().submit(send)                    # behind a command still being sent, in order
+            else:
+                try:
+                    self.host.call_service(service, entity_id=eid, **data)
+                except Exception as err:
+                    self.log(f"RAM remote control: could not re-send {eid}: {err!r}", level="WARNING")
+
+    # --- remote-control writes off the callback thread
+    # Every call to the inverter waits for the Modbus integration to reach it (2 to 4 seconds each on a slow day, three
+    # calls to a command). AppDaemon runs the app's callbacks on one thread, so sending in the tick held up everything
+    # else for up to 15 seconds. Under AppDaemon (not the demo, not the tests' fake) the calls go to a worker thread,
+    # in order, and what follows a send (the books, the log) runs back on the callback thread. One send at a time:
+    # while one is on its way the tick asks for nothing more, and anything else that writes to remote control (the
+    # relatch, Off) joins the same line, so nothing overtakes it.
+
+    def _writes_off_thread(self):
+        return bool(getattr(self.host, "background_writes", False)) and not self._demo
+
+    def _ram_worker(self):
+        worker = self.__dict__.get("_ram_worker_thread")
+        if worker is None:
+            worker = self.__dict__["_ram_worker_thread"] = Worker(self.host.log)
+        return worker
+
+    def _ram_sending(self):
+        """Is a command still being sent? (Not for longer than RAM_SEND_PATIENCE_S: then it is given up on.)"""
+        since = self.__dict__.get("_ram_send_since")
+        if since is None:
+            return False
+        if (datetime.now(timezone.utc) - since).total_seconds() > RAM_SEND_PATIENCE_S:
+            self.log(f"RAM remote control: a command has been on its way for over {RAM_SEND_PATIENCE_S} s; "
+                     "sending afresh", level="WARNING")
+            self._ram_forget()
+            return False
+        return True
+
+    def _ram_forget(self):
+        """Forget what was sent, and let any command still on its way be forgotten when it lands (a newer
+        generation has begun)."""
+        self._ram().forget()
+        self.__dict__["_ram_gen"] = self.__dict__.get("_ram_gen", 0) + 1
+        self.__dict__["_ram_send_since"] = None
+
+    def _ram_sent(self, now, want, why):
+        self._ram().done(now, str(self._today()), want, why)
+        if why == "change" and want.power_role:                    # and once more once the mode has landed
+            self.host.run_in(self._ram_relatch, 5, role=want.power_role, watts=want.watts)
+
+    def _ram_send_later(self, writes, rc, why, want, now):
+        """_ram_send, with the calls made on the worker. The books and the log follow on the callback thread."""
+        journal = getattr(self, "journal", None)
+        prepared, failed = [], False
+        for w in writes:
+            eid = rc.get(w.role)
+            if not eid:
+                failed = True
+                continue
+            try:
+                before = self.host.get_state(eid) if why == "change" and journal is not None else None
+                service, data = self._inverter().service_for(w)
+                prepared.append((w, eid, service, data, before))
+            except Exception as err:
+                failed = True
+                self._ram().errors += 1
+                self.log(f"RAM remote control: could not set {eid}: {err!r}", level="WARNING")
+        generation = self.__dict__.get("_ram_gen", 0)
+        self.__dict__["_ram_send_since"] = datetime.now(timezone.utc)
+
+        def work():
+            errors = []
+            for _, eid, service, data, _ in prepared:
+                try:
+                    self.host.call_service(service, entity_id=eid, **data)
+                    errors.append(None)
+                except Exception as err:
+                    errors.append(err)
+            return errors
+
+        def back(errors):
+            if self.__dict__.get("_ram_gen", 0) != generation:
+                return                                             # superseded (Off, a test, a restart): not the books'
+            self.__dict__["_ram_send_since"] = None
+            ok = not failed
+            for (w, eid, _, _, before), err in zip(prepared, errors or [Exception("the send failed")] * len(prepared),
+                                                   strict=False):
+                if why == "change" and journal is not None:
+                    journal.add(now, eid, w.value, before, f"RAM remote control: {want.text()}")
+                if err is not None:
+                    ok = False
+                    self._ram().errors += 1
+                    self.log(f"RAM remote control: could not set {eid}: {err!r}", level="WARNING")
+            if why == "change":
+                self.log(f"RAM remote control: {want.text()}")
+                try:
+                    if journal is not None:
+                        journal.save(now)
+                except OSError:
+                    pass
+                self._publish_writes_today()
+            if ok:
+                self._ram_sent(now, want, why)
+
+        self._ram_worker().submit(work, lambda errors: self.host.run_in(lambda kw: back(errors), 0))
 
     def _ram_send(self, writes, rc, why, want):
         """Send remote-control writes (temporary settings: not counted as EEPROM writes). Changes are journalled;
@@ -3209,11 +3328,38 @@ class Engine:
     def _ram_off(self, reason):
         rc = self._rc_entities()
         self._ram_was_on = False
-        self._ram().forget()
+        self._ram_forget()
         if rc.get("rc_mode"):
             self.log(f"RAM remote control Off ({reason})")
             cmd = self._inverter().ram_off_command()
-            self._ram_send([cmd.writes()[0]], rc, "change", cmd)
+            if self._writes_off_thread():
+                self._ram_off_later(cmd.writes()[0], rc, cmd)       # behind a command still being sent
+            else:
+                self._ram_send([cmd.writes()[0]], rc, "change", cmd)
+
+    def _ram_off_later(self, write, rc, cmd):
+        eid = rc.get(write.role)
+        if not eid:
+            return
+        try:
+            service, data = self._inverter().service_for(write)
+        except Exception as err:
+            self._ram().errors += 1
+            return self.log(f"RAM remote control: could not set {eid}: {err!r}", level="WARNING")
+
+        def work():
+            try:
+                self.host.call_service(service, entity_id=eid, **data)
+            except Exception as err:
+                return err
+
+        def back(err):
+            if err is not None:
+                self._ram().errors += 1
+                self.log(f"RAM remote control: could not set {eid}: {err!r}", level="WARNING")
+            else:
+                self.log(f"RAM remote control: {cmd.text()}")
+        self._ram_worker().submit(work, lambda err: self.host.run_in(lambda kw: back(err), 0))
 
     @staticmethod
     def _first_slot_hours(slots, now):
@@ -3696,6 +3842,8 @@ class Engine:
         return self._inverter().rc_entities(datetime.now(timezone.utc))
 
     def _rc_start(self, req, run, rc, now, user):
+        if "_ram_worker_thread" in self.__dict__:
+            self._ram_worker().idle(20)                           # a send still on its way must not overlap the test
         test = req["action"]
         power = req["power_w"] = rctest.power_for(test, req.get("power_w"))
         # the timed windows closed first, so they can't be what moves the battery

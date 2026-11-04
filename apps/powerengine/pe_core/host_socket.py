@@ -382,6 +382,10 @@ class SocketHost:
     def args(self) -> dict:
         return self._args
 
+    @property
+    def background_writes(self) -> bool:
+        return True                                                   # a service call waits for Home Assistant
+
     def method(self, name: str) -> Callable | None:
         return self.overrides.get(name) or getattr(self, name, None)
 
