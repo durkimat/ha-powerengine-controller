@@ -18,11 +18,22 @@ Requests (engine -> integration) carry an "id" and are answered by {"t": "reply"
     template {"template"}                   -> the rendered text
     call     {"service": "domain/name", "data": {...}}
     fire     {"event", "data"}
-    set      {"entity_id", "state", "attributes"}   write an entity's state (the direct publisher)
+    set      {"entity_id", "state", "attributes"}   write an entity's state
+    entity   {"component", "key", "name", "options"}   define one of the engine's own entities (see below)
+    retire   {"entity_id"}                  remove one of them
+    online   {"online"}                     the engine is up (true) or down (false): its entities are available or not
     on       {"event"} / off {"event"}      start or stop being sent this event
 
-Pushes (integration -> engine, no id): {"t": "changed", "entity_id", "old", "new"} for a watched entity, {"t": "event",
-"event", "data"} for an event the engine asked for, {"t": "stop"} to ask the engine to shut down.
+The engine's own entities (`sensor.pe_state_status`, ...) are defined by the engine, so a new one needs no new
+integration: `entity` gives its component (sensor, binary_sensor, switch), key (`state_status`: the entity id is
+`<component>.pe_<key>` and its unique id `powerengine_<key>`), name and options (icon, device_class, unit_of_
+measurement, state_class, options, suggested_display_precision, entity_category), and `set` then gives its state and
+extra attributes. An integration that does not make native entities answers `entity` with an error, and the engine
+writes plain states instead. A request this side does not know is answered with an error too ("unknown request").
+
+Pushes (integration -> engine, no id): {"t": "changed", "entity_id", "new"} for a watched entity, {"t": "event",
+"event", "data", "context"?} for an event the engine asked for ("context" is {"user_id", "id"}: who caused it),
+{"t": "stop"} to ask the engine to shut down.
 
 A full state is {"entity_id", "state", "attributes", "last_changed", "last_updated"} as Home Assistant keeps it.
 
@@ -46,7 +57,7 @@ from typing import Any
 VERSION = 1
 MAX_LINE = 32 * 1024 * 1024        # a day's history can be large, but nothing is bigger than this
 
-REQUESTS = ("watch", "states", "history", "template", "call", "fire", "set", "on", "off")
+REQUESTS = ("watch", "states", "history", "template", "call", "fire", "set", "entity", "retire", "online", "on", "off")
 PUSHES = ("changed", "event", "stop")
 HANDSHAKE = ("challenge", "hello", "welcome", "refuse")
 

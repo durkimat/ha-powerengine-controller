@@ -99,6 +99,10 @@ class AppDaemonHost:
         tests use has none, so the tests send in step."""
         return getattr(self._app, "AD", None) is not None
 
+    @property
+    def native_entities(self) -> None:
+        return None                                      # AppDaemon writes states (or MQTT discovery does the rest)
+
     def log(self, msg: str, *args: Any, **kwargs: Any) -> Any:
         """AppDaemon's own log (the app's `log` is the one that also keeps a ring for the diagnostics export)."""
         return self._app._hass_log(msg, *args, **kwargs)

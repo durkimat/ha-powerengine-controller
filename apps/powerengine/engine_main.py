@@ -52,6 +52,10 @@ def main(argv: list[str] | None = None) -> int:
         logging.error("%s", err)
         return EXIT_UNAVAILABLE
 
+    import signal
+    for name in ("SIGTERM", "SIGINT"):                       # stopped by the supervisor or a terminal: stop in order
+        signal.signal(getattr(signal, name), lambda *_: host.stop_requested.set())
+
     engine = powerengine.Engine()
     engine.__dict__["_host"] = host
     try:

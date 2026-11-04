@@ -5004,7 +5004,9 @@ class Engine:
         pub = self.__dict__.get("_publisher_obj")
         if pub is None:
             pub = select_publisher(self._publisher_choice(), getattr(self, "mqtt", None),
-                                   self.host.state_writer(self._told_once, demo=bool(self._demo)))
+                                   self.host.state_writer(self._told_once, demo=bool(self._demo)),
+                                   native=None if self._demo else self.host.native_entities,
+                                   told_once=self._told_once)
             self._publisher_obj = pub
         return pub
 

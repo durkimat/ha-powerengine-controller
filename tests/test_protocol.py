@@ -92,10 +92,11 @@ def test_nothing_listening_means_the_engine_gives_up_after_its_wait():
         host.start(timeout=0.2)
 
 
-def test_the_server_ignores_a_request_it_does_not_know():
+def test_a_request_the_server_does_not_know_is_answered_with_an_error_and_the_connection_carries_on():
+    from pe_core.host_socket import HostError
     with connected() as (home, server, host):
-        host._wire.send({"t": "from_the_future", "id": 99})
-        host._wire.send({"t": "watch", "id": 98, "entity_id": "sensor.a"})
+        with pytest.raises(HostError, match="unknown request 'from_the_future'"):
+            host.request("from_the_future")
         home.put("sensor.a", "1")
         assert host.get_state("sensor.a") == "1"
 

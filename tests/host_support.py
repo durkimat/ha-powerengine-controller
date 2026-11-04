@@ -22,6 +22,7 @@ class FakeHome:
         self.written: list[tuple] = []
         self.server: HostServer | None = None
         self.fail_calls = False
+        self.defined, self.retired, self.online = [], [], []
 
     def put(self, entity_id, state, attributes=None):
         """Set an entity as Home Assistant would, and tell the server (as the integration's listener does)."""
@@ -62,6 +63,15 @@ class FakeHome:
 
     def set_state(self, entity_id, state, attributes):
         self.written.append((entity_id, state, attributes))
+
+    def define_entity(self, component, key, name, options):
+        self.defined.append((component, key, name, options))
+
+    def retire_entity(self, entity_id):
+        self.retired.append(entity_id)
+
+    def entities_online(self, online):
+        self.online.append(online)
 
 
 def wait_for(condition, timeout=5.0, what="condition"):

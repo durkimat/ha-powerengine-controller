@@ -40,14 +40,33 @@ class Home(Protocol):
 
     def set_state(self, entity_id: str, state: Any, attributes: dict) -> None: ...
 
+    def define_entity(self, component: str, key: str, name: str, options: dict) -> None: ...
+
+    def retire_entity(self, entity_id: str) -> None: ...
+
+    def entities_online(self, online: bool) -> None: ...
+
+
+def _describe(err: Exception) -> str:
+    """The error as text for the engine. Some of Home Assistant's exceptions build their message from a translation,
+    which can only be done on its event loop; from here that raises, and the engine must still be answered."""
+    try:
+        return f"{type(err).__name__}: {err}"
+    except Exception:
+        args = ", ".join(str(a) for a in getattr(err, "args", ()))
+        return f"{type(err).__name__}{': ' + args if args else ''}"
+
 
 class HostServer:
     def __init__(self, home: Home, secret: str, address: str = "tcp:127.0.0.1:0", proto: int = protocol.VERSION,
-                 logger: logging.Logger | None = None, on_engine: Callable[[dict | None], None] | None = None):
+                 logger: logging.Logger | None = None, on_engine: Callable[[dict | None], None] | None = None,
+                 on_watch: Callable[[str], None] | None = None, on_listen: Callable[[str], None] | None = None):
         self.home, self._secret, self._proto = home, secret, proto
         self._requested = address
         self._logger = logger or logging.getLogger(__name__)
         self._on_engine = on_engine or (lambda info: None)       # called with {"engine": version} or None on leaving
+        self._on_watch = on_watch or (lambda entity_id: None)    # the engine now wants this entity's changes
+        self._on_listen = on_listen or (lambda event: None)      # the engine now wants this event
         self._listener = None
         self.address = ""
         self._lock = threading.RLock()
@@ -80,9 +99,9 @@ class HostServer:
         if self._thread is not None:
             self._thread.join(5)
 
-    def ask_to_stop(self) -> None:
-        """Ask the connected engine to shut down (an update, or Home Assistant stopping)."""
-        self._send({"t": "stop"})
+    def ask_to_stop(self) -> bool:
+        """Ask the connected engine to shut down (an update, or Home Assistant stopping). False: none is connected."""
+        return self._send({"t": "stop"})
 
     # --- what Home Assistant tells us
     def state_changed(self, entity_id: str, new: dict | None) -> None:
@@ -91,11 +110,12 @@ class HostServer:
         if watched:
             self._send({"t": "changed", "entity_id": entity_id, "new": new})
 
-    def event_fired(self, event: str, data: dict) -> None:
+    def event_fired(self, event: str, data: dict, context: dict | None = None) -> None:
+        """`context` is the event's origin ({"user_id", "id"}), for an engine that says who pressed a button."""
         with self._lock:
             wanted = event in self._events
         if wanted:
-            self._send({"t": "event", "event": event, "data": data})
+            self._send({"t": "event", "event": event, "data": data, **({"context": context} if context else {})})
 
     def wants(self) -> tuple[set[str], set[str]]:
         """(the entities and the events the engine has asked about), for the integration to subscribe to."""
@@ -103,14 +123,16 @@ class HostServer:
             return set(self._watched), set(self._events)
 
     # --- the connection
-    def _send(self, message: dict) -> None:
+    def _send(self, message: dict) -> bool:
         with self._lock:
             wire = self._wire
-        if wire is not None:
-            try:
-                wire.send(message)
-            except OSError:
-                pass
+        if wire is None:
+            return False
+        try:
+            wire.send(message)
+        except OSError:
+            return False
+        return True
 
     def _accept(self) -> None:
         while not self._stopped:
@@ -171,21 +193,25 @@ class HostServer:
 
     def _handle(self, wire: protocol.Wire, message: dict) -> None:
         kind, rid = message["t"], message.get("id")
-        if kind not in protocol.REQUESTS or rid is None:
-            return                                               # something this side doesn't know: ignored
+        if rid is None:
+            return                                               # (a push from the engine: there are none yet)
+        if kind not in protocol.REQUESTS:
+            wire.send({"t": "reply", "id": rid, "ok": False, "error": f"unknown request {kind!r}"})
+            return
         try:
             value = self._answer(kind, message)
             wire.send({"t": "reply", "id": rid, "ok": True, "value": value})
         except OSError:
             raise
         except Exception as err:                                 # whatever Home Assistant said, the engine hears it
-            wire.send({"t": "reply", "id": rid, "ok": False, "error": f"{type(err).__name__}: {err}"})
+            wire.send({"t": "reply", "id": rid, "ok": False, "error": _describe(err)})
 
     def _answer(self, kind: str, m: dict) -> Any:
         home = self.home
         if kind == "watch":
             with self._lock:
                 self._watched.add(m["entity_id"])
+            self._on_watch(m["entity_id"])
             return home.state(m["entity_id"])
         if kind == "states":
             return home.states(m.get("domain"))
@@ -202,9 +228,19 @@ class HostServer:
         if kind == "set":
             home.set_state(m["entity_id"], m.get("state"), m.get("attributes") or {})
             return None
+        if kind == "entity":
+            home.define_entity(m["component"], m["key"], m.get("name") or m["key"], m.get("options") or {})
+            return None
+        if kind == "retire":
+            home.retire_entity(m["entity_id"])
+            return None
+        if kind == "online":
+            home.entities_online(bool(m.get("online")))
+            return None
         if kind == "on":
             with self._lock:
                 self._events.add(m["event"])
+            self._on_listen(m["event"])
             return None
         if kind == "off":
             with self._lock:

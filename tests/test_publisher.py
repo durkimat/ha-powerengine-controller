@@ -226,3 +226,62 @@ def test_the_app_builds_the_publisher_from_the_setting_and_the_plugin():
         e.set_state = FakeHA().set_state
         assert isinstance(e._get_publisher(), DirectPublisher)
         sys.modules.pop("powerengine", None)
+
+
+# --- native entities (the engine running under the Home Assistant integration)
+class FakeNative:
+    def __init__(self):
+        self.defined, self.retired, self.online_calls, self.fail = [], [], [], False
+
+    def define(self, component, key, name, options):
+        if self.fail:
+            raise RuntimeError("not connected")
+        self.defined.append((component, key, name, options))
+
+    def retire(self, entity_id):
+        self.retired.append(entity_id)
+
+    def online(self, online):
+        self.online_calls.append(online)
+
+
+def test_the_native_publisher_defines_each_entity_then_writes_only_its_extra_attributes():
+    from pe_core.adapters.publish import NativePublisher, select_publisher
+    from pe_core.entities import EntityDef
+    native, writes = FakeNative(), []
+    pub = select_publisher("auto", None, lambda eid, **kw: writes.append((eid, kw)), native=native)
+    assert isinstance(pub, NativePublisher) and pub.name == "native"
+    ent = EntityDef("sensor", "state_battery_soc", "Battery", {"device_class": "battery", "unit_of_measurement": "%",
+                                                                "entity_category": "diagnostic",
+                                                                "command_topic": "x/set", "retain": True})
+    pub.discover(ent, "1.0")
+    assert native.defined == [("sensor", "state_battery_soc", "Battery", {
+        "device_class": "battery", "unit_of_measurement": "%", "entity_category": "diagnostic"})]
+    pub.publish("state_battery_soc", 84.0, {"zeros": [0, 1], "off": False})
+    assert writes[-1] == ("sensor.pe_state_battery_soc",
+                          {"state": "84.0", "attributes": {"zeros": [0, 1], "off": False}})
+    pub.available(False)
+    pub.retire(ent)
+    assert native.online_calls == [False] and native.retired == ["sensor.pe_state_battery_soc"]
+
+
+def test_the_native_publisher_writes_plain_states_for_an_entity_the_integration_would_not_make():
+    from pe_core.adapters.publish import select_publisher
+    from pe_core.entities import EntityDef
+    native, writes, told = FakeNative(), [], []
+    native.fail = True
+    pub = select_publisher("auto", None, lambda eid, **kw: writes.append((eid, kw)), native=native,
+                           told_once=lambda key, msg, level="INFO": told.append((key, level)))
+    pub.discover(EntityDef("sensor", "x", "X", {"icon": "mdi:a"}), "1.0")
+    assert told == [("native_define", "WARNING")]
+    assert writes[-1][1]["attributes"]["friendly_name"] == "PowerEngine X"        # the whole plain entity this time
+
+
+def test_native_entities_are_chosen_only_where_the_host_makes_them_and_not_when_mqtt_is_asked_for():
+    from pe_core.adapters.publish import DirectPublisher, MqttPublisher, NativePublisher, select_publisher
+    api, native = object(), FakeNative()
+    assert isinstance(select_publisher("auto", None, print, native=native), NativePublisher)
+    assert isinstance(select_publisher("auto", None, print, native=None), DirectPublisher)
+    assert isinstance(select_publisher("auto", api, print, native=None), MqttPublisher)
+    assert isinstance(select_publisher("direct", None, print, native=native), DirectPublisher)
+    assert isinstance(select_publisher("mqtt", api, print, native=native), MqttPublisher)

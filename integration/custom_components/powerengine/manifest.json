@@ -1,0 +1,15 @@
+{
+  "domain": "powerengine",
+  "name": "PowerEngine",
+  "codeowners": ["@durkimat"],
+  "config_flow": true,
+  "dependencies": [],
+  "after_dependencies": ["recorder"],
+  "documentation": "https://github.com/durkimat/ha-powerengine-controller",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/durkimat/ha-powerengine-controller/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.0.0"
+}

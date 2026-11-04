@@ -1,0 +1,54 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "PowerEngine",
+        "description": "PowerEngine runs its engine as a process of Home Assistant. Its settings live in a folder; the one the AppDaemon app already uses is filled in.",
+        "data": { "settings_dir": "Settings folder" }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "PowerEngine",
+        "data": { "settings_dir": "Settings folder" }
+      }
+    }
+  },
+  "issues": {
+    "engine_protocol": {
+      "title": "Restart Home Assistant to finish updating PowerEngine",
+      "description": "The updated engine and the PowerEngine integration speak different versions of their protocol, so the engine has stopped. Restarting Home Assistant loads the new integration and the engine starts again."
+    },
+    "running_in_appdaemon": {
+      "title": "PowerEngine is already running in AppDaemon",
+      "description": "Two copies of PowerEngine would both control the inverter, so the engine has not been started. Stop the AppDaemon app (and keep a backup of apps.yaml); the engine starts within a minute of the app stopping."
+    },
+    "engine_crashing": {
+      "title": "The PowerEngine engine keeps stopping",
+      "description": "The engine has stopped several times in the last quarter of an hour and is being started again after a wait. Download the integration's diagnostics for the engine's last log lines."
+    },
+    "engine_files_missing": {
+      "title": "PowerEngine's engine files are missing",
+      "description": "Reinstall PowerEngine from HACS and restart Home Assistant."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "engine": {
+        "state": {
+          "stopped": "Stopped", "waiting": "Waiting", "starting": "Starting", "running": "Running",
+          "restarting": "Restarting", "backing_off": "Starting again soon", "needs_restart": "Restart Home Assistant",
+          "failed": "Failed"
+        }
+      }
+    }
+  },
+  "services": {
+    "restart_engine": {
+      "name": "Restart engine",
+      "description": "Restart the PowerEngine engine now, for example to start an update that has just been installed."
+    }
+  }
+}

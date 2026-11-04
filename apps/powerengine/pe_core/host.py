@@ -33,7 +33,7 @@ METHODS = (
 )
 # What a host provides beyond those (see the end of the Host class).
 EXTRAS = ("log", "method", "state_writer", "plugin_api", "start_tracking", "cancel_all", "override", "clear_overrides",
-          "background_writes")
+          "background_writes", "native_entities")
 
 
 @runtime_checkable
@@ -94,6 +94,12 @@ class Host(Protocol):
     def background_writes(self) -> bool:
         """Do calls to the inverter wait on a real device, so that the engine should make them off the thread that runs
         its callbacks (pe_core/background.py)? False for a host whose calls are instant (the tests' fake, the demo)."""
+
+    @property
+    def native_entities(self) -> Any:
+        """Where the engine's own entities can be made as real Home Assistant entities (unique id, device, registry):
+        an object with `define(component, key, name, options)`, `retire(entity_id)` and `online(bool)`, or None where
+        the host can only write states (AppDaemon)."""
 
     def log(self, msg: str, *args: Any, **kwargs: Any) -> Any:
         """The host's own log (level="INFO" by default). The engine's `log` adds its diagnostics ring and calls this."""

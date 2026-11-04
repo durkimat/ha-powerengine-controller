@@ -42,6 +42,36 @@ class HostError(Exception):
     """The integration could not do what was asked (the message is its reason)."""
 
 
+class NativeEntities:
+    """The engine's own entities as real Home Assistant entities, made by the integration on the engine's word
+    (protocol.py: entity, retire, online). What was defined is kept, so a reconnection can say it all again."""
+
+    def __init__(self, host: SocketHost):
+        self._host = host
+        self.defined: dict[str, tuple] = {}              # key -> (component, name, options)
+        self.is_online: bool | None = None
+
+    def define(self, component: str, key: str, name: str, options: dict) -> None:
+        self.defined[key] = (component, name, dict(options))
+        self._host.request("entity", component=component, key=key, name=name, options=options)
+
+    def retire(self, entity_id: str) -> None:
+        component, _, rest = entity_id.partition(".")
+        self.defined.pop(rest[3:] if rest.startswith("pe_") else rest, None)
+        self._host.request("retire", entity_id=entity_id)
+
+    def online(self, online: bool) -> None:
+        self.is_online = online
+        self._host.request("online", online=online)
+
+    def replay(self) -> None:
+        """After a reconnection: define everything again, then say whether the engine is up."""
+        for key, (component, name, options) in list(self.defined.items()):
+            self._host.request("entity", component=component, key=key, name=name, options=options)
+        if self.is_online is not None:
+            self._host.request("online", online=self.is_online)
+
+
 class SocketHost:
     def __init__(self, address: str, secret: str, engine_version: str = "", args: dict | None = None,
                  logger: logging.Logger | None = None, retry: tuple = RETRY_S):
@@ -62,6 +92,7 @@ class SocketHost:
         self._state_listeners: dict[str, tuple[str, Callable, dict]] = {}     # handle -> (entity_id, callback, kwargs)
         self._event_listeners: dict[str, tuple[str, Callable, dict]] = {}
         self._pending: dict[int, dict] = {}
+        self._native = NativeEntities(self)
         self._ids = itertools.count(1)
         self._handles = itertools.count(1)
         self._wire: protocol.Wire | None = None
@@ -164,7 +195,7 @@ class SocketHost:
             elif kind == "changed":
                 self._changed(message["entity_id"], message.get("new"))
             elif kind == "event":
-                self._event(message["event"], message.get("data") or {})
+                self._event(message["event"], message.get("data") or {}, message.get("context"))
             elif kind == "stop":
                 self.stop_requested.set()
 
@@ -190,6 +221,7 @@ class SocketHost:
                 self._changed(entity_id, self.request("watch", entity_id=entity_id))
             for event in events:
                 self.request("on", event=event)
+            self._native.replay()
         except (HostUnavailable, HostError) as err:
             self.log(f"Could not re-read what the engine watches after reconnecting: {err}", level="WARNING")
 
@@ -348,11 +380,13 @@ class SocketHost:
             self._dispatcher.submit(lambda c=callback, a=attribute or "state", b=before, n=after, k=extra:
                                     c(entity_id, a, b, n, k), f"state listener {entity_id}")
 
-    def _event(self, event: str, data: dict) -> None:
+    def _event(self, event: str, data: dict, context: dict | None = None) -> None:
         with self._lock:
             listeners = [(c, kw) for e, c, kw in self._event_listeners.values() if e == event]
         for callback, kwargs in listeners:
             payload, extra = copy.deepcopy(data), dict(kwargs)
+            if context:                                            # where AppDaemon puts it (metadata)
+                payload.setdefault("metadata", {})["context"] = context
             self._dispatcher.submit(lambda c=callback, d=payload, k=extra: c(event, d, k), f"event listener {event}")
 
     # --- timers (the engine's own: nothing to ask the integration)
@@ -385,6 +419,10 @@ class SocketHost:
     @property
     def background_writes(self) -> bool:
         return True                                                   # a service call waits for Home Assistant
+
+    @property
+    def native_entities(self) -> NativeEntities:
+        return self._native
 
     def method(self, name: str) -> Callable | None:
         return self.overrides.get(name) or getattr(self, name, None)

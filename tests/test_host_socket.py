@@ -313,3 +313,64 @@ def test_the_host_logs_like_appdaemons_log(caplog):
             h.log("with %s", "args", level="WARNING")
     assert [(r.levelname, r.getMessage()) for r in caplog.records if r.name == "powerengine"] == [
         ("INFO", "plain"), ("WARNING", "with args")]
+
+
+def test_an_event_arrives_with_who_caused_it_where_appdaemon_puts_it():
+    with connected() as (home, server, h):
+        got = Recorder()
+        h.listen_event(got, "pe_config_save")
+        server.event_fired("pe_config_save", {"a": 1}, {"user_id": "u1", "id": "c1"})
+        assert got.wait() == [("pe_config_save", {"a": 1, "metadata": {"context": {"user_id": "u1", "id": "c1"}}}, {})]
+
+
+def test_the_server_tells_the_integration_what_the_engine_wants_to_hear_about():
+    from pe_core.host_server import HostServer
+    home, watched, listened = FakeHome(), [], []
+    server = HostServer(home, "s", on_watch=watched.append, on_listen=listened.append)
+    home.server = server
+    address = server.start()
+    host = SocketHost(address, "s")
+    try:
+        host.start(timeout=5)
+        host.get_state("sensor.a")
+        host.listen_event(lambda *a: None, "pe_x")
+        assert watched == ["sensor.a"] and listened == ["pe_x"]
+    finally:
+        host.stop()
+        server.stop()
+
+
+def test_an_error_that_cannot_be_turned_into_text_still_gets_an_answer():
+    class Awkward(Exception):
+        def __str__(self):
+            raise RuntimeError("only on the event loop")
+
+    class Home(FakeHome):
+        def call(self, service, data):
+            raise Awkward("service not found")
+    with connected(Home()) as (_, _, h):
+        with pytest.raises(HostError, match="Awkward"):
+            h.call_service("a/b")
+        assert h.get_timezone() == "Europe/London"                   # and the connection is still good
+
+
+def test_native_entities_are_defined_on_the_integration_and_defined_again_after_a_reconnection():
+    from pe_core.host_server import HostServer
+    home = FakeHome()
+    with connected(home) as (_, server, h):
+        native = h.native_entities
+        native.define("sensor", "state_x", "X", {"icon": "mdi:a"})
+        native.online(True)
+        assert home.defined == [("sensor", "state_x", "X", {"icon": "mdi:a"})] and home.online == [True]
+        address = server.address
+        server.stop()
+        wait_for(lambda: not h.connected.is_set(), what="the drop")
+        again = HostServer(home, "s3cret", address=address)
+        home.server = again
+        again.start()
+        try:
+            wait_for(lambda: len(home.defined) == 2 and home.online == [True, True], 10, "the definitions again")
+            native.retire("sensor.pe_state_x")
+            assert home.retired == ["sensor.pe_state_x"] and "state_x" not in native.defined
+        finally:
+            again.stop()
