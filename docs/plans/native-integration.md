@@ -32,11 +32,25 @@ custom_components/powerengine/        thin and stable: a Home Assistant restart 
    - **2a (done in 0.9.202):** the AppDaemon-specific code that was left (the demo's timer and listener tracking, the
      REST and MQTT publishing set-up, the plugin lookup) is in `pe_core/host_appdaemon.py`, and the `Engine` class in
      `powerengine.py` no longer inherits from AppDaemon's `Hass`; the AppDaemon app is `Engine` plus `Hass`.
-   - **2b:** a scheduler for `run_in`/`run_every`/`run_daily` on a thread pool; a socket `Host` with the state copy,
-     service calls and reconnection; a protocol module shared by both sides, with contract tests. Built and tested, but
-     nothing in a running system uses it until the integration exists. Also move `Engine` out of `powerengine.py`
-     into the engine package (the tests patch names in the `powerengine` module, so that move comes with a test
-     update).
+   - **2b (done in 0.9.203):** everything the engine needs to run without AppDaemon, built and tested, but nothing in a
+     running system uses it until the integration exists:
+     - `pe_core/host_scheduler.py`: `run_in`, `run_every`, `run_daily` and `cancel_timer` with AppDaemon's meanings
+       (start strings `now`, `now+N`, `HH:MM:SS`; wall-clock days across clock changes; a late repeat does not burst),
+       and the one thread every callback runs on, so callbacks never overlap, as in AppDaemon (the engine relies on it).
+     - `pe_core/protocol.py`: the versioned messages, the handshake (shared secret, protocol version) and the framing.
+     - `pe_core/host_socket.py` (`SocketHost`, the engine's side): a local copy of every entity read, so `get_state`
+       stays synchronous; state and event listeners fed by the integration; service calls, events, history and
+       templates as requests; carrying on from the copy through a lost connection and reconnecting.
+     - `pe_core/host_server.py` (`HostServer`, the integration's side, written against a small `Home` interface so
+       Phase 3 only has to implement `Home` over Home Assistant).
+     - `apps/powerengine/engine_main.py`: the engine process (`PE_SECRET=... python engine_main.py --address ...`), with
+       exit statuses the supervisor can act on (10: protocol mismatch, so a Home Assistant restart is needed).
+     - Tests: the same questions put to the AppDaemon host and the socket host, the handshake, reconnection, the timers,
+       and the real engine started as a real process against a fake Home Assistant.
+     - **Not done, on purpose:** moving `Engine` out of `powerengine.py`. The AppDaemon import in that file is already
+       guarded, so the engine runs from it in its own process today, and a move would only change which file holds
+       it and rewrite about 50 test patches. Revisit when Phase 3 decides how the engine is packaged inside the
+       integration.
 3. **The integration.** Manifest and a minimal config flow; the supervisor; the bridge; entity platforms built from
    `entities.py` (the set depends on the config, so entities are added and removed as it changes); diagnostics; Repairs.
 4. **Tests.** Entity creation and the bridge with `pytest-homeassistant-custom-component`; the engine against a fake
