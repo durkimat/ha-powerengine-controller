@@ -4525,7 +4525,7 @@ class Engine:
         """Keep the package files in <ha config>/packages in step with this version and with the chosen other
         controller. Never in a demo or a shadow run, never creates the folder, never raises: a problem is a warning
         and the sensor."""
-        if self._demo or getattr(self, "_shadow", False) or self.cfg is None:   # (a shadow run writes only in its folder)
+        if self._demo or getattr(self, "_shadow", False) or self.cfg is None:
             return
         try:
             controller = other_controller(self.cfg)
