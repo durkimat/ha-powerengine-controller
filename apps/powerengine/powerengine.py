@@ -122,6 +122,7 @@ from pe_core.freeloads import FreeLoadState
 from pe_core.health import WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_plan, day_view
+from pe_core.host import AppDaemonHost
 from pe_core.journal import WriteJournal, day_summary, is_staged
 from pe_core.loadstore import LoadStore
 from pe_core.lowwrite import Study as LowWriteStudy
@@ -215,6 +216,15 @@ def _real(writes) -> int:
 
 class PowerEngine(hass.Hass):
     _demo = None                     # the demo day when `demo: <day>` is set in apps.yaml (see _demo_setup)
+
+    @property
+    def host(self):
+        """What runs the app (pe_core/host.py): every call to Home Assistant, every timer and listener goes through
+        it. Kept in __dict__ so it is not one of the attributes initialize() sets and _wipe() removes."""
+        host = self.__dict__.get("_host")
+        if host is None:
+            host = self.__dict__["_host"] = AppDaemonHost(self)
+        return host
 
     # --- starting again inside the running app (the demo's start, day and exit) -------------------------------
     # AppDaemon keeps every timer and listener until they are cancelled, and an app object keeps its attributes. To
@@ -349,7 +359,7 @@ class PowerEngine(hass.Hass):
 
     def initialize(self):
         if self.__dict__.get("_touched") is None:
-            custom = self.args.get("settings_file")
+            custom = self.host.args.get("settings_file")
             if not any(os.path.isfile(p) for p in ([custom] if custom else list(DEFAULT_PATHS))):
                 # Only an app that isn't set up can switch in and out of the demo, so only then are attributes,
                 # timers and listeners recorded for _wipe(). A configured app runs exactly as before.
@@ -364,14 +374,14 @@ class PowerEngine(hass.Hass):
         validate_definitions()
 
         # Optional override. Not "config_path": AppDaemon sets that arg itself.
-        custom = self.args.get("settings_file")
+        custom = self.host.args.get("settings_file")
         self.paths = [custom] if custom else list(DEFAULT_PATHS)
         self._real_paths = list(self.paths)
         self.cfg, self.cfg_path, self.cfg_error = None, None, None
         self._demo = None
         self._override = None                        # a manual override (_on_override), loaded below
         self._early = EarlyTargets()                 # early-target records (_early_target), saved below
-        day = self.args.get("demo") or self._saved_demo_day()
+        day = self.host.args.get("demo") or self._saved_demo_day()
         if day:
             self._demo_setup(str(day))
         try:
@@ -423,7 +433,7 @@ class PowerEngine(hass.Hass):
         self._v2_cache, self._v2_learned_sig = {}, None
         self._no_data_since = None                 # when the readings last went missing (see DATA_GAP_GRACE_S)
         try:   # keep the activity log across restarts (it lives in the entity's attributes)
-            saved = self.get_state("sensor.pe_state_activity", attribute="entries")
+            saved = self.host.get_state("sensor.pe_state_activity", attribute="entries")
         except Exception:
             saved = None
         self.activity = ActivityLog(saved if isinstance(saved, list) else None)
@@ -440,7 +450,7 @@ class PowerEngine(hass.Hass):
         self.plan, self._plan_sig, self._plan_time = None, None, None
         self.sim = SimBattery()
         try:
-            self.tz = ZoneInfo(str(self.get_timezone()))
+            self.tz = ZoneInfo(str(self.host.get_timezone()))
         except Exception:
             self.tz = None
         if self._demo:                                 # the app reads the clock the way the demo world does
@@ -491,59 +501,59 @@ class PowerEngine(hass.Hass):
         self._cycle({})
         self._sync_dashboard()
 
-        self.listen_event(self._on_save, SAVE_EVENT)
-        self.listen_event(self._on_test, TEST_EVENT)
-        self.listen_event(self._on_diag_request, diagnostics.REQUEST_EVENT)
-        self.listen_event(self._on_set_control, CONTROL_EVENT)
-        self.listen_event(self._on_sim_history, "pe_sim_history")
-        self.listen_event(self._on_sim_settings, "pe_sim_settings")
+        self.host.listen_event(self._on_save, SAVE_EVENT)
+        self.host.listen_event(self._on_test, TEST_EVENT)
+        self.host.listen_event(self._on_diag_request, diagnostics.REQUEST_EVENT)
+        self.host.listen_event(self._on_set_control, CONTROL_EVENT)
+        self.host.listen_event(self._on_sim_history, "pe_sim_history")
+        self.host.listen_event(self._on_sim_settings, "pe_sim_settings")
         self._listen_for_commands()
         self._beat({})
-        self.run_every(self._beat, "now+60", HEARTBEAT_SECONDS)
-        self.run_every(lambda kwargs: self._evaluate(), f"now+{RECHECK_SECONDS}", RECHECK_SECONDS)
-        self.run_every(self._cycle, f"now+{CYCLE_SECONDS}", CYCLE_SECONDS)
+        self.host.run_every(self._beat, "now+60", HEARTBEAT_SECONDS)
+        self.host.run_every(lambda kwargs: self._evaluate(), f"now+{RECHECK_SECONDS}", RECHECK_SECONDS)
+        self.host.run_every(self._cycle, f"now+{CYCLE_SECONDS}", CYCLE_SECONDS)
         sample_s = self.cfg.engine_v2.sample_s if self.cfg is not None else V2Settings().sample_s
-        self.run_every(self._engine_tick, f"now+{sample_s}", sample_s)   # engine v2's tick; does nothing on v1
-        self.run_in(self._learn_load, 5)                     # load profile from history, then daily
-        self.run_daily(self._learn_load, "00:10:00")
-        self.run_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
-        self.run_daily(self._daily_summary, "08:00:00")
-        self.run_daily(self._sim_start, SIM_START)                  # tariff Simulator: heavy work, overnight only
-        self.run_in(lambda kwargs: self._sim_publish(), 20)
-        self.run_daily(self._lowwrite_start, LOWWRITE_START)        # low-write study: shadow only, changes nothing
-        self.run_in(lambda kwargs: self._lowwrite_publish(), 25)
+        self.host.run_every(self._engine_tick, f"now+{sample_s}", sample_s)   # engine v2's tick; does nothing on v1
+        self.host.run_in(self._learn_load, 5)                     # load profile from history, then daily
+        self.host.run_daily(self._learn_load, "00:10:00")
+        self.host.run_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
+        self.host.run_daily(self._daily_summary, "08:00:00")
+        self.host.run_daily(self._sim_start, SIM_START)                  # tariff Simulator: heavy work, overnight only
+        self.host.run_in(lambda kwargs: self._sim_publish(), 20)
+        self.host.run_daily(self._lowwrite_start, LOWWRITE_START)        # low-write study: shadow only, changes nothing
+        self.host.run_in(lambda kwargs: self._lowwrite_publish(), 25)
         if not self._demo:                                       # engine comparison: yesterday, replayed apart
-            self.run_daily(self._compare_start, COMPARE_START)
-            self.run_every(self._compare_poll, f"now+{COMPARE_POLL_S}", COMPARE_POLL_S)
-        self.run_in(lambda kwargs: self._compare_publish(), 30)
-        self.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
-        self.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
-        self.run_every(self._check_update, "now+120", 60)        # a new version installed: ask HA to restart us
+            self.host.run_daily(self._compare_start, COMPARE_START)
+            self.host.run_every(self._compare_poll, f"now+{COMPARE_POLL_S}", COMPARE_POLL_S)
+        self.host.run_in(lambda kwargs: self._compare_publish(), 30)
+        self.host.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
+        self.host.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
+        self.host.run_every(self._check_update, "now+120", 60)        # a new version installed: ask HA to restart us
         if not self._demo:                                       # (the demo makes no calls to the internet)
-            self.run_every(self._release_check, "now+60", 300)   # a new version released: straight from GitHub
-        self.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
-        self.listen_event(self._on_health_dismiss, "pe_health_dismiss")
-        self.listen_event(self._on_demo, DEMO_EVENT)
+            self.host.run_every(self._release_check, "now+60", 300)   # a new version released: straight from GitHub
+        self.host.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
+        self.host.listen_event(self._on_health_dismiss, "pe_health_dismiss")
+        self.host.listen_event(self._on_demo, DEMO_EVENT)
         if not self._demo:
             self._early = EarlyTargets(os.path.join(self._real_dir(), "early_target.json"))
         if not self._demo:
             self._override = manual.load(self._override_file(), datetime.now(timezone.utc))
-        self.listen_event(self._on_override, OVERRIDE_EVENT)
+        self.host.listen_event(self._on_override, OVERRIDE_EVENT)
         self._history_date = None                            # a day picked with the card's date picker (Plan history)
-        self.listen_event(self._on_history_day, HISTORY_DAY_EVENT)
+        self.host.listen_event(self._on_history_day, HISTORY_DAY_EVENT)
         self._v2_history_date = None                         # a day picked on the Engine v2 page's history
         self._flows_cache = {}                               # day -> (grid flows, when read): the history's real timing
-        self.listen_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
-        self.listen_event(self._on_v2_replan, V2_REPLAN_EVENT)
-        self.listen_event(self._on_alexa_test, ALEXA_TEST_EVENT)
-        self.listen_event(self._on_notify_test, NOTIFY_TEST_EVENT)
-        self.run_every(self._publish_notify_cycle, "now+50", 900)
-        self.listen_event(self._on_pe_notify, NOTIFY_EVENT)
-        self.listen_event(self._on_compare_recheck, COMPARE_RECHECK_EVENT)
-        self.run_every(self._publish_v2_history, "now+65", 900)
-        self.run_every(self._publish_forecast_score, "now+240", 3600)
-        self.run_in(self._backfill, 90)                      # fill recent days from HA history (after load learning)
-        self.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
+        self.host.listen_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
+        self.host.listen_event(self._on_v2_replan, V2_REPLAN_EVENT)
+        self.host.listen_event(self._on_alexa_test, ALEXA_TEST_EVENT)
+        self.host.listen_event(self._on_notify_test, NOTIFY_TEST_EVENT)
+        self.host.run_every(self._publish_notify_cycle, "now+50", 900)
+        self.host.listen_event(self._on_pe_notify, NOTIFY_EVENT)
+        self.host.listen_event(self._on_compare_recheck, COMPARE_RECHECK_EVENT)
+        self.host.run_every(self._publish_v2_history, "now+65", 900)
+        self.host.run_every(self._publish_forecast_score, "now+240", 3600)
+        self.host.run_in(self._backfill, 90)                    # fill recent days from HA history (after load learning)
+        self.host.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
 
     def terminate(self):
@@ -652,7 +662,7 @@ class PowerEngine(hass.Hass):
         inputs not ready and switched remote control Off in the middle of the overnight charge (31 Oct 2026, 03:06).
         An event is announced hours ahead, so a reading a few minutes old is as good. "unknown" is not held: it is
         what the sensors say when no event is scheduled."""
-        st = self.get_state(eid, attribute="all")
+        st = self.host.get_state(eid, attribute="all")
         if self.cfg is None or eid not in {self._role_entity(r) for r in EVENT_ROLES}:
             return st
         held = self.__dict__.setdefault("_event_held", {})
@@ -702,7 +712,7 @@ class PowerEngine(hass.Hass):
         self._watch_inputs(checks, required)
         guards, absent = guard_status(self.cfg, self._guard_state) if self.cfg is not None else ([], [])
         self._note_absent_guards(absent)
-        paused = self.get_state(PAUSE_ENTITY) == "on"
+        paused = self.host.get_state(PAUSE_ENTITY) == "on"
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused,
                               unverified=self._unverified() or self._v2_refusal())
         self._leave_active(getattr(self, "mode", None), mode, guards)
@@ -1056,7 +1066,7 @@ class PowerEngine(hass.Hass):
 
     def _override_reply(self, ok, message):
         self.log(f"Override: {message}", level="INFO" if ok else "WARNING")
-        self.fire_event(OVERRIDE_RESULT_EVENT, ok=ok, message=message)
+        self.host.fire_event(OVERRIDE_RESULT_EVENT, ok=ok, message=message)
 
     def _on_override(self, event_name, data, kwargs):
         """The card's override button (pe_override: set / clear). Only the event named pe_override is handled."""
@@ -1188,7 +1198,7 @@ class PowerEngine(hass.Hass):
     def _current_export_rate(self):
         spec = (self.cfg.inputs.get("export_rate") if self.cfg else None) or {}
         try:
-            return float(spec["value"]) if "value" in spec else float(self.get_state(spec.get("entity")))
+            return float(spec["value"]) if "value" in spec else float(self.host.get_state(spec.get("entity")))
         except (TypeError, ValueError, KeyError):
             return None
 
@@ -1298,7 +1308,7 @@ class PowerEngine(hass.Hass):
         if not eid:
             return None
         try:
-            return float(self.get_state(eid))
+            return float(self.host.get_state(eid))
         except (TypeError, ValueError):
             return None
 
@@ -1325,8 +1335,8 @@ class PowerEngine(hass.Hass):
         w = getattr(self, "_wlive", None)
         if w is None:
             try:
-                lat = float(self.get_state("zone.home", attribute="latitude"))
-                lon = float(self.get_state("zone.home", attribute="longitude"))
+                lat = float(self.host.get_state("zone.home", attribute="latitude"))
+                lon = float(self.host.get_state("zone.home", attribute="longitude"))
             except (TypeError, ValueError):
                 return
             w = self._wlive = Weather(os.path.join(self._sim_folder(), "weather_live.json"), lat, lon)
@@ -1535,12 +1545,12 @@ class PowerEngine(hass.Hass):
         units = {}
         for eid in plain:
             try:
-                units[eid] = {"unit_of_measurement": self.get_state(eid, attribute="unit_of_measurement")}
+                units[eid] = {"unit_of_measurement": self.host.get_state(eid, attribute="unit_of_measurement")}
             except Exception:
                 units[eid] = {}
         self.log(f"Cost backfill: {len(days)} day(s) from HA history ({days[0]:%d %b} to {days[-1]:%d %b})")
         self._bf = {"days": days, "plain": plain, "full": full, "units": units, "added": 0, "errors": 0}
-        self.run_in(self._backfill_day, 1)
+        self.host.run_in(self._backfill_day, 1)
 
     def _backfill_day(self, kwargs):
         job = self._bf
@@ -1560,7 +1570,7 @@ class PowerEngine(hass.Hass):
         for eid in job["plain"] + job["full"]:
             try:
                 if eid in job["full"]:
-                    rows = self.get_history(entity_id=eid, start_time=start - timedelta(days=1), end_time=end)
+                    rows = self.host.get_history(entity_id=eid, start_time=start - timedelta(days=1), end_time=end)
                 else:
                     rows = self._history(eid, start, end)
                 timelines[eid] = Timeline(rows, job["units"].get(eid))
@@ -1583,7 +1593,7 @@ class PowerEngine(hass.Hass):
         job["added"] += added
         if last is not None:
             self.log(f"Cost backfill: {day:%a %d %b}: {added} half-hours from history")
-        self.run_in(self._backfill_day, 1)
+        self.host.run_in(self._backfill_day, 1)
 
     def _refresh_months(self, prune=False):
         if self.costbook is None:
@@ -1614,7 +1624,7 @@ class PowerEngine(hass.Hass):
         reserves `domain` as its own argument name.
         """
         try:
-            self.call_service("logbook/log", name="PowerEngine", message=message)
+            self.host.call_service("logbook/log", name="PowerEngine", message=message)
         except Exception as err:
             self.log(f"Could not write to the logbook: {err!r}", level="WARNING")
 
@@ -1643,7 +1653,7 @@ class PowerEngine(hass.Hass):
             return
         def unit(eid):
             try:
-                return self.get_state(eid, attribute="unit_of_measurement") if eid else None
+                return self.host.get_state(eid, attribute="unit_of_measurement") if eid else None
             except Exception:
                 return None
         now = datetime.now(timezone.utc)
@@ -1652,14 +1662,14 @@ class PowerEngine(hass.Hass):
             ids["grid"], ids["check"] = self._role_entity("grid_power"), self._role_entity("grid_power_reference")
         self._hist_job = {"now": now, "days": list(range(HISTORY_DAYS, 0, -1)), "errors": 0, "ids": ids,
                           "units": {k: unit(e) for k, e in ids.items()}, "rows": {k: [] for k in ids}}
-        self.run_in(self._learn_load_day, 1)
+        self.host.run_in(self._learn_load_day, 1)
 
     def _history(self, eid, start, end):
         try:
-            return self.get_history(entity_id=eid, start_time=start, end_time=end,
+            return self.host.get_history(entity_id=eid, start_time=start, end_time=end,
                                     minimal_response=True, no_attributes=True)
         except TypeError:                              # older AppDaemon without those options
-            return self.get_history(entity_id=eid, start_time=start, end_time=end)
+            return self.host.get_history(entity_id=eid, start_time=start, end_time=end)
 
     def _learn_load_day(self, kwargs):
         job = self._hist_job
@@ -1677,7 +1687,7 @@ class PowerEngine(hass.Hass):
                     job["errors"] += 1
                     if job["errors"] == 1:
                         self.log(f"Load history: couldn't read {eid} for {start:%d %b} ({err!r})", level="WARNING")
-            self.run_in(self._learn_load_day, 1)
+            self.host.run_in(self._learn_load_day, 1)
             return
         house_rows, car_rows = job["rows"]["house"], job["rows"]["car"]
         self._hist_means = house_only_means(house_rows, car_rows, job["now"],
@@ -1696,7 +1706,7 @@ class PowerEngine(hass.Hass):
         if not self._hist_means:
             self.log("Load history from HA was empty; retrying in an hour. "
                      "PowerEngine's own load record is still used.", level="WARNING")
-            self.run_in(self._learn_load, 3600)
+            self.host.run_in(self._learn_load, 3600)
         self._rebuild_profile()
 
     def _grid_check(self, r):
@@ -1773,7 +1783,7 @@ class PowerEngine(hass.Hass):
     def _solar_forecast(self):
         """The forecast as neutral half-hourly points, from every mapped forecast role."""
         fc = self._forecast()
-        return fc.points(fc.read(lambda eid, attr: self.get_state(eid, attribute=attr),
+        return fc.points(fc.read(lambda eid, attr: self.host.get_state(eid, attribute=attr),
                                  [self._role_entity(role) for role in FORECAST_ROLES]))
 
     def _car_idle(self, r) -> bool:
@@ -1983,7 +1993,7 @@ class PowerEngine(hass.Hass):
             roles = fcsnap.snapshot_roles(self.cfg)
             states = {}
             for eid in dict.fromkeys(roles.values()):
-                st = self.get_state(eid, attribute="all")
+                st = self.host.get_state(eid, attribute="all")
                 if isinstance(st, dict):
                     states[eid] = {"state": st.get("state"), "attributes": st.get("attributes") or {}}
             local = r.now.astimezone(self.tz or timezone.utc)
@@ -2117,7 +2127,8 @@ class PowerEngine(hass.Hass):
             start = datetime(day.year, day.month, day.day, tzinfo=tz).astimezone(timezone.utc)
             plain, _ = history_entities(self.cfg, V2_FLOW_ROLES, plants=True)
             timelines = {eid: Timeline(self._history(eid, start, v2_day_end(day, tz)),
-                                       {"unit_of_measurement": self.get_state(eid, attribute="unit_of_measurement")})
+                                       {"unit_of_measurement": self.host.get_state(
+                                           eid, attribute="unit_of_measurement")})
                          for eid in plain}
             flows = real_flows(replay(self.cfg, timelines, start, min(v2_day_end(day, tz), now - timedelta(minutes=1))),
                                tz, day)
@@ -2231,7 +2242,7 @@ class PowerEngine(hass.Hass):
         sent = 0
         for svc, kw, what in calls:
             try:
-                self.call_service(svc, **kw)
+                self.host.call_service(svc, **kw)
                 sent += 1
             except Exception as err:
                 self.log(f"Could not {what}: {err!r}", level="WARNING")
@@ -2255,7 +2266,7 @@ class PowerEngine(hass.Hass):
         self._outbox().cancel(key)
         if self.cfg is not None and any(c["type"] == "bell" for c in self.cfg.notifications["channels"].values()):
             try:
-                self.call_service("persistent_notification/dismiss", notification_id=_notice_id(key))
+                self.host.call_service("persistent_notification/dismiss", notification_id=_notice_id(key))
             except Exception as err:
                 self.log(f"Could not dismiss a notification: {err!r}", level="WARNING")
 
@@ -2294,11 +2305,11 @@ class PowerEngine(hass.Hass):
         """A guard's state. AppDaemon's copy of HA's states can miss an entity that was re-created after it started
         (the other controller restarting does this), so when it has nothing, ask Home Assistant directly. If that
         can't be checked either, the guard is "unverified", which never counts as safe."""
-        state = self.get_state(eid)
+        state = self.host.get_state(eid)
         if state is not None:
             return state
         try:
-            live = str(self.render_template(f"{{{{ states('{eid}') }}}}")).strip()
+            live = str(self.host.render_template(f"{{{{ states('{eid}') }}}}")).strip()
         except Exception as err:
             self.log(f"Couldn't check {eid} with Home Assistant: {err!r}", level="WARNING")
             return UNVERIFIED
@@ -2379,7 +2390,8 @@ class PowerEngine(hass.Hass):
         services = alexa_trial_speakers(data.get("services"))
         chats = whatsapp_targets(data.get("whatsapp"))
         if not services and not chats:
-            self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False, message="No Alexa speaker or WhatsApp group was chosen.")
+            self.host.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False,
+                                 message="No Alexa speaker or WhatsApp group was chosen.")
             return
         intro = data.get("intro")
         intro = intro[:80].strip() if isinstance(intro, str) else ""
@@ -2399,10 +2411,10 @@ class PowerEngine(hass.Hass):
                 parts.append(f"{texted[0]} of {len(chats)} WhatsApp chats")
             bad = len(services) + len(chats) - speakers[0] - texted[0]
             note = f" ({bad} failed: see the log)" if bad else ""
-            self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=True,
+            self.host.fire_event(ALEXA_TEST_RESULT_EVENT, ok=True,
                             message=f"Sent to {' and '.join(parts)}: \"{text}\"{note}")
         else:
-            self.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False,
+            self.host.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False,
                             message="Home Assistant would not play or send it anywhere. See the AppDaemon log.")
 
     @staticmethod
@@ -2417,11 +2429,11 @@ class PowerEngine(hass.Hass):
         try:
             ch = parse_channel((data or {}).get("channel"), "test")
         except ConfigError as err:
-            self.fire_event(NOTIFY_TEST_RESULT_EVENT, ok=False, message=str(err))
+            self.host.fire_event(NOTIFY_TEST_RESULT_EVENT, ok=False, message=str(err))
             return
         sent, tried = self._send("test", ch, self._test_message(), datetime.now(timezone.utc))
         self.log(f"Test message to a {ch['type']} channel: {sent} of {tried}")
-        self.fire_event(NOTIFY_TEST_RESULT_EVENT, ok=sent > 0,
+        self.host.fire_event(NOTIFY_TEST_RESULT_EVENT, ok=sent > 0,
                         message=(f"Sent to {sent} of {tried}." + (" See the AppDaemon log for the ones that failed."
                                                                   if sent < tried else "")) if tried else
                         "There is nothing to send to.")
@@ -2457,14 +2469,14 @@ class PowerEngine(hass.Hass):
         if not (want or stop.held) or not eid or not eid.startswith("select."):
             return
         try:
-            options = self.get_state(eid, attribute="options")
+            options = self.host.get_state(eid, attribute="options")
         except Exception:
             options = None
         before, note_before = stop.to_dict(), stop.note
         action = stop.step(r.now, want, r.ev_mode, options if isinstance(options, list) else None)
         if action is not None:
             try:
-                self.call_service("select/select_option", entity_id=eid, option=action.option)
+                self.host.call_service("select/select_option", entity_id=eid, option=action.option)
                 self.log(f"Car charger: {action.text}")
                 self._logbook(f"Car charger: {action.text}")
             except Exception as err:
@@ -2511,7 +2523,7 @@ class PowerEngine(hass.Hass):
         if not (want or sb.held):
             return
         try:
-            state = self.get_state(eid)
+            state = self.host.get_state(eid)
         except Exception:
             state = None
         before, note_before = sb.to_dict(), sb.note
@@ -2521,7 +2533,7 @@ class PowerEngine(hass.Hass):
             self._run_note(r, "heat", sb.note)
         if action is not None:
             try:
-                self.call_service(f"{eid.split('.')[0]}/{action.service}", entity_id=eid)
+                self.host.call_service(f"{eid.split('.')[0]}/{action.service}", entity_id=eid)
                 self.log(f"Heating set-back: {action.text}")
                 self._logbook(f"Heating set-back: {action.text}")
             except Exception as err:
@@ -2563,7 +2575,7 @@ class PowerEngine(hass.Hass):
             if not (want or st.held or st.seen):
                 continue
             try:
-                state = self.get_state(load.entity)
+                state = self.host.get_state(load.entity)
             except Exception:
                 state = None
             action = st.step(want, state)
@@ -2571,7 +2583,7 @@ class PowerEngine(hass.Hass):
                 continue
             label = load.name or load.entity
             try:
-                self.call_service(f"{load.entity.split('.')[0]}/{action.service}", entity_id=load.entity)
+                self.host.call_service(f"{load.entity.split('.')[0]}/{action.service}", entity_id=load.entity)
                 self.log(f"Free power: {label}: {action.text}")
                 self._logbook(f"Free power: {label}: {action.text}")
             except Exception as err:
@@ -2684,7 +2696,7 @@ class PowerEngine(hass.Hass):
         """Count writes to the inverter's control entities by whatever controls it now (e.g. another controller)."""
         for handle in self._write_listeners:
             try:
-                self.cancel_listen_state(handle)
+                self.host.cancel_listen_state(handle)
             except Exception:
                 pass
         self._write_listeners = []
@@ -2704,7 +2716,7 @@ class PowerEngine(hass.Hass):
         AppDaemon would warn that they don't exist, and nothing could ever change them from outside anyway."""
         if self._demo and self._demo_world().is_demo(entity_id):
             return None
-        return self.listen_state(callback, entity_id)
+        return self.host.listen_state(callback, entity_id)
 
     def _on_guard_change(self, entity, attribute, old, new, kwargs):
         if old != new:
@@ -3112,7 +3124,7 @@ class PowerEngine(hass.Hass):
                 if writes and self._ram_send(writes, rc, why, want):
                     ram.done(now, str(self._today()), want, why)
                     if why == "change" and want.power_role:        # and once more once the mode has landed
-                        self.run_in(self._ram_relatch, 5, role=want.power_role, watts=want.watts)
+                        self.host.run_in(self._ram_relatch, 5, role=want.power_role, watts=want.watts)
                 floor = self._reserve_soc()
                 expected = ramcontrol.inverter_expected_w(
                     ram.sent, bms.expected_w(ram.sent, limits),
@@ -3122,10 +3134,10 @@ class PowerEngine(hass.Hass):
                 if follow == "not following" and self._ram_step_down(now, ram, r):
                     pass                                   # re-sent lower next cycle; reported once by _ram_step_down
                 elif follow == "not following":
-                    pw = self.get_state(rc.get(ram.sent.power_role)) if ram.sent.power_role else None
+                    pw = self.host.get_state(rc.get(ram.sent.power_role)) if ram.sent.power_role else None
                     self.log(f"RAM remote control: inverter not following {ram.sent.text()} (battery "
                              f"{round(r.battery_power or 0)} W, SoC {r.battery_soc}, power setting reads {pw}, "
-                             f"mode reads {self.get_state(rc.get('rc_mode'))})", level="WARNING")
+                             f"mode reads {self.host.get_state(rc.get('rc_mode'))})", level="WARNING")
                     self._notify("health", (f"control:ram_follow:{ram.changed_at}",
                                             "PowerEngine: inverter not following remote control",
                                             f"Asked for {ram.sent.text()} but the battery is at "
@@ -3152,7 +3164,7 @@ class PowerEngine(hass.Hass):
         caution, every field is None and nothing changes."""
         def raw(role):
             eid = self._role_entity(role)
-            return self.get_state(eid) if eid else None
+            return self.host.get_state(eid) if eid else None
         try:
             lim = bms.read_limits(raw("battery_bms_charge_limit"), raw("battery_bms_discharge_limit"),
                                   None, BATTERY_VOLTS, r.battery_power,
@@ -3244,7 +3256,7 @@ class PowerEngine(hass.Hass):
         if eid and self.mode.effective == "active":
             try:
                 service, data = self._inverter().service_for(Write(kwargs["role"], kwargs["watts"], "number"))
-                self.call_service(service, entity_id=eid, **data)
+                self.host.call_service(service, entity_id=eid, **data)
             except Exception as err:
                 self.log(f"RAM remote control: could not re-send {eid}: {err!r}", level="WARNING")
 
@@ -3261,9 +3273,9 @@ class PowerEngine(hass.Hass):
                 continue
             try:
                 if why == "change" and journal is not None:
-                    journal.add(now, eid, w.value, self.get_state(eid), f"RAM remote control: {want.text()}")
+                    journal.add(now, eid, w.value, self.host.get_state(eid), f"RAM remote control: {want.text()}")
                 service, data = self._inverter().service_for(w)
-                self.call_service(service, entity_id=eid, **data)
+                self.host.call_service(service, entity_id=eid, **data)
             except Exception as err:
                 ok = False
                 self._ram().errors += 1
@@ -3394,9 +3406,9 @@ class PowerEngine(hass.Hass):
                 buttons.append(eid)
                 continue
             if journal is not None:
-                journal.add(now, eid, w.value, self.get_state(eid), why)
+                journal.add(now, eid, w.value, self.host.get_state(eid), why)
             service, data = self._inverter().service_for(w)
-            self.call_service(service, entity_id=eid, **data)
+            self.host.call_service(service, entity_id=eid, **data)
             if w.kind == "number":
                 numbers.append((eid, w.value))
             if self._inverter().write_storage(w) != "staged":  # window times only sent by the update button
@@ -3407,7 +3419,7 @@ class PowerEngine(hass.Hass):
             # change behind), so press it once they read back, a few seconds later.
             args = {"buttons": buttons, "numbers": numbers, "why": why, "tries": 1}
             if numbers:
-                self.run_in(self._press_buttons, BUTTON_DELAY_S, **args)
+                self.host.run_in(self._press_buttons, BUTTON_DELAY_S, **args)
             else:
                 self._press_buttons(args)            # nothing to wait for (e.g. the clock sync button)
         try:
@@ -3420,7 +3432,7 @@ class PowerEngine(hass.Hass):
     def _press_buttons(self, kwargs):
         pending = [eid for eid, v in kwargs["numbers"] if not self._inverter().confirmed(eid, v)]
         if pending and kwargs["tries"] < 4:
-            self.run_in(self._press_buttons, BUTTON_DELAY_S, **dict(kwargs, tries=kwargs["tries"] + 1))
+            self.host.run_in(self._press_buttons, BUTTON_DELAY_S, **dict(kwargs, tries=kwargs["tries"] + 1))
             return
         if pending:
             self.log(f"Window values not confirmed before applying them ({pending}); applying anyway",
@@ -3428,7 +3440,7 @@ class PowerEngine(hass.Hass):
         now = datetime.now(timezone.utc)
         journal = getattr(self, "journal", None)
         for eid in kwargs["buttons"]:
-            self.call_service("button/press", entity_id=eid)
+            self.host.call_service("button/press", entity_id=eid)
             self.writes.own(self._today())
             if journal is not None:
                 journal.add(now, eid, None, None, kwargs["why"])
@@ -3442,7 +3454,7 @@ class PowerEngine(hass.Hass):
     def _execute(self, writes, entities, attempt=1):
         """Active mode, pause and leaving Active. Write, then verify."""
         self._write(writes, entities)
-        self.run_in(self._verify_writes, 15, writes=[w.as_dict() for w in writes if w.kind != "button"],
+        self.host.run_in(self._verify_writes, 15, writes=[w.as_dict() for w in writes if w.kind != "button"],
                     entities=entities, attempt=attempt)
 
     def _verify_writes(self, kwargs):
@@ -3679,7 +3691,7 @@ class PowerEngine(hass.Hass):
             self._test.problems.append(err)
             self._test.finish("refused")
             self._publish_test()
-            self.fire_event("pe_test_result", ok=False, message=f"Refused: {err}")
+            self.host.fire_event("pe_test_result", ok=False, message=f"Refused: {err}")
             return
         rc = self._rc_entities() if req and req["action"] in rctest.RC_TESTS else {}
         if req and not err and req["action"] in rctest.RC_TESTS:
@@ -3690,7 +3702,7 @@ class PowerEngine(hass.Hass):
                 self._test.problems.append(err)
                 self._test.finish("refused")
                 self._publish_test()
-                self.fire_event("pe_test_result", ok=False, message=f"Refused: {err}")
+                self.host.fire_event("pe_test_result", ok=False, message=f"Refused: {err}")
                 return
         run = self._test = testwrite.TestRun(req, now)
         if req["action"] in rctest.RC_TESTS:
@@ -3710,10 +3722,11 @@ class PowerEngine(hass.Hass):
                  f"({len(writes)} writes)")
         self._logbook(f"supervised test started by {user}: {req['action']} for {req['minutes']} min")
         self._publish_test()
-        self.fire_event("pe_test_result", ok=True, message=f"Test started: {req['action']} for {req['minutes']} min")
-        self._test_handles = [self.run_in(self._test_check, 10, phase="start", want=want, entities=entities),
-                              self.run_every(self._test_observe, "now+60", 60),
-                              self.run_in(self._test_end, req["minutes"] * 60)]
+        self.host.fire_event("pe_test_result", ok=True,
+                             message=f"Test started: {req['action']} for {req['minutes']} min")
+        self._test_handles = [self.host.run_in(self._test_check, 10, phase="start", want=want, entities=entities),
+                              self.host.run_every(self._test_observe, "now+60", 60),
+                              self.host.run_in(self._test_end, req["minutes"] * 60)]
 
     def _test_observe(self, kwargs):
         if self._test_running():
@@ -3722,7 +3735,7 @@ class PowerEngine(hass.Hass):
 
     def _test_check(self, kwargs):
         run = self._test
-        have = {role: self.get_state(kwargs["entities"][role]) for role in kwargs["want"]}
+        have = {role: self.host.get_state(kwargs["entities"][role]) for role in kwargs["want"]}
         bad = readback_mismatches(kwargs["want"], have)
         run.step(datetime.now(timezone.utc), f"read back ({kwargs['phase']})", ok=not bad, mismatched=bad,
                  **self._battery_now())
@@ -3745,20 +3758,20 @@ class PowerEngine(hass.Hass):
             return
         for handle in getattr(self, "_test_handles", []):
             try:
-                self.cancel_timer(handle)
+                self.host.cancel_timer(handle)
             except Exception:
                 pass
         self._test_handles = []
         run.status = "reverting"
         want = release()
         entities, _ = self._control_entities(want)
-        have = {role: self.get_state(entities[role]) for role in want}
+        have = {role: self.host.get_state(entities[role]) for role in want}
         writes = writes_needed(want, have, self._inverter().button_role)
         self._write_why = "supervised test: revert"
         self._write(writes, entities)
         run.step(datetime.now(timezone.utc), "reverted to Self-Use", writes=[w.as_dict() for w in writes])
         self._publish_test()
-        self.run_in(self._test_check, 10, phase="end", want=want, entities=entities, stopped=kwargs.get("stopped"))
+        self.host.run_in(self._test_check, 10, phase="end", want=want, entities=entities, stopped=kwargs.get("stopped"))
 
     # --- supervised remote-control (RC register) tests ------------------------------------------
 
@@ -3787,12 +3800,12 @@ class PowerEngine(hass.Hass):
         self.log(f"Supervised RC test started by {user}: {test} at {power} W for {req['minutes']} min")
         self._logbook(f"supervised RC test started by {user}: {test} for {req['minutes']} min")
         self._publish_test()
-        self.fire_event("pe_test_result", ok=True, message=f"Test started: {test} for {req['minutes']} min")
-        self._test_handles = [self.run_in(self._rc_relatch, 5),
-                              self.run_every(self._rc_sample, f"now+{rctest.SAMPLE_S}", rctest.SAMPLE_S),
-                              self.run_in(self._rc_end, req["minutes"] * 60)]
+        self.host.fire_event("pe_test_result", ok=True, message=f"Test started: {test} for {req['minutes']} min")
+        self._test_handles = [self.host.run_in(self._rc_relatch, 5),
+                              self.host.run_every(self._rc_sample, f"now+{rctest.SAMPLE_S}", rctest.SAMPLE_S),
+                              self.host.run_in(self._rc_end, req["minutes"] * 60)]
         if test == "rc_failsafe":
-            self._test_handles.append(self.run_in(self._rc_stop_resending, rctest.FAILSAFE_FORCE_S))
+            self._test_handles.append(self.host.run_in(self._rc_stop_resending, rctest.FAILSAFE_FORCE_S))
 
     def _rc_relatch(self, kwargs):
         """The power again after the force option: some firmware only takes the power once RC is on."""
@@ -3806,7 +3819,7 @@ class PowerEngine(hass.Hass):
             return
         now = datetime.now(timezone.utc)
         sample = {"time": now.isoformat(timespec="seconds"), **self._battery_now(),
-                  "rc": self.get_state(self._rc["rc"]["rc_mode"])}
+                  "rc": self.host.get_state(self._rc["rc"]["rc_mode"])}
         self._rc["samples"].append(sample)
         self._test.step(now, "reading", **{k: v for k, v in sample.items() if k != "time"})
         self._publish_test()
@@ -3817,7 +3830,7 @@ class PowerEngine(hass.Hass):
             return
         now = datetime.now(timezone.utc)
         self._rc["stop_at"] = now.isoformat(timespec="seconds")
-        self.call_service("homeassistant/reload_config_entry", entity_id=self._rc["rc"]["rc_mode"])
+        self.host.call_service("homeassistant/reload_config_entry", entity_id=self._rc["rc"]["rc_mode"])
         self._test.step(now, "stopped re-sending (SolaX Modbus reloaded; Off NOT written) - watching for the "
                              "inverter to drop the force charge by itself")
         self._publish_test()
@@ -3826,7 +3839,7 @@ class PowerEngine(hass.Hass):
         run, rc = self._test, self._rc
         for handle in getattr(self, "_test_handles", []):
             try:
-                self.cancel_timer(handle)
+                self.host.cancel_timer(handle)
             except Exception:
                 pass
         self._test_handles = []
@@ -3835,16 +3848,16 @@ class PowerEngine(hass.Hass):
         self._write([self._inverter().ram_off_command().writes()[0]], rc["rc"])
         run.step(datetime.now(timezone.utc), "remote control Off", **self._battery_now())
         self._publish_test()
-        self.run_in(self._rc_finish, 15, stopped=kwargs.get("stopped"))
+        self.host.run_in(self._rc_finish, 15, stopped=kwargs.get("stopped"))
 
     def _rc_finish(self, kwargs):
         run, rc = self._test, self._rc
         now = datetime.now(timezone.utc)
-        have = {role: self.get_state(rc["windows"][role]) for role in rc["want"]}
+        have = {role: self.host.get_state(rc["windows"][role]) for role in rc["want"]}
         changed = readback_mismatches(rc["want"], have)
         if changed:
             run.problems.append("timed-window settings changed during the test: " + ", ".join(changed))
-        mode = self.get_state(rc["rc"]["rc_mode"])
+        mode = self.host.get_state(rc["rc"]["rc_mode"])
         if self._inverter().app_option(mode) not in (rctest.OPTION_OFF, None):
             run.problems.append(f"remote control still shows '{mode}' after switching Off")
         run.verdict, run.explanation = rctest.judge(run.req["action"], rc["power"], rc["samples"], rc["stop_at"])
@@ -3909,7 +3922,7 @@ class PowerEngine(hass.Hass):
     def _watch_ready_by(self):
         if getattr(self, "_ready_by_handle", None):
             try:
-                self.cancel_listen_state(self._ready_by_handle)
+                self.host.cancel_listen_state(self._ready_by_handle)
             except Exception:
                 pass
         self._ready_by_handle = None
@@ -3943,7 +3956,7 @@ class PowerEngine(hass.Hass):
             if changed:
                 self._save_smart()
             return
-        st = self.get_state(eid, attribute="all") or {}
+        st = self.host.get_state(eid, attribute="all") or {}
         options = self._tariff().ready_by_options(st)
         cheap_p = cheap_limit(r, self.cfg, self._wear_p())
         safety, feats = self.cfg.safety, self.cfg.features
@@ -3976,7 +3989,7 @@ class PowerEngine(hass.Hass):
         from pe_core.smartcharge import SETTLE
         disp = self._role_entity("smart_dispatches")
         bad = ready_by_state in (None, "unknown", "unavailable") or (
-            disp and self.get_state(disp) in (None, "unknown", "unavailable"))
+            disp and self.host.get_state(disp) in (None, "unknown", "unavailable"))
         since = getattr(self, "_smart_ok_since", None)
         if bad or since is None:
             self._smart_ok_since = None if bad else now
@@ -3988,11 +4001,11 @@ class PowerEngine(hass.Hass):
         try:
             self._our_write = (value, datetime.now(timezone.utc))
             service, data = self._tariff().ready_by_call(eid, value)
-            self.call_service(service, **data)
+            self.host.call_service(service, **data)
             target = self._role_entity("smart_target_soc")
-            call = self._tariff().charge_target_call(target, self.get_state(target) if target else None)
+            call = self._tariff().charge_target_call(target, self.host.get_state(target) if target else None)
             if call:
-                self.call_service(call[0], **call[1])
+                self.host.call_service(call[0], **call[1])
         except Exception as err:
             self.log(f"Could not request smart-charge slots: {err!r}", level="WARNING")
 
@@ -4031,7 +4044,7 @@ class PowerEngine(hass.Hass):
                                     log=lambda m: self.log(m, level="WARNING"), ctx=ctx)
             self._sim_steps, self._sim_began = 0, datetime.now(timezone.utc)
             self.log("Simulator: overnight run started")
-            self.run_in(self._sim_step, 1)
+            self.host.run_in(self._sim_step, 1)
         except Exception as err:
             self._sim_job = None
             self.log(f"Simulator could not start: {err!r}", level="WARNING")
@@ -4059,7 +4072,7 @@ class PowerEngine(hass.Hass):
             self._sim_job = None
             self.log(f"Simulator run failed: {err!r}", level="WARNING")
             return
-        self.run_in(self._sim_step, 1)
+        self.host.run_in(self._sim_step, 1)
 
     def _sim_context(self) -> SimContext:
         """Your tariff (from the rate sensor's 'tariff' attribute), history, heat pump, location."""
@@ -4069,19 +4082,19 @@ class PowerEngine(hass.Hass):
                          equipment=EquipmentSettings.from_dict(self._sim_settings().get("equipment")),
                          auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)))
         eid = self._role_entity("import_rate_now")
-        code = str(self.get_state(eid, attribute="tariff") or "") if eid else ""
+        code = str(self.host.get_state(eid, attribute="tariff") or "") if eid else ""
         if code.startswith("E-1R-") and len(code) > 7:
             supplier = supplier_of(eid)
             ctx.current = {"supplier": supplier, "product": code[5:-2], "tariff": code, "region": code[-1],
                            "name": "your tariff"}
         spec = self.cfg.inputs.get("export_rate") or {}
         try:
-            ctx.export_p = float(spec["value"]) if "value" in spec else float(self.get_state(spec.get("entity")))
+            ctx.export_p = float(spec["value"]) if "value" in spec else float(self.host.get_state(spec.get("entity")))
         except (TypeError, ValueError, KeyError):
             ctx.export_p = None
         try:
-            lat = float(self.get_state("zone.home", attribute="latitude"))
-            lon = float(self.get_state("zone.home", attribute="longitude"))
+            lat = float(self.host.get_state("zone.home", attribute="latitude"))
+            lon = float(self.host.get_state("zone.home", attribute="longitude"))
             ctx.weather = Weather(os.path.join(self._sim_folder(), "weather.json"), lat, lon)
         except (TypeError, ValueError):
             ctx.weather = None
@@ -4130,14 +4143,14 @@ class PowerEngine(hass.Hass):
         e = EquipmentSettings.from_dict(data.get("equipment"))
         problems = s.problems() + e.problems()
         if problems:
-            self.fire_event("pe_sim_result", ok=False, message="Not saved: " + "; ".join(problems))
+            self.host.fire_event("pe_sim_result", ok=False, message="Not saved: " + "; ".join(problems))
             return
         path = os.path.join(self._sim_folder(), "settings.json")
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
             json.dump({"heat_pump": s.as_dict(), "equipment": e.as_dict()}, fh, indent=1)
         self.log(f"Simulator: settings saved by {self._user_name(data)}")
-        self.fire_event("pe_sim_result", ok=True, message="Saved. Tonight's run includes them.")
+        self.host.fire_event("pe_sim_result", ok=True, message="Saved. Tonight's run includes them.")
         self._sim_publish()
 
     def _sim_publish(self):
@@ -4178,7 +4191,7 @@ class PowerEngine(hass.Hass):
                                 datetime.now(timezone.utc), limit=LOWWRITE_SLICE)
             self._lowwrite_publish()
             if summary.get("pending"):
-                self.run_in(self._lowwrite_start, 60)
+                self.host.run_in(self._lowwrite_start, 60)
         except Exception as err:
             self.log(f"Low-write study failed: {err!r}", level="WARNING")
 
@@ -4249,7 +4262,7 @@ class PowerEngine(hass.Hass):
         if event_name != COMPARE_RECHECK_EVENT:
             return
         def say(ok, message):
-            self.fire_event(COMPARE_RECHECK_RESULT, ok=ok, message=message, day=str((data or {}).get("day")))
+            self.host.fire_event(COMPARE_RECHECK_RESULT, ok=ok, message=message, day=str((data or {}).get("day")))
         if not self._compare_on():
             return say(False, "The engine comparison is switched off.")
         try:
@@ -4384,7 +4397,7 @@ class PowerEngine(hass.Hass):
             return
         wanted = {p.id: p.name for p in self.cfg.solar_plants if p.enabled}
         try:
-            ids = list((self.get_state() or {}).keys())
+            ids = list((self.host.get_state() or {}).keys())
         except Exception:
             ids = []
         published = {pid for pid in (solar_plant_id_from_entity(e) for e in ids) if pid}
@@ -4402,7 +4415,7 @@ class PowerEngine(hass.Hass):
         input_field = {"battery_soc": "soc", "battery_power": "battery_power", "solar_power": "solar_power"}
         wanted = {(d.id, input_field[k]): d.name for d in self.cfg.devices for k in d.inputs}
         try:
-            ids = list((self.get_state() or {}).keys())
+            ids = list((self.host.get_state() or {}).keys())
         except Exception:
             ids = []
         published = {ref for ref in (device_ref_from_entity(e) for e in ids) if ref}
@@ -4471,7 +4484,7 @@ class PowerEngine(hass.Hass):
 
     def _entity_present(self, entity_id):
         try:
-            return self.get_state(entity_id) is not None
+            return self.host.get_state(entity_id) is not None
         except Exception:
             return True                                   # can't tell: don't claim a reload is needed
 
@@ -4513,7 +4526,7 @@ class PowerEngine(hass.Hass):
             _, backup = save_config(self._save_path(), new)
         except (ConfigError, OSError) as err:
             self.log(f"Config save by {user} rejected: {err}", level="WARNING")
-            self.fire_event(RESULT_EVENT, ok=False, message=str(err))
+            self.host.fire_event(RESULT_EVENT, ok=False, message=str(err))
             return
         changed = self._changes(self.cfg.raw if self.cfg else {}, new)
         self.log(f"Config saved by {user} ({changed}); backup: {backup or 'none (first save)'}")
@@ -4525,7 +4538,7 @@ class PowerEngine(hass.Hass):
             self._logbook(f"site changed by {user}: the inverter or its firmware; Passive until the tests are re-run")
         # answer as soon as the file is saved: the reload below re-checks inputs, rewrites the dashboard and runs a
         # cycle, which on a slow host (or behind an engine v2 calculation on the app's thread) outlasted the card's wait
-        self.fire_event(RESULT_EVENT, ok=True, message=f"Saved. {changed}."
+        self.host.fire_event(RESULT_EVENT, ok=True, message=f"Saved. {changed}."
                         + (" The inverter changed, so PowerEngine is Passive until the tests are re-run."
                            if switched else ""))
         self._reload()
@@ -4547,26 +4560,26 @@ class PowerEngine(hass.Hass):
             return
         self._update_seen = installed
         self.log(f"Version {installed} installed (running {__version__}); asking Home Assistant to restart AppDaemon")
-        self.fire_event("pe_update_installed", running=__version__, installed=installed)
+        self.host.fire_event("pe_update_installed", running=__version__, installed=installed)
 
     def _listen_for_commands(self):
         """Direct mode only: HA has no integration behind our entities, so hear its service calls. (With MQTT the
         switches are real and the app just watches their state, so nothing is registered.)"""
         pub = self._get_publisher()
         if pub is not None and not pub.retains:
-            self.listen_event(self._on_call_service, "call_service")
-            self.listen_event(self._on_pe_command, "pe_command")
+            self.host.listen_event(self._on_call_service, "call_service")
+            self.host.listen_event(self._on_pe_command, "pe_command")
 
     def _on_call_service(self, event_name, data, kwargs):
         """Direct mode: a switch, select or number of ours was operated in HA (see pe_core/commands.py)."""
         data = data or {}
         for ent, value in from_service(str(data.get("domain")), str(data.get("service")),
-                                       data.get("service_data") or {}, self.get_state):
+                                       data.get("service_data") or {}, self.host.get_state):
             self._on_command(ent.key, value)
 
     def _on_pe_command(self, event_name, data, kwargs):
         """Direct mode: the card's own command event, for when HA refuses a service call for a missing platform."""
-        for ent, value in from_pe_command(data, self.get_state):
+        for ent, value in from_pe_command(data, self.host.get_state):
             self._on_command(ent.key, value)
 
     def _on_command(self, key, value):
@@ -4627,7 +4640,7 @@ class PowerEngine(hass.Hass):
             if fid != self.costbook.flow_id:              # inputs that shape the flows changed: rebuild from history
                 self.costbook.flow_id = fid
                 self.log("Cost inputs changed; recent days will be rebuilt from HA history")
-                self.run_in(self._backfill, 30)
+                self.host.run_in(self._backfill, 30)
             else:
                 p_after = self._params(conversion=False)
                 if p_before is not None and (abs(p_after.capacity_kwh - p_before.capacity_kwh) > 0.05
@@ -4710,7 +4723,8 @@ class PowerEngine(hass.Hass):
         the first cold spell can be read back: command, battery power and the limits side by side."""
         roles = ("battery_bms_charge_limit", "battery_bms_discharge_limit")
         now_raw = {k: {"entity": self._role_entity(k),
-                       "state": self.get_state(self._role_entity(k)) if self._role_entity(k) else None} for k in roles}
+                       "state": self.host.get_state(self._role_entity(k)) if self._role_entity(k) else None}
+                   for k in roles}
         ring = self.__dict__.get("_bms_ring")
         return {"mapped": {k: bool(v["entity"]) for k, v in now_raw.items()}, "sensors": now_raw,
                 "recent": ring.as_list() if ring is not None else [],
@@ -4724,14 +4738,14 @@ class PowerEngine(hass.Hass):
         saved = diagnostics.safe(diagnostics.save_copy,
                                  os.path.join(os.path.dirname(self._save_path()), "diagnostics"), stamp, bundle)
         self.log(f"Diagnostics exported for {self._user_name(data)} ({saved if isinstance(saved, str) else saved})")
-        self.fire_event(diagnostics.BUNDLE_EVENT, id=rid, bundle=json.loads(json.dumps(bundle, default=str)),
+        self.host.fire_event(diagnostics.BUNDLE_EVENT, id=rid, bundle=json.loads(json.dumps(bundle, default=str)),
                         saved=saved if isinstance(saved, str) else None)
 
     def _user_name(self, data):
         ctx = (data.get("metadata") or {}).get("context") or data.get("context") or {}
         uid = ctx.get("user_id")
         if uid:
-            for person in (self.get_state("person") or {}).values():
+            for person in (self.host.get_state("person") or {}).values():
                 if (person.get("attributes") or {}).get("user_id") == uid:
                     return person["attributes"].get("friendly_name", uid)
         return uid or "unknown user"
@@ -4758,7 +4772,7 @@ class PowerEngine(hass.Hass):
         pub = self._get_publisher()
         for ent in RETIRED_ENTITIES:
             try:
-                if pub.retains or self.get_state(ent.entity_id) is not None:
+                if pub.retains or self.host.get_state(ent.entity_id) is not None:
                     pub.retire(ent)
             except Exception as err:
                 self.log(f"Could not retire {ent.entity_id}: {err!r}", level="WARNING")
@@ -4847,7 +4861,7 @@ class PowerEngine(hass.Hass):
 
     def _demo_reply(self, ok, message):
         self.log(f"Demo: {message}", level="INFO" if ok else "WARNING")
-        self.fire_event(DEMO_RESULT_EVENT, ok=ok, message=message)
+        self.host.fire_event(DEMO_RESULT_EVENT, ok=ok, message=message)
 
     def _on_demo(self, event_name, data, kwargs):
         """The card's demo buttons (pe_demo: start / day / exit). Only the event named pe_demo is handled."""
@@ -4868,8 +4882,8 @@ class PowerEngine(hass.Hass):
                                                f"{', '.join(pack['days'])}.")
             if action == "day" and not self._demo:
                 return self._demo_reply(False, "No demo is running. Start it first.")
-            if self.args.get("demo"):
-                return self._demo_reply(False, f"The demo is set in apps.yaml (demo: {self.args['demo']}); change "
+            if self.host.args.get("demo"):
+                return self._demo_reply(False, f"The demo is set in apps.yaml (demo: {self.host.args['demo']}); change "
                                                "that line and restart AppDaemon to pick another day.")
             try:
                 os.makedirs(self._real_dir(), exist_ok=True)
@@ -4882,8 +4896,8 @@ class PowerEngine(hass.Hass):
             title = fill(pack["days"][day].get("title", day), self._names())
             self._demo_reply(True, f"Starting the demo: {title}." if action == "start" else f"Switched to: {title}.")
         elif action == "exit":
-            if self.args.get("demo"):
-                return self._demo_reply(False, f"The demo is set in apps.yaml (demo: {self.args['demo']}); remove "
+            if self.host.args.get("demo"):
+                return self._demo_reply(False, f"The demo is set in apps.yaml (demo: {self.host.args['demo']}); remove "
                                                "that line and restart AppDaemon to leave it.")
             try:
                 os.remove(self._demo_file())

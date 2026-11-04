@@ -2,6 +2,21 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.201 (beta)
+
+### Behaviour changes
+
+None. This release changes how PowerEngine is put together inside, not what it does.
+
+### Behind the scenes
+
+- Every call the app makes to AppDaemon (reading and setting Home Assistant states, calling services, firing and
+  listening for events, timers) now goes through one `Host` interface (`pe_core/host.py`). Today AppDaemon is the only
+  host. This is the first step towards running the engine as its own process, so it can be updated without restarting
+  Home Assistant (plan: `docs/plans/native-integration.md`).
+- `tests/test_host.py` checks that the interface, the AppDaemon host and the fake AppDaemon the tests use all agree, and
+  fails if the app starts calling AppDaemon directly again.
+
 ## 0.9.200 (beta)
 
 ### Behaviour changes

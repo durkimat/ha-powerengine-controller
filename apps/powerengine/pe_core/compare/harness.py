@@ -131,6 +131,9 @@ def _fake_appdaemon():
         def get_timezone(self):
             return "Europe/London"
 
+        def render_template(self, template, **kw):
+            return ""
+
         def get_plugin_api(self, name):
             return types.SimpleNamespace(mqtt_publish=self._mqtt_publish)
 
