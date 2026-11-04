@@ -36,6 +36,10 @@ Home Assistant.
 
 ## Safety
 
-The integration will not start the engine while another PowerEngine is running (the AppDaemon app's heartbeat sensor
-updated in the last five minutes): two would both control the inverter. It raises a Repair and starts the engine within
-a minute of the other stopping. It does not yet run in shadow mode; that, and the migration, are phase 5.
+In **Live** mode the integration will not start the engine while another PowerEngine is running (the AppDaemon app's
+heartbeat sensor updated in the last five minutes): two would both control the inverter. It raises a Repair and starts
+the engine within a minute of the other stopping.
+
+In **Shadow** mode it runs beside the live one on a copy of its data, under separate entities, and refuses every call
+and event the engine asks for; see [docs/plans/shadow-run.md](../docs/plans/shadow-run.md). `tools/shadow_compare.py`
+compares the two from Home Assistant's history.

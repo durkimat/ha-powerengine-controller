@@ -80,7 +80,7 @@ Rules: no change to any data file format in the migration releases, and the engi
 it is in shadow mode.
 
 1. Back up: a Home Assistant backup, the cost history and a copy of `/config/powerengine`.
-2. **Shadow run, for days.** The integration runs alongside the AppDaemon app on a *copy* of the data folder, with all
+2. **Shadow run, for a day or two** (built: [shadow-run.md](shadow-run.md)). The integration runs alongside the AppDaemon app on a *copy* of the data folder, with all
    writes blocked and its entities under a temporary prefix. Compare its plans with the live app's and fix every
    difference.
 3. **Cut-over** in a quiet daytime window (not during a grid event or a cheap-rate charge): stop and disable the app
