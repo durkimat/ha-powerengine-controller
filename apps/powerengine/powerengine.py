@@ -4632,6 +4632,8 @@ class Engine:
         """HACS replaces the app's files but AppDaemon keeps the old modules loaded. When the version on disk differs
         from the one running, fire pe_update_installed once; the handover package's automation restarts AppDaemon.
         (PowerEngine can't restart AppDaemon itself: that needs admin rights it deliberately doesn't have.)"""
+        if self.host.native_entities is not None:          # as the integration's engine: it restarts us itself
+            return
         installed = installed_version(os.path.join(os.path.dirname(os.path.abspath(__file__)), "pe_core",
                                                    "__init__.py"))
         if installed is None or installed == __version__ or getattr(self, "_update_seen", None) == installed:
