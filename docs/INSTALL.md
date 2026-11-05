@@ -68,6 +68,14 @@ PowerEngine's entities are ordinary Home Assistant entities (`sensor.pe_...`).
 | Input mapping | unconfigured |
 | Input catalogue / Settings catalogue | the number of inputs and settings PowerEngine knows about |
 
+**Check the log** (*Settings → System → Logs*, search for `powerengine`). Before any configuration it says:
+
+```
+PowerEngine 0.9.209 starting
+No config.yaml found (...); running unconfigured.
+Inputs: unconfigured; mode unconfigured (...)
+```
+
 If the engine does not start, a Repair on the integration says why. The engine's own log lines are in the
 **Diagnostics** log sensor (`sensor.pe_diag_log`) and Home Assistant's log (search for `powerengine`).
 
