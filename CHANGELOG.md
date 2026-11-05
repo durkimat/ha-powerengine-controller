@@ -2,6 +2,30 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.215 (beta)
+
+### Behaviour changes
+
+- **The dashboard card is now part of the integration, and PowerEngine is one install.** HACS installs the PowerEngine
+  integration only; the integration serves the card (built into `custom_components/powerengine/frontend/`) and adds it to
+  Home Assistant's pages itself, so there is no separate card to install and nothing to add to Lovelace's resources. The
+  card is released with PowerEngine and always has its version. If you already have the card from HACS (the
+  `ha-powerengine-card` Dashboard repository), remove it and its Lovelace resource after updating: the two would load
+  the same cards twice. The old card repository is retired.
+- **The setup checklist and the update card no longer talk about AppDaemon.** The checklist is now: PowerEngine running
+  (with where to look if it is not), and the two chart cards (installed from HACS with one button if HACS is there).
+  The update card says it restarts the engine, not AppDaemon.
+- **The Predbat handover card is gone** from the card, and with it every Predbat reference. The "Other battery controller"
+  guards are unchanged.
+- The engine's "what's new" check no longer reads the retired card repository's changelog.
+
+### Behind the scenes
+
+- The card's source is in `card/` (with its history squashed in) and its 285 tests now run in CI (`node --test`).
+  `tools/build_integration.py` copies it into the integration with `CARD_VERSION` set to the engine's version.
+- `integration/tests/test_frontend.py` covers serving the card, its fingerprinted address (a new address as soon as an
+  update replaces the file), and removing it on unload.
+
 ## 0.9.214 (beta)
 
 ### Behaviour changes
