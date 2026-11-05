@@ -24,7 +24,9 @@ charging on a plan. Allow an hour. Nothing in the data files changes format, so 
 ## Steps
 
 1. **Back up.** A Home Assistant backup; `tar czf` of `/config/powerengine`; a copy of the app's yaml
-   (`/config/appdaemon/apps/ha-powerengine-controller/powerengine.yaml`) and of `/config/.storage/core.entity_registry`.
+   (`/config/appdaemon/apps/ha-powerengine-controller/powerengine.yaml`) and of `/config/.storage/core.entity_registry`
+   and `core.restore_state`. Note the Pause and Right-align switches' states: the migration can only carry them over
+   while the app's entities still have a state, and by then the app is stopped (it says so when it could not).
 2. **Put the live app in Passive** (Config page, or `operation: mode: passive` in config.yaml). The app hands the
    inverter back to Self-Use and sends nothing, so nothing after this can leave the inverter in a forced state. Check
    `sensor.pe_state_control_method` / the inverter's mode.
@@ -32,9 +34,11 @@ charging on a plan. Allow an hour. Nothing in the data files changes format, so 
    is released as an integration) and restart Home Assistant once. If it already runs as a shadow it comes back as one.
 4. **Make the entry live**: Settings, Devices & services, PowerEngine, Configure: mode Live. It waits ("Waiting",
    with a Repair that the app is running).
-5. **Stop the AppDaemon app**: move `powerengine.yaml` aside (AppDaemon unloads the app within seconds), or disable the
-   app in HACS. Wait five minutes, until the heartbeat is stale.
-6. **Run `powerengine.migrate_from_mqtt`** (Developer tools, Actions). It returns what it did. The engine starts within
+5. **Stop the AppDaemon app**: move `powerengine.yaml` aside, then **restart the AppDaemon add-on** (it did not unload a
+   running app when the file moved, on 5 Nov 2026), or disable the app in HACS. The old heartbeat goes `unavailable`
+   when the add-on stops; the migration refuses while it is still updating, so otherwise wait five minutes.
+6. **Run `powerengine.migrate_from_mqtt`** (Developer tools, Actions; a call from the REST API returns 500 whatever
+   happens, as the service answers with data). It returns what it did, including anything to set by hand. The engine starts within
    seconds, in **Passive** (the config says so), on `/config/powerengine`.
 7. **Check, still Passive** (for an hour, through at least one planning cycle):
    - the entity ids and counts match the snapshot (`sensor.pe_*`, 86 entities); no `_2` duplicates; history graphs

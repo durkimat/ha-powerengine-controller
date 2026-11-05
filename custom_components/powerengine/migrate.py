@@ -166,6 +166,11 @@ async def async_migrate(hass: HomeAssistant, folder: Path, shadow_leftovers: boo
             if registry.async_get(entry.entity_id) is None and hass.states.get(entry.entity_id) is not None:
                 hass.states.async_remove(entry.entity_id)               # take another id (sensor.pe_..._2)
         result.removed = len(old)
+        unknown = [r["entity_id"] for r in rows if r["entity_id"].startswith("switch.")
+                   and r["state"] in (None, "unavailable", "unknown")]
+        if unknown:
+            result.notes.append(f"{', '.join(unknown)} had no state to carry over (the app was already stopped): "
+                                "set them by hand if they were not off")
     if shadow_leftovers:
         leftovers = shadow_entries(hass)
         for entry in leftovers:
@@ -173,11 +178,12 @@ async def async_migrate(hass: HomeAssistant, folder: Path, shadow_leftovers: boo
             if hass.states.get(entry.entity_id) is not None:
                 hass.states.async_remove(entry.entity_id)
         result.shadow_removed = len(leftovers)
-        if leftovers:
+        if leftovers:                                               # the shadow's device, once it has no entities
             devices = dr.async_get(hass)
-            for device in list(devices.devices.values()):
-                if any(domain == DOMAIN and ident.endswith("_shadow") for domain, ident in device.identifiers) \
-                        and not er.async_entries_for_device(registry, device.id, include_disabled_entities=True):
+            for entry_id in {e.config_entry_id for e in leftovers if e.config_entry_id}:
+                device = devices.async_get_device(identifiers={(DOMAIN, f"{entry_id}_shadow")})
+                if device is not None and not er.async_entries_for_device(registry, device.id,
+                                                                          include_disabled_entities=True):
                     devices.async_remove_device(device.id)
     _LOGGER.info("Migration from the AppDaemon app: %s", result.as_dict())
     return result

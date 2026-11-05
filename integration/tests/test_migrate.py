@@ -6,6 +6,7 @@ from datetime import timedelta
 import pytest
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
@@ -108,15 +109,27 @@ async def test_running_it_again_finds_nothing(hass, tmp_path):
     await hass.config_entries.async_unload(entry.entry_id)
 
 
-async def test_a_shadow_runs_leftovers_go_when_the_entry_becomes_live(hass, tmp_path):
-    registry = er.async_get(hass)
-    for key in ("diag_version", "state_status"):
-        registry.async_get_or_create("sensor", DOMAIN, f"powerengine_shadow_{key}",
-                                     suggested_object_id=f"pe_shadow_{key}")
+async def test_a_shadow_runs_leftovers_and_device_go_when_the_entry_becomes_live(hass, tmp_path):
     entry = await start(hass, tmp_path)
+    registry, devices = er.async_get(hass), dr.async_get(hass)
+    device = devices.async_get_or_create(config_entry_id=entry.entry_id,
+                                         identifiers={(DOMAIN, f"{entry.entry_id}_shadow")})
+    for key in ("diag_version", "state_status"):
+        registry.async_get_or_create("sensor", DOMAIN, f"powerengine_shadow_{key}", config_entry=entry,
+                                     device_id=device.id, suggested_object_id=f"pe_shadow_{key}")
     result = await hass.services.async_call(DOMAIN, const.SERVICE_MIGRATE, {}, blocking=True, return_response=True)
     assert result["shadow_removed"] == 2
     assert registry.async_get("sensor.pe_shadow_diag_version") is None
+    assert devices.async_get(device.id) is None
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_it_says_when_a_switch_had_no_state_to_carry_over(hass, tmp_path):
+    old_app(hass)
+    hass.states.async_set("switch.pe_ctl_pause", "unavailable")           # the app was stopped before the migration
+    entry = await start(hass, tmp_path)
+    result = await hass.services.async_call(DOMAIN, const.SERVICE_MIGRATE, {}, blocking=True, return_response=True)
+    assert any("switch.pe_ctl_pause" in note for note in result["notes"])
     await hass.config_entries.async_unload(entry.entry_id)
 
 
