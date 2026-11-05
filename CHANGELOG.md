@@ -2,6 +2,24 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.206 (beta)
+
+### Behaviour changes
+
+- A short outage of the supplier's smart-charge or rate sensors no longer re-plans. The supplier's integration drops
+  these sensors for a minute or two now and then. Their planned slots and rate lists read as empty meanwhile, which the
+  engine took as "the slots were withdrawn", and it re-planned when the slots disappeared and again when they came
+  back. On 5 Nov 2026 that turned a charge to 90% into an hour of export. The last good slots and rates are now kept
+  while their sensor is unavailable, for up to 15 minutes. A sensor that is available and says there are no slots is
+  believed at once, and after 15 minutes of outage the engine stops holding the old lists (and says so in the log, as
+  a warning).
+- The log says when it starts keeping the last known lists and when they are back ("The smart-charge slots are back
+  after 90 s").
+
+### Behind the scenes
+
+- `pe_core/hold.py` (`Hold`), used by `read()` for the rate and smart-slot lists. Tests in `tests/test_hold.py`.
+
 ## 0.9.205 (beta)
 
 ### Behaviour changes
