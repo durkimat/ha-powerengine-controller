@@ -60,3 +60,21 @@ def test_initialize_runs_with_a_config(engine):
     e.args = {"settings_file": str(folder / "config.yaml")}
     e.initialize()
     assert e.cfg is not None and e.damper.hold_until is not None
+
+
+def test_cost_sensors_are_published_when_the_app_has_no_mqtt_handle(engine, monkeypatch):
+    """Direct publishing (and the integration) has no MQTT plugin; the cost sensors must not wait for one."""
+    e, folder, powerengine = engine
+    (folder / "config.yaml").write_text("schema_version: 1\noperation: {mode: passive}\ninputs: {}\n"
+                                        "system: {publisher: direct}\n")
+    e.args = {"settings_file": str(folder / "config.yaml")}
+    e.initialize()
+    assert e.mqtt is None
+    e.costbook = object()
+    e._months = []
+    monkeypatch.setattr(e, "_scenario_params", lambda: None)
+    monkeypatch.setattr(powerengine, "cost_entity_states", lambda *a, **k: {"cost_today": ("1.5", {})})
+    seen = []
+    monkeypatch.setattr(e, "_publish_if_changed", lambda key, state, attrs: seen.append((key, state)))
+    e._publish_costs()
+    assert seen == [("cost_today", "1.5")]
