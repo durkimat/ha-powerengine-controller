@@ -1,11 +1,10 @@
 """PowerEngine in demo mode, closed loop: the app decides, the simulated battery follows, and nothing reaches the
 real Home Assistant."""
 import sys
-import types
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from replay_harness import Clock, FrozenDatetime, _fake_appdaemon
+from replay_harness import Clock, FrozenDatetime, fake_home
 
 BST = timezone(timedelta(hours=1))
 START = datetime(2026, 10, 6, 0, 10, tzinfo=BST)          # a cheap night, on the "car" day (68 % at midnight)
@@ -14,7 +13,7 @@ HOURS = 6
 
 def load_demo_app(monkeypatch):
     """powerengine against a fake AppDaemon that records anything that reaches the 'real' Home Assistant."""
-    Base = _fake_appdaemon()
+    Base = fake_home()
 
     class Hass(Base):
         def __init__(self):
@@ -35,13 +34,9 @@ def load_demo_app(monkeypatch):
             self.real_mqtt.append(name)
             raise AssertionError("demo mode must not look for the MQTT plugin")
 
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = Hass
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine
+    powerengine.PowerEngine = type("PowerEngine", (powerengine.PowerEngine, Hass), {})
     for name, mod in list(sys.modules.items()):
         if (name == "powerengine" or name.startswith("pe_core")) and getattr(mod, "datetime", None) is datetime:
             monkeypatch.setattr(mod, "datetime", FrozenDatetime)

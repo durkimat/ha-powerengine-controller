@@ -2,7 +2,7 @@
 perfect-foresight bound, each costed from the world's own flows (`tools/engine_compare.py`'s method, which the demo
 days proved; docs/plans/engine-pages-and-comparison.md, 2.1).
 
-For each engine the WHOLE app runs in demo mode (a fake AppDaemon and a fake clock; the demo world plays the day's
+For each engine the WHOLE app runs in demo mode (a fake Home Assistant and a fake clock; the demo world plays the day's
 house, sun, prices, smart slots and grid events and simulates the battery), Active, RAM remote control. The app's own
 run_every callbacks (the 30 s cycle, v2's tick, the 5 min input check, the heartbeat) are called at their intervals and
 the world is stepped every 10 s. Each run is costed from the world's flows:

@@ -1,6 +1,6 @@
-"""PowerEngine AppDaemon entry point.
+"""PowerEngine: the engine, run as a process of its own by the Home Assistant integration (engine_main.py).
 
-A thin adapter between AppDaemon/Home Assistant and pe_core. Decision logic
+A thin adapter between Home Assistant (through its host, pe_core/host.py) and pe_core. Decision logic
 belongs in pe_core so it can be tested offline.
 
 Passive (the default) only monitors and simulates. Active writes the Solis timed-slot settings (and, if the
@@ -18,11 +18,6 @@ import threading
 from datetime import date, datetime, timedelta, timezone
 from time import monotonic
 from zoneinfo import ZoneInfo
-
-try:
-    import appdaemon.plugins.hass.hassapi as hass
-except ImportError:                      # the engine's own process (docs/plans/native-integration.md) has no AppDaemon
-    hass = None
 
 from pe_core import (
     __version__,
@@ -126,7 +121,7 @@ from pe_core.health import WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_plan, day_view
 from pe_core.hold import Hold
-from pe_core.host_appdaemon import AppDaemonHost
+from pe_core.host_local import LocalHost
 from pe_core.journal import WriteJournal, day_summary, is_staged
 from pe_core.loadstore import LoadStore
 from pe_core.lowwrite import Study as LowWriteStudy
@@ -221,7 +216,7 @@ def _real(writes) -> int:
     return sum(not is_staged(w.role) for w in writes)
 
 class Engine:
-    _demo = None                     # the demo day when `demo: <day>` is set in apps.yaml (see _demo_setup)
+    _demo = None                     # the demo day when `demo: <day>` is set in the app's settings (see _demo_setup)
     _shadow = False                  # a shadow run (engine_main --shadow): plans, controls and sends nothing, and
     #                                  stays inside its own data folder (the integration also blocks its calls)
 
@@ -231,7 +226,7 @@ class Engine:
         it. Kept in __dict__ so it is not one of the attributes initialize() sets and _wipe() removes."""
         host = self.__dict__.get("_host")
         if host is None:
-            host = self.__dict__["_host"] = AppDaemonHost(self)
+            host = self.__dict__["_host"] = LocalHost(self)
         return host
 
     # --- starting again inside the running app (the demo's start, day and exit) -------------------------------
@@ -2347,7 +2342,7 @@ class Engine:
                             message=f"Sent to {' and '.join(parts)}: \"{text}\"{note}")
         else:
             self.host.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False,
-                            message="Home Assistant would not play or send it anywhere. See the AppDaemon log.")
+                            message="Home Assistant would not play or send it anywhere. See PowerEngine's log.")
 
     @staticmethod
     def _test_message():
@@ -2366,7 +2361,7 @@ class Engine:
         sent, tried = self._send("test", ch, self._test_message(), datetime.now(timezone.utc))
         self.log(f"Test message to a {ch['type']} channel: {sent} of {tried}")
         self.host.fire_event(NOTIFY_TEST_RESULT_EVENT, ok=sent > 0,
-                        message=(f"Sent to {sent} of {tried}." + (" See the AppDaemon log for the ones that failed."
+                        message=(f"Sent to {sent} of {tried}." + (" See PowerEngine's log for the ones that failed."
                                                                   if sent < tried else "")) if tried else
                         "There is nothing to send to.")
 
@@ -4287,7 +4282,7 @@ class Engine:
 
     # --- same-day engine comparison (docs/plans/engine-pages-and-comparison.md, 2.4): never touches Home Assistant ----
     #
-    # Each night a separate process (pe_core.compare.run, the whole app against a fake AppDaemon in a temp folder)
+    # Each night a separate process (pe_core.compare.run, the whole app against a fake Home Assistant in a temp folder)
     # replays yesterday once with each engine from the day's forecast record; this side starts it, looks at it every
     # five minutes, stops it at 90 minutes, runs one at a time, and publishes sensor.pe_cost_engines.
 
@@ -4349,7 +4344,7 @@ class Engine:
             why = self._compare_scheduler().recheck(day, self._today())
         except Exception as err:
             self.log(f"Engine comparison: could not queue {day}: {err!r}", level="WARNING")
-            return say(False, "It could not be started. See the AppDaemon log.")
+            return say(False, "It could not be started. See PowerEngine's log.")
         if why:
             return say(False, f"Not started: {why}.")
         self.log(f"Engine comparison: replaying {day} again, asked for from the card")
@@ -4867,8 +4862,9 @@ class Engine:
     # --- demo mode (demo plan C2): a simulated home and battery, and nothing written to the real system -----------
 
     def _demo_setup(self, day):
-        """`demo: <day>` in apps.yaml. The settings are a fresh copy of demo/config.template in a separate folder, so
-        the real configuration, costs, journal and learned data are never touched; the app's get_state, call_service,
+        """`demo: <day>` in the app's settings. The settings are a fresh copy of demo/config.template in a separate
+        folder, so the
+        real configuration, costs, journal and learned data are never touched; the app's get_state, call_service,
         fire_event, set_state and get_history become the demo gate's (pe_core/demo/gate.py); publishing is direct."""
         pack = load_demo_pack()
         if day not in pack["days"]:
@@ -4887,7 +4883,7 @@ class Engine:
         real_set = self.host.method("set_state")
         gate = self._demo_gate = DemoGate(
             self._demo_world, self.host.method("get_state"),
-            self.host.lossless_set_state(real_set, self._told_once) if real_set is not None else None,
+            real_set,
             self.host.method("fire_event"), self.log,
             allowed_events=(RESULT_EVENT, "pe_test_result", "pe_sim_result", diagnostics.BUNDLE_EVENT,
                             DEMO_RESULT_EVENT))
@@ -4948,8 +4944,9 @@ class Engine:
             if action == "day" and not self._demo:
                 return self._demo_reply(False, "No demo is running. Start it first.")
             if self.host.args.get("demo"):
-                return self._demo_reply(False, f"The demo is set in apps.yaml (demo: {self.host.args['demo']}); change "
-                                               "that line and restart AppDaemon to pick another day.")
+                return self._demo_reply(False, f"The demo is set in the app's settings (demo: "
+                                               f"{self.host.args['demo']}); change that line and restart the engine "
+                                               "to pick another day.")
             try:
                 os.makedirs(self._real_dir(), exist_ok=True)
                 tmp = self._demo_file() + ".tmp"
@@ -4962,8 +4959,9 @@ class Engine:
             self._demo_reply(True, f"Starting the demo: {title}." if action == "start" else f"Switched to: {title}.")
         elif action == "exit":
             if self.host.args.get("demo"):
-                return self._demo_reply(False, f"The demo is set in apps.yaml (demo: {self.host.args['demo']}); remove "
-                                               "that line and restart AppDaemon to leave it.")
+                return self._demo_reply(False, f"The demo is set in the app's settings (demo: "
+                                               f"{self.host.args['demo']}); remove that line and restart the engine "
+                                               "to leave it.")
             try:
                 os.remove(self._demo_file())
             except FileNotFoundError:
@@ -5096,10 +5094,10 @@ class Engine:
                  "remove it in HACS or set remove_entities: false to bring them back.", level="WARNING")
 
 
-if hass is not None:
-    class PowerEngine(Engine, hass.Hass):
-        """The AppDaemon app (apps.yaml: `class: PowerEngine`): the engine, run by AppDaemon. The engine reaches
-        AppDaemon only through its host (pe_core/host_appdaemon.py)."""
+class PowerEngine(Engine):
+    """The engine, named as the tests and the demo build it: with a stand-in for Home Assistant as its other base class
+    (pe_core/compare/harness.py). Inside Home Assistant the integration runs `Engine` itself (engine_main.py)."""
 
-        def _hass_log(self, msg, *args, **kwargs):
-            return hass.Hass.log(self, msg, *args, **kwargs)
+    def _base_log(self, msg, *args, **kwargs):
+        log = getattr(super(Engine, self), "log", None)
+        return log(msg, *args, **kwargs) if log else None

@@ -30,7 +30,8 @@ custom_components/powerengine/        thin and stable: a Home Assistant restart 
    (`pe_core/host.py`); `tests/test_host.py` fails if a new direct call appears. No change in behaviour.
 2. **Engine process.**
    - **2a (done in 0.9.202):** the AppDaemon-specific code that was left (the demo's timer and listener tracking, the
-     REST and MQTT publishing set-up, the plugin lookup) is in `pe_core/host_appdaemon.py`, and the `Engine` class in
+     REST and MQTT publishing set-up, the plugin lookup) was in `pe_core/host_appdaemon.py` (removed in 0.9.211, with the AppDaemon shell: the tests, the demo and the nightly
+     comparison use `pe_core/host_local.py`), and the `Engine` class in
      `powerengine.py` no longer inherits from AppDaemon's `Hass`; the AppDaemon app is `Engine` plus `Hass`.
    - **2b (done in 0.9.203):** everything the engine needs to run without AppDaemon, built and tested, but nothing in a
      running system uses it until the integration exists:
@@ -72,10 +73,11 @@ custom_components/powerengine/        thin and stable: a Home Assistant restart 
    process.
 4. **Tests.** Entity creation and the bridge with `pytest-homeassistant-custom-component`; the engine against a fake
    host; a shadow run compared with the live app (`tools/engine_compare.py`).
-5. **Cut-over tooling and migration (built: [cut-over.md](cut-over.md)).** `migrate.py` and the service
-   `powerengine.migrate_from_mqtt`: the engine is not started while the app's MQTT entities exist; the service saves a
-   snapshot of them, clears their retained messages, removes them and starts the engine, which makes the same ids
-   natively. The runbook is the numbered steps in cut-over.md; the cut-over itself is a decision for the owner.
+5. **Cut-over tooling and migration (built, used on 2026-11-05, removed in 0.9.211).** `migrate.py` and the service
+   `powerengine.migrate_from_mqtt`: the engine was not started while the app's MQTT entities existed; the service saved
+   a snapshot of them, cleared their retained messages, removed them and started the engine, which made the same ids
+   natively. The one system that needed it has moved, so the tooling, its Repairs and the runbook are gone (they are in
+   the 0.9.210 tag if they are ever wanted).
 
 ## Migrating a running system
 

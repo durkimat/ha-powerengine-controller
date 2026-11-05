@@ -1,6 +1,5 @@
 """The other_controller setting: none / predbat / other, derived when not chosen (0.9.108)."""
 import sys
-import types
 
 import pytest
 
@@ -99,11 +98,6 @@ def test_guard_roles_are_never_required():
 
 @pytest.fixture
 def app(monkeypatch):
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = type("Hass", (), {})
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine
     a = powerengine.PowerEngine.__new__(powerengine.PowerEngine)

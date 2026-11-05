@@ -36,7 +36,6 @@ from .const import (
     STATUS_RUNNING,
     STATUS_STARTING,
     STATUS_STOPPED,
-    STATUS_WAITING,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -122,10 +121,6 @@ class EngineSupervisor:
         self._connected = True
         if self._process is not None and self._process.returncode is None and self.status == STATUS_STARTING:
             self._set(STATUS_RUNNING)
-
-    def wait_for_other(self) -> None:
-        """Another PowerEngine is running: don't start the engine until it isn't."""
-        self._set(STATUS_WAITING)
 
     # --- start, stop, restart
     def start(self) -> None:

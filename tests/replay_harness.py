@@ -9,19 +9,18 @@ from __future__ import annotations
 
 import json
 import sys
-import types
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import yaml
 
-from pe_core.compare.harness import (  # noqa: F401  (the fake AppDaemon and the clock live in the app package now)
+from pe_core.compare.harness import (  # noqa: F401  (the fake Home Assistant and the clock live in the app package now)
     HANDLES,
     LOGGED_INFO,
     VERSION,
     Clock,
     FrozenDatetime,
-    _fake_appdaemon,
+    fake_home,
 )
 
 HERE = Path(__file__).parent
@@ -29,14 +28,10 @@ STEP = timedelta(seconds=60)
 PLAN_SLOTS = 32                      # half-hours of each plan kept in the record
 
 def load_app(monkeypatch):
-    """Import powerengine against the fake AppDaemon, with the clock patched into every module that uses it."""
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = _fake_appdaemon()
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
+    """Import powerengine over the fake Home Assistant, with the clock patched into every module that uses it."""
     sys.modules.pop("powerengine", None)
     import powerengine
+    powerengine.PowerEngine = type("PowerEngine", (powerengine.PowerEngine, fake_home()), {})
     for name, mod in list(sys.modules.items()):
         if (name == "powerengine" or name.startswith("pe_core")) and getattr(mod, "datetime", None) is datetime:
             monkeypatch.setattr(mod, "datetime", FrozenDatetime)
@@ -224,12 +219,8 @@ class Replay:
 
 
 def import_powerengine(monkeypatch):
-    """The app module, imported against the fake AppDaemon (for tests that call one of its methods on a stub)."""
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = _fake_appdaemon()
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
+    """The app module, imported over the fake Home Assistant (for tests that call one of its methods on a stub)."""
     sys.modules.pop("powerengine", None)
     import powerengine
+    powerengine.PowerEngine = type("PowerEngine", (powerengine.PowerEngine, fake_home()), {})
     return powerengine

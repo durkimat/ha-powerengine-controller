@@ -157,11 +157,6 @@ def test_the_v2_day_picker_shows_the_picked_day_inside_the_kept_days(v2_run):
 # --- the snapshot hook, bound from the real class ------------------------------------------------------------------
 
 def _hook_app(monkeypatch, tmp_path, states):
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = type("Hass", (), {})
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine as pe
     monkeypatch.setattr(pe, "datetime", type("D", (datetime,), {

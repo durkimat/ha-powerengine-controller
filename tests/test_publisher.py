@@ -195,23 +195,8 @@ def test_publisher_setting_parses_defaults_to_auto_and_rejects_others():
     assert [o[0] for o in entry["options"]] == ["auto", "mqtt", "direct"]
 
 
-def _engine():
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-
-    class Hass:
-        def __getattr__(self, name):
-            raise AttributeError(name)
-
-        def log(self, *a, **k):
-            pass
-    hassapi.Hass = Hass
-    mods = {n: types.ModuleType(n) for n in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass")}
-    mods["appdaemon.plugins.hass.hassapi"] = hassapi
-    return mods
-
-
 def test_the_app_builds_the_publisher_from_the_setting_and_the_plugin():
-    with mock.patch.dict(sys.modules, _engine()):
+    with mock.patch.dict(sys.modules):
         sys.modules.pop("powerengine", None)
         import powerengine
         e = powerengine.PowerEngine.__new__(powerengine.PowerEngine)

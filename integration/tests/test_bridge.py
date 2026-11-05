@@ -11,6 +11,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, async_
 
 from custom_components.powerengine import const
 from custom_components.powerengine.const import DOMAIN
+from custom_components.powerengine.supervisor import EngineSupervisor
 from pe_core.host_socket import HostError, SocketHost  # noqa: E402
 
 
@@ -24,10 +25,10 @@ class Calls:
 
 
 @pytest.fixture
-async def engine_client(hass, tmp_path):
-    """The integration set up with no engine of its own (another PowerEngine is "running"), and a client that stands in
-    for the engine."""
-    hass.states.async_set(const.HEARTBEAT_ENTITY, "beating")
+async def engine_client(hass, tmp_path, monkeypatch):
+    """The integration set up with no engine of its own (the supervisor does not start one), and a client that stands
+    in for the engine."""
+    monkeypatch.setattr(EngineSupervisor, "start", lambda self: None)
     entry = MockConfigEntry(domain=DOMAIN, data={}, options={const.CONF_SETTINGS_DIR: str(tmp_path)})
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)

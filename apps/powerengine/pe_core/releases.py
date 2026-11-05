@@ -16,7 +16,7 @@ APP_REPO = "ha-powerengine-controller"
 CARD_REPO = "ha-powerengine-card"
 TIMEOUT_S = 10
 NOTES_BUDGET = 5000            # characters of notes in the sensor attributes (HA skips attributes over 16 KB)
-USER_AGENT = "PowerEngine (Home Assistant AppDaemon app; version check)"
+USER_AGENT = "PowerEngine (Home Assistant integration; version check)"
 
 _HEADING = re.compile(r"^## (\d+\.\d+\.\d+)(?:\s.*)?$", re.M)
 

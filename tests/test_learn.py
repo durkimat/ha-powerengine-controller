@@ -140,14 +140,8 @@ def test_half_hour_notes_the_command():
 
 def _app(monkeypatch, cfg=None):
     import sys
-    import types
 
     from pe_core.config import parse_config
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = type("Hass", (), {})
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine
     a = powerengine.PowerEngine.__new__(powerengine.PowerEngine)

@@ -137,9 +137,9 @@ SYSTEM_CHOICES = {
     "other_controller": ("control", (("none", "No other battery controller"),
                                      ("predbat", "Predbat, switched over with the handover package"),
                                      ("other", "Another controller: PowerEngine checks the guard entities below"))),
-    "publisher": ("system", (("auto", "Automatic (MQTT if AppDaemon has the MQTT plugin, else direct)"),
+    "publisher": ("system", (("auto", "Automatic (the integration's own entities)"),
                              ("mqtt", "MQTT"),
-                             ("direct", "Direct through AppDaemon (no MQTT broker)"))),
+                             ("direct", "Plain states written to Home Assistant (no MQTT broker)"))),
 }
 LOCATION_LAG_H = {"garage": 24.0, "outside": 6.0, "indoors": 72.0}
 

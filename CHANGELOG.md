@@ -2,6 +2,30 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.211 (beta)
+
+### Behaviour changes
+
+- **The AppDaemon code is gone.** The engine no longer has an AppDaemon host or an AppDaemon app class
+  (`pe_core/host_appdaemon.py`, the `Hass` shell in `powerengine.py`), and nothing in it reads `appdaemon`. In Home
+  Assistant the engine already ran on the integration's host; the tests, the demo and the nightly comparison now run it
+  on a plain in-process host (`pe_core/host_local.py`) over a fake Home Assistant. Nothing changes in how the engine
+  decides or controls.
+- **The migration from the AppDaemon app is gone**, with its `powerengine.migrate_from_mqtt` service, its two Repairs
+  ("already running in AppDaemon", "finish taking over") and the "waiting" engine state. The integration now starts
+  the engine whenever it is not running. Moving from the old app is no longer supported (the 0.9.210 tag has the
+  tooling, and `docs/plans/native-integration.md` the history).
+- The Entity publishing setting's wording no longer mentions AppDaemon ("Automatic" means the integration's own
+  entities). The "See the AppDaemon log" hints now say "See PowerEngine's log".
+- The engine no longer works round AppDaemon 4.5's `set_state` (the REST write that kept `false`, `null` and `0` in
+  attributes) or checks that the MQTT plugin is configured.
+
+### Behind the scenes
+
+- The tests that built the engine over a hand-stubbed `appdaemon` module now give it a fake Home Assistant as a second
+  base class (`pe_core/compare/harness.py: fake_home`). Tests of AppDaemon-only behaviour (asyncio task handles,
+  the REST write, the plugin check, slow-call logging) were removed with the code they tested.
+
 ## 0.9.210 (beta)
 
 ### Behaviour changes

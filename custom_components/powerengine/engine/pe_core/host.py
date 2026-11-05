@@ -1,10 +1,11 @@
 """The one door between PowerEngine and the thing that runs it.
 
 The app reads and changes Home Assistant, sets timers and listens for events. Every one of those calls goes through a
-`Host`, never straight to AppDaemon, so what hosts the app can change without the decisions changing. Today the host is
-AppDaemon (`AppDaemonHost`); the plan is a second one that talks to a separate engine process (docs/plans).
+`Host`, never straight to a client library, so what hosts the app can change without the decisions changing. Inside
+Home Assistant the host is the integration's (`SocketHost`, host_socket.py), which talks to the engine as a process of
+its own; the tests, the demo and the nightly comparison use `LocalHost` (host_local.py).
 
-The methods keep AppDaemon's names, arguments and meanings, because that is what the app already speaks:
+The methods keep the names, arguments and meanings the app grew up with (AppDaemon's):
 
   * Callbacks are plain functions called on a worker thread; a state or event callback takes the arguments AppDaemon
     gives it, a timer callback takes (kwargs).
@@ -12,7 +13,7 @@ The methods keep AppDaemon's names, arguments and meanings, because that is what
     return one for `cancel_listen_state` and `cancel_listen_event`.
   * `get_state` is synchronous and cheap (a host may answer from a local copy of Home Assistant's states).
 
-`AppDaemonHost` (host_appdaemon.py) looks each method up on the app at the moment of the call, not when it is built,
+`LocalHost` looks each method up on the app at the moment of the call, not when it is built,
 so the tests, which replace whatever they need on the app, work without change. Beyond the calls in METHODS a host
 also provides what the engine needs of the place it runs: its own log, the way entity states are written, plugin
 lookups, and the demo's start, exit and replacement of the Home Assistant calls.
@@ -23,7 +24,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
 
-# The methods a host provides. test_host.py checks that the Protocol, the AppDaemon host and the fake AppDaemon the
+# The methods a host provides. test_host.py checks that the Protocol, the local host and the fake Home Assistant the
 # tests use all have exactly these.
 METHODS = (
     "get_state", "get_history", "render_template", "get_timezone",

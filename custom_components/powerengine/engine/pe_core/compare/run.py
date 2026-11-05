@@ -3,7 +3,7 @@
 Replays one finished local day through the whole app in the demo world (docs/plans/engine-pages-and-comparison.md, 2.4):
 plain self-use, engine v1, engine v2 (Active, RAM remote control, the same start level and learned state) and the
 perfect-foresight bound, fed with what happened (house, car, sun, prices charged, smart slots that ran, grid events)
-and the forecasts as they were (the day's snapshot). It runs in its own process with the fake AppDaemon, in a temp
+and the forecasts as they were (the day's snapshot). It runs in its own process with the fake Home Assistant, in a temp
 folder, with the owner's settings copied in: it can't reach Home Assistant, and nothing it does touches the owner's
 files except the result it writes to `<save dir>/costs/compare/YYYY-MM-DD.json`.
 

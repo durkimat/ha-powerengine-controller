@@ -1,15 +1,13 @@
 """Starting, switching and leaving the demo from the dashboard (pe_demo / pe_demo_result), and doing it cleanly."""
-import asyncio
 import itertools
 import json
 import sys
-import types
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 import pytest
 import yaml
-from replay_harness import Clock, FrozenDatetime, _fake_appdaemon
+from replay_harness import Clock, FrozenDatetime, fake_home
 
 _HANDLES = itertools.count(1000)
 BST = timezone(timedelta(hours=1))
@@ -19,11 +17,10 @@ NOTE = "Recorded data from a real home. Nothing is controlled."
 DAYS = [("sunny", "Sunny day"), ("dull", "Dull day"), ("axle", "<<event>> event day"), ("car", "Car charging day")]
 
 
-def load_app(monkeypatch, wrap=None):
-    """`wrap`: what a scheduling or listening call hands back. None: the handle itself (AppDaemon 4.4); a function
-    such as `task_handle` makes it an asyncio Task/Future that resolves to the handle (AppDaemon 4.5 called from
-    its event loop)."""
-    Base = _fake_appdaemon()
+def load_app(monkeypatch):
+    """The engine over the fake Home Assistant, recording every timer and listener and anything that reaches the
+    'real' Home Assistant."""
+    Base = fake_home()
 
     class Hass(Base):
         def __init__(self):
@@ -35,22 +32,18 @@ def load_app(monkeypatch, wrap=None):
         def _add(self, kind, cb, key):
             h = next(_HANDLES)
             self.live[h] = (kind, cb.__name__, key)
-            return wrap(h) if wrap else h
+            return h
 
         def run_in(self, cb, delay, **kw):
             h = super().run_in(cb, delay, **kw)
             self.live[h] = ("timer", cb.__name__, "in")
-            return wrap(h) if wrap else h
+            return h
 
         def run_every(self, cb, *a, **k):
             return self._add("timer", cb, "every")
 
         def run_daily(self, cb, *a, **k):
-            # AppDaemon 4.5 builds run_daily on self.run_every, so through the app's own tracking wrapper too
             return self.run_every(cb, "now", 86400)
-
-        def timer_running(self, handle, **kw):
-            return handle in self.live
 
         def listen_event(self, cb, event=None, **k):
             return self._add("event", cb, event)
@@ -59,23 +52,17 @@ def load_app(monkeypatch, wrap=None):
             return self._add("state", cb, entity)
 
         def cancel_timer(self, handle, **kw):
-            if isinstance(handle, asyncio.Future):          # AppDaemon: "Invalid callback handle", nothing cancelled
-                self.invalid_cancels += 1
-                return
             self.timers[:] = [x for x in self.timers if x[3] != handle]  # in place: no new attribute
-            if self.live.pop(handle, None) is None:          # AppDaemon: "Invalid callback handle"
+            if self.live.pop(handle, None) is None:          # a handle that is not live
                 self.invalid_cancels += 1
 
         def cancel_listen_event(self, handle, **kw):
-            if isinstance(handle, asyncio.Future):
-                self.invalid_cancels += 1
-                return
             self.live.pop(handle, None)
 
         cancel_listen_state = cancel_listen_event
 
         def get_plugin_api(self, name):
-            raise RuntimeError("no MQTT plugin in this AppDaemon")          # so entities are published directly
+            raise RuntimeError("no MQTT plugin")          # so entities are published directly
 
         def set_state(self, entity_id, state=None, attributes=None, **kw):
             self.real_sets.append(entity_id)
@@ -87,13 +74,9 @@ def load_app(monkeypatch, wrap=None):
         def fire_event(self, event, **kw):
             self.real_events.append((event, kw))
 
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = Hass
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine
+    powerengine.PowerEngine = type("PowerEngine", (powerengine.PowerEngine, Hass), {})
     for name, mod in list(sys.modules.items()):
         if (name == "powerengine" or name.startswith("pe_core")) and getattr(mod, "datetime", None) is datetime:
             monkeypatch.setattr(mod, "datetime", FrozenDatetime)
@@ -105,8 +88,8 @@ def make(tmp_path, monkeypatch):
     folder = tmp_path / "powerengine"
     folder.mkdir()
 
-    def build(real_config=False, wrap=None, **args):
-        powerengine = load_app(monkeypatch, wrap)
+    def build(real_config=False, **args):
+        powerengine = load_app(monkeypatch)
         if real_config:
             (folder / "config.yaml").write_text("# the owner's config\n")
         app = powerengine.PowerEngine()
@@ -118,15 +101,6 @@ def make(tmp_path, monkeypatch):
     yield build
     sys.modules.pop("powerengine", None)
 
-
-_LOOP = asyncio.new_event_loop()
-
-
-def task_handle(handle):
-    """What AppDaemon 4.5 returns when the call is made on its event loop: a finished Task holding the handle."""
-    fut = _LOOP.create_future()
-    fut.set_result(handle)
-    return fut
 
 
 def send(app, **data):

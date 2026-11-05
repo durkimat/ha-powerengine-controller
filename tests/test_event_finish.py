@@ -91,11 +91,6 @@ def test_setback_and_carstop_leave_notes_for_the_announcement():
 # --- the app ---
 
 def _app(monkeypatch, tmp_path, alexa=None, records=None):
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = type("Hass", (), {})
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine
     a = powerengine.PowerEngine.__new__(powerengine.PowerEngine)

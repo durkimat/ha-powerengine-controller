@@ -18,7 +18,7 @@ SUPPLIERS = {
 }
 TIMEOUT_S = 20
 MAX_PAGES = 40
-USER_AGENT = "PowerEngine (Home Assistant AppDaemon app; tariff simulator)"
+USER_AGENT = "PowerEngine (Home Assistant integration; tariff simulator)"
 # Not tariffs a household can simply move to (new-build bundles, staff-only, test products).
 EXCLUDE_WORDS = ("TEST", "ZERO-", "EMPLOYEE", "ENGAGE_EV")
 

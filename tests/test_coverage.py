@@ -1,6 +1,5 @@
 import json
 import sys
-import types
 from datetime import date, datetime, timedelta, timezone
 
 from pe_core import coverage
@@ -66,11 +65,6 @@ def test_coverage_summary_names_what_each_day_lacked(tmp_path):
 
 
 def _app(monkeypatch):
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = type("Hass", (), {})
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine
 

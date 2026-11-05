@@ -1,8 +1,9 @@
-"""The fake AppDaemon and the fake clock the whole app can run against without Home Assistant.
+"""The fake Home Assistant and the fake clock the whole app can run against.
 
 Used by tests/replay_harness.py (the replay safety net), tools/engine_compare.py and the nightly engine comparison
 (`pe_core.compare.run`, which the app starts as a separate process). Nothing in here reaches the real Home Assistant:
-`Hass` keeps its states, service calls and events in memory.
+`Hass` keeps its states, service calls and events in memory, and is the engine's other base class (with the
+AppDaemon-style names the host forwards to).
 """
 
 from __future__ import annotations
@@ -44,9 +45,9 @@ class FrozenDatetime(datetime):
         return Clock.now.replace(tzinfo=None)
 
 
-def _fake_appdaemon():
+def fake_home():
     class Hass:
-        """Just enough of AppDaemon's Hass API, over an in-memory state machine."""
+        """Just enough of a Home Assistant client, over an in-memory state machine."""
 
         def __init__(self):
             self.states: dict[str, dict] = {}
@@ -132,7 +133,7 @@ def _fake_appdaemon():
             return "Europe/London"
 
         def render_template(self, template, **kw):
-            raise NotImplementedError("the fake AppDaemon has no templates")     # as when it had no such method
+            raise NotImplementedError("the fake Home Assistant has no templates")
 
         def get_plugin_api(self, name):
             return types.SimpleNamespace(mqtt_publish=self._mqtt_publish)
@@ -151,13 +152,10 @@ def _fake_appdaemon():
     return Hass
 
 
-fake_appdaemon = _fake_appdaemon
-
-
 def recording_hass_class():
     """The fake Hass, also recording what the app registers with run_every and anything that would reach Home
     Assistant (in demo mode nothing should: the gate keeps it all inside the app)."""
-    Base = _fake_appdaemon()
+    Base = fake_home()
 
     class Hass(Base):
         def __init__(self):
@@ -186,18 +184,12 @@ def recording_hass_class():
 
 @contextlib.contextmanager
 def loaded_app(config_text=None, engine: str = "v1", pack=None, extra_files=None, setup=None):
-    """`powerengine` imported against the recording fake AppDaemon with the clock patched in. In demo mode the app
+    """`powerengine` imported over the recording fake Home Assistant with the clock patched in. In demo mode the app
     copies demo/config.template as its settings: `config_text(engine)` (default: the template with the engine chosen) is
     written instead, and `extra_files` ({path relative to the settings folder: source file}) are copied beside it.
     `pack` replaces the demo pack the app loads (a real day as a one-day pack). `setup(powerengine, stack)` may enter
     more patches (the world the app builds, how it learns its load profile) on the ExitStack."""
-    stubs = {}
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = recording_hass_class()
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        stubs[name] = types.ModuleType(name)
-    stubs["appdaemon.plugins.hass.hassapi"] = hassapi
-    saved = {name: sys.modules.get(name) for name in (*stubs, "powerengine")}
+    saved = {"powerengine": sys.modules.get("powerengine")}
     real_copy = shutil.copyfile
 
     def copy(src, dst, **kw):
@@ -217,12 +209,12 @@ def loaded_app(config_text=None, engine: str = "v1", pack=None, extra_files=None
         return real_copy(src, dst, **kw)
 
     with contextlib.ExitStack() as stack:
-        sys.modules.update(stubs)
         sys.modules.pop("powerengine", None)
         stack.callback(lambda: [sys.modules.pop(n, None) if v is None else sys.modules.__setitem__(n, v)
                                 for n, v in saved.items()])
         stack.enter_context(mock.patch.object(shutil, "copyfile", copy))
         import powerengine
+        powerengine.PowerEngine = type("PowerEngine", (powerengine.PowerEngine, recording_hass_class()), {})
         if pack is not None:
             stack.enter_context(mock.patch.object(powerengine, "load_demo_pack", lambda *a, **k: pack))
         if setup is not None:

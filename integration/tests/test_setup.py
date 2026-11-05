@@ -96,29 +96,6 @@ async def test_the_restart_button_and_service_restart_the_engine(hass, tmp_path)
     await hass.config_entries.async_unload(entry.entry_id)
 
 
-async def test_another_powerengine_running_stops_the_engine_starting_and_says_why(hass, tmp_path):
-    hass.states.async_set(const.HEARTBEAT_ENTITY, "2026-11-04T12:00:00+00:00")       # the AppDaemon app is beating
-    entry = await start(hass, tmp_path)
-    assert engine(hass).state == "waiting"
-    assert ir.async_get(hass).async_get_issue(DOMAIN, const.ISSUE_RUNNING_ELSEWHERE)
-    assert entry.runtime_data.supervisor._process is None
-    assert hass.states.get("sensor.pe_diag_version") is None             # nothing of the engine's is published
-    await hass.config_entries.async_unload(entry.entry_id)
-    assert not ir.async_get(hass).issues
-
-
-async def test_the_engine_starts_once_the_other_powerengine_has_stopped(hass, tmp_path):
-    hass.states.async_set(const.HEARTBEAT_ENTITY, "2026-11-04T12:00:00+00:00")
-    entry = await start(hass, tmp_path)
-    assert engine(hass).state == "waiting"
-    old = (dt_util.utcnow() - timedelta(minutes=10)).timestamp()                     # its last beat was 10 minutes ago
-    hass.states.async_set(const.HEARTBEAT_ENTITY, "2026-11-04T11:50:00+00:00", timestamp=old)
-    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=2))
-    await wait_for(hass, lambda: engine(hass).state == "running", what="the engine to start")
-    assert not ir.async_get(hass).async_get_issue(DOMAIN, const.ISSUE_RUNNING_ELSEWHERE)
-    await hass.config_entries.async_unload(entry.entry_id)
-
-
 async def test_diagnostics_hold_the_status_and_the_engines_last_lines_but_no_secret(hass, tmp_path):
     from custom_components.powerengine.diagnostics import async_get_config_entry_diagnostics
     entry = await start(hass, tmp_path)
