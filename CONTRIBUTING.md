@@ -7,7 +7,7 @@ PowerEngine is two repositories that release together:
 
 - **the app** (this repo, `durkimat/ha-powerengine-controller`): the engine and its Home Assistant integration, the planner and the inverter, tariff,
   car-charger, forecast and grid-event adapters;
-- **the card** ([`durkimat/ha-powerengine-card`](https://github.com/durkimat/ha-powerengine-card)): the Lovelace card for the
+- **the card** (`card/`, bundled in the integration): the Lovelace card for the
   configuration page, the setup wizard and the tests, health and update pages.
 
 Licence: [Apache-2.0](LICENSE). Under section 5 of that licence, anything you submit is licensed to the project under the
@@ -53,7 +53,7 @@ A new tariff, car-charger, forecast or grid-event adapter is a small Python clas
    ruff check .
    python3 -m pytest -q
    ```
-   In the card repo: `node --check ha-powerengine-card.js && node --test tests/*.test.cjs`.
+   For the card: `node --check card/ha-powerengine-card.js && node --test card/tests/*.test.cjs`.
 3. **The replay must pass unchanged** (`tests/test_replay.py`). It replays a recorded night through the whole app and compares
    every plan, decision and inverter command. If you only refactored and it fails, you changed behaviour: fix the change. If you
    meant to change behaviour, re-record (`PE_REPLAY_UPDATE=1 python3 -m pytest tests/test_replay.py`) and explain the diff in the PR.

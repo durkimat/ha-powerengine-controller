@@ -70,7 +70,7 @@ const ALEXA_TEST_EVENT = "pe_alexa_test", ALEXA_TEST_RESULT = "pe_alexa_test_res
 const ALEXA_TEST_WAIT_MS = 20000;
 // How long a save waits for PowerEngine's answer. A late answer still replaces the message (the subscription stays open).
 const SAVE_WAIT_MS = 45000;
-const SAVE_NO_REPLY = "No reply from PowerEngine yet. It may be busy, and the change may still go through: refresh this page in a minute to check. If it hasn't, look at the AppDaemon log.";
+const SAVE_NO_REPLY = "No reply from PowerEngine yet. It may be busy, and the change may still go through: refresh this page in a minute to check. If it hasn't, look at PowerEngine's log (Settings, System, Logs).";
 
 // What this user's supplier and devices are called comes from the app (sensor.pe_diag_version, attribute "names").
 // Texts here never hard-code one: they carry <<term>> placeholders, filled by fillNames.
@@ -1018,7 +1018,7 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     const ver = s[VERSION_SENSOR];
     const cat = catalogueAttrs(s, CATALOGUE_SENSOR);
     if (!ver || ver.state === "unavailable" || !cat || !cat.roles) {
-      this._renderMessage("PowerEngine app not detected. Check it is installed and AppDaemon's MQTT plugin is set up (install guide, Step 3).");
+      this._renderMessage("PowerEngine isn't running. Check the PowerEngine integration is set up (Settings, Devices & services) and that its engine is running.");
       return;
     }
     this._building = true;
@@ -1103,7 +1103,7 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     this._setTestStatus("ok", "Sending…");
     clearTimeout(this._testTimer);
     this._testTimer = setTimeout(() => this._setTestStatus("error",
-      "No reply from PowerEngine. Check it is running version 0.9.175 or later, then look at the AppDaemon log."), ALEXA_TEST_WAIT_MS);
+      "No reply from PowerEngine. Check it is running version 0.9.175 or later, then look at PowerEngine's log."), ALEXA_TEST_WAIT_MS);
     try {
       await this._hass.callWS({ type: "fire_event", event_type: ALEXA_TEST_EVENT, event_data: payload });
     } catch (e) {
@@ -1122,7 +1122,7 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     say("ok", "Sending…");
     this._testingChannel = name;
     clearTimeout(this._notifyTestTimer);
-    this._notifyTestTimer = setTimeout(() => say("error", `No reply from PowerEngine. Check it is running version ${ROUTER_APP_VERSION} or later, then look at the AppDaemon log.`), ALEXA_TEST_WAIT_MS);
+    this._notifyTestTimer = setTimeout(() => say("error", `No reply from PowerEngine. Check it is running version ${ROUTER_APP_VERSION} or later, then look at PowerEngine's log.`), ALEXA_TEST_WAIT_MS);
     try {
       await this._hass.callWS({ type: "fire_event", event_type: NOTIFY_TEST_EVENT, event_data: { channel: routerChannelConfig(ch) } });
     } catch (e) {
@@ -1533,7 +1533,7 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
 
     // operation
     let body = section("operation", "Operation");
-    const activeWarn = el("div", { class: "warning" }, T("⚠ Live: PowerEngine writes the inverter's timed charge and discharge settings (and, with smart-charge optimisation on, asks <<supplier>> for slots). It only goes live when every handover guard is safe. Normally set by the Battery controller panel above; pause any time from the Monitoring tab."));
+    const activeWarn = el("div", { class: "warning" }, T("⚠ Live: PowerEngine writes the inverter's timed charge and discharge settings (and, with smart-charge optimisation on, asks <<supplier>> for slots). It only goes live when every guard for another controller is safe. Pause any time from the Monitoring tab."));
     const modeSel = el("select", { onchange: (ev) => {
       this._draft.operation.mode = ev.target.value;
       activeWarn.style.display = ev.target.value === "active" ? "" : "none";
@@ -2400,26 +2400,17 @@ if (typeof customElements !== "undefined" && !customElements.get("powerengine-to
   window.customCards.push({ type: "powerengine-toggle-card", name: "PowerEngine toggle", description: "A discreet title + switch row." });
 }
 
-// --- Other battery controller (Predbat optional) --------------------------------------------------------------
-// The app publishes `other_controller` on sensor.pe_diag_version: none | predbat | other | unset (app 0.9.108+).
-// Older apps publish nothing, so the card falls back to looking for Predbat's own entities.
-const OTHER_CONTROLLERS = ["none", "predbat", "other"];
+// --- Other battery controller ----------------------------------------------------------------------------------
+// The app publishes `other_controller` on sensor.pe_diag_version: none | other | unset. Older apps publish nothing,
+// so the guards are shown as before.
+const OTHER_CONTROLLERS = ["none", "other"];
 const GUARD_ROLES = ["guard_read_only", "guard_off_1", "guard_off_2"];
 const OTHER_UNSET_PROMPT = "Choose whether another battery controller is installed. PowerEngine won't go Active until you do.";
-const PREDBAT_ENTITIES = ["switch.predbat_set_read_only", "input_select.battery_controller"];
 
 /** The published value (null for an older app that doesn't publish it). */
 function otherControllerValue(states) {
   const a = (((states || {})[VERSION_SENSOR] || {}).attributes) || {};
   return typeof a.other_controller === "string" ? a.other_controller : null;
-}
-
-/** Show the Predbat <-> PowerEngine handover card? Only when Predbat is the other controller; an older app (no
- *  attribute) shows it when Predbat's entities exist. */
-function handoverVisible(states) {
-  const v = otherControllerValue(states);
-  if (v !== null) return v === "predbat";
-  return PREDBAT_ENTITIES.some((id) => !!(states || {})[id]);
 }
 
 /** The value in force for the config page: what the owner has picked in the form (if different from what's saved),
@@ -2432,233 +2423,21 @@ function effectiveOtherController(published, draftValue) {
 
 /** Which guard roles the Inverter control topic shows for a value. */
 function guardRolesShown(value) {
-  return value === null || value === undefined || value === "predbat" || value === "other" ? GUARD_ROLES.slice() : [];
+  return value === null || value === undefined || value === "other" ? GUARD_ROLES.slice() : [];
 }
 
 /** The prompt above the choice (empty unless the owner hasn't chosen yet). */
 function otherControllerPrompt(value) { return value === "unset" ? OTHER_UNSET_PROMPT : ""; }
 
-/** Is Predbat the other controller (for hints that name it)? An older app: Predbat's entities exist. */
-function predbatInUse(states) { return handoverVisible(states); }
-
 /** The first step of the Tests card's checklist. */
-function testsPauseHint(states) {
-  return predbatInUse(states)
-    ? "Keep PowerEngine selected in the battery controller switch (Predbat stays read-only), and turn on <b>Pause control</b> on the Monitoring page. Tests are refused while PowerEngine is in control."
-    : "Turn on <b>Pause control</b> on the Monitoring page. Tests are refused while PowerEngine is in control.";
-}
-
-// --- Battery controller handover ---------------------------------------------------------------------------
-// Switches between Predbat and PowerEngine through input_select.battery_controller (docs/ha/
-// powerengine_handover.yaml runs the handover scripts). Shows what each related entity should be for the chosen
-// controller, so a half-finished or manually undone handover is obvious and can be re-applied.
-const HANDOVER_DEFAULTS = {
-  selector: "input_select.battery_controller",
-  read_only: "switch.predbat_set_read_only",
-  pause: "switch.pe_ctl_pause",
-  mode: "sensor.pe_state_operation_mode",
-  scripts: { PowerEngine: "script.battery_handover_to_powerengine", Predbat: "script.battery_handover_to_predbat" },
-};
-const CONTROLLERS = ["Predbat", "PowerEngine"];
-const HANDOVER_STEPS = {
-  PowerEngine: "Predbat goes read-only, and PowerEngine is set to Active and " +
-    "un-paused. About 20 seconds. PowerEngine is then live; you'll get a notification saying so, or why not.",
-  Predbat: "PowerEngine is set to Passive and closes its inverter windows (Self-Use), then Predbat leaves read-only " +
-    "and takes over at its next update. About 30 seconds. Predbat is then live.",
-};
-
-// Rows of {label, want, have, ok, note} for the controller currently selected (ok null = not a fault / unknown),
-// plus a one-line status: live, paused (for testing) or not live.
-function handoverRows(states, cfg) {
-  const c = Object.assign({}, HANDOVER_DEFAULTS, cfg || {});
-  const st = (id) => (states && states[id]) || null;
-  const val = (id) => (st(id) ? st(id).state : "missing");
-  const sel = val(c.selector);
-  const toPE = sel === "PowerEngine";
-  const rows = [];
-  const add = (label, want, have, ok, note) => rows.push({ label, want, have, ok, note: note || "" });
-  const known = (v) => !["missing", "unknown", "unavailable"].includes(v);
-
-  const ro = val(c.read_only);
-  if (!known(ro) && toPE) {
-    // Predbat isn't connected to HA, so it can't be controlling the inverter: PowerEngine counts this as safe
-    add("Predbat read-only", "on", ro, true, "Predbat isn't connected to Home Assistant right now, so it can't be " +
-      "controlling the inverter; PowerEngine carries on. Restart the Predbat add-on to bring it back.");
-  } else {
-    add("Predbat read-only", toPE ? "on" : "off", ro, known(ro) ? ro === (toPE ? "on" : "off") : null,
-      known(ro) ? "" : "Home Assistant doesn't have this entity right now (Predbat not running, or still starting).");
-  }
-
-  const pz = val(c.pause);
-  const paused = toPE && pz === "on";
-  add("PowerEngine paused", "off", pz, paused ? null : (known(pz) ? pz === "off" : null),
-      paused ? "Paused for testing: nothing is driving the battery (Self-Use). Resume to go live again." : "");
-
-  const m = val(c.mode);
-  const reason = (st(c.mode) && st(c.mode).attributes && st(c.mode).attributes.reason) || "";
-  if (toPE) {
-    add("PowerEngine mode", "active", m, paused && m === "paused" ? null : (known(m) ? m === "active" : null),
-        m === "active" || m === "paused" ? "" : reason);
-  } else {
-    add("PowerEngine mode", "passive", m, known(m) ? !["active", "paused"].includes(m) : null,
-        m === "active" ? reason : "");
-  }
-  // a row we can't read (entity missing or unavailable) means we can't vouch for the handover: not live
-  const bad = rows.some((r) => r.ok === false || (r.ok === null && !(paused && r.label.startsWith("PowerEngine"))));
-  const status = bad ? "not_live" : paused ? "paused" : "live";
-  return { selected: sel, rows, allOk: !bad, paused, status };
-}
-
-class PowerEngineHandoverCard extends (typeof HTMLElement !== "undefined" ? HTMLElement : class {}) {
-  setConfig(config) {
-    this._config = config || {};
-    this._c = Object.assign({}, HANDOVER_DEFAULTS, this._config);
-    if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    this._render();
-  }
-
-  set hass(hass) {
-    this._hass = hass;
-    this._render();
-  }
-
-  getCardSize() { return 5; }
-
-  _busy() {
-    const s = this._hass && this._hass.states;
-    return !!s && Object.values(this._c.scripts).some((id) => s[id] && s[id].state === "on");
-  }
-
-  async _switch(target) {
-    this._confirm = null;
-    try {
-      await this._hass.callService("input_select", "select_option", { entity_id: this._c.selector, option: target });
-      this._msg = "";
-    } catch (err) {
-      this._msg = "Could not switch: " + ((err && err.message) || err);
-    }
-    this._render();
-  }
-
-  async _pause(on) {
-    try {
-      await this._hass.callService("switch", on ? "turn_on" : "turn_off", { entity_id: this._c.pause });
-      this._msg = "";
-    } catch (err) {
-      this._msg = "Could not change pause: " + ((err && err.message) || err);
-    }
-    this._render();
-  }
-
-  async _reapply(sel) {
-    try {
-      await this._hass.callService("script", "turn_on", { entity_id: this._c.scripts[sel] });
-      this._msg = "";
-    } catch (err) {
-      this._msg = "Could not re-apply: " + ((err && err.message) || err);
-    }
-    this._render();
-  }
-
-  _render() {
-    if (!this.shadowRoot || !this._c) return;
-    if (!this._built) {
-      this.shadowRoot.innerHTML = `
-        <style>
-          ha-card { padding: 16px; }
-          h2 { margin: 0 0 8px; font-size: 1.2em; font-weight: 500; }
-          p { margin: 4px 0 10px; color: var(--secondary-text-color); }
-          .seg { display: inline-flex; border: 1px solid var(--divider-color); border-radius: 18px; overflow: hidden; }
-          .seg button { font: inherit; padding: 6px 16px; border: 0; background: none; color: var(--primary-text-color);
-                        cursor: pointer; }
-          .seg button.on { background: var(--primary-color); color: var(--text-primary-color, #fff); cursor: default; }
-          .seg button:disabled:not(.on) { opacity: .5; cursor: default; }
-          .confirm { margin: 10px 0; padding: 10px; border-radius: 8px; background: var(--secondary-background-color); }
-          .btn { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--divider-color);
-                 background: var(--primary-color); color: var(--text-primary-color, #fff); cursor: pointer; margin-right: 6px; }
-          .btn.plain { background: none; color: var(--primary-text-color); }
-          table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-          td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--divider-color); vertical-align: top; }
-          th { font-weight: 500; color: var(--secondary-text-color); }
-          .ok { color: var(--success-color, #43a047); } .bad { color: var(--error-color, #db4437); }
-          .note { color: var(--secondary-text-color); font-size: .9em; }
-          .msg { color: var(--error-color, #db4437); margin-top: 8px; }
-          .status { margin: 10px 0 0; font-weight: 500; }
-          .status.live { color: var(--success-color, #43a047); } .status.not_live { color: var(--error-color, #db4437); }
-          .status.paused, .status.busy, .warn { color: var(--warning-color, #ffa000); }
-        </style>
-        <ha-card><div class="body"></div></ha-card>`;
-      this.shadowRoot.addEventListener("click", (ev) => {
-        const b = ev.target.closest("button");
-        if (!b || b.disabled) return;
-        if (b.dataset.pick) { this._confirm = b.dataset.pick; this._render(); }
-        else if (b.dataset.go) this._switch(b.dataset.go);
-        else if (b.dataset.cancel !== undefined) { this._confirm = null; this._render(); }
-        else if (b.dataset.reapply) this._reapply(b.dataset.reapply);
-        else if (b.dataset.pause) this._pause(b.dataset.pause === "on");
-      });
-      this._built = true;
-    }
-    const esc = (t) => String(t).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
-    const body = this.shadowRoot.querySelector(".body");
-    const states = this._hass ? this._hass.states : {};
-    const show = !this._hass || handoverVisible(states);
-    this.style.display = show ? "" : "none";
-    if (!show) { body.innerHTML = ""; return; }
-    const title = `<h2>${esc(this._config.title || "Battery controller")}</h2>`;
-    if (!states[this._c.selector]) {
-      body.innerHTML = title + `<p>${esc(this._c.selector)} not found. Install docs/ha/powerengine_handover.yaml as a ` +
-        `package (see INSTALL.md), check the config and restart Home Assistant.</p>`;
-      return;
-    }
-    const h = handoverRows(states, this._config);
-    const busy = this._busy();
-    const seg = CONTROLLERS.map((c) => `<button class="${c === h.selected ? "on" : ""}" ${busy || c === h.selected ? "disabled" : ""}
-        data-pick="${c}">${c}</button>`).join("");
-    const line = busy ? "Switching…" : h.status === "live" ? `${h.selected} is live.`
-      : h.status === "paused" ? "PowerEngine is paused for testing: nothing is driving the battery (Self-Use)."
-      : `${h.selected} is selected but not fully live: see ✗ below.`;
-    let html = title + `<p>Which system drives the battery. Switching hands over and leaves the chosen one fully
-      live.</p><div><span class="seg">${seg}</span></div>
-      <div class="status ${busy ? "busy" : h.status}">${esc(line)}</div>`;
-    if (this._confirm && this._confirm !== h.selected && !busy) {
-      html += `<div class="confirm"><b>Hand control to ${esc(this._confirm)}?</b><p>${esc(HANDOVER_STEPS[this._confirm])}</p>
-        <button class="btn" data-go="${esc(this._confirm)}">Switch to ${esc(this._confirm)}</button>
-        <button class="btn plain" data-cancel>Cancel</button></div>`;
-    }
-    html += `<table><tr><th></th><th>Should be</th><th>Is</th></tr>` + h.rows.map((r) => {
-      const mark = r.ok === true ? '<span class="ok">✓</span>' : r.ok === false ? '<span class="bad">✗</span>'
-        : (h.paused ? '<span class="warn">‖</span>' : "?");
-      return `<tr><td>${mark} ${esc(r.label)}${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}</td>` +
-        `<td>${esc(r.want)}</td><td>${esc(r.have)}</td></tr>`;
-    }).join("") + `</table>`;
-    if (h.status === "not_live" && !busy && this._c.scripts[h.selected]) {
-      html += `<p>Something doesn't match ${esc(h.selected)} (changed by hand, or a handover didn't finish).</p>
-        <button class="btn" data-reapply="${esc(h.selected)}">Re-apply ${esc(h.selected)} handover</button>`;
-    }
-    if (h.selected === "PowerEngine" && !busy) {
-      html += h.paused
-        ? `<p><button class="btn" data-pause="off">Resume PowerEngine (go live)</button></p>`
-        : `<p><button class="btn plain" data-pause="on">Pause for testing</button>
-           <span class="note">Stops PowerEngine and returns the inverter to Self-Use; Predbat stays read-only.
-           Needed for the supervised tests.</span></p>`;
-    }
-    if (this._msg) html += `<div class="msg">${esc(this._msg)}</div>`;
-    body.innerHTML = html;
-  }
-}
-
-if (typeof customElements !== "undefined" && !customElements.get("powerengine-handover-card")) {
-  customElements.define("powerengine-handover-card", PowerEngineHandoverCard);
-  window.customCards = window.customCards || [];
-  window.customCards.push({ type: "powerengine-handover-card", name: "PowerEngine handover",
-    description: "Switch battery control between Predbat and PowerEngine." });
+function testsPauseHint() {
+  return "Turn on <b>Pause control</b> on the Monitoring page. Tests are refused while PowerEngine is in control.";
 }
 
 // --- Supervised tests (the Tests page) ---------------------------------------------------------------------
 // Admin only (HA only lets admins fire events). Each test writes to the inverter for a few minutes while someone
 // watches, records what the battery did, then hands the inverter back to Self-Use. The app refuses unless the
-// handover guards are safe and PowerEngine isn't in control.
+// guards for another controller are safe and PowerEngine isn't in control.
 const TEST_EVENT = "pe_test_write";
 const TEST_ENTITY = "sensor.pe_diag_test_write";
 const RC_TAILS = {
@@ -2710,7 +2489,7 @@ const TESTS = [
   { key: "rc_failsafe", group: "rc", label: "RC failsafe (stop re-sending)", minutes: 12, power: true,
     defPower: 2000,
     what: "Force charges for 2 minutes, then stops the command being re-sent by reloading the inverter's Modbus " +
-      "integration, without writing Off. This is what would happen if HA or AppDaemon died: the inverter should " +
+      "integration, without writing Off. This is what would happen if HA or PowerEngine's engine died: the inverter should " +
       "drop the command by itself after its RC timeout (reported as 5 to 30 minutes). Its entities show as " +
       "unavailable for a few seconds during the reload; that's expected.",
     watch: "Charging starts, then keeps going for a while after the reload. Note the time it stops by itself " +
@@ -2939,9 +2718,9 @@ if (typeof customElements !== "undefined" && !customElements.get("powerengine-te
 }
 
 // --- Update (Configuration page) ---------------------------------------------------------------------------
-// One button: ask HACS to check GitHub now for both PowerEngine repositories (otherwise HACS may not notice a new
-// release for hours), then run the handover package's script.powerengine_update, which installs what's new and
-// restarts AppDaemon. Admins only (HACS's refresh and the add-on restart both need admin).
+// One button: ask HACS to check GitHub now for PowerEngine (otherwise HACS may not notice a new release for
+// hours), then run the handover package's script.powerengine_update, which installs what's new and restarts the
+// engine. Admins only (HACS's refresh needs admin).
 const UPDATE_SCRIPT = "script.powerengine_update";
 
 function peRepos(list) {
@@ -2956,9 +2735,8 @@ function versionLine(states) {
   const running = ((states || {})["sensor.pe_diag_version"] || {}).state || "?";
   const parts = updateEntities(states).map((id) => {
     const a = (states[id] || {}).attributes || {};
-    const what = /card/i.test(id) ? "card" : "app";
     const more = states[id].state === "on" && a.latest_version ? ` → ${a.latest_version} available` : "";
-    return `${what} ${a.installed_version || "?"}${more}`;
+    return `${a.installed_version || "?"}${more}`;
   });
   const rel = (states || {})["sensor.pe_diag_update"];
   const released = rel && rel.state === "available" ? (rel.attributes || {}).latest : null;
@@ -2982,7 +2760,7 @@ class PowerEngineUpdateCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     const running = ((hass.states || {})["sensor.pe_diag_version"] || {}).state;
     if (this._busy && this._from && running && running !== this._from && running !== "unavailable") {
       this._busy = false;
-      this._msg = `PowerEngine ${running} is running. Reload the page to load the matching card.`;
+      this._msg = `PowerEngine ${running} is running. Reload the page to load the matching cards.`;
       this._reload = true;
     }
     this._render();
@@ -3031,11 +2809,11 @@ class PowerEngineUpdateCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
       }
       if (!hass.states[UPDATE_SCRIPT]) {
         this._busy = false;
-        this._status("The update script isn't installed: copy docs/ha/powerengine_handover.yaml (0.9.42 or later) " +
-          "into /config/packages/ and reload scripts.");
+        this._status("The update script isn't installed: PowerEngine writes it to /config/packages/ itself once " +
+          "`homeassistant: packages: !include_dir_named packages` is in configuration.yaml; then reload scripts.");
         return;
       }
-      this._status("Installing what's new and restarting AppDaemon if the app changed (about a minute)…");
+      this._status("Installing what's new and restarting the engine (about a minute)…");
       await hass.callService("script", "turn_on", { entity_id: UPDATE_SCRIPT });
       setTimeout(() => {
         if (this._busy) {
@@ -3043,7 +2821,7 @@ class PowerEngineUpdateCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
           const now = ((this._hass.states || {})["sensor.pe_diag_version"] || {}).state;
           this._status(now === this._from
             ? `Still ${now}: nothing new to install, or it's still going (see the notification).`
-            : `PowerEngine ${now} is running. Reload the page to load the matching card.`);
+            : `PowerEngine ${now} is running. Reload the page to load the matching cards.`);
           this._reload = now !== this._from;
           this._render();
         }
@@ -3084,7 +2862,7 @@ class PowerEngineUpdateCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
           <div class="notes"></div>
         </ha-card>`;
       this.shadowRoot.querySelector(".go").addEventListener("click", () => {
-        if (confirm("Install the latest PowerEngine app and card, then restart AppDaemon? Control pauses for " +
+        if (confirm("Install the latest PowerEngine and restart its engine? Control pauses for " +
             "about a minute while it restarts.")) this._update();
       });
       this._pkgBox = makePackageBox();
@@ -3097,7 +2875,7 @@ class PowerEngineUpdateCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     const { running, parts, released, known, notes } = versionLine(this._hass.states);
     const q = (s) => this.shadowRoot.querySelector(s);
     q(".line").innerHTML = `<b>PowerEngine ${running}</b> running` + (parts.length
-      ? " · " + parts.join(" · ") : " · HACS update entities not found")
+      ? " · installed " + parts.join(" · ") : " · HACS update entity not found")
       + (released ? ` · <b>${released} released</b>` : "");
     if (notes !== this._notes) {
       this._notes = notes;
@@ -3130,8 +2908,10 @@ if (typeof customElements !== "undefined" && !customElements.get("powerengine-up
 }
 
 // --- Setup checklist ---------------------------------------------------------------------------------------
-// Checks each prerequisite once (on load and after an install) and installs what HACS can
-// install with one button. Admins only: every HACS and Supervisor call below is admin-only on HA's side.
+// PowerEngine itself is the integration (installed from HACS, with this card bundled), so what is left to check is
+// that the engine is running and that the two chart cards the dashboard draws with are loaded; the checklist installs
+// those with HACS if it can. Checks once (on load and after an install). Admins only: the HACS calls below are
+// admin-only on HA's side.
 //
 // Commands (verified against the sources, see the notes in tests/helpers.test.cjs):
 //   hacs/info                    (hacs/websocket/__init__.py)   -> {categories: [...], disabled_reason, version, ...}
@@ -3140,18 +2920,12 @@ if (typeof customElements !== "undefined" && !customElements.get("powerengine-up
 //   hacs/repositories/add        (same file) {repository, category}; answers {} even when it refuses (the reason goes to
 //                                 HACS's error signal), so the card lists again to see whether it worked
 //   hacs/repository/download     (hacs/websocket/repository.py) {repository: <id as text>}; a failure is a WS error
-//   supervisor/api               (HA core hassio/websocket_api.py) {endpoint: "/addons", method: "get"} -> {addons: [...]}
 const SETUP_REPOS = {
-  app: { key: "app", full_name: "durkimat/ha-powerengine-controller", category: "appdaemon", label: "PowerEngine app" },
   apex: { key: "apex", full_name: "RomRider/apexcharts-card", category: "plugin", label: "Chart card", element: "apexcharts-card" },
   flow: { key: "flow", full_name: "slipx06/sunsynk-power-flow-card", category: "plugin", label: "Energy-flow card", element: "sunsynk-power-flow-card" },
 };
 const SETUP_LINKS = {
   hacs: "https://hacs.xyz/docs/use/download/download/",
-  hacsOptions: "https://my.home-assistant.io/redirect/integration/?domain=hacs",
-  addon: "https://my.home-assistant.io/redirect/supervisor_addon/?addon=a0d7b954_appdaemon",
-  appdaemonDocs: "https://appdaemon.readthedocs.io/en/latest/INSTALL.html",
-  mqtt: "https://my.home-assistant.io/redirect/config_flow_start/?domain=mqtt",
 };
 
 /** The HACS repository (from hacs/repositories/list) for "owner/name", or null. Case doesn't matter. */
@@ -3161,11 +2935,10 @@ function findHacsRepo(list, fullName) {
 }
 
 function hacsInfoPayload() { return { type: "hacs/info" }; }
-function hacsListPayload(categories) { return { type: "hacs/repositories/list", categories: categories || ["appdaemon", "plugin"] }; }
+function hacsListPayload(categories) { return { type: "hacs/repositories/list", categories: categories || ["plugin"] }; }
 function hacsAddPayload(fullName, category) { return { type: "hacs/repositories/add", repository: fullName, category }; }
 /** HACS wants the repository id as text. */
 function hacsDownloadPayload(id) { return { type: "hacs/repository/download", repository: String(id) }; }
-function addonsPayload() { return { type: "supervisor/api", endpoint: "/addons", method: "get" }; }
 
 /** The next HACS call to install one of SETUP_REPOS: add it to HACS if HACS doesn't know it yet, else download it. */
 function installStep(key, repos) {
@@ -3173,14 +2946,6 @@ function installStep(key, repos) {
   if (!def) return null;
   const repo = findHacsRepo(repos, def.full_name);
   return repo ? hacsDownloadPayload(repo.id) : hacsAddPayload(def.full_name, def.category);
-}
-
-/** The AppDaemon add-on from a supervisor /addons answer: {state: "started" | "stopped" | "missing", slug, name, version}. */
-function addonFrom(result) {
-  const list = ((result || {}).addons || []).filter((a) => a && /appdaemon/i.test(String(a.slug || "")));
-  const a = list.find((x) => /^a0d7b954_appdaemon$/.test(x.slug)) || list[0];
-  if (!a) return { state: "missing" };
-  return { state: a.state === "started" ? "started" : "stopped", slug: a.slug, name: a.name, version: a.version };
 }
 
 /** A version sensor that exists and has a value. */
@@ -3192,64 +2957,27 @@ function peRunning(states) {
 const ADMIN_NOTE = "Only an admin can check or install this.";
 
 /**
- * The checklist. facts: {isAdmin, hacs (true/false/null=unknown), hacsReason, categories (array or null), addon
- * ({state: "started"|"stopped"|"missing"|"unsupervised"|"unknown"}), repos (HACS list, or null), cardsLoaded
- * ({element: bool}), components (array), peVersion (string or null)}.
+ * The checklist. facts: {isAdmin, hacs (true/false/null=unknown), hacsReason, repos (HACS list, or null), cardsLoaded
+ * ({element: bool}), peVersion (string or null), otherController}.
  * Row: {key, title, why, status: "ok"|"missing"|"unknown", needed, detail, action}. action is null, or
  * {kind: "install", target, label}, {kind: "link", href, label} or {kind: "reload", label}.
  */
 function setupRows(facts) {
   const f = facts || {};
   const admin = !!f.isAdmin;
-  const cats = Array.isArray(f.categories) ? f.categories : null;
   const repos = f.repos || null;
-  const comps = f.components || [];
   const rows = [];
   const hacsOk = f.hacs === true;
   const install = (target, label) => (admin && hacsOk ? { kind: "install", target, label } : null);
   const link = (href, label) => ({ kind: "link", href, label });
   const unknownFor = (r) => (!admin ? { ...r, status: "unknown", detail: ADMIN_NOTE, action: null } : r);
 
-  // 1. HACS
-  const hacsRow = { key: "hacs", title: "HACS", why: "Installs PowerEngine and its cards.", needed: true };
-  rows.push(unknownFor(f.hacs === true
-    ? { ...hacsRow, status: "ok", detail: "Installed.", action: null }
-    : f.hacs === false
-      ? { ...hacsRow, status: "missing",
-          detail: f.hacsReason ? "HACS is switched off: " + f.hacsReason : "HACS isn't installed. Install it first; it takes a few minutes.",
-          action: link(SETUP_LINKS.hacs, "How to install HACS") }
-      : { ...hacsRow, status: "unknown", detail: "Couldn't check.", action: null }));
-
-  // 2. HACS AppDaemon discovery
-  const disc = { key: "discovery", title: "HACS shows AppDaemon apps", why: "Lets HACS install PowerEngine (an AppDaemon app).", needed: true };
-  if (f.hacs !== true || !cats) rows.push(unknownFor({ ...disc, status: "unknown", detail: "Check HACS first.", action: null }));
-  else if (cats.includes("appdaemon")) rows.push(unknownFor({ ...disc, status: "ok", detail: "On.", action: null }));
-  else rows.push(unknownFor({ ...disc, status: "missing",
-    detail: "Switch it on: Settings, Devices & services, HACS, Configure, then tick \"Enable AppDaemon apps discovery & tracking\" and submit. Then reload the page.",
-    action: link(SETUP_LINKS.hacsOptions, "Open HACS") }));
-
-  // 3. AppDaemon add-on
-  const ad = f.addon || { state: "unknown" };
-  const addon = { key: "addon", title: "AppDaemon add-on", why: "Runs PowerEngine.", needed: true };
-  if (ad.state === "started") rows.push(unknownFor({ ...addon, status: "ok", detail: "Installed and running" + (ad.version ? ` (${ad.version}).` : "."), action: null }));
-  else if (ad.state === "stopped") rows.push(unknownFor({ ...addon, status: "missing", detail: "Installed, but not running. Start it from its page.", action: link(SETUP_LINKS.addon, "Open add-on") }));
-  else if (ad.state === "missing") rows.push(unknownFor({ ...addon, status: "missing", detail: "Not installed. Install it from the add-on store.", action: link(SETUP_LINKS.addon, "Open add-on store page") }));
-  else rows.push(unknownFor({ ...addon, status: "unknown", detail: "Can't check this here. Make sure AppDaemon is running.", action: link(SETUP_LINKS.appdaemonDocs, "AppDaemon guide") }));
-
-  // 4. The PowerEngine app in HACS
-  const appRepo = findHacsRepo(repos, SETUP_REPOS.app.full_name);
-  const appRow = { key: "app", title: "PowerEngine app", why: "The energy manager itself, installed through HACS.", needed: true };
-  if (appRepo && appRepo.installed) rows.push(unknownFor({ ...appRow, status: "ok", detail: `Installed in HACS${appRepo.installed_version ? " (" + appRepo.installed_version + ")" : ""}.`, action: null }));
-  else if (!hacsOk || !repos) rows.push(unknownFor({ ...appRow, status: f.hacs === false ? "missing" : "unknown", detail: f.hacs === false ? "Needs HACS first." : "Check HACS first.", action: null }));
-  else if (!appRepo && !(cats || []).includes("appdaemon")) rows.push(unknownFor({ ...appRow, status: "missing", detail: "Switch on AppDaemon discovery in HACS first (above).", action: null }));
-  else rows.push(unknownFor({ ...appRow, status: "missing", detail: "Not installed.", action: install("app", "Install") }));
-
-  // 5. PowerEngine running
+  // 1. PowerEngine running
   const ver = f.peVersion || null;
-  rows.push({ key: "running", title: "PowerEngine running", why: "It publishes its version once it has started.", status: ver ? "ok" : "missing", needed: true,
-    detail: ver ? `Version ${ver}.` : "Not running yet. After installing the app, restart the AppDaemon add-on.", action: null });
+  rows.push({ key: "running", title: "PowerEngine running", why: "It publishes its version once its engine has started.", status: ver ? "ok" : "missing", needed: true,
+    detail: ver ? `Version ${ver}.` : "Not running yet. Open Settings, Devices & services, PowerEngine: its Repairs say what is wrong, and its Restart engine button starts it again.", action: null });
 
-  // 6. Chart cards
+  // 2. Chart cards
   ["apex", "flow"].forEach((k) => {
     const def = SETUP_REPOS[k];
     const loaded = !!(f.cardsLoaded || {})[def.element];
@@ -3258,22 +2986,19 @@ function setupRows(facts) {
     if (loaded) rows.push({ ...base, status: "ok", detail: `Loaded (${def.full_name}).`, action: null });
     else if (repo && repo.installed) rows.push({ ...base, status: "missing", detail: "Installed. Reload this page to load it.", action: { kind: "reload", label: "Reload page" } });
     else rows.push(unknownFor({ ...base, status: hacsOk || f.hacs === false ? "missing" : "unknown",
-      detail: hacsOk ? `Not installed (${def.full_name}).` : f.hacs === false ? "Needs HACS first." : `Check HACS first (${def.full_name}).`, action: install(k, "Install") }));
+      detail: hacsOk ? `Not installed (${def.full_name}).`
+        : f.hacs === false ? `Not installed (${def.full_name}). Install it from HACS, or install HACS first.` : `Check HACS first (${def.full_name}).`,
+      action: hacsOk ? install(k, "Install") : f.hacs === false ? link(SETUP_LINKS.hacs, "How to install HACS") : null }));
   });
 
-  // 7. MQTT
-  const mq = { key: "mqtt", title: "MQTT", why: "Needed for full use, not for the demo. PowerEngine shares its data through it.", needed: false };
-  rows.push(comps.includes("mqtt") ? { ...mq, status: "ok", detail: "Set up.", action: null }
-    : { ...mq, status: "missing", detail: "Not set up.", action: link(SETUP_LINKS.mqtt, "Set up MQTT") });
-
-  // 8. Another battery controller: the app won't go Active until the owner has said whether there is one
+  // 3. Another battery controller: the app won't go Active until the owner has said whether there is one
   if (f.otherController === "unset") rows.push({ key: "controller", title: "Other battery controller", needed: true, status: "missing",
     why: "PowerEngine won't go Active until you choose.", detail: OTHER_UNSET_PROMPT, action: null });
 
   return rows;
 }
 
-/** "All set" when PowerEngine is running and the chart cards are loaded (MQTT is optional). */
+/** "All set" when PowerEngine is running and the chart cards are loaded. */
 function setupSummary(facts) {
   const rows = setupRows(facts);
   const ok = (k) => (rows.find((r) => r.key === k) || {}).status === "ok";
@@ -3309,22 +3034,16 @@ class PowerEngineSetupCard extends (typeof HTMLElement !== "undefined" ? HTMLEle
     this._checking = true;
     this._render();
     const comps = (hass.config && hass.config.components) || [];
-    const s = { hacs: null, hacsReason: null, categories: null, addon: { state: "unknown" }, repos: null };
+    const s = { hacs: null, hacsReason: null, repos: null };
     if (this._isAdmin()) {
       if (!comps.includes("hacs")) s.hacs = false;
       else {
         try {
           const info = await hass.callWS(hacsInfoPayload());
-          s.categories = info.categories || [];
           s.hacsReason = info.disabled_reason || null;
           s.hacs = !s.hacsReason;
           if (s.hacs) s.repos = await hass.callWS(hacsListPayload());
         } catch (err) { s.hacs = null; this._notes.hacs = "Couldn't ask HACS: " + ((err && err.message) || err); }
-      }
-      if (!comps.includes("hassio")) s.addon = { state: "unsupervised" };
-      else {
-        try { s.addon = addonFrom(await hass.callWS(addonsPayload())); }
-        catch (err) { s.addon = { state: "unknown" }; }
       }
     }
     this._scan = s;
@@ -3351,9 +3070,7 @@ class PowerEngineSetupCard extends (typeof HTMLElement !== "undefined" ? HTMLEle
       }
       this._progress(key, "Downloading with HACS…");
       await hass.callWS(installStep(key, repos));
-      this._notes[key] = key === "app"
-        ? "Installed. Restart the AppDaemon add-on so it starts PowerEngine."
-        : "Installed. Reload this page for the card to load.";
+      this._notes[key] = "Installed. Reload this page for the card to load.";
     } catch (err) {
       this._notes[key] = "Failed: " + ((err && err.message) || err);
     }
@@ -3371,8 +3088,8 @@ class PowerEngineSetupCard extends (typeof HTMLElement !== "undefined" ? HTMLEle
     Object.values(SETUP_REPOS).forEach((d) => {
       if (d.element) cardsLoaded[d.element] = typeof customElements !== "undefined" && !!customElements.get(d.element);
     });
-    return { isAdmin: this._isAdmin(), hacs: s.hacs === undefined ? null : s.hacs, hacsReason: s.hacsReason, categories: s.categories,
-      addon: s.addon, repos: s.repos, cardsLoaded, components: (hass.config && hass.config.components) || [],
+    return { isAdmin: this._isAdmin(), hacs: s.hacs === undefined ? null : s.hacs, hacsReason: s.hacsReason,
+      repos: s.repos, cardsLoaded, components: (hass.config && hass.config.components) || [],
       peVersion: peRunning(hass.states),
       otherController: otherControllerValue(hass.states),
       setup: (((hass.states || {})[VERSION_SENSOR] || {}).attributes || {}).setup || null };
@@ -5184,7 +4901,7 @@ class PowerEngineDiagnosticsCard extends (typeof HTMLElement !== "undefined" ? H
       });
       await new Promise((r) => setTimeout(r, 300));          // let the subscription land first
       await this._hass.callWS({ type: "fire_event", event_type: DIAG_REQUEST, event_data: { id } });
-      return (await answer) || { bundle: { error: "PowerEngine didn't answer within 20 s (is AppDaemon running?)" } };
+      return (await answer) || { bundle: { error: "PowerEngine didn't answer within 20 s (is the engine running?)" } };
     } catch (err) {
       return { bundle: { error: "Could not ask PowerEngine: " + ((err && err.message) || err) + " (admin users only)" } };
     } finally {
@@ -9586,7 +9303,7 @@ class PowerEngineEventsCard extends PowerEngineV2Card {
 });
 
 if (typeof module !== "undefined") {
-  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerSupported, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, ROUTER_APP_VERSION, whatsappSupported, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, PACKAGE_SENSOR, PACKAGE_BANNER_TEXT, PACKAGE_BUTTON, PACKAGE_ASK_ADMIN, INSTALL_GUIDE_URL, packageInfo, packageReloadPayload, packagePromptAfterSave, packageBannerView, packageProblemLine, roleNeed, setupRows, setupSummary, otherControllerValue, handoverVisible, effectiveOtherController, guardRolesShown, otherControllerPrompt, predbatInUse, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, HANDOVER_DEFAULTS, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, MIN_APP_VERSION, parseVersion, versionOlder, versionWarnings, logRows, logWhen, escHtml, findRcEntities, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, handoverRows, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, SETUP_REPOS, findHacsRepo, hacsInfoPayload, hacsListPayload, hacsAddPayload, hacsDownloadPayload, addonsPayload, installStep, addonFrom, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, FREE_LOADS_APP_VERSION, freeLoadsSupported, freeLoadDraft, buildFreeLoads, DEVICES_APP_VERSION, DEVICE_INPUTS, devicesSupported, deviceDraft, deviceNewId, buildDevices, deviceReadout,
+  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerSupported, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, ROUTER_APP_VERSION, whatsappSupported, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, PACKAGE_SENSOR, PACKAGE_BANNER_TEXT, PACKAGE_BUTTON, PACKAGE_ASK_ADMIN, INSTALL_GUIDE_URL, packageInfo, packageReloadPayload, packagePromptAfterSave, packageBannerView, packageProblemLine, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, MIN_APP_VERSION, parseVersion, versionOlder, versionWarnings, logRows, logWhen, escHtml, findRcEntities, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, SETUP_REPOS, findHacsRepo, hacsInfoPayload, hacsListPayload, hacsAddPayload, hacsDownloadPayload, installStep, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, FREE_LOADS_APP_VERSION, freeLoadsSupported, freeLoadDraft, buildFreeLoads, DEVICES_APP_VERSION, DEVICE_INPUTS, devicesSupported, deviceDraft, deviceNewId, buildDevices, deviceReadout,
   wizardDeviceName, wizardInUse, wizardOthers, wizardUsedEntities, wizardPlantFromDevice, wizardPlantId, EXPORT_FORMAT, EXPORT_VERSION, EXPORT_STATE_MAX, wizardInfo, wizardFacts, wizardMatch, wizardCandidates, wizardRoles, wizardSuggest, wizardPlantGuess, wizardMissing, wizardWatts, wizardSignCheck, wizardBalance, scrubText, buildCandidateExport, candidateFileName, wizardEnergyDevices,
   SYSTEM_DRAFT_KEY, systemKinds, systemItems, systemMissingParts, opsSet, opsRemove, opsUndoRemove, opsTag, opsSummary, applyOps, featuresLeftOut, buildApplyConfig, equipmentOf, systemFingerprint, overlayEquipment, systemImpact, systemDraftLoad, systemDraftSave,
   OVERRIDE_MODES, OVERRIDE_PERIODS, OVERRIDE_MAX_SLOTS, inverterWords, overrideEndOptions, overridePayload, overrideView, overrideSummary,

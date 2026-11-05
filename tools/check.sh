@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-line local check. Default: ruff + the fast tests (about 40 s). `--full` adds the slow whole-app tests and the
-# replay (about 4 min); run that before a release. `--card` also checks the card repo beside this one.
+# replay (about 4 min); run that before a release. `--card` also checks the card (card/).
 # Prints one line on success; on failure, the first failing output only.
 set -u
 cd "$(dirname "$0")/.."
@@ -15,7 +15,7 @@ sel=(-m "not slow"); [ "$full" = 1 ] && sel=()
 python3 -m pytest -q -x -n auto --dist loadscope "${sel[@]}" -p no:cacheprovider >"$out" 2>&1 || fail "pytest"
 summary="$(tail -n 1 "$out")"
 if [ "$card" = 1 ]; then
-  c="../ha-powerengine-card"; [ -d "$c" ] || { echo "card repo not found at $c"; exit 1; }
+  c="card"; [ -d "$c" ] || { echo "card folder not found at $c"; exit 1; }
   (cd "$c" && node --check ha-powerengine-card.js && node --test tests/*.test.cjs) >"$out" 2>&1 || fail "card"
 fi
 echo "OK: ruff clean; $summary$([ "$card" = 1 ] && echo '; card ok')$([ "$full" = 1 ] || echo ' (fast tier; use --full before a release)')"

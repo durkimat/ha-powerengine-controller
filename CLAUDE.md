@@ -4,15 +4,16 @@ PowerEngine is a Home Assistant energy manager, run as a Home Assistant integrat
 process (`custom_components/powerengine/`; the engine's source is `apps/powerengine/`). It plans and controls a home battery
 (Solis S5-EH1P6K-L hybrid inverter, 18 kWh battery) against EDF tariffs (smart slots ~6.99p, overnight ~7p, peak
 ~30p, export 15p), a myenergi Zappi car charger and Solcast forecasts. It publishes its entities as native Home Assistant entities, and a
-companion Lovelace card (`../ha-powerengine-card`) provides the configuration, test, health, update and
+Lovelace card (`card/`, bundled in the integration and served by it) provides the configuration, test, health, update and
 diagnostics UI. The owner is Matthew. This is live on his house: mistakes cost money or inverter wear.
 
-## Two repos
+## The engine and the card
 
-Changes often touch both repos: this one (the app, `durkimat/ha-powerengine-controller`) and the card
-(`durkimat/ha-powerengine-card`, one JS file). A session that needs both must have the card cloned **beside this
-repo as `../ha-powerengine-card`**, which is where `tools/release.sh` and the card's `CLAUDE.md` look. If it is not
-there, say so and stop; don't guess its contents. Pairs that must move together:
+The card (`card/ha-powerengine-card.js`, with its tests in `card/tests/`) lives in this repository since 0.9.215 and is
+released with it: `tools/build_integration.py` copies it, with its `CARD_VERSION` set to the engine's, into
+`custom_components/powerengine/frontend/`, which the integration serves (`frontend.py`). The old
+`durkimat/ha-powerengine-card` repository is retired; the `--card-notes` options in the release tools are no longer
+used. Pairs that must move together:
 
 - A new setting in `pe_core/config.py` (`SAFETY`, `SETTING_SECTIONS`) needs adding to the card's section lists in
   `ha-powerengine-card.js` (search for a neighbouring key, e.g. `ram_max_power_w`), or it never shows on the config page.
@@ -46,14 +47,14 @@ owner approves each run on GitHub. It can't run `tools/release.sh` itself (it ne
   settings, and a GUI; `tools/sim/README.md`).
 - `tests/`: pytest. `tests/test_replay.py` with `tests/replay_harness.py` replays a recorded night through the
   whole app (see "Replay safety net").
-- The card repo has one JS file, `ha-powerengine-card.js`, and `tests/helpers.test.cjs` (node --test).
+- The card is one JS file, `card/ha-powerengine-card.js`, with `card/tests/*.test.cjs` (node --test).
 
 ## Checks before any PR
 
 ```
 tools/check.sh              # ruff + fast tests, about 40 s, one line on success
 tools/check.sh --full       # adds the slow whole-app tests and the replay (about 4 min): before a release
-tools/check.sh --card       # also node --check and node --test in ../ha-powerengine-card
+tools/check.sh --card       # also node --check and node --test in card/
 ```
 
 Slow tests are marked `slow` in `tests/conftest.py` (`SLOW_MODULES`); a new whole-app test module goes in that list. CI runs everything.

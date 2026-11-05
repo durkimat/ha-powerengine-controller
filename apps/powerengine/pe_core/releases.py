@@ -1,6 +1,6 @@
 """New-version check straight from GitHub (HACS only looks every few hours).
 
-Every few minutes PowerEngine reads the app's and the card's CHANGELOG.md from GitHub (raw files: no API rate
+Every few minutes PowerEngine reads the CHANGELOG.md from GitHub (raw files: no API rate
 limit) and compares the newest version there with the one running. The sections for every newer version become the
 "what's new" notes on the Configuration page; if there are many, the older ones become links to their releases.
 """
@@ -13,7 +13,6 @@ import urllib.request
 
 OWNER = "durkimat"
 APP_REPO = "ha-powerengine-controller"
-CARD_REPO = "ha-powerengine-card"
 TIMEOUT_S = 10
 NOTES_BUDGET = 5000            # characters of notes in the sensor attributes (HA skips attributes over 16 KB)
 USER_AGENT = "PowerEngine (Home Assistant integration; version check)"
@@ -59,21 +58,14 @@ def sections(changelog: str) -> dict[str, str]:
     return out
 
 
-def _boring(card_text: str) -> bool:
-    return not card_text or "no card changes" in card_text.lower()
-
-
-def summary(running: str, app_log: str, card_log: str | None = None, budget: int = NOTES_BUDGET) -> dict:
+def summary(running: str, app_log: str, budget: int = NOTES_BUDGET) -> dict:
     """What's newer than `running`: latest version, how many releases behind, and markdown notes (newest first)."""
-    app, card = sections(app_log), sections(card_log or "")
+    app = sections(app_log)
     newer = sorted((v for v in app if vkey(v) > vkey(running)), key=vkey, reverse=True)
     latest = newer[0] if newer else (max(app, key=vkey) if app else None)
     parts, used, linked = [], 0, []
     for v in newer:
-        body = app[v]
-        if not _boring(card.get(v, "")):
-            body += "\n\n**Card:** " + card[v].strip()
-        block = f"### {v}\n\n{body}"
+        block = f"### {v}\n\n{app[v]}"
         if used + len(block) > budget and parts:
             linked.append(v)
             continue

@@ -46,13 +46,12 @@ PowerEngine is a Home Assistant integration. The integration is thin and rarely 
 controls is a separate process it starts and watches. No AppDaemon, no MQTT broker and no `apps.yaml` are needed, and
 PowerEngine's entities are ordinary Home Assistant entities (`sensor.pe_...`).
 
-1. **HACS → ⋮ → Custom repositories**, add both:
-   - `https://github.com/durkimat/ha-powerengine-controller`, category **Integration**
-   - `https://github.com/durkimat/ha-powerengine-card`, category **Dashboard**
-2. **Download both, at the latest version of each.** The card is only released when it changes, so its version can be
-   behind the integration's. While PowerEngine is in beta, turn on pre-releases for each repo in HACS, then pick the
-   latest version.
-3. **Restart Home Assistant**, then reload the browser page (so the card's resource loads).
+1. **HACS → ⋮ → Custom repositories**, add `https://github.com/durkimat/ha-powerengine-controller`, category
+   **Integration**. That is the whole install: the dashboard card is part of PowerEngine and the integration serves it,
+   so there is nothing to add to Lovelace's resources.
+2. **Download PowerEngine** at the latest version. While it is in beta, turn on pre-releases for the repository in HACS,
+   then pick the latest version.
+3. **Restart Home Assistant**, then reload the browser page (so the card loads).
 4. **Settings → Devices & services → Add integration → PowerEngine**, mode **Live**. The engine starts; with no
    `config.yaml` yet it waits in Passive ("No config.yaml yet; set PowerEngine up on the config page").
 

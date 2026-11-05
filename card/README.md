@@ -1,18 +1,13 @@
-# PowerEngine Card
+# PowerEngine card
 
-The configuration page for [PowerEngine](https://github.com/durkimat/ha-powerengine-controller):
-input mappings, feature switches and safety margins, edited with Home Assistant's
-own entity pickers and validated before saving.
+The dashboard cards for [PowerEngine](https://github.com/durkimat/ha-powerengine-controller): the configuration page
+(input mappings, feature switches, safety margins), the plan, costs, health and test pages, and the update and setup
+cards.
 
-> **Status: early development (0.0.x).** Configures inputs, solar plants, features
-> and mode. PowerEngine itself is Passive-only in 0.0.x.
+**This is part of PowerEngine, not a separate install.** The source is `ha-powerengine-card.js` here; the build
+(`tools/build_integration.py`) puts a copy, with its version set to the engine's, in
+`custom_components/powerengine/frontend/`, and the integration serves it and adds it to Home Assistant's pages
+(`custom_components/powerengine/frontend.py`). Installing PowerEngine from HACS as an integration is the whole install.
+See [docs/INSTALL.md](../docs/INSTALL.md).
 
-## Install
-
-This card is installed as part of PowerEngine. Follow the
-**[PowerEngine installation guide](https://github.com/durkimat/ha-powerengine-controller/blob/main/docs/INSTALL.md)**
-(Step 4 installs the card; Step 5 creates the admin-only config page).
-
-The card and app don't need the same version. Each warns only if the other is older than the minimum it needs
-(the card needs app 0.9.69 or newer; the app publishes the oldest card it works with). The card is only released when
-it changes, so its version can be behind the app's.
+Tests: `node --check ha-powerengine-card.js && node --test tests/*.test.cjs` (CI runs them).

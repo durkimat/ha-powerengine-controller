@@ -39,6 +39,13 @@ jobs:
         run: ruff check .
       - if: steps.changes.outputs.code == 'true'
         run: pytest -q -n auto --dist loadscope
+      # the dashboard card (card/): a syntax check and its own tests, which need only Node
+      - uses: actions/setup-node@v4
+        if: steps.changes.outputs.code == 'true'
+        with:
+          node-version: "22"
+      - if: steps.changes.outputs.code == 'true'
+        run: node --check card/ha-powerengine-card.js && node --test card/tests/*.test.cjs
 
   hacs:
     name: HACS validation               # the name the branch rule requires: keep it exactly

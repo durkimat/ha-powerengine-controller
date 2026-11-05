@@ -226,47 +226,6 @@ test("simulator history plan and month range", () => {
 
 const hs = (v, a) => ({ state: v, attributes: a || {} });
 
-test("handoverRows: PowerEngine live", () => {
-  const r = h.handoverRows({
-    "input_select.battery_controller": hs("PowerEngine"), "switch.predbat_set_read_only": hs("on"),
-    "switch.pe_ctl_pause": hs("off"), "sensor.pe_state_operation_mode": hs("active") });
-  assert.deepEqual(r.rows.map((x) => x.ok), [true, true, true]);
-  assert.equal(r.status, "live");
-});
-
-test("handoverRows: PowerEngine selected but Passive is not live", () => {
-  const r = h.handoverRows({
-    "input_select.battery_controller": hs("PowerEngine"), "switch.predbat_set_read_only": hs("on"),
-    "switch.pe_ctl_pause": hs("off"), "sensor.pe_state_operation_mode": hs("passive", { reason: "Passive: watching" }) });
-  assert.equal(r.rows[2].ok, false);
-  assert.equal(r.status, "not_live");
-});
-
-test("handoverRows: paused for testing is not a fault", () => {
-  const r = h.handoverRows({
-    "input_select.battery_controller": hs("PowerEngine"), "switch.predbat_set_read_only": hs("on"),
-    "switch.pe_ctl_pause": hs("on"), "sensor.pe_state_operation_mode": hs("paused") });
-  assert.deepEqual(r.rows.map((x) => x.ok), [true, null, null]);
-  assert.equal(r.status, "paused");
-});
-
-test("handoverRows: Predbat selected but still active", () => {
-  const r = h.handoverRows({
-    "input_select.battery_controller": hs("Predbat"), "switch.predbat_set_read_only": hs("on"),
-    "switch.pe_ctl_pause": hs("off"), "sensor.pe_state_operation_mode": hs("active") });
-  assert.deepEqual(r.rows.map((x) => x.ok), [false, true, false]);
-  assert.equal(r.status, "not_live");
-});
-
-test("handoverRows: a missing Predbat switch is not live", () => {
-  const r = h.handoverRows({
-    "input_select.battery_controller": hs("Predbat"),
-    "switch.pe_ctl_pause": hs("off"), "sensor.pe_state_operation_mode": hs("passive") });
-  assert.equal(r.rows[0].ok, null);
-  assert.match(r.rows[0].note, /doesn't have this entity/);
-  assert.equal(r.status, "not_live");
-});
-
 test("measuredText for learned rates", () => {
   assert.equal(h.measuredText({ states: {} }, "battery_max_charge_power"), "(not measured yet)");
   const hass = { states: { "sensor.pe_diag_learned": { state: "1 learned", attributes: { raw: { max_charge_kw: 4.2, max_discharge_kw: null } } } } };
@@ -325,15 +284,6 @@ test("matchesSearch", () => {
   assert.ok(h.matchesSearch("anything", "  "));
 });
 
-test("handoverRows: Predbat missing is safe under PowerEngine", () => {
-  const r = h.handoverRows({
-    "input_select.battery_controller": hs("PowerEngine"),
-    "switch.pe_ctl_pause": hs("off"), "sensor.pe_state_operation_mode": hs("active") });
-  assert.equal(r.rows[0].ok, true);
-  assert.match(r.rows[0].note, /isn't connected/);
-  assert.equal(r.status, "live");
-});
-
 test("diagnostics history adds the mapped raw meters and the grid cross-check", () => {
   const ids = h.diagHistoryIds({ inputs: { grid_power: { entity: "sensor.solis_meter_active_power" },
     grid_power_reference: { entity: "sensor.myenergi_67lr_power_grid" }, battery_capacity: { value: 18 } } });
@@ -345,18 +295,16 @@ test("diagnostics history adds the mapped raw meters and the grid cross-check", 
   assert.ok(h.diagHistoryIds(null).includes("sensor.pe_state_grid_power"));
 });
 
-test("update card finds the PowerEngine repositories and reads the versions", () => {
+test("update card finds the PowerEngine repository and reads the version", () => {
   const repos = h.peRepos([{ id: 1, full_name: "durkimat/ha-powerengine-controller", installed: true },
-    { id: 2, full_name: "durkimat/ha-powerengine-card", installed: true },
     { id: 3, full_name: "hacs/integration", installed: true },
     { id: 4, full_name: "someone/powerengine-fork", installed: false }]);
-  assert.deepEqual(repos.map((r) => r.id), [1, 2]);
+  assert.deepEqual(repos.map((r) => r.id), [1]);
   const states = { "sensor.pe_diag_version": { state: "0.9.45" },
-    "update.powerengine_update": { state: "on", attributes: { installed_version: "v0.9.45", latest_version: "v0.9.46" } },
-    "update.powerengine_card_update": { state: "off", attributes: { installed_version: "v0.9.45" } } };
+    "update.powerengine_update": { state: "on", attributes: { installed_version: "v0.9.45", latest_version: "v0.9.46" } } };
   const v = h.versionLine(states);
   assert.equal(v.running, "0.9.45");
-  assert.deepEqual(v.parts, ["card v0.9.45", "app v0.9.45 → v0.9.46 available"]);
+  assert.deepEqual(v.parts, ["v0.9.45 → v0.9.46 available"]);
 });
 
 test("log card rows and times, and escaping", () => {
@@ -521,50 +469,40 @@ test("any label ending in ' tariff' is the waterfall's Tariff column, and the ev
 // Command shapes checked against hacs/integration (custom_components/hacs/websocket/__init__.py: hacs/info;
 // repositories.py: hacs/repositories/list and /add; repository.py: hacs/repository/download) and home-assistant/core
 // (components/hassio/websocket_api.py: supervisor/api; the frontend's fetchHassioAddonsInfo uses /addons, method get).
-const APP = "durkimat/ha-powerengine-controller";
 const APEX = "RomRider/apexcharts-card";
 const FLOW = "slipx06/sunsynk-power-flow-card";
 const hrepo = (full, id, installed, extra) => ({ id, full_name: full, installed: !!installed, installed_version: installed ? "1.0" : null, ...extra });
 const allFacts = () => ({
-  isAdmin: true, hacs: true, categories: ["integration", "plugin", "appdaemon"], addon: { state: "started", version: "0.16" },
-  repos: [hrepo(APP, "11", true), hrepo(APEX, "12", true), hrepo(FLOW, "13", true)],
-  cardsLoaded: { "apexcharts-card": true, "sunsynk-power-flow-card": true }, components: ["hacs", "hassio", "mqtt"], peVersion: "0.9.61",
+  isAdmin: true, hacs: true,
+  repos: [hrepo(APEX, "12", true), hrepo(FLOW, "13", true)],
+  cardsLoaded: { "apexcharts-card": true, "sunsynk-power-flow-card": true }, components: ["hacs"], peVersion: "0.9.61",
 });
 const emptyFacts = () => ({
-  isAdmin: true, hacs: true, categories: ["integration", "plugin", "appdaemon"], addon: { state: "missing" },
-  repos: [], cardsLoaded: {}, components: ["hacs", "hassio"], peVersion: null,
+  isAdmin: true, hacs: true,
+  repos: [], cardsLoaded: {}, components: ["hacs"], peVersion: null,
 });
 const row = (rows, key) => rows.find((r) => r.key === key);
 
-test("setup payloads match HACS and Supervisor commands", () => {
+test("setup payloads match HACS commands", () => {
   assert.deepStrictEqual(h.hacsInfoPayload(), { type: "hacs/info" });
-  assert.deepStrictEqual(h.hacsListPayload(), { type: "hacs/repositories/list", categories: ["appdaemon", "plugin"] });
-  assert.deepStrictEqual(h.hacsAddPayload(APP, "appdaemon"), { type: "hacs/repositories/add", repository: APP, category: "appdaemon" });
+  assert.deepStrictEqual(h.hacsListPayload(), { type: "hacs/repositories/list", categories: ["plugin"] });
+  assert.deepStrictEqual(h.hacsAddPayload(APEX, "plugin"), { type: "hacs/repositories/add", repository: APEX, category: "plugin" });
   assert.deepStrictEqual(h.hacsDownloadPayload(12), { type: "hacs/repository/download", repository: "12" });   // id must be text
-  assert.deepStrictEqual(h.addonsPayload(), { type: "supervisor/api", endpoint: "/addons", method: "get" });
 });
 
 test("repository lookup ignores case and finds nothing in an empty list", () => {
   const list = [hrepo("romrider/ApexCharts-Card", 7, true)];
   assert.strictEqual(h.findHacsRepo(list, APEX).id, 7);
-  assert.strictEqual(h.findHacsRepo(list, APP), null);
-  assert.strictEqual(h.findHacsRepo(null, APP), null);
+  assert.strictEqual(h.findHacsRepo(list, FLOW), null);
+  assert.strictEqual(h.findHacsRepo(null, APEX), null);
 });
 
 test("install step adds an unknown repository, then downloads it", () => {
-  assert.deepStrictEqual(h.installStep("app", []), { type: "hacs/repositories/add", repository: APP, category: "appdaemon" });
+  assert.deepStrictEqual(h.installStep("apex", []), { type: "hacs/repositories/add", repository: APEX, category: "plugin" });
   assert.deepStrictEqual(h.installStep("flow", []), { type: "hacs/repositories/add", repository: FLOW, category: "plugin" });
-  assert.deepStrictEqual(h.installStep("app", [hrepo(APP, 99, false)]), { type: "hacs/repository/download", repository: "99" });
+  assert.deepStrictEqual(h.installStep("flow", [hrepo(FLOW, 99, false)]), { type: "hacs/repository/download", repository: "99" });
+  assert.strictEqual(h.installStep("app", []), null);                     // PowerEngine is not installed from here
   assert.strictEqual(h.installStep("nope", []), null);
-});
-
-test("add-on lookup finds an AppDaemon slug and its state", () => {
-  const r = (state) => ({ addons: [{ slug: "core_mosquitto", state: "started" }, { slug: "a0d7b954_appdaemon", state, name: "AppDaemon", version: "0.16" }] });
-  assert.strictEqual(h.addonFrom(r("started")).state, "started");
-  assert.strictEqual(h.addonFrom(r("stopped")).state, "stopped");
-  assert.strictEqual(h.addonFrom({ addons: [{ slug: "core_mosquitto", state: "started" }] }).state, "missing");
-  assert.strictEqual(h.addonFrom({ addons: [{ slug: "abc123_appdaemon4", state: "started" }] }).state, "started");   // a community fork
-  assert.strictEqual(h.addonFrom(null).state, "missing");
 });
 
 test("version sensor: unavailable is not running", () => {
@@ -575,54 +513,23 @@ test("version sensor: unavailable is not running", () => {
 
 test("nothing installed, as an admin: every needed row is missing and offers its action", () => {
   const rows = h.setupRows(emptyFacts());
-  assert.strictEqual(row(rows, "hacs").status, "ok");
-  assert.strictEqual(row(rows, "discovery").status, "ok");
-  assert.strictEqual(row(rows, "addon").status, "missing");
-  assert.match(row(rows, "addon").action.href, /supervisor_addon/);
-  assert.deepStrictEqual(row(rows, "app").action, { kind: "install", target: "app", label: "Install" });
+  assert.deepStrictEqual(rows.map((r) => r.key), ["running", "apex", "flow"]);
   assert.strictEqual(row(rows, "running").status, "missing");
+  assert.match(row(rows, "running").detail, /Repairs/);
   assert.strictEqual(row(rows, "apex").action.target, "apex");
   assert.strictEqual(row(rows, "flow").action.target, "flow");
-  assert.strictEqual(row(rows, "mqtt").needed, false);
-  assert.match(row(rows, "mqtt").why, /not for the demo/);
-  assert.strictEqual(row(rows, "mqtt").action.kind, "link");
   assert.strictEqual(h.setupSummary(emptyFacts()).allSet, false);
-});
-
-test("AppDaemon discovery off: explains the option and blocks the app install", () => {
-  const f = emptyFacts();
-  f.categories = ["integration", "plugin"];
-  const rows = h.setupRows(f);
-  assert.strictEqual(row(rows, "discovery").status, "missing");
-  assert.match(row(rows, "discovery").detail, /Enable AppDaemon apps discovery/);
-  assert.strictEqual(row(rows, "discovery").action.kind, "link");
-  assert.strictEqual(row(rows, "app").action, null);
-  assert.strictEqual(row(rows, "apex").action.target, "apex");   // plugins don't need it
 });
 
 test("HACS missing: no install buttons, link to how to install it", () => {
   const f = emptyFacts();
-  f.hacs = false; f.categories = null; f.repos = null; f.components = [];
+  f.hacs = false; f.repos = null; f.components = [];
   const rows = h.setupRows(f);
-  assert.strictEqual(row(rows, "hacs").status, "missing");
-  assert.match(row(rows, "hacs").action.href, /hacs\.xyz/);
-  ["app", "apex", "flow"].forEach((k) => assert.strictEqual(row(rows, k).action, null));
-  assert.strictEqual(row(rows, "discovery").status, "unknown");
-});
-
-test("no Supervisor: the add-on row is unknown, with a docs link and no install", () => {
-  const f = emptyFacts();
-  f.addon = { state: "unsupervised" };
-  const r = row(h.setupRows(f), "addon");
-  assert.strictEqual(r.status, "unknown");
-  assert.match(r.detail, /make sure AppDaemon is running/i);
-  assert.match(r.action.href, /appdaemon/);
-});
-
-test("add-on installed but stopped is missing, not ok", () => {
-  const f = allFacts();
-  f.addon = { state: "stopped" };
-  assert.strictEqual(row(h.setupRows(f), "addon").status, "missing");
+  ["apex", "flow"].forEach((k) => {
+    assert.strictEqual(row(rows, k).status, "missing");
+    assert.strictEqual(row(rows, k).action.kind, "link");
+    assert.match(row(rows, k).action.href, /hacs\.xyz/);
+  });
 });
 
 test("chart card installed in HACS but not loaded asks for a reload", () => {
@@ -643,18 +550,11 @@ test("everything installed: all ok, one line with the version", () => {
   assert.strictEqual(s.todo, 0);
 });
 
-test("all set without MQTT: still all set", () => {
-  const f = allFacts();
-  f.components = ["hacs", "hassio"];
-  assert.strictEqual(row(h.setupRows(f), "mqtt").status, "missing");
-  assert.strictEqual(h.setupSummary(f).allSet, true);
-});
-
 test("non-admin sees the list but no install buttons, and an admin note on HACS-dependent rows", () => {
   const f = emptyFacts();
-  f.isAdmin = false; f.hacs = null; f.categories = null; f.repos = null; f.addon = { state: "unknown" };
+  f.isAdmin = false; f.hacs = null; f.repos = null;
   const rows = h.setupRows(f);
-  ["hacs", "discovery", "addon", "app", "apex", "flow"].forEach((k) => {
+  ["apex", "flow"].forEach((k) => {
     assert.strictEqual(row(rows, k).action, null, k);
     assert.strictEqual(row(rows, k).status, "unknown", k);
     assert.match(row(rows, k).detail, /admin/i, k);
@@ -664,7 +564,7 @@ test("non-admin sees the list but no install buttons, and an admin note on HACS-
 
 test("non-admin with everything running still sees all set", () => {
   const f = allFacts();
-  f.isAdmin = false; f.hacs = null; f.categories = null; f.repos = null; f.addon = { state: "unknown" };
+  f.isAdmin = false; f.hacs = null; f.repos = null;
   assert.strictEqual(h.setupSummary(f).allSet, true);
 });
 
