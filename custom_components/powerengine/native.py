@@ -29,6 +29,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
 from .const import CONF_MODE, DOMAIN, MODE_SHADOW
+from .migrate import Snapshot
 from .shadow import SHADOW_PREFIX
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,6 +61,7 @@ class NativeEntities:
         self.entities: dict[str, PowerEngineEntity] = {}
         self.adders: dict[str, Callable[[list], None]] = {}
         self.online = True
+        self.snapshot = Snapshot()            # what the AppDaemon app's entities were, after a migration
 
     @callback
     def attach(self, component: str, add_entities: Callable[[list], None]) -> None:
@@ -164,6 +166,9 @@ class PowerEngineEntity(Entity):
 
     async def async_added_to_hass(self) -> None:
         self.added = True
+        custom = self._native.snapshot.customisation(self.entity_id)       # what the owner had set on the old entity
+        if custom:
+            er.async_get(self.hass).async_update_entity(self.entity_id, **custom)
 
     async def async_will_remove_from_hass(self) -> None:
         self.added = False
@@ -258,3 +263,5 @@ class PowerEngineSwitch(PowerEngineEntity, SwitchEntity, RestoreEntity):
         if self._state is None and (last := await self.async_get_last_state()) is not None:
             if last.state in ("on", "off"):
                 self._state = last.state
+        if self._state is None and self._native.snapshot.state(self.entity_id) in ("on", "off"):
+            self._state = self._native.snapshot.state(self.entity_id)         # the old switch's state, after a migration

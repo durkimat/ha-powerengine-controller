@@ -28,9 +28,11 @@ ISSUE_RUNNING_ELSEWHERE = "running_in_appdaemon"
 ISSUE_CRASHING = "engine_crashing"
 ISSUE_FILES = "engine_files_missing"
 ISSUE_NO_SOURCE = "shadow_no_source"
+ISSUE_OLD_ENTITIES = "old_entities"
 
 SERVICE_RESTART_ENGINE = "restart_engine"
 SERVICE_REFRESH_SHADOW = "refresh_shadow"
+SERVICE_MIGRATE = "migrate_from_mqtt"
 
 # the engine's exit statuses (apps/powerengine/engine_main.py)
 EXIT_STOPPED, EXIT_PROTOCOL, EXIT_SECRET, EXIT_UNAVAILABLE = 0, 10, 11, 12

@@ -72,7 +72,10 @@ custom_components/powerengine/        thin and stable: a Home Assistant restart 
    process.
 4. **Tests.** Entity creation and the bridge with `pytest-homeassistant-custom-component`; the engine against a fake
    host; a shadow run compared with the live app (`tools/engine_compare.py`).
-5. **Cut-over tooling and migration** (below).
+5. **Cut-over tooling and migration (built: [cut-over.md](cut-over.md)).** `migrate.py` and the service
+   `powerengine.migrate_from_mqtt`: the engine is not started while the app's MQTT entities exist; the service saves a
+   snapshot of them, clears their retained messages, removes them and starts the engine, which makes the same ids
+   natively. The runbook is the numbered steps in cut-over.md; the cut-over itself is a decision for the owner.
 
 ## Migrating a running system
 

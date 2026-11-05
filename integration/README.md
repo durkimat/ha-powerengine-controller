@@ -11,6 +11,7 @@ Assistant. The plan, the phases and how a running system migrates are in
 | `supervisor.py` | Starts `engine/engine_main.py` as a process of Home Assistant's Python, forwards its log, restarts it after a wait, restarts it when its files change, and does not restart it for a protocol mismatch (exit 10). |
 | `bridge.py` | `HassHome`: answers the engine's requests (states, history, templates, service calls, events) from Home Assistant, and sends it the changes and events it asked for. |
 | `native.py` | The engine's own entities as real entities: registry, unique ids `powerengine_<key>`, ids `sensor.pe_<key>`, one device. The engine describes them, so a new one needs no integration update. |
+| `migrate.py` | Taking over from the AppDaemon app: snapshots its MQTT entities, clears their retained messages, removes them, so the native ones take the same ids (`powerengine.migrate_from_mqtt`; [the runbook](../docs/plans/cut-over.md)). |
 | `sensor.py`, `binary_sensor.py`, `switch.py`, `button.py` | The platforms (the engine status sensor and "Restart engine" button are the integration's own). |
 | `config_flow.py`, `diagnostics.py`, `strings.json` | Setup (one entry, the settings folder), download diagnostics, Repairs text. |
 

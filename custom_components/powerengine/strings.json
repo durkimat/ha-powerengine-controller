@@ -36,6 +36,10 @@
       "title": "The PowerEngine engine keeps stopping",
       "description": "The engine has stopped several times in the last quarter of an hour and is being started again after a wait. Download the integration's diagnostics for the engine's last log lines."
     },
+    "old_entities": {
+      "title": "Finish taking over from the PowerEngine AppDaemon app",
+      "description": "The AppDaemon app's entities still exist, and the engine is not started until they are replaced (it would make duplicates called sensor.pe_..._2). With the app stopped, run the powerengine.migrate_from_mqtt service: it saves a snapshot of the old entities, clears their MQTT messages, removes them, and the engine then makes them again with the same entity ids and history."
+    },
     "engine_files_missing": {
       "title": "PowerEngine's engine files are missing",
       "description": "Reinstall PowerEngine from HACS and restart Home Assistant."
@@ -56,6 +60,10 @@
     "restart_engine": {
       "name": "Restart engine",
       "description": "Restart the PowerEngine engine now, for example to start an update that has just been installed."
+    },
+    "migrate_from_mqtt": {
+      "name": "Take over from the AppDaemon app",
+      "description": "With the AppDaemon app stopped: save a snapshot of its entities, clear its MQTT messages and remove them, so the engine can make them as native entities with the same entity ids. Does nothing if there are none."
     },
     "refresh_shadow": {
       "name": "Refresh shadow data",
