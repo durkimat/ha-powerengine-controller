@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 
-from pe_core.adapters.publish import DirectPublisher, MqttPublisher
+from pe_core.adapters.publish import DirectPublisher, NativePublisher
 from pe_core.commands import entity_ids, from_pe_command, from_service
 
 
@@ -26,7 +26,7 @@ def app():
         import powerengine
         e = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
         ha = FakeHA()
-        e.cfg, e.mqtt, e.set_state = None, None, ha.set_state
+        e.cfg, e.set_state = None, ha.set_state
         e.get_state = lambda eid=None, **k: ha.states.get(eid)
         e._publisher_obj = DirectPublisher(ha.set_state)
         e.ha = ha
@@ -120,11 +120,12 @@ def test_number_values_are_clamped():
 
 
 def test_listeners_only_in_direct_mode(app):
-    # what initialize() registers: the call_service and pe_command listeners exist only when the publisher isn't MQTT
+    # what initialize() registers: the call_service and pe_command listeners exist only when the entities are plain
+    # states (with native entities the switches are real and their state changes arrive as any state does)
     events = []
     app.listen_event = lambda cb, name, **k: events.append(name)
     for pub, expected in ((DirectPublisher(app.ha.set_state), ["call_service", "pe_command"]),
-                          (MqttPublisher(types.SimpleNamespace(mqtt_publish=lambda *a, **k: None)), [])):
+                          (NativePublisher(types.SimpleNamespace(), app.ha.set_state), [])):
         events.clear()
         app._publisher_obj = pub
         app._listen_for_commands()

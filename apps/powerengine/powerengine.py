@@ -303,13 +303,10 @@ class Engine:
         except Exception as err:
             self.log(f"Could not read the saved log: {err!r}", level="WARNING")
 
-        choice = self._publisher_choice()
-        self.mqtt = None if choice == "direct" else self._mqtt_api(quiet=choice == "auto")
         self._publisher_obj = None
         if self._get_publisher() is None:
             return
-        self.log(f"Entity publishing: {self._get_publisher().name}"
-                 + (" (set 'Entity publishing' on the Config page to change it)" if choice == "auto" else ""))
+        self.log(f"Entity publishing: {self._get_publisher().name}")
 
         for ent in ENTITIES:
             self._get_publisher().discover(ent, __version__)
@@ -4617,8 +4614,8 @@ class Engine:
                                     "Passive (nothing is controlled) until you run the supervised tests again."))
 
     def _listen_for_commands(self):
-        """Direct mode only: HA has no integration behind our entities, so hear its service calls. (With MQTT the
-        switches are real and the app just watches their state, so nothing is registered.)"""
+        """Direct mode only: HA has no integration behind our entities, so hear its service calls. (With native entities
+        the switches are real and the app just watches their state, so nothing is registered.)"""
         pub = self._get_publisher()
         if pub is not None and not pub.retains:
             self.host.listen_event(self._on_call_service, "call_service")
@@ -4638,7 +4635,7 @@ class Engine:
 
     def _on_command(self, key, value):
         """One place a command from HA lands: set the entity, and the state listeners (pause and guards, history)
-        react to the change exactly as they do when MQTT delivers it."""
+        react to the change exactly as they do when a native switch changes."""
         pub = self._get_publisher()
         if pub is not None:
             self.log(f"Command from Home Assistant: {key} = {value}")
@@ -4821,8 +4818,8 @@ class Engine:
     # --- helpers -------------------------------------------------------------------
 
     def _retire_old_entities(self):
-        """Remove entities an earlier release published (entities.RETIRED_ENTITIES). MQTT: clear their retained
-        topics (harmless to repeat). Direct: only those HA still has, so a fresh install gets no stray entity."""
+        """Remove entities an earlier release published (entities.RETIRED_ENTITIES). Native: harmless to repeat. Direct:
+        only those HA still has, so a fresh install gets no stray entity."""
         pub = self._get_publisher()
         for ent in RETIRED_ENTITIES:
             try:
@@ -4832,7 +4829,7 @@ class Engine:
                 self.log(f"Could not retire {ent.entity_id}: {err!r}", level="WARNING")
 
     def _ui_defaults(self):
-        """Set dashboard preferences to their defaults once (HA and the broker keep them after that)."""
+        """Set dashboard preferences to their defaults once (Home Assistant keeps them after that)."""
         path = os.path.join(os.path.dirname(self._save_path()), "ui.json")
         try:
             with open(path, encoding="utf-8") as fh:
@@ -4986,18 +4983,12 @@ class Engine:
                 "days": [{"key": k, "title": fill(v.get("title", k), names)} for k, v in pack.items()],
                 "note": "Recorded data from a real home. Nothing is controlled."}
 
-    def _publisher_choice(self):
-        if self._demo:
-            return "direct"
-        choice = ((getattr(self.cfg, "system", None) or {}).get("publisher") if self.cfg else None) or "auto"
-        return choice
-
     def _get_publisher(self):
-        """The one door for every entity the app publishes (MQTT or direct; the core never knows which)."""
+        """The one door for every entity the app publishes (native or plain states; the core never knows which). The
+        demo always writes plain states."""
         pub = self.__dict__.get("_publisher_obj")
         if pub is None:
-            pub = select_publisher(self._publisher_choice(), getattr(self, "mqtt", None),
-                                   self.host.state_writer(self._told_once, demo=bool(self._demo)),
+            pub = select_publisher(self.host.state_writer(self._told_once, demo=bool(self._demo)),
                                    native=None if self._demo else self.host.native_entities,
                                    told_once=self._told_once)
             self._publisher_obj = pub
@@ -5008,20 +4999,6 @@ class Engine:
         if key not in told:
             told.add(key)
             self.log(message, level=level)
-
-    def _mqtt_api(self, quiet=False):
-        try:
-            api = self.host.plugin_api("MQTT")
-        except Exception as err:  # plugin not configured
-            api = None
-            if not quiet:
-                self.log(f"MQTT plugin error: {err}", level="WARNING")
-        if api is None and quiet:
-            self.log("No MQTT plugin in AppDaemon: publishing entities directly.")
-        elif api is None:
-            self.log("MQTT plugin not configured in appdaemon.yaml; entities can't be published. "
-                     "See docs/INSTALL.md, Step 3.", level="WARNING")
-        return api
 
     def _publish_state(self, key, state, attributes=None):
         pub = self._get_publisher()

@@ -20,7 +20,7 @@ def live_folder(hass):
     import pathlib
     folder = pathlib.Path(hass.config.path("powerengine"))
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / "config.yaml").write_text("system:\n  publisher: mqtt\noperation:\n  mode: active\n")
+    (folder / "config.yaml").write_text("system:\n  control_method: ram_remote\noperation:\n  mode: active\n")
     (folder / "load_history.json").write_text('{"days": 15}')
     (folder / "config.yaml.bak-20261030").write_text("old")
     (folder / "costs-backup.tgz").write_text("big")
@@ -52,7 +52,7 @@ def test_the_engines_own_entities_are_the_shadows_and_nobody_elses_are():
 def test_seeding_copies_the_live_folder_once_without_the_bulky_or_stale_files(tmp_path):
     live, copy = tmp_path / "live", tmp_path / "copy"
     live.mkdir()
-    (live / "config.yaml").write_text("system:\n  publisher: mqtt\n  other: 1\n")
+    (live / "config.yaml").write_text("system:\n  control_method: ram_remote\n  other: 1\n")
     (live / "data.json").write_text("{}")
     (live / "old.tgz").write_text("x")
     (live / "config.yaml.bak-1").write_text("x")
@@ -63,7 +63,7 @@ def test_seeding_copies_the_live_folder_once_without_the_bulky_or_stale_files(tm
     assert shadow.seed(live, copy) == 3
     assert sorted(p.relative_to(copy).as_posix() for p in copy.rglob("*") if p.is_file()) == [
         "config.yaml", "costs/d.json", "data.json"]
-    assert "publisher: auto" in (copy / "config.yaml").read_text() and "other: 1" in (copy / "config.yaml").read_text()
+    assert (copy / "config.yaml").read_text() == "system:\n  control_method: ram_remote\n  other: 1\n"
     (live / "data.json").write_text('{"newer": true}')
     assert shadow.seed(live, copy) == 0 and (copy / "data.json").read_text() == "{}"      # not over its own
     assert shadow.seed(tmp_path / "none", tmp_path / "copy2") == 0                          # nothing to copy
@@ -88,13 +88,13 @@ async def test_a_shadow_run_publishes_its_own_entities_and_leaves_the_live_ones_
     assert device.name == "PowerEngine (shadow)"
     name = hass.states.get("sensor.pe_shadow_diag_version").attributes["friendly_name"]
     assert name == "PowerEngine (shadow) Version"
-    # it works on its own copy, held to passive, and the copy has the live settings with native publishing
+    # it works on its own copy, held to passive, and the copy has the live settings
     copy = hass.config.path("powerengine_shadow")
     assert json.loads(open(f"{copy}/load_history.json").read()) == {"days": 15}
     assert not __import__("os").path.exists(f"{copy}/costs-backup.tgz")
     assert not __import__("os").path.exists(f"{copy}/config.yaml.bak-20261030")
-    assert "publisher: auto" in open(f"{copy}/config.yaml").read()
-    assert open(f"{live}/config.yaml").read().count("publisher: mqtt") == 1             # the live one is untouched
+    assert "control_method: ram_remote" in open(f"{copy}/config.yaml").read()           # the live settings, copied
+    assert open(f"{live}/config.yaml").read() == "system:\n  control_method: ram_remote\noperation:\n  mode: active\n"
     assert hass.states.get("sensor.pe_shadow_state_operation_mode") is not None
     assert engine(hass).attributes["mode"] == "shadow"
     await hass.config_entries.async_unload(entry.entry_id)

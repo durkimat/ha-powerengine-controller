@@ -1,7 +1,7 @@
-"""PowerEngine's Home Assistant entities, published via MQTT discovery.
+"""PowerEngine's Home Assistant entities.
 
-Pure data: this module builds topics and payloads; the AppDaemon adapter only
-publishes them. Every entity follows the naming scheme
+Pure data: this module says what each entity is; the publisher (adapters/publish.py) makes them. Every entity follows
+the naming scheme
     <component>.pe_<group>_<name>
 and belongs to the single "PowerEngine" device.
 """
@@ -11,12 +11,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from typing import Any
-
-BASE_TOPIC = "powerengine"
-DISCOVERY_PREFIX = "homeassistant"
-AVAILABILITY_TOPIC = f"{BASE_TOPIC}/status"
-ONLINE, OFFLINE = "online", "offline"
-REPO_URL = "https://github.com/durkimat/ha-powerengine-controller"
 
 GROUPS = ("cfg", "ctl", "state", "plan", "map", "diag", "cost", "event", "ui", "v2")
 _KEY = re.compile(r"^(" + "|".join(GROUPS) + r")(_[a-z0-9_]+)?$")   # e.g. plan, plan_next_mode
@@ -40,18 +34,6 @@ class EntityDef:
     @property
     def unique_id(self) -> str:
         return f"powerengine_{self.key}"
-
-    @property
-    def state_topic(self) -> str:
-        return f"{BASE_TOPIC}/{self.key}/state"
-
-    @property
-    def attributes_topic(self) -> str:
-        return f"{BASE_TOPIC}/{self.key}/attributes"
-
-    @property
-    def discovery_topic(self) -> str:
-        return f"{DISCOVERY_PREFIX}/{self.component}/{BASE_TOPIC}/{self.key}/config"
 
 
 # --- the entities this build publishes -------------------------------------------------
@@ -198,23 +180,16 @@ COST_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "event_months", "Special events this month", {**MONEY, "icon": "mdi:calendar-star"}),
 )
 
-# Dashboard display preferences. Handled by HA and the MQTT broker: the command topic is also the state topic and is
-# retained, so HA's own command comes straight back as the state. Not optimistic, so HA shows a normal toggle
-# (an optimistic switch is drawn as two lightning-bolt buttons).
-_UI_TOPIC = f"{BASE_TOPIC}/ui_right_align/set"
+# Dashboard display preferences: a switch whose state Home Assistant keeps across restarts.
 UI_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("switch", "ui_right_align", "Right-align numbers",
-              {"icon": "mdi:format-align-right", "entity_category": "config", "command_topic": _UI_TOPIC,
-               "state_topic": _UI_TOPIC, "optimistic": False, "retain": True}),
+              {"icon": "mdi:format-align-right", "entity_category": "config"}),
 )
 
-# Pause: stops all inverter writes in Active mode (after handing the inverter back to Self-Use once). Same
-# retained command/state topic pattern as the UI switch, so the choice survives restarts of HA and the app.
-PAUSE_TOPIC = f"{BASE_TOPIC}/ctl_pause/set"
+# Pause: stops all inverter writes in Active mode (after handing the inverter back to Self-Use once). A switch whose
+# state survives restarts of HA and the engine.
 CONTROL_SWITCHES: tuple[EntityDef, ...] = (
-    EntityDef("switch", "ctl_pause", "Pause control",
-              {"icon": "mdi:pause-octagon", "command_topic": PAUSE_TOPIC, "state_topic": PAUSE_TOPIC,
-               "optimistic": False, "retain": True}),
+    EntityDef("switch", "ctl_pause", "Pause control", {"icon": "mdi:pause-octagon"}),
 )
 
 # Plan history tab: the day is picked with the card's date picker (event pe_history_day), so only the sensor is left.
@@ -229,67 +204,18 @@ HISTORY_ENTITIES: tuple[EntityDef, ...] = (
     EntityDef("sensor", "ui_notify", "Notifications", {"icon": "mdi:bell-ring"}),
 )
 
-# Entities an earlier release published that no longer exist. The app retires them at every start (the retained
-# discovery, state and command topics are cleared; direct mode removes or marks the HA state), so an upgrade leaves
-# nothing behind. Only the fields retirement reads are kept. 0.9.72-0.9.74: the Costs tab's custom date range.
-# 0.9.84: the Plan history tab's plan and day choices.
+# Entities an earlier release published that no longer exist. The engine retires them at every start, so an upgrade
+# leaves nothing behind. 0.9.72-0.9.74: the Costs tab's custom date range. 0.9.84: the Plan history tab's plan and day
+# choices.
 RETIRED_ENTITIES: tuple[EntityDef, ...] = (
-    EntityDef("select", "ui_cost_from", "Costs range from", {"command_topic": f"{BASE_TOPIC}/ui_cost_from/set"}),
-    EntityDef("select", "ui_cost_to", "Costs range to", {"command_topic": f"{BASE_TOPIC}/ui_cost_to/set"}),
-    EntityDef("select", "ui_history_plan", "History plan", {"command_topic": f"{BASE_TOPIC}/ui_history_plan/set"}),
-    EntityDef("select", "ui_history_day", "History day", {"command_topic": f"{BASE_TOPIC}/ui_history_day/set"}),
+    EntityDef("select", "ui_cost_from", "Costs range from"),
+    EntityDef("select", "ui_cost_to", "Costs range to"),
+    EntityDef("select", "ui_history_plan", "History plan"),
+    EntityDef("select", "ui_history_day", "History day"),
 )
 
 ENTITIES = (ENTITIES + STATE_ENTITIES + PLAN_ENTITIES + V2_ENTITIES + COST_ENTITIES + UI_ENTITIES + CONTROL_SWITCHES
             + HISTORY_ENTITIES)
-
-
-def device(version: str) -> dict[str, Any]:
-    return {
-        "identifiers": ["powerengine"],
-        "name": "PowerEngine",
-        "manufacturer": "PowerEngine",
-        "model": "Home Assistant integration",
-        "sw_version": version,
-        "configuration_url": REPO_URL,
-    }
-
-
-def discovery_payload(ent: EntityDef, version: str) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "name": ent.name,
-        "has_entity_name": True,
-        "unique_id": ent.unique_id,
-        "default_entity_id": ent.entity_id,
-        "state_topic": ent.state_topic,
-        "json_attributes_topic": ent.attributes_topic,
-        "availability_topic": AVAILABILITY_TOPIC,
-        "payload_available": ONLINE,
-        "payload_not_available": OFFLINE,
-        "device": device(version),
-        "origin": {"name": "PowerEngine", "sw_version": version, "support_url": REPO_URL},
-    }
-    if ent.component == "binary_sensor":
-        payload.update({"payload_on": "ON", "payload_off": "OFF"})
-    payload.update(ent.options)
-    return payload
-
-
-def entity_removal_messages(ent: EntityDef) -> list[tuple[str, str]]:
-    """(topic, payload) pairs that delete one entity and its retained state."""
-    msgs = [(ent.discovery_topic, ""), (ent.state_topic, ""), (ent.attributes_topic, "")]
-    if "command_topic" in ent.options:                            # retained UI preference
-        msgs.append((ent.options["command_topic"], ""))
-    return msgs
-
-
-def removal_messages() -> list[tuple[str, str]]:
-    """(topic, payload) pairs that delete every entity and its retained state."""
-    msgs: list[tuple[str, str]] = []
-    for ent in ENTITIES:
-        msgs += entity_removal_messages(ent)
-    msgs.append((AVAILABILITY_TOPIC, ""))
-    return msgs
 
 
 def solar_plant_entity(plant_id: str, name: str) -> EntityDef:

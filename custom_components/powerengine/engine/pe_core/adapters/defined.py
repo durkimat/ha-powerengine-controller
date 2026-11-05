@@ -12,7 +12,7 @@ algorithm stays in Python and is chosen by name in the file (`behaviour:`):
   clock        drift_button    the clock sensor's drift and a sync button (pe_core/clock.py)
 
 Pure translation only, like the adapter it replaces: it reads Home Assistant solely through the `HomeAssistant`
-object it is given and does no logging, journalling or MQTT. The neutral role names ("timed_charge_start_hour",
+object it is given and does no logging or journalling. The neutral role names ("timed_charge_start_hour",
 "rc_mode", "storage_mode" ...) are the app's own vocabulary and are the same for every inverter; a definition says
 which entities and which option words they stand for on its inverter.
 """

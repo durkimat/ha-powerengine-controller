@@ -119,8 +119,11 @@ SAFETY = {
     "damp_burst_settle_min": (5.0, 1, 30),    # ...and then waits for the plan to be steady this long (min)
 }
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage", "control_method": "timed_windows",
-                   "publisher": "auto", "overnight_window": "learned", "engine": "v1",
+                   "overnight_window": "learned", "engine": "v1",
                    "other_controller": ""}      # "" = not chosen: derived from the mapped guards (other_controller())
+# system settings that were removed: still accepted in a saved config, and ignored. `publisher` (auto / mqtt / direct)
+# chose how entities reached Home Assistant; the integration's own entities are the only way now.
+RETIRED_SYSTEM_SETTINGS = ("publisher",)
 # system settings chosen from a list: key -> (config-page section, ((value, label), ...))
 SYSTEM_CHOICES = {
     "battery_location": ("cold", (("garage", "Garage or outbuilding (follows outside over about 24 h)"),
@@ -136,9 +139,6 @@ SYSTEM_CHOICES = {
                                  "the sun falling short)"))),
     "other_controller": ("control", (("none", "No other battery controller"),
                                      ("other", "Another controller: PowerEngine checks the guard entities below"))),
-    "publisher": ("system", (("auto", "Automatic (the integration's own entities)"),
-                             ("mqtt", "MQTT"),
-                             ("direct", "Plain states written to Home Assistant (no MQTT broker)"))),
 }
 LOCATION_LAG_H = {"garage": 24.0, "outside": 6.0, "indoors": 72.0}
 
@@ -298,11 +298,6 @@ SETTING_TEXT = {
     "battery_location": ("Battery location", "",
                          "Where the battery is, which sets how quickly it follows the outside temperature: how long "
                          "a cold spell takes to chill it, and to warm it back up."),
-    "publisher": ("Entity publishing", "",
-                  "How PowerEngine's entities get into Home Assistant. MQTT keeps them across restarts and lets "
-                  "their switches be changed from HA. Direct needs no MQTT broker, but the entities are rebuilt at "
-                  "each start and their switches are read-only. Automatic uses MQTT when it is set up. Takes effect "
-                  "after a restart."),
     "overnight_window": ("Overnight window", "",
                          "The regular cheap overnight rate that the plan can rely on every night. Learned: "
                          "worked out from the half-hours that were cheapest on "
@@ -833,6 +828,8 @@ def parse_config(data: Any) -> Config:
     if not isinstance(raw_system, dict):
         raise ConfigError("'system' must be a mapping")
     for key, value in raw_system.items():
+        if key in RETIRED_SYSTEM_SETTINGS:
+            continue                              # a setting that no longer exists: accepted and ignored
         if key not in SYSTEM_DEFAULTS:
             raise ConfigError(f"unknown system setting '{key}'")
         if key == "other_controller" and value == "predbat":

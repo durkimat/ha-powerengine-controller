@@ -53,7 +53,7 @@ def replay_config(owner: dict | None, template: dict, engine: str, measured: dic
         features[key] = False
     cfg["features"] = features
     cfg["operation"] = {**(cfg.get("operation") or {}), "mode": "active"}
-    cfg["system"] = {**(cfg.get("system") or {}), "control_method": "ram_remote", "publisher": "direct",
+    cfg["system"] = {**(cfg.get("system") or {}), "control_method": "ram_remote",
                      "engine": engine, "house_load_includes_ev": True}      # (the world's house load includes the car)
     if "v2_split" not in cfg:                          # not yet separated by the app: engine v2 keeps what it followed
         from ..config import parse_config

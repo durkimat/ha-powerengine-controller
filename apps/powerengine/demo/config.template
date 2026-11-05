@@ -132,7 +132,6 @@ system:
   house_load_includes_ev: true
   battery_location: garage
   control_method: ram_remote
-  publisher: direct
 notifications:
   service: persistent_notification
   events:

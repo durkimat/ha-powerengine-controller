@@ -15,7 +15,6 @@ import os
 import re
 import shutil
 import sys
-import types
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
@@ -135,13 +134,11 @@ def fake_home():
         def render_template(self, template, **kw):
             raise NotImplementedError("the fake Home Assistant has no templates")
 
-        def get_plugin_api(self, name):
-            return types.SimpleNamespace(mqtt_publish=self._mqtt_publish)
-
-        def _mqtt_publish(self, topic, payload=None, *a, **k):
-            """PowerEngine sets its own pause switch over MQTT (the daily write limit): the replay applies it."""
-            if str(topic).endswith("/ctl_pause/set"):
-                self.pending_pause = str(payload)
+        def set_state(self, entity_id, state=None, attributes=None, **kw):
+            """The engine's own entities are written here and dropped, except its pause switch (the daily write
+            limit pauses it): the replay applies that."""
+            if entity_id == "switch.pe_ctl_pause" and str(state) in ("on", "off"):
+                self.pending_pause = str(state)
 
         def log(self, msg, *a, level="INFO", **k):
             if level in ("WARNING", "ERROR"):
@@ -176,9 +173,6 @@ def recording_hass_class():
         def fire_event(self, event, **kw):
             self.real_events.append(event)
 
-        def get_plugin_api(self, name):
-            raise AssertionError("demo mode must not look for the MQTT plugin")
-
     return Hass
 
 
@@ -198,7 +192,7 @@ def loaded_app(config_text=None, engine: str = "v1", pack=None, extra_files=None
             if config_text is not None:
                 text = config_text(engine)
             elif engine == "v2":
-                text = text.replace("  publisher: direct\n", "  publisher: direct\n  engine: v2\n")
+                text = text.replace("  control_method: ram_remote\n", "  control_method: ram_remote\n  engine: v2\n")
             with open(dst, "w", encoding="utf-8") as fh:
                 fh.write(text)
             for rel, source in (extra_files or {}).items():

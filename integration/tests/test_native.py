@@ -1,5 +1,6 @@
-"""The engine's own entities as real Home Assistant entities (native.py): in the registry with the unique ids MQTT gave
-them, on one device, with values Home Assistant accepts, and a pause switch that holds what it is given."""
+"""The engine's own entities as real Home Assistant entities (native.py): in the registry with the unique ids the old
+AppDaemon app's MQTT entities had, on one device, with values Home Assistant accepts, and a pause switch that
+holds what it is given."""
 
 import logging
 
@@ -11,7 +12,7 @@ from test_setup import running, start
 from custom_components.powerengine.const import DOMAIN
 
 
-async def test_the_real_engines_entities_are_in_the_registry_with_the_ids_mqtt_gave_them_on_one_device(hass, tmp_path,
+async def test_the_real_engines_entities_are_in_the_registry_with_the_ids_they_always_had_on_one_device(hass, tmp_path,
                                                                                                     caplog):
     caplog.set_level(logging.WARNING)
     entry = await start(hass, tmp_path)

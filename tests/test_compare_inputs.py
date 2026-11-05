@@ -202,7 +202,7 @@ def test_the_replay_settings_keep_the_owners_and_point_the_inputs_at_the_world()
         for off in ("smart_charge_optimisation", "tariff_simulator", "engine_compare"):
             assert cfg["features"][off] is False                                     # ...but not the internet ones
         assert cfg["operation"]["mode"] == "active" and cfg["system"]["control_method"] == "ram_remote"
-        assert cfg["system"]["publisher"] == "direct" and cfg["system"]["house_load_includes_ev"] is True
+        assert "publisher" not in cfg["system"] and cfg["system"]["house_load_includes_ev"] is True
         assert "site" not in cfg and [p["id"] for p in cfg["solar_plants"]] == ["main"]
         assert cfg["solar_plants"][0]["power"] == {"entity": "sensor.demo_solar_power"}
         assert cfg["engine_v2"]["sample_s"] == 15

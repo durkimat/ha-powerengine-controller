@@ -133,7 +133,7 @@ uses the full flow. In short (the steps below describe the full flow):
 
 Read the named file before touching that area (they are one-liners here; the detail is there):
 
-- **Publishing** (`docs/history/demo-mode.md`, B1): all entity output goes through `self._get_publisher()`; never call `mqtt_publish` or build a topic in the app.
+- **Publishing** (`docs/history/demo-mode.md`, B1): all entity output goes through `self._get_publisher()` (native entities under the integration, plain states in the demo and tests); never write an entity's state any other way.
 - **Demo gate** (C2): in demo mode always call `self.call_service` / `self.fire_event` in `powerengine.py`, never on anything else; a test fails on a new call elsewhere.
 - **Re-initialise** (C3): keep `initialize()` and what it sets in `self`; don't set attributes from AppDaemon threads outside it.
 - **Demo pack** (C1): numbers, times and flags only; never commit a pack from an unscrubbed source, never put private day files in tests.

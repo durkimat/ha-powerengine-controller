@@ -131,11 +131,7 @@ class LocalHost:
             except Exception:
                 pass
 
-    # --- plugins and states
-    def plugin_api(self, name: str) -> Any:
-        """The stand-in's plugin API. Raises what the stand-in raises (the demo's must not be asked)."""
-        return self._app.get_plugin_api(name)
-
+    # --- states
     def state_writer(self, told_once: Callable, demo: bool = False) -> Callable | None:
         """set_state for the direct publisher."""
         return self.method("set_state")

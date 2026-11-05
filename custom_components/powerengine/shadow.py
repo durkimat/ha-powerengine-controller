@@ -99,16 +99,7 @@ def seed(live: Path, shadow: Path) -> int:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
             count += 1
-    _make_native(shadow / "config.yaml")
     return count
-
-
-def _make_native(config: Path) -> None:
-    """The live settings may name MQTT or direct publishing; the shadow publishes through the integration."""
-    text = config.read_text(encoding="utf-8")
-    new = re.sub(r"^(\s*publisher:\s*).*$", r"\1auto", text, flags=re.M)
-    if new != text:
-        config.write_text(new, encoding="utf-8")
 
 
 def clear(shadow: Path) -> None:
