@@ -222,6 +222,8 @@ def _real(writes) -> int:
 
 class Engine:
     _demo = None                     # the demo day when `demo: <day>` is set in apps.yaml (see _demo_setup)
+    _shadow = False                  # a shadow run (engine_main --shadow): plans, controls and sends nothing, and
+    #                                  stays inside its own data folder (the integration also blocks its calls)
 
     @property
     def host(self):
@@ -267,6 +269,9 @@ class Engine:
         else:
             self._wipe()
         self.log(f"PowerEngine {__version__} starting")
+        if self._shadow:
+            self.log("SHADOW RUN: this engine plans as the live one does and sends nothing; its entities are "
+                     "separate and its data folder is its own")
         self._started_at = datetime.now(timezone.utc)
         self.damper = damping.Damper()
         self._damp_restart(self._started_at)
@@ -417,11 +422,12 @@ class Engine:
         self.host.run_daily(self._learn_load, "00:10:00")
         self.host.run_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
         self.host.run_daily(self._daily_summary, "08:00:00")
-        self.host.run_daily(self._sim_start, SIM_START)                  # tariff Simulator: heavy work, overnight only
+        if not self._shadow:                                     # (heavy overnight jobs: the live engine does them)
+            self.host.run_daily(self._sim_start, SIM_START)              # tariff Simulator: heavy work, overnight only
+            self.host.run_daily(self._lowwrite_start, LOWWRITE_START)    # low-write study: shadow only, changes nothing
         self.host.run_in(lambda kwargs: self._sim_publish(), 20)
-        self.host.run_daily(self._lowwrite_start, LOWWRITE_START)        # low-write study: shadow only, changes nothing
         self.host.run_in(lambda kwargs: self._lowwrite_publish(), 25)
-        if not self._demo:                                       # engine comparison: yesterday, replayed apart
+        if not self._demo and not self._shadow:                  # engine comparison: yesterday, replayed apart
             self.host.run_daily(self._compare_start, COMPARE_START)
             self.host.run_every(self._compare_poll, f"now+{COMPARE_POLL_S}", COMPARE_POLL_S)
         self.host.run_in(lambda kwargs: self._compare_publish(), 30)
@@ -615,7 +621,7 @@ class Engine:
         self._note_absent_guards(absent)
         paused = self.host.get_state(PAUSE_ENTITY) == "on"
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused,
-                              unverified=self._unverified() or self._v2_refusal())
+                              unverified=self._unverified() or self._v2_refusal(), shadow=self._shadow)
         self._leave_active(getattr(self, "mode", None), mode, guards)
         prev = getattr(self, "mode", None)
         if mode.effective == "active" and (prev is None or prev.effective != "active"):
@@ -4524,8 +4530,9 @@ class Engine:
 
     def _package_sync(self, why="start"):
         """Keep the package files in <ha config>/packages in step with this version and with the chosen other
-        controller. Never in a demo, never creates the folder, never raises: a problem is a warning and the sensor."""
-        if self._demo or self.cfg is None:
+        controller. Never in a demo or a shadow run, never creates the folder, never raises: a problem is a warning
+        and the sensor."""
+        if self._demo or getattr(self, "_shadow", False) or self.cfg is None:
             return
         try:
             controller = other_controller(self.cfg)
@@ -5011,7 +5018,9 @@ class Engine:
         pub = self.__dict__.get("_publisher_obj")
         if pub is None:
             pub = select_publisher(self._publisher_choice(), getattr(self, "mqtt", None),
-                                   self.host.state_writer(self._told_once, demo=bool(self._demo)))
+                                   self.host.state_writer(self._told_once, demo=bool(self._demo)),
+                                   native=None if self._demo else self.host.native_entities,
+                                   told_once=self._told_once)
             self._publisher_obj = pub
         return pub
 

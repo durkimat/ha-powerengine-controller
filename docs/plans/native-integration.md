@@ -51,11 +51,31 @@ custom_components/powerengine/        thin and stable: a Home Assistant restart 
        guarded, so the engine runs from it in its own process today, and a move would only change which file holds
        it and rewrite about 50 test patches. Revisit when Phase 3 decides how the engine is packaged inside the
        integration.
-3. **The integration.** Manifest and a minimal config flow; the supervisor; the bridge; entity platforms built from
-   `entities.py` (the set depends on the config, so entities are added and removed as it changes); diagnostics; Repairs.
+3. **The integration (built; in the repository at `custom_components/powerengine/`, not yet installed anywhere).**
+   `integration/README.md` has the file map:
+   - a minimal config flow (one entry; the settings folder, defaulting to the app's `powerengine` folder);
+   - the supervisor: starts the engine as a process of Home Assistant's own Python, forwards its log, restarts it after
+     5 s, 10 s, 30 s, 1 min and 5 min if it stops, raises a Repair if it keeps stopping, restarts it when an update
+     replaced its files (checked every minute; the "Restart engine" button and `powerengine.restart_engine` do it at
+     once), and does not restart it for a protocol mismatch (exit 10; a Repair says to restart Home Assistant);
+   - the bridge (`HassHome`): states (the engine keeps a copy), history from the recorder, templates, service calls
+     (which wait for the device, as a slow inverter needs), events with who caused them;
+   - native entities from the engine's catalogue (`native.py`): in the registry with the same unique ids MQTT gave
+     them (`powerengine_<key>`), the same entity ids (`sensor.pe_...`), on one device; the engine describes them, so a
+     new entity needs no integration update. The pause switch holds what it is given and the engine hears a change as
+     any other state change. Values Home Assistant would reject (a bad time, an enum value not in its options)
+     become `unknown` with one warning;
+   - diagnostics (status, versions, the engine's last log lines, no secret) and Repairs;
+   - a guard: it will not start the engine while the AppDaemon app is running (its heartbeat sensor updated in the
+     last five minutes), because two would both control the inverter.
+   Tested against Home Assistant 2026.10.4 (`pytest-homeassistant-custom-component`), with the real engine as the
+   process.
 4. **Tests.** Entity creation and the bridge with `pytest-homeassistant-custom-component`; the engine against a fake
    host; a shadow run compared with the live app (`tools/engine_compare.py`).
-5. **Cut-over tooling and migration** (below).
+5. **Cut-over tooling and migration (built: [cut-over.md](cut-over.md)).** `migrate.py` and the service
+   `powerengine.migrate_from_mqtt`: the engine is not started while the app's MQTT entities exist; the service saves a
+   snapshot of them, clears their retained messages, removes them and starts the engine, which makes the same ids
+   natively. The runbook is the numbered steps in cut-over.md; the cut-over itself is a decision for the owner.
 
 ## Migrating a running system
 
@@ -63,7 +83,7 @@ Rules: no change to any data file format in the migration releases, and the engi
 it is in shadow mode.
 
 1. Back up: a Home Assistant backup, the cost history and a copy of `/config/powerengine`.
-2. **Shadow run, for days.** The integration runs alongside the AppDaemon app on a *copy* of the data folder, with all
+2. **Shadow run, for a day or two** (built: [shadow-run.md](shadow-run.md)). The integration runs alongside the AppDaemon app on a *copy* of the data folder, with all
    writes blocked and its entities under a temporary prefix. Compare its plans with the live app's and fix every
    difference.
 3. **Cut-over** in a quiet daytime window (not during a grid event or a cheap-rate charge): stop and disable the app
@@ -80,6 +100,19 @@ it is in shadow mode.
    app first.
 
 ## Risks and open decisions
+
+- **One repository, two ways to install it (decided: the same repository).** `apps/powerengine/` is the AppDaemon app
+  and `custom_components/powerengine/` is the integration; HACS takes the folder for the category it was added as. HACS
+  keeps one entry per repository, so the two can't both be installed through HACS at once: the shadow run installs the
+  integration by hand (copy the folder, restart Home Assistant), and at the cut-over the AppDaemon entry in HACS is
+  removed and the repository added again as an integration. The integration's generated parts (the engine copy, the
+  shared protocol files, the manifest version) are committed and kept current by the release tools and CI
+  (`tools/build_integration.py`). The card (a third HACS entry) could later be registered by the integration itself, so
+  there is one thing to install.
+- The "Entity publishing" setting offers auto, MQTT and direct; under the integration `auto` means native. Nothing in
+  the Config page names native yet.
+- `expire_after` (the heartbeat sensor goes unavailable after 5 minutes without a beat under MQTT) is not applied to
+  native entities yet.
 
 - Entity ids must not change: pre-create registry entries with a fixed `suggested_object_id`. Test on a copy first.
 - Timer behaviour (worker threads, `run_every` start strings such as `"now+240"`) must match AppDaemon's; the damping,

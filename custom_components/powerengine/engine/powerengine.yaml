@@ -1,0 +1,6 @@
+# AppDaemon app definition, shipped with the app so no apps.yaml edit is needed.
+# Your own settings do NOT live here (HACS replaces this folder on update):
+# they live in /homeassistant/powerengine/config.yaml, written by the config page.
+powerengine:
+  module: powerengine
+  class: PowerEngine

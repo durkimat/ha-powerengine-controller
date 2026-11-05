@@ -258,3 +258,29 @@ def test_verify_prepared_card_accepts_a_prepared_card_and_rejects_others(repos, 
     (card / "CHANGELOG.md").write_text("# Changelog\n")
     r = sh(work, "bash", "-c", call, check=False)
     assert r.returncode != 0 and "no '## 0.9.51' section" in r.stderr
+
+
+def test_prepare_brings_the_integration_up_to_date_with_the_new_version(repos):
+    """custom_components/powerengine carries a copy of the engine and its version (tools/build_integration.py): a
+    release commit must hold them in step, or the installed integration would start an older engine than the tested
+    one."""
+    work, notes = repos
+    (work / "apps/powerengine/pe_core/protocol.py").write_text("PROTOCOL = 1\n")
+    (work / "apps/powerengine/pe_core/host_server.py").write_text("SERVER = 1\n")
+    (work / "apps/powerengine/powerengine.py").write_text("ENGINE = 1\n")
+    integration = work / "custom_components/powerengine"
+    integration.mkdir(parents=True)
+    (integration / "manifest.json").write_text('{"domain": "powerengine", "version": "0.0.0"}\n')
+    (integration / "__init__.py").write_text("")
+    sh(work, "python3", "tools/build_integration.py", "--sync")
+    sh(work, "git", "add", "-A")
+    sh(work, "git", "commit", "-qm", "the integration, current for 0.9.50")
+    assert '"version": "0.9.50"' in (integration / "manifest.json").read_text()
+    r = prepare(work, notes)
+    assert r.returncode == 0, r.stderr
+    assert '"version": "0.9.51"' in (integration / "manifest.json").read_text()
+    assert '"0.9.51"' in (integration / "engine/pe_core/__init__.py").read_text()
+    changed = sh(work, "git", "show", "--name-only", "--format=", "HEAD").stdout.split()
+    assert "custom_components/powerengine/manifest.json" in changed
+    assert "custom_components/powerengine/engine/pe_core/__init__.py" in changed
+    assert sh(work, "python3", "tools/build_integration.py", "--check").returncode == 0

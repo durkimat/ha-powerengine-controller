@@ -1,0 +1,1047 @@
+"""Loading and validating PowerEngine's config.yaml.
+
+The file is owned by the app (written by the config page). This module only
+reads and validates it; a missing file means "unconfigured", never an error.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+from dataclasses import dataclass, field
+from typing import Any
+
+import yaml
+
+from .engine_v2.settings import (
+    BUILTIN_PROFILES,
+    DEFAULT_PROFILE,
+    ENGINE_ALIAS,
+    SettingsError,
+    V2Settings,
+    parse_profiles,
+    parse_v2,
+    profile_of,
+    profile_values,
+)
+from .names import fill
+from .roles import RETIRED_ROLES, ROLE_BY_KEY, is_forbidden_control
+
+SCHEMA_VERSION = 1
+
+# Where the AppDaemon add-on sees HA's config folder differs between add-on
+# versions, so try both (first match wins).
+DEFAULT_PATHS = (
+    "/homeassistant/powerengine/config.yaml",
+    "/config/powerengine/config.yaml",
+)
+
+KNOWN_KEYS = frozenset(
+    {
+        "schema_version",
+        "inputs",
+        "solar_plants",
+        "devices",
+        "free_power_loads",
+        "system",
+        "features",
+        "safety",
+        "tariff",
+        "operation",
+        "notifications",
+        "site",
+        "engine_v2",
+        "v2_profile",
+        "v2_profiles",
+        "v2_split",
+        "remove_entities",
+    }
+)
+
+MODES = ("passive", "active")
+FORECAST_SOURCES = ("none", "solcast_site", "scaled")
+FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
+            "free_power_days", "tariff_simulator", "optimised_plan", "learn_taper", "learn_reserve", "learn_export",
+            "learn_car", "cold_caution", "cold_learning", "damp_restart", "damp_bursts", "deep_overnight",
+            "use_check_meter", "axle_plus_export", "learn_conversion", "slots_whole_house", "smart_skip_full_car",
+            "learn_car_min", "engine_compare", "axle_stop_car", "axle_heating_setback")
+LEGACY_FEATURES = ("use_learned",)          # 0.8.0's single switch, replaced by one per figure: ignored if saved
+FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
+                    "arbitrage": False, "axle": True,
+                    "free_power_days": True, "tariff_simulator": True, "optimised_plan": True,
+                    "learn_taper": True, "learn_reserve": True, "learn_export": True, "learn_car": True,
+                    "cold_caution": True, "cold_learning": True, "damp_restart": True, "damp_bursts": False,
+                    "deep_overnight": True, "use_check_meter": True,
+                    "axle_plus_export": True, "learn_conversion": True, "slots_whole_house": True,
+                    "smart_skip_full_car": False, "learn_car_min": True,
+                    "engine_compare": True, "axle_stop_car": True, "axle_heating_setback": False}
+# name: (default, min, max) -- numeric safety settings, all validated
+INT_SAFETY = ("smart_max_requests_per_day",)     # whole numbers: a fractional value is rounded
+# Safety settings that became engine v2 settings: a saved value starts the v2 setting (`parse_v2` `legacy`); no error.
+MOVED_TO_V2 = frozenset({"smart_slot_certainty_pct"})      # 0.9.157: engine v2's `slot_odds_pct`
+
+SAFETY = {
+    "smart_max_requests_per_day": (6, 4, 10),  # smart-charge ready-by changes a day
+    "smart_min_gap_min": (20, 10, 120),        # minutes between ready-by changes
+    "smart_lookahead_h": (3, 1, 8),            # no request if a slot is planned within this many hours
+    "car_min_charge_min": (2.0, 0.5, 10.0),    # the car must charge this long, unbroken, for a smart slot to count
+    "min_reserve_soc": (12, 0, 100),          # never plan to go below this (%)
+    "battery_floor_soc": (12, 0, 50),         # the battery's own lowest level (BMS cut-off); engine v2's hard floor (%)
+    "overnight_start_h": (23.5, 0, 24),       # fixed overnight window: start, hours since midnight in half-hours
+    "overnight_end_h": (5.5, 0, 24),          # ...and end (a start after the end runs over midnight)
+    "cheap_threshold_p": (10.0, 0, 100),      # import at or below this is "cheap" (pence/kWh)
+    "grid_charge_target_soc": (100, 10, 100), # charge to this in cheap periods (%)
+    "charge_hysteresis_soc": (3, 0, 20),      # resume charging only below target minus this (%)
+    "pre_axle_lookahead_h": (6.0, 0, 48),     # start protecting charge this long before an event (h)
+    "axle_margin_soc": (5, 0, 50),            # extra above the event's needs (%)
+    "heating_pump_overrun_min": (15, 0, 120), # heating turned down this long before a grid event (pump overrun)
+    "main_fuse_a": (60, 20, 200),             # supply fuse; import is planned to stay under 90% of it (A)
+    "ev_charger_kw": (7.4, 0, 22),            # car charger power, assumed during planned smart slots (kW)
+    "export_limit_kw": (6.0, 0, 30),          # DNO-approved export limit (kW)
+    "battery_wear_p": (2.0, 0, 20),           # wear cost per kWh cycled through the battery (p/kWh)
+    "arbitrage_min_margin_p": (1.0, 0, 50),   # profit per kWh an arbitrage cycle must clear after losses + wear
+    "arbitrage_min_soc": (75, 10, 100),       # arbitrage sells only down to this (%)
+    "arbitrage_max_soc": (90, 20, 100),       # with arbitrage on, cheap top-ups stop here (%)
+    "arbitrage_band_penalty_p": (2.0, 0, 50), # extra p/kWh counted when arbitrage goes outside the band
+    "max_writes_per_day": (150, 20, 2000),    # Active: pause control if PowerEngine's own writes reach this
+    "window_switch_cost_p": (5.0, 0, 100),    # optimiser: cost counted per change of the inverter's timed windows
+    "cold_caution_temp_c": (4.0, -20, 20),    # cold battery: plan a slower charge below this battery temperature
+    "cold_charge_pct": (50, 10, 100),         # ...at this share of the normal charge rate (%)
+    "cold_release_c": (3.0, 0, 15),           # ...until the battery is this much warmer than the threshold
+    "battery_temp_lag_h": (24.0, 1, 96),      # how long the battery takes to follow the outside temperature (h)
+    "ram_refresh_min": (1.0, 0.5, 4.0),       # RAM remote control: re-send the command this often (min)
+    "ram_switch_cost_p": (0.5, 0, 100),       # optimiser: cost per switch with RAM remote control (no EEPROM wear)
+    "ram_max_power_w": (5000, 500, 10000),    # RAM remote control: the most the inverter accepts (W)
+    "inverter_max_output_w": (6000, 1000, 30000),  # RAM remote control: inverter total AC output (W)
+    "overnight_switch_cost_p": (3.0, 0, 100),  # deeper selling overnight: cost per charge/sell switch there (p)
+    "damp_restart_min": (5.0, 1, 30),         # restart hold-off: no writes this long after a start or resume (min)
+    "damp_burst_window_min": (10.0, 2, 60),   # burst damping: something written this recently counts as a burst
+    "damp_burst_settle_min": (5.0, 1, 30),    # ...and then waits for the plan to be steady this long (min)
+}
+SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage", "control_method": "timed_windows",
+                   "publisher": "auto", "overnight_window": "learned", "engine": "v1",
+                   "other_controller": ""}      # "" = not chosen: derived from the mapped guards (other_controller())
+# system settings chosen from a list: key -> (config-page section, ((value, label), ...))
+SYSTEM_CHOICES = {
+    "battery_location": ("cold", (("garage", "Garage or outbuilding (follows outside over about 24 h)"),
+                                  ("outside", "Outside, sheltered (about 6 h)"),
+                                  ("indoors", "Inside the house (about 72 h)"),
+                                  ("custom", "Custom: use Battery warm-up time below"))),
+    "control_method": ("control", (("timed_windows", "Timed windows (the inverter's charge/discharge times; EEPROM)"),
+                                   ("ram_remote", "RAM remote control (Battery control override; no EEPROM writes)"))),
+    "overnight_window": ("tariff", (("learned", "Learned from the rates (recommended)"),
+                                    ("fixed", "Fixed times (set below)"))),
+    "engine": ("engine", (("v1", "Engine v1: a half-hour plan, remade every 5 minutes and on changes"),
+                          ("v2", "Engine v2: acts on conditions (a level reached, a price change, "
+                                 "the sun falling short)"))),
+    "other_controller": ("control", (("none", "No other battery controller"),
+                                     ("predbat", "Predbat, switched over with the handover package"),
+                                     ("other", "Another controller: PowerEngine checks the guard entities below"))),
+    "publisher": ("system", (("auto", "Automatic (MQTT if AppDaemon has the MQTT plugin, else direct)"),
+                             ("mqtt", "MQTT"),
+                             ("direct", "Direct through AppDaemon (no MQTT broker)"))),
+}
+LOCATION_LAG_H = {"garage": 24.0, "outside": 6.0, "indoors": 72.0}
+
+# Notifications: HA's notification area by default, or a phone via the companion app (a notify.* service).
+NOTIFY_EVENTS = {
+    "health": (True, "Health problems", "When the Health tab finds a problem (checked after start-up and each night)."),
+    "inputs": (True, "Inputs not working", "When a required input has been unavailable or stale for 15 minutes."),
+    "axle": (True, "Grid events", "When a grid event (<<event>>) is scheduled, with its time."),
+    "free_power": (True, "Free-power sessions", "When a free-electricity session is announced."),
+    "daily": (False, "Daily summary", "Each morning: yesterday's cost and savings."),
+    "alexa": (False, "Alexa announcements", "Spoken reminders before a grid event, saying whether the battery looks "
+                                            "ready. Choose the speakers and the allowed hours below."),
+    "simulator": (True, "Tariff opportunities", "When the overnight Simulator finds a tariff that would have cost "
+                                                "noticeably less, or new tariffs appear."),
+}
+_NOTIFY_SERVICE = re.compile(r"^notify\.[a-z0-9_]+$")
+# a WhatsApp group id (120363012345678901@g.us) or a phone number with its country code (447700900123)
+_WHATSAPP_TARGET = re.compile(r"^(\d+(-\d+)?@g\.us|\d{6,15})$")
+# Alexa announcements: nothing is spoken before the earliest time (later at weekends) or after the latest
+ALEXA_DEFAULT = {"services": ["notify.alexa_media_everywhere"], "hours_before": [8, 5, 2, 1, 0],
+                 "earliest_weekday": "07:30", "earliest_weekend": "09:00", "latest": "21:00",
+                 "intro": "Daddybot here.", "finish": True, "whatsapp": False, "whatsapp_targets": []}
+NOTIFY_DEFAULT = "persistent_notification"      # HA's own notification area (the bell); no phone needed
+
+# Labels and one-line help for the config page (kept next to the defaults they describe).
+SETTING_TEXT = {
+    "min_reserve_soc": ("Minimum reserve", "%", "Engine 1 never plans to take the battery below this. Engine 2 has its "
+                                                "own Your reserve and the Battery's hard floor."),
+    "battery_floor_soc": ("Battery's hard floor", "%",
+                          "The lowest level the battery itself allows (its BMS cut-off). Engine v2 never goes "
+                          "below it, not even for a grid event. Engine v1 uses its Minimum reserve instead."),
+    "other_controller": ("Other battery controller", "",
+                         "Whether anything else also controls the battery. With none, PowerEngine does not check or "
+                         "need the handover guards below, and Active is allowed. With "
+                         "Predbat or another controller, PowerEngine stays Passive unless the guard entities show "
+                         "that controller is switched off or read only. If you have not chosen, PowerEngine goes "
+                         "by the guards you have mapped."),
+    "engine": ("Planning engine", "",
+               "Which engine plans and decides. Engine v1 plans in half-hours. Engine v2 works out what a stored "
+               "kWh is worth and acts when a condition is met. Engine v2 has settings profiles (for "
+               "example the 2.1 beta one, which follows its own plan). Switching changes neither Active, Passive nor "
+               "Pause; each engine keeps its settings."),
+    "smart_max_requests_per_day": ("Requests per day", "requests",
+                                   "The most times a day PowerEngine changes the car's ready-by time to ask for "
+                                   "slots. Each change makes the supplier re-plan the car's charging."),
+    "smart_min_gap_min": ("Time between requests", "min",
+                          "The shortest wait after any ready-by change (PowerEngine's or anyone else's) before "
+                          "PowerEngine asks again. Unsuccessful requests also back off: 30, 60, 120, then 240 "
+                          "minutes."),
+    "smart_lookahead_h": ("Skip if a slot is due within", "h",
+                          "Don't ask when a slot is already planned to start within this time."),
+    "car_min_charge_min": ("Shortest real charge", "min",
+                           "How long the car's charger must report charging without a break inside a smart-charge "
+                           "slot for the slot to count as used. Shorter bursts (the car waking up) are ignored. "
+                           "With learning on, PowerEngine moves this towards what your confirmed slots show."),
+    "overnight_start_h": ("Fixed overnight window: starts", "h",
+                          "Used only when the overnight window is set to Fixed times. Hours since midnight, in "
+                          "half-hour steps: 23.5 is 23:30, 0.5 is 00:30. A start after the end runs over midnight."),
+    "overnight_end_h": ("Fixed overnight window: ends", "h",
+                        "Used only when the overnight window is set to Fixed times. The time the cheap rate stops: "
+                        "5.5 is 05:30, so the 05:00 half-hour is the last one. 24 is midnight."),
+    "cheap_threshold_p": ("Cheap import threshold", "p/kWh",
+                          "Import at or below this counts as cheap. With the automatic threshold on, this is the "
+                          "most it can be; the day's prices can set it lower."),
+    "grid_charge_target_soc": ("Grid-charge target", "%", "How full to charge from the grid when import is cheap."),
+    "charge_hysteresis_soc": ("Charge restart margin", "%", "Once full, restart only below target minus this."),
+    "pre_axle_lookahead_h": ("Grid-event look-ahead", "h",
+                             "How long before a grid event to start protecting charge."),
+    "axle_margin_soc": ("Grid-event safety margin", "%",
+                        "Extra charge kept above what a grid event needs."),
+    "heating_pump_overrun_min": ("Heating pump overrun", "min", "Heating is turned down this long before an event."),
+    "main_fuse_a": ("Main supply fuse", "A",
+                    "Rating of the main fuse at the supply cutout. PowerEngine plans grid charging so house + car + "
+                    "battery import stays under 90% of it (230 V), reducing battery charging first. Change it if "
+                    "the fuse is upgraded."),
+    "ev_charger_kw": ("Car charger power", "kW",
+                      "What the car draws while charging (7.4 kW for a 32 A <<ev_charger>>). Used to plan the fuse "
+                      "limit during smart-charge slots."),
+    "export_limit_kw": ("Export limit", "kW",
+                        "The export limit your DNO approved. PowerEngine never plans to export more than this."),
+    "battery_wear_p": ("Battery wear cost", "p/kWh",
+                       "Cost of wear per kWh through the battery: battery price ÷ (capacity kWh × rated cycles). "
+                       "E.g. £4,000 ÷ (18 × 8,000) ≈ 2.8p. Used only to decide whether arbitrage is worth it. "
+                       "Engine 1 only: engine 2 has its own Battery wear."),
+    "arbitrage_min_margin_p": ("Arbitrage minimum profit", "p/kWh",
+                               "Arbitrage runs only if, per kWh exported, export price − purchase price ÷ losses − "
+                               "wear is at least this."),
+    "arbitrage_min_soc": ("Arbitrage band: bottom", "%",
+                          "A guide, not a limit. Outside the fixed overnight window a sale may go up to 5 points "
+                          "below this (paying the outside-band cost) so a cycle can use whole half-hours; the refill "
+                          "may depend on smart-charge slots that can be withdrawn, so never lower. Inside the "
+                          "overnight window, where the refill is guaranteed, selling may go lower if it pays."),
+    "arbitrage_max_soc": ("Arbitrage band: top", "%",
+                          "A guide, not a limit. With arbitrage on, grid charging (smart slots included) may run up "
+                          "to 5 points past this (paying the outside-band cost) so a cycle can use whole half-hours; "
+                          "the overnight window's final top-up fills to the day's grid-charge target. Solar can "
+                          "fill it higher. 100 allows full charges any time."),
+    "arbitrage_band_penalty_p": ("Arbitrage outside-band cost", "p/kWh",
+                                 "Extra cost counted for each kWh arbitrage moves outside the band. Higher keeps "
+                                 "cycles inside it more strictly; 0 ignores the band."),
+    "window_switch_cost_p": ("Window change cost", "p",
+                             "With Timed windows: counted by the optimiser each time the plan switches between "
+                             "self-use, charging and selling (each switch rewrites the inverter's timed windows, which "
+                             "wears its memory). Higher means fewer, longer charge and sell periods; 0 ignores it."),
+    "ram_max_power_w": ("RAM max power", "W",
+                        "With RAM remote control: the highest force charge/discharge power the inverter accepts. "
+                        "A higher value is refused and the inverter keeps its previous power (one tested inverter "
+                        "accepts 5000 W but not 5200 W). PowerEngine never asks for more than this."),
+    "inverter_max_output_w": ("Inverter max output", "W",
+                              "With RAM remote control: the most the inverter can put out in total, solar and battery "
+                              "together (6000 W for a 6 kW model). When the sun is using part of it, a force discharge "
+                              "can only get the rest, so a battery giving less than the command then is not reported "
+                              "as not following."),
+    "overnight_switch_cost_p": ("Overnight switch cost", "p",
+                                "For inverters on timed windows, with deeper selling overnight: the cost counted for "
+                                "each switch between charging and selling inside the fixed overnight window. Higher "
+                                "favours one deep sale and one refill over several shallow cycles that earn about the "
+                                "same. Not used with remote control, where a switch writes nothing to the EEPROM."),
+    "ram_switch_cost_p": ("RAM switch cost", "p",
+                          "With RAM remote control: the same, but a switch is only a temporary setting (no memory "
+                          "wear), so it's small: just enough to avoid pointless back-and-forth. Lower lets the plan "
+                          "take more short arbitrage cycles."),
+    "max_writes_per_day": ("Daily write limit", "writes",
+                           "Safety stop for inverter EEPROM wear: if PowerEngine's own writes today reach this, it "
+                           "pauses control (inverter back to Self-Use) and notifies you. Resuming allows this many "
+                           "more. Normal days need far fewer (Health tab)."),
+    "cold_caution_temp_c": ("Cold caution below", "°C",
+                            "Battery temperature (estimated from the outside temperature) below which charging is "
+                            "expected to be slower. With learning on, PowerEngine moves this to what it sees."),
+    "cold_charge_pct": ("Cold charge rate", "%",
+                        "Share of the normal charge rate the plan expects while cautious. With learning on, "
+                        "replaced by the rate actually seen once slowed charges have been recorded."),
+    "cold_release_c": ("Cold caution release", "°C",
+                       "Once cautious, stay so until the battery is this much warmer than the threshold, so one "
+                       "milder afternoon doesn't end it."),
+    "battery_temp_lag_h": ("Battery warm-up time", "h",
+                           "Used when Battery location is Custom: how long the battery takes to follow the outside "
+                           "temperature (24 h garage, 6 h outside, 72 h indoors)."),
+    "damp_restart_min": ("Restart hold-off", "min",
+                         "With Restart hold-off on: after PowerEngine starts, or control resumes or goes live, "
+                         "nothing is written for this long. The inverter keeps running the windows already set."),
+    "damp_burst_window_min": ("Burst window", "min",
+                              "With Burst damping on: a change to a slot, current or the mode written within this "
+                              "long is treated as part of a burst."),
+    "damp_burst_settle_min": ("Burst settle time", "min",
+                              "With Burst damping on: a change within a burst waits until the plan has been steady "
+                              "for this long, so several quick changes become one write."),
+    "control_method": ("Control method", "",
+                       "How PowerEngine drives the inverter. Timed windows: programs the inverter's charge and "
+                       "discharge times (stored in its EEPROM, so each change wears it). RAM remote control: sends "
+                       "Force charge / Force discharge / Off through the inverter integration's Battery control "
+                       "override "
+                       "(temporary settings, no EEPROM writes), re-sent every RAM refresh; if PowerEngine stops, "
+                       "the inverter returns to Self-Use by itself within about 5 minutes."),
+    "ram_refresh_min": ("RAM refresh", "min",
+                        "With RAM remote control: how often the current command is re-sent. Must stay well inside "
+                        "the inverter's remote-control timeout (about 5 minutes on the inverter tested)."),
+    "battery_location": ("Battery location", "",
+                         "Where the battery is, which sets how quickly it follows the outside temperature: how long "
+                         "a cold spell takes to chill it, and to warm it back up."),
+    "publisher": ("Entity publishing", "",
+                  "How PowerEngine's entities get into Home Assistant. MQTT keeps them across restarts and lets "
+                  "their switches be changed from HA. Direct needs no MQTT broker, but the entities are rebuilt at "
+                  "each start and their switches are read-only. Automatic uses MQTT when it is set up. Takes effect "
+                  "after a restart."),
+    "overnight_window": ("Overnight window", "",
+                         "The regular cheap overnight rate that the plan can rely on every night. Learned: "
+                         "worked out from the half-hours that were cheapest on "
+                         "every one of the last 14 days, so moving smart-charge slots are left out. Fixed "
+                         "times: use the two times below instead, for a new install, a tariff with no integration, or "
+                         "if the learned window looks wrong."),
+    "house_load_includes_ev": ("House load includes the car charger", "",
+                               "Tick if the car is inside the inverter's house load. PowerEngine then subtracts it and "
+                               "stops the battery discharging into the car."),
+}
+
+
+# Config-page sections for the numeric settings (in display order).
+SETTING_SECTIONS = (
+    ("battery", "Battery and charging", ("min_reserve_soc", "battery_floor_soc", "cheap_threshold_p",
+                                         "grid_charge_target_soc", "charge_hysteresis_soc")),
+    ("tariff", "Overnight window", ("overnight_start_h", "overnight_end_h")),
+    ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
+    ("axle", "Grid events", ("pre_axle_lookahead_h", "axle_margin_soc", "heating_pump_overrun_min")),
+    ("smart", "Smart-charge requests", ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h",
+                                                  "car_min_charge_min")),
+    ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
+                                "arbitrage_max_soc", "arbitrage_band_penalty_p", "overnight_switch_cost_p")),
+    ("control", "Inverter control", ("max_writes_per_day", "window_switch_cost_p", "ram_refresh_min",
+                                           "ram_switch_cost_p", "ram_max_power_w", "inverter_max_output_w")),
+    ("cold", "Cold battery", ("cold_caution_temp_c", "cold_charge_pct", "cold_release_c", "battery_temp_lag_h")),
+    ("damping", "Dampening tuning", ("damp_restart_min", "damp_burst_window_min", "damp_burst_settle_min")),
+    # (battery_location, a choice, is shown at the top of this section)
+)
+
+
+def settings_catalogue() -> dict:
+    """Settings schema for the config page: defaults, ranges, labels, help."""
+    order = [k for _, _, keys in SETTING_SECTIONS for k in keys]
+    safety = [{"key": k, "default": SAFETY[k][0], "min": SAFETY[k][1], "max": SAFETY[k][2],
+               "label": fill(SETTING_TEXT[k][0]), "unit": SETTING_TEXT[k][1], "help": fill(SETTING_TEXT[k][2])}
+              for k in order]
+    system = [{"key": k, "default": d, "label": fill(SETTING_TEXT[k][0]), "help": fill(SETTING_TEXT[k][2])}
+              | ({"section": SYSTEM_CHOICES[k][0], "options": [list(o) for o in SYSTEM_CHOICES[k][1]]}
+                 if k in SYSTEM_CHOICES else {})
+              for k, d in SYSTEM_DEFAULTS.items()]
+    return {"safety": safety, "system": system,
+            "sections": [{"key": sec, "label": fill(label), "keys": list(keys)}
+                         for sec, label, keys in SETTING_SECTIONS]}
+_ENTITY_ID = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
+_PLANT_ID = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
+
+
+class ConfigError(ValueError):
+    """The config file exists but is not valid."""
+
+
+@dataclass(frozen=True)
+class SolarPlant:
+    id: str
+    name: str
+    power: dict[str, Any]
+    energy_today: dict[str, Any]
+    forecast: str = "none"
+    enabled: bool = True
+
+
+@dataclass(frozen=True)
+class Device:
+    """A piece of equipment beyond the main inverter (docs/plans/multiple-devices.md, M1): read only for now. `inputs`
+    maps DEVICE_INPUTS to an input spec (entity or fixed value)."""
+    id: str
+    adapter: str
+    firmware: str | None = None
+    control: str = "read_only"
+    name: str = ""
+    inputs: dict[str, Any] = field(default_factory=dict)
+
+
+FREE_LOAD_DOMAINS = ("switch", "input_boolean")     # what can be turned on and off with turn_on / turn_off
+
+
+@dataclass(frozen=True)
+class FreeLoad:
+    """Something the owner wants running while there is free power (an immersion heater, say): PowerEngine turns it on
+    when an EDF free-electricity session starts and off when it ends (pe_core/freeloads.py)."""
+    entity: str
+    name: str = ""
+
+
+DEVICE_INPUTS = {"battery_soc": "battery", "battery_power": "battery", "solar_power": "solar"}   # input -> capability
+DEVICE_CONTROLS = ("read_only",)           # "controlled" arrives with M3; only the main inverter is driven until then
+
+
+# Which plant this home has: one adapter (by name) per kind. The choices come from the adapter registry, so a new
+# definition file or adapter shows up here by itself; "none" is allowed where the app can run without that part.
+SITE_KEYS = ("inverter", "inverter_firmware", "ev_charger", "car", "tariff", "forecast", "events")
+SITE_KINDS = {"inverter": "inverter", "ev_charger": "ev", "tariff": "tariff", "forecast": "forecast", "events": "event"}
+SITE_EXTRA = {"ev_charger": ("none",), "car": ("none",), "tariff": ("auto",), "forecast": ("none",),
+              "events": ("none",)}          # not adapters: "auto" detects the tariff, "none" leaves the part out
+
+
+def site_choices() -> dict[str, tuple[str, ...]]:
+    """The valid values of each site key that takes a name (from the registry, plus the extras above)."""
+    from .adapters import registry
+    out = {}
+    for key in SITE_KEYS:
+        if key == "inverter_firmware":
+            continue
+        found = tuple(registry.names(SITE_KINDS[key])) if key in SITE_KINDS else ()
+        extra = SITE_EXTRA.get(key, ())
+        out[key] = (extra + found) if key == "tariff" else (found + extra)
+    return out
+
+
+@dataclass(frozen=True)
+class Site:
+    """The `site:` section. The defaults describe how PowerEngine has always run (the migration writes them)."""
+    inverter: str = "solis"
+    inverter_firmware: str | None = None
+    ev_charger: str = "zappi"
+    car: str = "none"
+    tariff: str = "auto"
+    forecast: str = "solcast"
+    events: str = "axle"
+
+    def as_dict(self) -> dict[str, Any]:
+        return {k: getattr(self, k) for k in SITE_KEYS}
+
+
+def _parse_site(data: Any) -> Site:
+    if data is None:
+        return Site()
+    if not isinstance(data, dict):
+        raise ConfigError("'site' must be a mapping")
+    unknown = sorted(set(data) - set(SITE_KEYS), key=str)
+    if unknown:
+        raise ConfigError(f"unknown site key(s): {', '.join(map(str, unknown))} (known: {', '.join(SITE_KEYS)})")
+    values = dict(data)
+    choices = site_choices()
+    for key, allowed in choices.items():
+        if key in values and values[key] not in allowed:
+            raise ConfigError(f"site '{key}' must be one of {', '.join(allowed)} (not {values[key]!r})")
+    fw = values.get("inverter_firmware")
+    if isinstance(fw, str):
+        values["inverter_firmware"] = fw.strip() or None
+    elif fw is not None:
+        raise ConfigError(f"site 'inverter_firmware' must be text in quotes or empty (not {fw!r})")
+    return Site(**values)
+
+
+@dataclass(frozen=True)
+class Config:
+    mode: str = "passive"
+    features: dict[str, bool] = field(default_factory=lambda: dict(FEATURE_DEFAULTS))
+    safety: dict[str, float] = field(default_factory=lambda: {k: v[0] for k, v in SAFETY.items()})
+    system: dict = field(default_factory=lambda: dict(SYSTEM_DEFAULTS))
+    remove_entities: bool = False
+    notifications: dict[str, Any] = field(default_factory=lambda: _parse_notifications(None))
+    inputs: dict[str, Any] = field(default_factory=dict)
+    solar_plants: tuple[SolarPlant, ...] = ()
+    devices: tuple[Device, ...] = ()
+    free_power_loads: tuple[FreeLoad, ...] = ()        # switched on while free power is on offer (freeloads.py)
+    site: Site = field(default_factory=Site)
+    engine_v2: V2Settings = field(default_factory=V2Settings)
+    v2_profile: str = DEFAULT_PROFILE                  # the engine v2 profile in use (built in, or one of v2_profiles)
+    v2_profiles: dict[str, dict[str, Any]] = field(default_factory=dict)     # your saved profiles
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+def _check_input_spec(label: str, spec: Any) -> None:
+    if not isinstance(spec, dict) or not ({"entity", "value"} & spec.keys()):
+        raise ConfigError(f"{label} must have either 'entity' or 'value'")
+    if "entity" in spec and "value" in spec:
+        raise ConfigError(f"{label} has both 'entity' and 'value'; use one")
+    if "entity" in spec and not _ENTITY_ID.match(str(spec["entity"])):
+        raise ConfigError(f"{label}: '{spec['entity']}' is not a valid entity id")
+    if "invert" in spec and not isinstance(spec["invert"], bool):
+        raise ConfigError(f"{label}: 'invert' must be true or false")
+    if "use_measured" in spec and not isinstance(spec["use_measured"], bool):
+        raise ConfigError(f"{label}: 'use_measured' must be true or false")
+
+
+def _check_role(role_key: str, spec: dict) -> None:
+    role = ROLE_BY_KEY.get(role_key)
+    if role is None:
+        raise ConfigError(f"unknown input '{role_key}'")
+    _check_input_spec(f"input '{role_key}'", spec)
+    if spec.get("invert") and not role.signed:
+        raise ConfigError(f"input '{role_key}' can't be inverted")
+    if "use_measured" in spec and not role.measurable:
+        raise ConfigError(f"input '{role_key}' has no measured figure")
+    if "value" in spec:
+        if not role.static_ok:
+            raise ConfigError(f"input '{role_key}' must be an entity, not a fixed value")
+        try:
+            value = float(spec["value"])
+        except (TypeError, ValueError):
+            raise ConfigError(f"input '{role_key}': fixed value must be a number") from None
+        if role_key == "battery_round_trip" and not 50 <= value <= 100:
+            raise ConfigError("input 'battery_round_trip' must be 50 to 100 (%)")
+    else:
+        domain = str(spec["entity"]).split(".", 1)[0]
+        if domain not in role.domains:
+            raise ConfigError(f"input '{role_key}' must be a {' or '.join(role.domains)} entity")
+        if role.kind == "control" and is_forbidden_control(spec["entity"]):
+            raise ConfigError(f"input '{role_key}': PowerEngine never writes to bump/boost entities")
+
+
+def _parse_plants(data: Any) -> tuple[SolarPlant, ...]:
+    if data is None:
+        return ()
+    if not isinstance(data, list):
+        raise ConfigError("'solar_plants' must be a list")
+    plants, seen = [], set()
+    for i, item in enumerate(data, start=1):
+        if not isinstance(item, dict):
+            raise ConfigError(f"solar plant #{i} must be a mapping")
+        pid = item.get("id")
+        if not isinstance(pid, str) or not _PLANT_ID.match(pid):
+            raise ConfigError(f"solar plant #{i}: 'id' must be lowercase letters, digits or _ (max 24)")
+        if pid in seen:
+            raise ConfigError(f"solar plant id '{pid}' is used twice")
+        seen.add(pid)
+        for key in ("power", "energy_today"):
+            _check_input_spec(f"solar plant '{pid}' {key}", item.get(key))
+        forecast = item.get("forecast", "none")
+        if forecast not in FORECAST_SOURCES:
+            raise ConfigError(f"solar plant '{pid}': forecast must be one of {', '.join(FORECAST_SOURCES)}")
+        enabled = item.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ConfigError(f"solar plant '{pid}': 'enabled' must be true or false")
+        plants.append(
+            SolarPlant(
+                id=pid,
+                name=str(item.get("name") or pid),
+                power=dict(item["power"]),
+                energy_today=dict(item["energy_today"]),
+                forecast=forecast,
+                enabled=enabled,
+            )
+        )
+    return tuple(plants)
+
+
+CHANNEL_TYPES = ("bell", "notify", "alexa", "whatsapp")
+_CHANNEL_NAME = re.compile(r"^[a-z0-9_]{1,30}$")
+_KIND = re.compile(r"^[a-z0-9_]{1,40}$")
+_NEW_NOTIFICATION_KEYS = {"channels", "rules", "reminder_hours"}
+_OLD_NOTIFICATION_KEYS = {"service", "events", "alexa"}
+_LEGACY_KINDS = ("health", "inputs", "axle", "free_power", "daily", "simulator")
+
+
+def _parse_notifications(raw: Any) -> dict[str, Any]:
+    """The notification settings as channels (where messages can go) and rules (which kinds go where). The older
+    `service` / `events` / `alexa` settings still load, and are turned into the same channels and rules."""
+    raw = raw or {}
+    if not isinstance(raw, dict):
+        raise ConfigError("'notifications' must be a mapping")
+    unknown = sorted(set(raw) - _NEW_NOTIFICATION_KEYS - _OLD_NOTIFICATION_KEYS)
+    if unknown:
+        raise ConfigError(f"unknown notification setting(s): {', '.join(unknown)}")
+    if set(raw) & _NEW_NOTIFICATION_KEYS:
+        if set(raw) & _OLD_NOTIFICATION_KEYS:
+            raise ConfigError("notifications has both channels/rules and the older service/events/alexa settings: "
+                              "use one or the other")
+        return _parse_channels_and_rules(raw)
+    return _legacy_model(_parse_legacy_notifications(raw))
+
+
+def _parse_hours(raw: Any, where: str) -> dict[str, int] | None:
+    if raw in (None, {}):
+        return None
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where}.hours must be a mapping with weekday_from, weekend_from and until")
+    unknown = sorted(set(raw) - {"weekday_from", "weekend_from", "until"})
+    if unknown:
+        raise ConfigError(f"unknown {where}.hours setting(s): {', '.join(unknown)}")
+    weekday = _clock_minutes("weekday_from", raw.get("weekday_from", "00:00"), where + ".hours")
+    weekend = _clock_minutes("weekend_from", raw.get("weekend_from", raw.get("weekday_from", "00:00")),
+                             where + ".hours")
+    until = 1440 if raw.get("until") in (None, "24:00") else _clock_minutes("until", raw["until"], where + ".hours")
+    return {"weekday_from": weekday, "weekend_from": weekend, "until": until}
+
+
+def parse_channel(raw: Any, name: str) -> dict[str, Any]:
+    """One channel: its type, where it sends to, the opening words, the hours it may be used and what to do with a
+    message outside them (hold it until they open, or skip it)."""
+    where = f"notifications.channels.{name}"
+    if not _CHANNEL_NAME.match(str(name)):
+        raise ConfigError(f"a channel name must be lowercase letters, digits and underscores (up to 30), not {name!r}")
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where} must be a mapping")
+    kind = raw.get("type")
+    if kind not in CHANNEL_TYPES:
+        raise ConfigError(f"{where}.type must be one of {', '.join(CHANNEL_TYPES)}")
+    own = {"bell": set(), "notify": {"service"}, "alexa": {"services"}, "whatsapp": {"targets"}}[kind]
+    unknown = sorted(set(raw) - {"type", "label", "intro", "hours", "outside_hours"} - own)
+    if unknown:
+        raise ConfigError(f"unknown {where} setting(s): {', '.join(unknown)}")
+    intro = raw.get("intro", "")
+    if not isinstance(intro, str) or len(intro) > 80:
+        raise ConfigError(f"{where}.intro must be text of at most 80 characters (empty for none)")
+    label = raw.get("label", name)
+    if not isinstance(label, str) or not 0 < len(label.strip()) <= 40:
+        raise ConfigError(f"{where}.label must be a short name")
+    outside = raw.get("outside_hours", "hold")
+    if outside not in ("hold", "skip"):
+        raise ConfigError(f"{where}.outside_hours must be hold (send when the hours open) or skip")
+    out: dict[str, Any] = {"type": kind, "label": label.strip(), "intro": intro.strip(),
+                           "hours": _parse_hours(raw.get("hours"), where), "outside_hours": outside}
+    if kind == "notify":
+        service = raw.get("service")
+        if not isinstance(service, str) or not _NOTIFY_SERVICE.match(service):
+            raise ConfigError(f"{where}.service must be a notify service, e.g. notify.mobile_app_my_phone")
+        out["service"] = service
+    elif kind == "alexa":
+        services = raw.get("services")
+        if (not isinstance(services, list) or not services
+                or not all(isinstance(x, str) and _NOTIFY_SERVICE.match(x) for x in services)):
+            raise ConfigError(f"{where}.services must be a list of notify services, e.g. [notify.alexa_media_kitchen]")
+        out["services"] = list(dict.fromkeys(services))
+    elif kind == "whatsapp":
+        targets = raw.get("targets")
+        if (not isinstance(targets, list) or not targets
+                or not all(isinstance(x, str) and _WHATSAPP_TARGET.match(x.strip()) for x in targets)):
+            raise ConfigError(f"{where}.targets must be a list of WhatsApp group ids "
+                              "(like 120363012345678901@g.us) or phone numbers with the country code")
+        out["targets"] = list(dict.fromkeys(x.strip() for x in targets))
+    return out
+
+
+def _parse_channels_and_rules(raw: dict) -> dict[str, Any]:
+    raw_channels = raw.get("channels") or {}
+    if not isinstance(raw_channels, dict):
+        raise ConfigError("'notifications.channels' must be a mapping of name to channel")
+    channels = {str(name): parse_channel(spec, str(name)) for name, spec in raw_channels.items()}
+    raw_rules = raw.get("rules") or []
+    if not isinstance(raw_rules, list):
+        raise ConfigError("'notifications.rules' must be a list")
+    rules = []
+    for i, rule in enumerate(raw_rules, 1):
+        if not isinstance(rule, dict) or set(rule) - {"events", "to"}:
+            raise ConfigError(f"notifications.rules[{i}] must have events and to")
+        events, to = rule.get("events"), rule.get("to")
+        if not isinstance(events, list) or not events or not all(isinstance(e, str) and _KIND.match(e) for e in events):
+            raise ConfigError(f"notifications.rules[{i}].events must be a list of message kinds, e.g. [health]")
+        if not isinstance(to, list) or not to or not all(isinstance(c, str) for c in to):
+            raise ConfigError(f"notifications.rules[{i}].to must be a list of channel names")
+        missing = [c for c in to if c not in channels]
+        if missing:
+            raise ConfigError(f"notifications.rules[{i}] sends to {', '.join(missing)}, which is not a channel")
+        rules.append({"events": list(dict.fromkeys(events)), "to": list(dict.fromkeys(to))})
+    hours = raw.get("reminder_hours", ALEXA_DEFAULT["hours_before"])
+    if (not isinstance(hours, list) or not hours
+            or not all(isinstance(h, (int, float)) and not isinstance(h, bool) and 0 <= h <= 48 for h in hours)):
+        raise ConfigError("notifications.reminder_hours must be a list of hours between 0 and 48")
+    return {"format": "channels", "channels": channels, "rules": rules,
+            "reminder_hours": sorted({float(h) for h in hours}, reverse=True)}
+
+
+def _legacy_model(old: dict[str, Any]) -> dict[str, Any]:
+    """The older settings as channels and rules: the HA notification area or phone for the events switched on, and the
+    Alexa speakers and WhatsApp (with the Alexa hours and opening words) for the grid event reminders and summary."""
+    base = {"label": "", "intro": "", "hours": None, "outside_hours": "hold"}
+    channels: dict[str, Any] = {}
+    rules: list[dict] = []
+    service = old["service"]
+    main = "bell" if service == NOTIFY_DEFAULT else ("phone" if service else None)
+    if main == "bell":
+        channels["bell"] = {**base, "type": "bell", "label": "HA notifications"}
+    elif main:
+        channels["phone"] = {**base, "type": "notify", "label": "Phone", "service": service}
+    kinds = [k for k in _LEGACY_KINDS if old["events"].get(k)]
+    if main and kinds:
+        rules.append({"events": kinds, "to": [main]})
+    a = old["alexa"]
+    hours = {"weekday_from": a["earliest_weekday"], "weekend_from": a["earliest_weekend"], "until": a["latest"]}
+    spoken = []
+    if a["services"]:
+        channels["alexa"] = {**base, "type": "alexa", "label": "Alexa", "services": a["services"],
+                             "intro": a["intro"], "hours": dict(hours)}
+        spoken.append("alexa")
+    if a["whatsapp"] and a["whatsapp_targets"]:
+        channels["whatsapp"] = {**base, "type": "whatsapp", "label": "WhatsApp", "targets": a["whatsapp_targets"],
+                                "intro": a["intro"], "hours": dict(hours)}
+        spoken.append("whatsapp")
+    if old["events"].get("alexa") and spoken:
+        rules.append({"events": ["grid_reminder"] + (["grid_summary"] if a["finish"] else []), "to": spoken})
+    return {"format": "legacy", "channels": channels, "rules": rules, "reminder_hours": a["hours_before"]}
+
+
+def _parse_legacy_notifications(raw: dict) -> dict[str, Any]:
+    # "persistent_notification" = HA's notification area (the default); "off" (or "") = none; else a notify service
+    service = raw.get("service", NOTIFY_DEFAULT)
+    if service in ("", None, "off"):
+        service = ""
+    if not isinstance(service, str) or (service and service != NOTIFY_DEFAULT and not _NOTIFY_SERVICE.match(service)):
+        raise ConfigError("notifications.service must be off, persistent_notification (HA's notification area) or "
+                          "a notify service, e.g. notify.mobile_app_my_phone")
+    events = {k: v[0] for k, v in NOTIFY_EVENTS.items()}
+    raw_events = raw.get("events") or {}
+    if not isinstance(raw_events, dict):
+        raise ConfigError("'notifications.events' must be a mapping")
+    for key, value in raw_events.items():
+        if key not in NOTIFY_EVENTS:
+            raise ConfigError(f"unknown notification '{key}'")
+        if not isinstance(value, bool):
+            raise ConfigError(f"notification '{key}' must be true or false")
+        events[key] = value
+    return {"service": service, "events": events, "alexa": _parse_alexa(raw.get("alexa"))}
+
+
+def _clock_minutes(name: str, value: Any, where: str = "notifications.alexa") -> int:
+    try:
+        h, m = str(value).split(":")
+        h, m = int(h), int(m)
+    except ValueError:
+        raise ConfigError(f"{where}.{name} must be a time like 07:30") from None
+    if not (0 <= h < 24 and 0 <= m < 60):
+        raise ConfigError(f"{where}.{name} must be a time like 07:30")
+    return h * 60 + m
+
+
+def _parse_alexa(raw: Any) -> dict[str, Any]:
+    raw = raw or {}
+    if not isinstance(raw, dict):
+        raise ConfigError("'notifications.alexa' must be a mapping")
+    unknown = sorted(set(raw) - set(ALEXA_DEFAULT))
+    if unknown:
+        raise ConfigError(f"unknown notifications.alexa setting(s): {', '.join(unknown)}")
+    cfg = ALEXA_DEFAULT | raw
+    services = cfg["services"]
+    if not isinstance(services, list) or not all(isinstance(x, str) and _NOTIFY_SERVICE.match(x) for x in services):
+        raise ConfigError("notifications.alexa.services must be a list of notify services, "
+                          "e.g. [notify.alexa_media_kitchen]")
+    hours = cfg["hours_before"]
+    if (not isinstance(hours, list) or not hours
+            or not all(isinstance(h, (int, float)) and not isinstance(h, bool) and 0 <= h <= 48 for h in hours)):
+        raise ConfigError("notifications.alexa.hours_before must be a list of hours between 0 and 48")
+    intro = cfg["intro"]
+    if not isinstance(intro, str) or len(intro) > 80:
+        raise ConfigError("notifications.alexa.intro must be text of at most 80 characters (empty for none)")
+    if not isinstance(cfg["finish"], bool):
+        raise ConfigError("notifications.alexa.finish must be true or false")
+    if not isinstance(cfg["whatsapp"], bool):
+        raise ConfigError("notifications.alexa.whatsapp must be true or false")
+    targets = cfg["whatsapp_targets"]
+    if not isinstance(targets, list) or not all(isinstance(x, str) and _WHATSAPP_TARGET.match(x.strip())
+                                                for x in targets):
+        raise ConfigError("notifications.alexa.whatsapp_targets must be a list of WhatsApp group ids "
+                          "(like 120363012345678901@g.us) or phone numbers with the country code")
+    targets = list(dict.fromkeys(x.strip() for x in targets))
+    if cfg["whatsapp"] and not targets:
+        raise ConfigError("notifications.alexa.whatsapp is on but whatsapp_targets is empty")
+    return {"services": list(dict.fromkeys(services)), "intro": intro.strip(), "finish": cfg["finish"],
+            "whatsapp": cfg["whatsapp"], "whatsapp_targets": targets,
+            "hours_before": sorted({float(h) for h in hours}, reverse=True),
+            "earliest_weekday": _clock_minutes("earliest_weekday", cfg["earliest_weekday"]),
+            "earliest_weekend": _clock_minutes("earliest_weekend", cfg["earliest_weekend"]),
+            "latest": _clock_minutes("latest", cfg["latest"])}
+
+
+def parse_config(data: Any) -> Config:
+    """Validate an already-loaded YAML document and return a Config."""
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        raise ConfigError("top level of config.yaml must be a mapping")
+
+    unknown = sorted(set(data) - KNOWN_KEYS)
+    if unknown:
+        raise ConfigError(f"unknown top-level key(s): {', '.join(unknown)} (is this the right file?)")
+
+    version = data.get("schema_version", SCHEMA_VERSION)
+    if version != SCHEMA_VERSION:
+        raise ConfigError(f"unsupported schema_version {version!r} (expected {SCHEMA_VERSION})")
+
+    operation = data.get("operation") or {}
+    if not isinstance(operation, dict):
+        raise ConfigError("'operation' must be a mapping")
+    mode = operation.get("mode", "passive")
+    if mode not in MODES:
+        raise ConfigError("'operation.mode' must be 'passive' or 'active'")
+
+    remove_entities = data.get("remove_entities", False)
+    if not isinstance(remove_entities, bool):
+        raise ConfigError("'remove_entities' must be true or false")
+
+    inputs = data.get("inputs") or {}
+    if not isinstance(inputs, dict):
+        raise ConfigError("'inputs' must be a mapping")
+    inputs = {k: v for k, v in inputs.items() if k not in RETIRED_ROLES}
+    for role_key, spec in inputs.items():
+        _check_role(role_key, spec)
+
+    features = dict(FEATURE_DEFAULTS)
+    raw_features = data.get("features") or {}
+    if not isinstance(raw_features, dict):
+        raise ConfigError("'features' must be a mapping")
+    for key, value in raw_features.items():
+        if key in LEGACY_FEATURES:
+            continue
+        if key not in FEATURES:
+            raise ConfigError(f"unknown feature '{key}'")
+        if not isinstance(value, bool):
+            raise ConfigError(f"feature '{key}' must be true or false")
+        features[key] = value
+
+    safety = {k: v[0] for k, v in SAFETY.items()}
+    raw_safety = data.get("safety") or {}
+    if not isinstance(raw_safety, dict):
+        raise ConfigError("'safety' must be a mapping")
+    moved = {k: raw_safety[k] for k in MOVED_TO_V2 if k in raw_safety}     # seeds engine v2's own setting
+    for key, value in raw_safety.items():
+        if key in MOVED_TO_V2:
+            continue
+        if key not in SAFETY:
+            raise ConfigError(f"unknown safety setting '{key}'")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ConfigError(f"safety setting '{key}' must be a number")
+        _, lo, hi = SAFETY[key]
+        if not lo <= value <= hi:
+            raise ConfigError(f"safety setting '{key}' must be between {lo} and {hi}")
+        safety[key] = int(round(value)) if key in INT_SAFETY else value
+    if safety["arbitrage_min_soc"] >= safety["arbitrage_max_soc"]:
+        raise ConfigError("arbitrage lowest charge must be below its highest charge")
+    if safety["min_reserve_soc"] >= safety["grid_charge_target_soc"]:
+        raise ConfigError("minimum reserve must be below the grid-charge target")
+    for key in ("overnight_start_h", "overnight_end_h"):
+        if abs(safety[key] * 2 - round(safety[key] * 2)) > 1e-6:
+            raise ConfigError(f"'{key}' must be on the hour or half past (23.5 is 23:30)")
+
+    notifications = _parse_notifications(data.get("notifications"))
+
+    system = dict(SYSTEM_DEFAULTS)
+    raw_system = data.get("system") or {}
+    if not isinstance(raw_system, dict):
+        raise ConfigError("'system' must be a mapping")
+    for key, value in raw_system.items():
+        if key not in SYSTEM_DEFAULTS:
+            raise ConfigError(f"unknown system setting '{key}'")
+        if key in SYSTEM_CHOICES:
+            if value not in [v for v, _ in SYSTEM_CHOICES[key][1]] + ([""] if key == "other_controller" else [])\
+                    + (list(ENGINE_ALIAS) if key == "engine" else []):
+                raise ConfigError(f"system setting '{key}' must be one of "
+                                  + ", ".join(v for v, _ in SYSTEM_CHOICES[key][1]))
+        elif not isinstance(value, bool):
+            raise ConfigError(f"system setting '{key}' must be true or false")
+        system[key] = value
+    beta_alias = system["engine"] in ENGINE_ALIAS          # an old "v2_1": engine v2 with the 2.1 beta profile
+    system["engine"] = ENGINE_ALIAS.get(system["engine"], system["engine"])
+
+    if system["overnight_window"] == "fixed" and safety["overnight_start_h"] == safety["overnight_end_h"]:
+        raise ConfigError("a fixed overnight window needs a start and an end that differ")
+
+    try:
+        v2_profiles = parse_profiles(data.get("v2_profiles"))
+        v2_profile = data.get("v2_profile") or (profile_of("v2_1") if beta_alias else DEFAULT_PROFILE)
+        if not isinstance(v2_profile, str) or (v2_profile not in BUILTIN_PROFILES and v2_profile not in v2_profiles):
+            raise SettingsError(f"unknown engine v2 profile {v2_profile!r}")
+        legacy = {"slot_odds_pct": moved["smart_slot_certainty_pct"]} if "smart_slot_certainty_pct" in moved else None
+        engine_v2 = parse_v2(data.get("engine_v2"), profile_values(v2_profile, v2_profiles), legacy)
+    except SettingsError as err:
+        raise ConfigError(str(err)) from err
+
+    return Config(
+        mode=mode,
+        features=features,
+        safety=safety,
+        system=system,
+        remove_entities=remove_entities,
+        notifications=notifications,
+        inputs=dict(inputs),
+        solar_plants=_parse_plants(data.get("solar_plants")),
+        devices=_parse_devices(data.get("devices")),
+        free_power_loads=_parse_free_loads(data.get("free_power_loads")),
+        site=_parse_site(data.get("site")),
+        engine_v2=engine_v2,
+        v2_profile=v2_profile,
+        v2_profiles=v2_profiles,
+        raw=data,
+    )
+
+
+def _parse_free_loads(data: Any) -> tuple[FreeLoad, ...]:
+    if data is None:
+        return ()
+    if not isinstance(data, list):
+        raise ConfigError("'free_power_loads' must be a list")
+    loads, seen = [], set()
+    for i, item in enumerate(data, start=1):
+        if isinstance(item, str):                         # the short form: just the entity
+            item = {"entity": item}
+        if not isinstance(item, dict):
+            raise ConfigError(f"free power load #{i} must be an entity or a mapping with 'entity'")
+        unknown = sorted(set(item) - {"entity", "name"}, key=str)
+        if unknown:
+            raise ConfigError(f"free power load #{i}: unknown key(s) {', '.join(map(str, unknown))}")
+        eid = item.get("entity")
+        if not isinstance(eid, str) or not _ENTITY_ID.match(eid):
+            raise ConfigError(f"free power load #{i}: 'entity' must be an entity id like switch.immersion_heater")
+        if eid.split(".")[0] not in FREE_LOAD_DOMAINS:
+            raise ConfigError(f"free power load '{eid}': only {' and '.join(FREE_LOAD_DOMAINS)} entities can be "
+                              f"turned on and off")
+        if eid in seen:
+            raise ConfigError(f"free power load '{eid}' is listed twice")
+        seen.add(eid)
+        name = item.get("name") or ""
+        if not isinstance(name, str):
+            raise ConfigError(f"free power load '{eid}': 'name' must be text")
+        loads.append(FreeLoad(entity=eid, name=name.strip()))
+    return tuple(loads)
+
+
+def _parse_devices(data: Any) -> tuple[Device, ...]:
+    if data is None:
+        return ()
+    if not isinstance(data, list):
+        raise ConfigError("'devices' must be a list")
+    from .adapters.definition import device_capabilities
+    adapters = site_choices()["inverter"]
+    devices, seen = [], {"main"}
+    for i, item in enumerate(data, start=1):
+        if not isinstance(item, dict):
+            raise ConfigError(f"device #{i} must be a mapping")
+        unknown = sorted(set(item) - {"id", "adapter", "firmware", "control", "name", "inputs"}, key=str)
+        if unknown:
+            raise ConfigError(f"device #{i}: unknown key(s) {', '.join(map(str, unknown))}")
+        did = item.get("id")
+        if not isinstance(did, str) or not _PLANT_ID.match(did):
+            raise ConfigError(f"device #{i}: 'id' must be lowercase letters, digits or _ (max 24)")
+        if did in seen:
+            raise ConfigError(f"device id '{did}' is used twice" if did != "main" else
+                              "device id 'main' is the main inverter; choose another id")
+        seen.add(did)
+        adapter = item.get("adapter")
+        if adapter not in adapters:
+            raise ConfigError(f"device '{did}': adapter must be one of {', '.join(adapters)} (not {adapter!r})")
+        control = item.get("control", "read_only")
+        if control not in DEVICE_CONTROLS:
+            raise ConfigError(f"device '{did}': control must be {' or '.join(DEVICE_CONTROLS)} for now (only the "
+                              f"main inverter is controlled; not {control!r})")
+        firmware = item.get("firmware")
+        if firmware is not None and not isinstance(firmware, str):
+            raise ConfigError(f"device '{did}': 'firmware' must be text in quotes or empty")
+        name = item.get("name") or did
+        if not isinstance(name, str):
+            raise ConfigError(f"device '{did}': 'name' must be text")
+        inputs = item.get("inputs") or {}
+        if not isinstance(inputs, dict):
+            raise ConfigError(f"device '{did}': 'inputs' must be a mapping")
+        caps = device_capabilities(adapter, firmware or None)
+        for key, spec in inputs.items():
+            if key not in DEVICE_INPUTS:
+                raise ConfigError(f"device '{did}': unknown input '{key}' (known: {', '.join(DEVICE_INPUTS)})")
+            if not caps[DEVICE_INPUTS[key]]:
+                raise ConfigError(f"device '{did}': '{key}' needs a device that reports {DEVICE_INPUTS[key]} "
+                                  f"data, and {adapter} doesn't")
+            _check_input_spec(f"device '{did}' input '{key}'", spec)
+            if spec.get("invert") and key != "battery_power":
+                raise ConfigError(f"device '{did}' input '{key}' can't be inverted")
+        devices.append(Device(id=did, adapter=adapter, firmware=(firmware or "").strip() or None, control=control,
+                              name=name, inputs=dict(inputs)))
+    return tuple(devices)
+
+
+def load_config(paths: tuple[str, ...] | list[str] = DEFAULT_PATHS) -> tuple[Config | None, str | None]:
+    """Load the first config file that exists.
+
+    Returns (None, None) when no file exists (the app then runs unconfigured).
+    Raises ConfigError when a file exists but is invalid.
+    """
+    for path in paths:
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as fh:
+                try:
+                    data = yaml.safe_load(fh)
+                except yaml.YAMLError as err:
+                    raise ConfigError(f"{path} is not valid YAML: {err}") from err
+            return parse_config(data), path
+    return None, None
+
+
+BATTERY_PAIR = ("battery_charge_power", "battery_discharge_power")
+
+
+def uses_battery_pair(cfg: Config) -> bool:
+    """True when separate charging/discharging sensors replace the single (unsigned) battery power sensor."""
+    return all("entity" in (cfg.inputs.get(k) or {}) for k in BATTERY_PAIR)
+
+
+def use_measured(cfg: Config | None, role_key: str) -> bool:
+    """Whether a measurable input should use PowerEngine's measured figure once there is one (default yes)."""
+    spec = (cfg.inputs.get(role_key) if cfg else None) or {}
+    return spec.get("use_measured", True) is not False
+
+
+# The role groups a part of the site brings with it. When the site leaves the part out ("none"), these roles are not
+# needed, so a home with no car charger, no forecast or no grid-event provider is not held at "inputs missing".
+# (A car charger takes the smart-charge group with it: smart-charge slots are for the car.)
+SKIPPED_PART_GROUPS = {"ev_charger": ("ev", "smart"), "forecast": ("solar",), "events": ("axle",)}
+
+
+def left_out_roles(site: Site) -> set[str]:
+    """Role keys that belong to parts the site leaves out."""
+    groups = {g for part, gs in SKIPPED_PART_GROUPS.items() if getattr(site, part) == "none" for g in gs}
+    return {r.key for r in ROLE_BY_KEY.values() if r.group in groups}
+
+
+GUARD_KEYS = ("guard_read_only", "guard_off_1", "guard_off_2")
+OTHER_CONTROLLER_UNSET = "unset"
+
+
+def other_controller(cfg: Config | None) -> str:
+    """Whether another battery controller is installed: none, predbat, other, or unset (never chosen and no guard
+    mapped). Not chosen: derived from the guards, so an install that has them mapped behaves as it always did.
+    Nothing is written to the saved config."""
+    if cfg is None:
+        return OTHER_CONTROLLER_UNSET
+    chosen = cfg.system.get("other_controller") or ""
+    if chosen:
+        return chosen
+    mapped = {k: (cfg.inputs.get(k) or {}).get("entity") for k in GUARD_KEYS}
+    if "predbat" in str(mapped["guard_read_only"] or "").lower():
+        return "predbat"
+    if any(mapped.values()):
+        return "other"
+    return OTHER_CONTROLLER_UNSET
+
+
+def required_roles(cfg: Config) -> list[str]:
+    """Role keys that must be mapped, given which features are switched on and which parts the site leaves out."""
+    feature_for = {"axle": "axle", "free_power": "free_power_days"}
+    pair = uses_battery_pair(cfg)
+    left_out = left_out_roles(cfg.site)
+    keys = []
+    for role in ROLE_BY_KEY.values():
+        if role.key in left_out:
+            continue
+        if role.required == "yes" or (role.required in feature_for and cfg.features.get(feature_for[role.required])):
+            keys.append(role.key)
+    if pair:                               # the pair replaces the single sensor, and both become required
+        keys = [k for k in keys if k != "battery_power"] + [k for k in BATTERY_PAIR if k not in keys]
+    return keys

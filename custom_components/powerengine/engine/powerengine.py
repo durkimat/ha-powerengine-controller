@@ -1,0 +1,5118 @@
+"""PowerEngine AppDaemon entry point.
+
+A thin adapter between AppDaemon/Home Assistant and pe_core. Decision logic
+belongs in pe_core so it can be tested offline.
+
+Passive (the default) only monitors and simulates. Active writes the Solis timed-slot settings (and, if the
+feature is on, EDF smart-charge requests) behind the handover guards, the pause switch and the daily write limit.
+"""
+
+import copy
+import dataclasses
+import hashlib
+import json
+import os
+import re
+import shutil
+import threading
+from datetime import date, datetime, timedelta, timezone
+from time import monotonic
+from zoneinfo import ZoneInfo
+
+try:
+    import appdaemon.plugins.hass.hassapi as hass
+except ImportError:                      # the engine's own process (docs/plans/native-integration.md) has no AppDaemon
+    hass = None
+
+from pe_core import (
+    __version__,
+    bms,
+    chunks,
+    clock,
+    coverage,
+    damping,
+    diagnostics,
+    earlytarget,
+    fcsnap,
+    forecastlog,
+    gridcheck,
+    hapackage,
+    inuse,
+    ramcontrol,
+    rctest,
+    releases,
+    testwrite,
+    v2history,
+)
+from pe_core import learn as learning
+from pe_core import override as manual
+from pe_core.activity import ActivityLog
+from pe_core.adapters import registry
+from pe_core.adapters.definition import load_definition
+from pe_core.adapters.kraken import supplier_of
+from pe_core.adapters.null import NULL as NULL_ADAPTERS
+from pe_core.adapters.options import site_options
+from pe_core.adapters.publish import select_publisher
+from pe_core.adapters.solcast import ROLES as FORECAST_ROLES
+from pe_core.announce import due as alexa_due
+from pe_core.announce import event_summary as alexa_event_summary
+from pe_core.announce import finish_message as alexa_finish_message
+from pe_core.announce import message as alexa_message
+from pe_core.announce import readiness as alexa_readiness
+from pe_core.announce import trial_message as alexa_trial_message
+from pe_core.announce import trial_speakers as alexa_trial_speakers
+from pe_core.announce import whatsapp_targets
+from pe_core.background import Worker
+from pe_core.carstop import CarStop
+from pe_core.certainty import Certainty
+from pe_core.checks import OK, blocking, check, degraded, summarise
+from pe_core.commands import from_pe_command, from_service
+from pe_core.compare import results as compare_results
+from pe_core.compare import sensor as compare_sensor
+from pe_core.compare.schedule import Scheduler as CompareScheduler
+from pe_core.compare.snapfeed import snapshot_path
+from pe_core.config import (
+    DEFAULT_PATHS,
+    LOCATION_LAG_H,
+    ConfigError,
+    Site,
+    load_config,
+    other_controller,
+    parse_channel,
+    parse_config,
+    required_roles,
+    settings_catalogue,
+    use_measured,
+    uses_battery_pair,
+)
+from pe_core.control import KINDS, Write, readback_mismatches, release, writes_needed
+from pe_core.costbook import KEEP_DAYS, MIN_MEASURE_DAYS, CostBook, cost_entity_states
+from pe_core.costs import METHOD_VERSION, waterfall
+from pe_core.dashboard import energy_flow_card, sync_dashboard
+from pe_core.decide import cheap_limit, decide, pre_axle_reserve
+from pe_core.demo.gate import DemoGate
+from pe_core.demo.pack import load_pack as load_demo_pack
+from pe_core.demo.world import DemoWorld
+from pe_core.earlytarget import EarlyTargets
+from pe_core.eeprom import BlockWriteModel, WriteLog, WriteModel
+from pe_core.energy import Recorder
+from pe_core.engine_v2 import publish as v2publish
+from pe_core.engine_v2 import triggers as v2_triggers
+from pe_core.engine_v2.engine import EngineV2
+from pe_core.engine_v2.settings import BETA_PROFILE, SettingsError, V2Settings, profile_values, split_block
+from pe_core.engine_v2.types import BatteryFacts, Situation, StepInput
+from pe_core.entities import (
+    ENTITIES,
+    RETIRED_ENTITIES,
+    device_entity,
+    device_ref_from_entity,
+    solar_plant_entity,
+    solar_plant_id_from_entity,
+    validate_definitions,
+)
+from pe_core.equipment import EquipmentSettings
+from pe_core.forecast import (
+    LoadProfile,
+    build_slots,
+    half_hour_means,
+    house_only_means,
+    meter_corrected,
+    parse_history,
+    profile_from_means,
+    slot_start,
+)
+from pe_core.freeloads import FreeLoadState
+from pe_core.health import WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
+from pe_core.heatpump import HeatPumpSettings
+from pe_core.history import chosen_plan, day_view
+from pe_core.hold import Hold
+from pe_core.host_appdaemon import AppDaemonHost
+from pe_core.journal import WriteJournal, day_summary, is_staged
+from pe_core.loadstore import LoadStore
+from pe_core.lowwrite import Study as LowWriteStudy
+from pe_core.modes import GUARDS, UNVERIFIED, effective_mode, guard_problems, guard_status
+from pe_core.names import build_names, default_names, fill, neutral_names, set_current
+from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
+from pe_core.optimiser import compare, optimise
+from pe_core.planner import make_plan, params_from, plan_entity_states, slot_certainty_rows
+from pe_core.readings import read
+from pe_core.replay import Timeline, flow_id, history_entities, replay
+from pe_core.roles import ROLE_BY_KEY, ROLES, catalogue, is_forbidden_control
+from pe_core.router import Message, Outbox, channels_for, is_open, kind_list, public_model, render
+from pe_core.schedule import forecast_writes, periods, settled, urgent
+from pe_core.setback import Setback
+from pe_core.setback import window as setback_window
+from pe_core.simhistory import History, months_wanted, parse_upload
+from pe_core.simjob import SimContext, SimStore
+from pe_core.simjob import run as sim_run
+from pe_core.simulate import SimBattery
+from pe_core.slots import DEFAULT_MIN_CHARGE_MIN, SlotTracker, learn_min_charge
+from pe_core.smartcharge import SmartCharger, ask_message, worth_asking
+from pe_core.status import entity_states
+from pe_core.store import coerce_flags, save_config, with_operation
+from pe_core.tariff import describe_window, fixed_window, overnight_window
+from pe_core.v2flows import FLOW_ROLES as V2_FLOW_ROLES
+from pe_core.v2flows import day_end as v2_day_end
+from pe_core.v2flows import real_flows
+from pe_core.v2history import KEEP_DAYS as V2_HISTORY_KEEP_DAYS
+from pe_core.v2history import V2History
+from pe_core.verification import active_refusal
+from pe_core.version import MIN_CARD_VERSION, installed_version
+from pe_core.weather import Weather
+from pe_core.wizard import wizard_info
+
+HEARTBEAT_SECONDS = 60
+V2_SAVE_SECONDS = 300             # engine v2's state file is saved this often (and on terminate)
+V2_PREVIEW_REASON = "Preview: engine v1 is in control"
+ENGINE_LABELS = {"v1": "v1", "v2": "v2", "v2_1": "2.1 beta"}
+V2_CACHE_SECONDS = 60             # the certainty scores and the forecast points the v2 tick reuses
+DATA_GAP_GRACE_S = 180             # a reading missing this long or less keeps the last decision (_bridge_data_gap)
+LOWWRITE_START = "02:40:00"       # after the Simulator has had its hour
+COMPARE_START = "03:20:00"         # after the low-write study: the same-day engine comparison (a separate process)
+COMPARE_POLL_S = 300              # how often the app looks at that process
+LOWWRITE_SLICE = 3                # new days planned per pass (about a second each); more passes follow a minute apart
+SIM_START = "01:30:00"            # after the midnight jobs (00:05-00:20), well before the morning
+SIM_SLICE_SECONDS = 2.0           # work per callback, then hand AppDaemon back for a second
+CONTROL_STRATEGY = "rolling"      # "rolling" | "block": decided by #44 (EEPROM writes) before Active ships
+BATTERY_VOLTS = 52.0              # nominal, for converting power to the inverter's current settings
+CYCLE_SECONDS = 30
+RAM_SEND_PATIENCE_S = 60          # a remote-control command not landed by then is given up on (_ram_sending)
+SLOW_TICK_S = 5.0                 # a tick this slow is logged with where the time went (_note_slow_tick)
+EVENT_ROLES = ("axle_event_active", "axle_event_start", "axle_event_end", "axle_direction")
+FINISH_KEEP_H = 14          # a grid event's summary not yet spoken (quiet hours) is dropped after this long
+EVENT_HOLD_S = 900          # the grid-event sensors may be unavailable this long before their last reading is dropped
+STICK_WARMUP = timedelta(minutes=5)   # after a start, no mid-slot stickiness while the plan's inputs load
+REPLAN_SECONDS = 300
+HISTORY_DAYS = 14
+BACKFILL_DAYS = 14
+RECHECK_SECONDS = 300
+BUTTON_DELAY_S = 3                # apply the inverter's window times this long after writing them (see _press_buttons)
+INPUT_GRACE_SECONDS = 600         # inputs missing: keep the inverter's programmed windows this long before releasing
+RAM_INPUT_GRACE_SECONDS = 90      # inputs missing under RAM remote control: carry on this long before switching it Off
+# ...but the refresh interval plus that grace stays under this (the inverter's own failsafe is about 5 minutes)
+RAM_FAILSAFE_MARGIN_S = 240
+SAVE_EVENT = "pe_config_save"
+RESULT_EVENT = "pe_config_result"
+DEMO_EVENT, DEMO_RESULT_EVENT = "pe_demo", "pe_demo_result"
+OVERRIDE_EVENT, OVERRIDE_RESULT_EVENT = "pe_override", "pe_override_result"
+HISTORY_DAY_EVENT = "pe_history_day"
+V2_HISTORY_DAY_EVENT = "pe_v2_history_day"
+# the Config page's test announcement (admin only)
+ALEXA_TEST_EVENT, ALEXA_TEST_RESULT_EVENT = "pe_alexa_test", "pe_alexa_test_result"
+# a message from elsewhere, and the Config page's test of a notification channel
+NOTIFY_EVENT = "pe_notify"
+NOTIFY_TEST_EVENT, NOTIFY_TEST_RESULT_EVENT = "pe_notify_test", "pe_notify_test_result"
+COMPARE_RECHECK_EVENT = "pe_compare_recheck"     # Engines compared's "Compare again" (admin only): {day}
+COMPARE_RECHECK_RESULT = "pe_compare_recheck_result"
+V2_REPLAN_EVENT = "pe_v2_replan"        # the plan card's "Re-plan now" button (admin only: HA's fire_event needs admin)
+CONTROL_EVENT = "pe_set_control"          # fired by the handover scripts: {"operation": "active" | "passive"}
+TEST_EVENT = "pe_test_write"      # supervised test writes, fired by the config card (admin only)
+PAUSE_ENTITY = "switch.pe_ctl_pause"
+NOT_SET_UP = "Not set up yet"                    # what the Mode and Health tiles say before there is a config
+
+
+def _notice_id(key: str) -> str:
+    return "powerengine_" + "".join(c if c.isalnum() else "_" for c in key)
+
+
+
+def _real(writes) -> int:
+    """Writes that reach the inverter (staged window times don't until the update button sends them)."""
+    return sum(not is_staged(w.role) for w in writes)
+
+class Engine:
+    _demo = None                     # the demo day when `demo: <day>` is set in apps.yaml (see _demo_setup)
+    _shadow = False                  # a shadow run (engine_main --shadow): plans, controls and sends nothing, and
+    #                                  stays inside its own data folder (the integration also blocks its calls)
+
+    @property
+    def host(self):
+        """What runs the app (pe_core/host.py): every call to Home Assistant, every timer and listener goes through
+        it. Kept in __dict__ so it is not one of the attributes initialize() sets and _wipe() removes."""
+        host = self.__dict__.get("_host")
+        if host is None:
+            host = self.__dict__["_host"] = AppDaemonHost(self)
+        return host
+
+    # --- starting again inside the running app (the demo's start, day and exit) -------------------------------
+    # AppDaemon keeps every timer and listener until they are cancelled, and an app object keeps its attributes. To
+    # run initialize() again without doubling anything up, the app records which attributes initialize() and the
+    # callbacks set (`_touched`) and which timers and listeners it registered (`_handles`), and _wipe() undoes both.
+
+    def __setattr__(self, name, value):
+        super().__setattr__(name, value)
+        touched = self.__dict__.get("_touched")
+        if touched is not None:
+            touched.add(name)
+
+    def _wipe(self):
+        """Undo a previous initialize(): stop and hand back the inverter, cancel every timer and listener it made, and
+        delete every attribute it set, and put back the real calls to Home Assistant that demo mode replaced."""
+        try:
+            self.terminate()
+        except Exception as err:
+            self.log(f"Restart: terminate failed: {err!r}", level="WARNING")
+        self.host.cancel_all()
+        self.host.clear_overrides()
+        for name in list(self.__dict__["_touched"]):
+            self.__dict__.pop(name, None)
+        self.__dict__["_touched"].clear()
+
+    def initialize(self):
+        if self.__dict__.get("_touched") is None:
+            custom = self.host.args.get("settings_file")
+            if not any(os.path.isfile(p) for p in ([custom] if custom else list(DEFAULT_PATHS))):
+                # Only an app that isn't set up can switch in and out of the demo, so only then are attributes,
+                # timers and listeners recorded for _wipe(). A configured app runs exactly as before.
+                self.__dict__["_touched"] = set()
+                self.host.start_tracking()
+        else:
+            self._wipe()
+        self.log(f"PowerEngine {__version__} starting")
+        if self._shadow:
+            self.log("SHADOW RUN: this engine plans as the live one does and sends nothing; its entities are "
+                     "separate and its data folder is its own")
+        self._started_at = datetime.now(timezone.utc)
+        self.damper = damping.Damper()
+        self._damp_restart(self._started_at)
+        validate_definitions()
+
+        # Optional override. Not "config_path": AppDaemon sets that arg itself.
+        custom = self.host.args.get("settings_file")
+        self.paths = [custom] if custom else list(DEFAULT_PATHS)
+        self._real_paths = list(self.paths)
+        self.cfg, self.cfg_path, self.cfg_error = None, None, None
+        self._demo = None
+        self._override = None                        # a manual override (_on_override), loaded below
+        self._early = EarlyTargets()                 # early-target records (_early_target), saved below
+        day = self.host.args.get("demo") or self._saved_demo_day()
+        if day:
+            self._demo_setup(str(day))
+        try:
+            self.cfg, self.cfg_path = load_config(self.paths)
+        except ConfigError as err:
+            self.cfg_error = str(err)
+            self.log(f"Config problem: {err}", level="WARNING")
+        if self.cfg is None and self.cfg_error is None:
+            looked = ", ".join(self.paths)
+            self.log(f"No config.yaml found (looked in {looked}); running unconfigured.")     # not a fault
+        elif self.cfg is not None:
+            self.log(f"Loaded config from {self.cfg_path}: {len(self.cfg.inputs)} inputs, "
+                     f"{len(self.cfg.solar_plants)} solar plant(s)")
+            self._split_v2_settings()
+            self._add_site()
+
+        try:                                           # the log from before this start (Health tab's log card)
+            self.__dict__.get("_log_ring") or self.log("PowerEngine log starts")
+            self._log_ring.load(self._log_path())
+        except Exception as err:
+            self.log(f"Could not read the saved log: {err!r}", level="WARNING")
+
+        choice = self._publisher_choice()
+        self.mqtt = None if choice == "direct" else self._mqtt_api(quiet=choice == "auto")
+        self._publisher_obj = None
+        if self._get_publisher() is None:
+            return
+        self.log(f"Entity publishing: {self._get_publisher().name}"
+                 + (" (set 'Entity publishing' on the Config page to change it)" if choice == "auto" else ""))
+        if self.cfg is not None and self.cfg.remove_entities:
+            self._remove_entities()
+            return
+
+        for ent in ENTITIES:
+            self._get_publisher().discover(ent, __version__)
+        self._sync_solar_entities()
+        self._sync_device_entities()
+        self._retire_old_entities()
+        self._ui_defaults()
+        self._get_publisher().available(True)
+        self._publish_state("diag_version", __version__)
+        self._publish_state("diag_started", datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        self._publish_chunked("map_catalogue", str(len(ROLES)), catalogue())
+        self._publish_chunked("map_settings", str(len(settings_catalogue()["safety"])), settings_catalogue())
+        self._last_checks = None
+        self._published = {}
+        self._decision, self._since = None, None
+        self._v2, self._v2_lock, self._v2_saved = None, threading.Lock(), None     # engine v2 (_engine_v2)
+        self._v2_cache, self._v2_learned_sig = {}, None
+        self._no_data_since = None                 # when the readings last went missing (see DATA_GAP_GRACE_S)
+        try:   # keep the activity log across restarts (it lives in the entity's attributes)
+            saved = self.host.get_state("sensor.pe_state_activity", attribute="entries")
+        except Exception:
+            saved = None
+        self.activity = ActivityLog(saved if isinstance(saved, list) else None)
+        self.profile: LoadProfile | None = None
+        self._hist_means: dict = {}
+        self._hist_fixed: set = set()
+        self.loadstore = LoadStore(os.path.join(os.path.dirname(self._save_path()), "load_history.json"))
+        try:
+            n = self.loadstore.load()
+            if n:
+                self.log(f"Load record: {n} half-hours recorded by PowerEngine")
+        except Exception as err:
+            self.log(f"Could not read the load record: {err!r}", level="WARNING")
+        self.plan, self._plan_sig, self._plan_time = None, None, None
+        self.sim = SimBattery()
+        try:
+            self.tz = ZoneInfo(str(self.host.get_timezone()))
+        except Exception:
+            self.tz = None
+        if self._demo:                                 # the app reads the clock the way the demo world does
+            self.tz = self._demo_world().tz
+        self._publish_names()                          # the adapters (the forecast needs tz) can now name themselves
+        self.recorder = Recorder()
+        self.notifier = Notifier(os.path.join(os.path.dirname(self._save_path()), "notifications.json"))
+        self._bad_since = {}
+        self.writes = WriteLog(os.path.join(os.path.dirname(self._save_path()), "inverter_writes.json"))
+        self.write_model = WriteModel()
+        self.block_model = BlockWriteModel()
+        self._write_listeners = []
+        self._watch_controls()
+        self._publish_writes()
+        self.slots = SlotTracker(os.path.join(os.path.dirname(self._save_path()), "costs", "slots.json"))
+        self._slots_last = None
+        self.smart = SmartCharger(os.path.join(os.path.dirname(self._save_path()), "costs", "smart_requests.json"))
+        self._our_write, self._last_readings = None, None
+        self._dashboard_readings_synced = False
+        self._watch_ready_by()
+        self.costbook, self._months, self.measured = None, [], None
+        try:
+            self.costbook = CostBook(os.path.join(os.path.dirname(self._save_path()), "costs"), self.tz)
+            self.costbook.export_fallback = self._current_export_rate()
+            if self.cfg is not None:
+                self.costbook.flow_id = flow_id(self.cfg)
+                self._sync_window()
+            self._measure(revalue=False)
+            if self.costbook.needs_revalue and self.cfg is not None:
+                n = self.costbook.revalue(**self._cost_params())
+                self.log(f"Costs: re-valued {n} half-hours with method {METHOD_VERSION}")
+            self._refresh_months()
+        except Exception as err:
+            self.log(f"Could not open the cost book: {err!r}", level="WARNING")
+        self._fcsnap, self._v2hist, self._flog, self._warned_days = None, None, None, {}
+        if self.costbook is not None:
+            try:                      # forecast snapshots (never in a demo) and engine v2's history, beside the costs
+                if not self._demo:
+                    self._fcsnap = fcsnap.SnapshotWriter(os.path.join(self.costbook.folder, "snapshots"), self.tz)
+                self._v2hist = V2History(os.path.join(self.costbook.folder, "v2history"), self.tz)
+                if not self._demo:
+                    self._flog = forecastlog.ForecastLog(os.path.join(self.costbook.folder, "forecastlog"), self.tz)
+            except Exception as err:
+                self.log(f"Could not set up the forecast snapshots or engine v2 history: {err!r}", level="WARNING")
+        self._publish_v2_settings()
+        self._evaluate()                                   # also publishes mode + config status
+        self._package_sync("start")
+        self._cycle({})
+        self._sync_dashboard()
+
+        self.host.listen_event(self._on_save, SAVE_EVENT)
+        self.host.listen_event(self._on_test, TEST_EVENT)
+        self.host.listen_event(self._on_diag_request, diagnostics.REQUEST_EVENT)
+        self.host.listen_event(self._on_set_control, CONTROL_EVENT)
+        self.host.listen_event(self._on_sim_history, "pe_sim_history")
+        self.host.listen_event(self._on_sim_settings, "pe_sim_settings")
+        self._listen_for_commands()
+        self._beat({})
+        self.host.run_every(self._beat, "now+60", HEARTBEAT_SECONDS)
+        self.host.run_every(lambda kwargs: self._evaluate(), f"now+{RECHECK_SECONDS}", RECHECK_SECONDS)
+        self.host.run_every(self._cycle, f"now+{CYCLE_SECONDS}", CYCLE_SECONDS)
+        sample_s = self.cfg.engine_v2.sample_s if self.cfg is not None else V2Settings().sample_s
+        self.host.run_every(self._engine_tick, f"now+{sample_s}", sample_s)   # engine v2's tick; does nothing on v1
+        self.host.run_in(self._learn_load, 5)                     # load profile from history, then daily
+        self.host.run_daily(self._learn_load, "00:10:00")
+        self.host.run_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
+        self.host.run_daily(self._daily_summary, "08:00:00")
+        if not self._shadow:                                     # (heavy overnight jobs: the live engine does them)
+            self.host.run_daily(self._sim_start, SIM_START)              # tariff Simulator: heavy work, overnight only
+            self.host.run_daily(self._lowwrite_start, LOWWRITE_START)    # low-write study: shadow only, changes nothing
+        self.host.run_in(lambda kwargs: self._sim_publish(), 20)
+        self.host.run_in(lambda kwargs: self._lowwrite_publish(), 25)
+        if not self._demo and not self._shadow:                  # engine comparison: yesterday, replayed apart
+            self.host.run_daily(self._compare_start, COMPARE_START)
+            self.host.run_every(self._compare_poll, f"now+{COMPARE_POLL_S}", COMPARE_POLL_S)
+        self.host.run_in(lambda kwargs: self._compare_publish(), 30)
+        self.host.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
+        self.host.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
+        self.host.run_every(self._check_update, "now+120", 60)        # a new version installed: ask HA to restart us
+        if not self._demo:                                       # (the demo makes no calls to the internet)
+            self.host.run_every(self._release_check, "now+60", 300)   # a new version released: straight from GitHub
+        self.host.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
+        self.host.listen_event(self._on_health_dismiss, "pe_health_dismiss")
+        self.host.listen_event(self._on_demo, DEMO_EVENT)
+        if not self._demo:
+            self._early = EarlyTargets(os.path.join(self._real_dir(), "early_target.json"))
+        if not self._demo:
+            self._override = manual.load(self._override_file(), datetime.now(timezone.utc))
+        self.host.listen_event(self._on_override, OVERRIDE_EVENT)
+        self._history_date = None                            # a day picked with the card's date picker (Plan history)
+        self.host.listen_event(self._on_history_day, HISTORY_DAY_EVENT)
+        self._v2_history_date = None                         # a day picked on the Engine v2 page's history
+        self._flows_cache = {}                               # day -> (grid flows, when read): the history's real timing
+        self.host.listen_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
+        self.host.listen_event(self._on_v2_replan, V2_REPLAN_EVENT)
+        self.host.listen_event(self._on_alexa_test, ALEXA_TEST_EVENT)
+        self.host.listen_event(self._on_notify_test, NOTIFY_TEST_EVENT)
+        self.host.run_every(self._publish_notify_cycle, "now+50", 900)
+        self.host.listen_event(self._on_pe_notify, NOTIFY_EVENT)
+        self.host.listen_event(self._on_compare_recheck, COMPARE_RECHECK_EVENT)
+        self.host.run_every(self._publish_v2_history, "now+65", 900)
+        self.host.run_every(self._publish_forecast_score, "now+240", 3600)
+        self.host.run_in(self._backfill, 90)                    # fill recent days from HA history (after load learning)
+        self.host.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
+        self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
+
+    def terminate(self):
+        self._save_engine_state()
+        if "_ram_worker_thread" in self.__dict__:
+            self._ram_worker().idle(15)                           # a command on its way (or Off) finishes first
+        try:
+            sched = self.__dict__.get("_compare")
+            if sched is not None:
+                sched.kill()                                      # a comparison runner stops with the app
+        except Exception:
+            pass
+        if self._get_publisher() is not None:
+            self._get_publisher().available(False)
+        try:
+            self._log_ring.save(self._log_path())
+        except Exception:
+            pass
+
+    # --- PowerEngine's own log (Health tab) ------------------------------------------------
+
+    def _log_path(self):
+        return os.path.join(os.path.dirname(self._save_path()), "log.json")
+
+    def _log_step(self, kwargs):
+        ring = self.__dict__.get("_log_ring")
+        if ring is None or not ring.changed:
+            return
+        self._publish_state("diag_log", len(ring.lines), ring.published())
+        now = datetime.now(timezone.utc)
+        last = getattr(self, "_log_saved", None)
+        if last is None or (now - last).total_seconds() >= 300:
+            try:
+                ring.save(self._log_path())
+                self._log_saved = now
+            except OSError as err:
+                self.host.log(f"Could not save the log: {err}", level="WARNING")
+
+    # --- new releases, straight from GitHub (HACS only looks every few hours) ---------------------------
+
+    def _release_check(self, kwargs):
+        tags = self.__dict__.setdefault("_release_etags", {})
+        texts = self.__dict__.setdefault("_release_texts", {})
+        try:
+            for repo in (releases.APP_REPO, releases.CARD_REPO):
+                url = releases.raw_url(repo)
+                text, tags[url] = releases.fetch_text(url, tags.get(url) if texts.get(url) else None)
+                if text is not None:
+                    texts[url] = text
+            s = releases.summary(__version__, texts.get(releases.raw_url(releases.APP_REPO), ""),
+                                 texts.get(releases.raw_url(releases.CARD_REPO), ""))
+            s["checked"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            state = "available" if s["available"] else "up to date"
+            if s["available"] and getattr(self, "_release_seen", None) != s["latest"]:
+                self._release_seen = s["latest"]
+                self.log(f"New version {s['latest']} released (running {__version__}, {s['behind']} behind)")
+            self._publish_if_changed("diag_update", state, s)
+        except Exception as err:
+            now = datetime.now(timezone.utc)
+            last = getattr(self, "_release_err_at", None)
+            if last is None or (now - last).total_seconds() >= 3600:
+                self._release_err_at = now
+                self.log(f"Could not check GitHub for a new version: {err!r}", level="WARNING")
+
+    # --- Health findings: dismissed ones stay hidden (the same finding; a new one shows) ---------------
+
+    def _dismissed_path(self):
+        return os.path.join(os.path.dirname(self._save_path()), "health_dismissed.json")
+
+    def _dismissed(self) -> dict:
+        d = self.__dict__.get("_dismissed_cache")
+        if d is None:
+            try:
+                with open(self._dismissed_path(), encoding="utf-8") as fh:
+                    d = json.load(fh)
+            except (OSError, ValueError):
+                d = {}
+            self._dismissed_cache = d
+        return d
+
+    def _on_health_dismiss(self, event_name, data, kwargs):
+        key = str((data or {}).get("key", ""))[:20]
+        h = getattr(self, "_health_last", None) or {}
+        f = next((x for x in h.get("all_findings", []) if x.get("key") == key), None)
+        if f is None:
+            return
+        d = self._dismissed()
+        d[key] = {"title": f.get("title"), "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+        for k in [k for k, v in d.items() if v.get("at", "") < cutoff]:
+            del d[k]
+        try:
+            tmp = self._dismissed_path() + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(d, fh)
+            os.replace(tmp, self._dismissed_path())
+        except OSError as err:
+            self.log(f"Could not save the dismissed finding: {err}", level="WARNING")
+        self.log(f"Health: dismissed \"{f.get('title')}\" ({f.get('detail', '')[:120]})")
+        self._health()
+
+    # --- mapping checks and mode -----------------------------------------------------
+
+    def _state_all(self, eid):
+        """A state with its attributes, as `get_state(eid, attribute="all")` gives it, except that the grid-event
+        sensors are held at their last good reading for up to EVENT_HOLD_S when they report "unavailable". The Axle
+        integration is unavailable for a few minutes around 03:00 most nights; without this the app declared its
+        inputs not ready and switched remote control Off in the middle of the overnight charge (31 Oct 2026, 03:06).
+        An event is announced hours ahead, so a reading a few minutes old is as good. "unknown" is not held: it is
+        what the sensors say when no event is scheduled."""
+        st = self.host.get_state(eid, attribute="all")
+        if self.cfg is None or eid not in {self._role_entity(r) for r in EVENT_ROLES}:
+            return st
+        held = self.__dict__.setdefault("_event_held", {})
+        now = datetime.now(timezone.utc)
+        if not (isinstance(st, dict) and st.get("state") == "unavailable") and st is not None:
+            held[eid] = (now, st)
+            return st
+        kept = held.get(eid)
+        if kept is not None and (now - kept[0]).total_seconds() <= EVENT_HOLD_S:
+            return kept[1]
+        return st
+
+    def _evaluate(self):
+        checks, required = {}, []
+        if self.cfg is not None:
+            required = required_roles(self.cfg)
+            no_other = other_controller(self.cfg) == "none"
+            for role in ROLES:
+                if no_other and role.group == "handover":      # no other controller: the guards are not checked
+                    continue
+                spec = self.cfg.inputs.get(role.key)
+                state = None
+                if spec and "entity" in spec:
+                    state = self._state_all(spec["entity"])
+                    if state is None and role.group == "handover":       # AppDaemon lost track: ask HA
+                        live = self._guard_state(spec["entity"])
+                        if live not in (UNVERIFIED, "unknown", "unavailable", "None"):
+                            state = {"state": live, "attributes": {}}
+                checks[role.key] = check(role, spec, state)
+                use = (getattr(self, "_in_use", None) or {}).get(role.key)
+                if use and spec and "value" in spec and checks[role.key][0] == OK:
+                    checks[role.key] = (OK, use["text"])        # what the plan really uses, not just what was typed
+            if uses_battery_pair(self.cfg) and "battery_power" in self.cfg.inputs:
+                checks["battery_power"] = (OK, "Not used: the charging and discharging sensors are mapped")
+        missing = blocking(checks, required)
+        self._missing_why = "; ".join(f"{k}: {checks[k][1]}" + (f" ({self.cfg.inputs[k]['entity']})"
+                                      if k in self.cfg.inputs and "entity" in self.cfg.inputs[k] else "")
+                                      for k in missing if k in checks) if self.cfg is not None else ""
+        down = degraded(checks, required)
+        if bool(down) != bool(getattr(self, "_degraded", [])):
+            if down:
+                self.log(f"Inputs unavailable ({', '.join(down)}); control carries on, assuming the car is not "
+                         "charging and no grid event is running", level="WARNING")
+            else:
+                self.log("Car charger and grid-event inputs back")
+        self._degraded = down
+        self._watch_inputs(checks, required)
+        guards, absent = guard_status(self.cfg, self._guard_state) if self.cfg is not None else ([], [])
+        self._note_absent_guards(absent)
+        paused = self.host.get_state(PAUSE_ENTITY) == "on"
+        mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused,
+                              unverified=self._unverified() or self._v2_refusal(), shadow=self._shadow)
+        self._leave_active(getattr(self, "mode", None), mode, guards)
+        prev = getattr(self, "mode", None)
+        if mode.effective == "active" and (prev is None or prev.effective != "active"):
+            self._damp_restart(datetime.now(timezone.utc))        # resumed, or went Active
+        if getattr(self, "_paused", False) and not paused:          # resumed: allow a fresh day's worth of writes
+            self.writes.set_base(self._today(), self.writes.own_today(self._today()))
+            self._cap_base = self.writes.base(self._today())
+        self.mode = mode
+        self._guards, self._paused = guards, paused
+
+        if self.cfg_error:
+            overall = "error"
+        elif self.cfg is None:
+            overall = "unconfigured"
+        else:
+            overall = summarise(checks, required)
+
+        signature = (overall, mode, tuple(guards), paused, tuple(sorted(checks.items())))
+        if signature == self._last_checks:
+            return
+        self._last_checks = signature
+        self._checks = {k: {"status": s, "message": m} for k, (s, m) in checks.items()}
+        self._health()
+        self._publish_state("diag_config_ok", "ON" if overall in ("ok", "warnings") else "OFF",
+                            {"reason": self.cfg_error or overall, "file": self.cfg_path})
+        self._publish_state("cfg_operation_mode", mode.configured)
+        self._publish_state("state_operation_mode", mode.effective,
+                            {"reason": mode.reason, "guards": guards or "all safe", "paused": paused,
+                             "guards_absent": absent})
+        self._publish_status()
+        self._publish_state("map_config", overall, {
+            "config": self.cfg.raw if self.cfg else {},
+            "checks": {k: {"status": s, "message": m} for k, (s, m) in checks.items()},
+            "required": required,
+            "file": self.cfg_path,
+            "save_path": self._save_path(),
+            "error": self.cfg_error,
+        })
+        self.log(f"Inputs: {overall}; mode {mode.label} ({mode.reason}"
+                 f"{self._why_not_ready() if mode.effective == 'unconfigured' else ''})")
+
+    # --- the monitoring cycle ------------------------------------------------------
+
+    def _cycle(self, kwargs):
+        """Read inputs, decide (Passive: would-do only), then publish entities that changed."""
+        readings, decision = None, None
+        if self._demo:
+            self._demo_world().step()                      # the simulated home and battery move on a minute
+        if self.cfg is not None and not self.cfg_error and (self.mode.effective == "unconfigured"
+                                                            or getattr(self, "_guard_live", False)):
+            self._guard_live = False
+            # inputs missing (e.g. just after an HA restart) or a guard AppDaemon can't see: recheck every cycle, so
+            # control resumes within a cycle of them coming back, not up to 5 minutes
+            self._evaluate()
+        self._release_if_still_missing()
+        self._publish_package()                            # whether Home Assistant has loaded the package files
+        if self.cfg is not None and self.mode.effective != "unconfigured":
+            try:
+                readings = read(self.cfg, self._state_all, None,
+                                self._tariff(), self._events(), self._ev(), self._forecast(), self._hold())
+                self._record_load(readings)
+                self._grid_check(readings)
+                self._record_costs(readings)
+                self._watch_events(readings)
+                self._announce_event(readings)
+                self._car_stop_step(readings)
+                self._heating_setback_step(readings)
+                self._free_loads_step(readings)
+                self._event_finish_step(readings)
+                self._flush_held(readings.now)
+                self._track_slots(readings)
+                self._snapshot_forecast(readings)
+                self._smart_step(readings)
+                self._refresh_temps(readings.now)
+                self._expire_override(readings.now)
+                self._maybe_replan(readings)
+                if self._engine_name() == "v2":
+                    # engine v2 decides in its own tick (_engine_tick); v1's plan above is still made, for comparison
+                    shown = self._decision
+                else:
+                    decision = self._bridge_data_gap(
+                        decide(readings, self.cfg, self._decision, self.tz, plan=self.plan,
+                               override=self._active_override()), readings.now)
+                    decision = self._early_target(readings, decision)
+                    self._note_command(decision)
+                    shown = decision
+                sim = self.sim.update(shown, readings, self._params(), self.tz) if shown is not None else None
+                if sim is not None:
+                    self._publish_if_changed("state_sim_soc", round(sim, 1),
+                                             {"cost_today": round(self.sim.cost_today, 2),
+                                              "real_soc": readings.battery_soc})
+            except Exception as err:          # never let one bad reading stop the app
+                self.log(f"Reading, planning or deciding failed: {err!r}", level="WARNING")
+        if decision is not None:
+            self._hand_over(readings, decision)
+        shown = self._decision if readings is not None and self._engine_name() == "v2" else decision
+        for key, (state, attrs) in entity_states(readings, self.mode, self.tz, shown, self._since).items():
+            self._publish_if_changed(key, state, attrs)
+        self._publish_if_changed("state_engine", self._engine_name(), self._engine_attrs())
+        self._publish_override()
+        if not self._dashboard_readings_synced and getattr(self, "_last_readings", None) is not None:
+            self._dashboard_readings_synced = True     # now the real capacity, not the 18000 Wh fallback
+            self._sync_dashboard()
+
+    def _hand_over(self, readings, decision, send=True):
+        """A decision (either engine's) goes the one way: the activity log, the decision on record, the would-write
+        counts and the inverter control (RAM refresh, BMS caps, fuse cap, following check, write budget). With
+        send=False (engine v2 on timed windows) it is logged and counted as a would-do, and nothing is sent."""
+        passive = self.mode.effective != "active" or not send
+        entry = self.activity.record(decision, readings.now, passive, self.tz)
+        if entry:
+            self._since = entry["hhmm"]
+            self.log(f"Decision: {entry['text']}")
+            self._logbook(entry["text"])
+            self._publish_state("state_activity", entry["time"], {"entries": self.activity.entries})
+        self._decision = decision
+        self._count_would_writes(readings, decision)
+        if send:
+            self._control(readings, decision)
+
+    # --- engine v2 (pe_core/engine_v2, docs/plans/engine-v2.md) ------------------------------------
+
+    def _engine_choice(self):
+        """The system setting's choice: "v1", "v2" or "v2_1" (engine 2.1 beta)."""
+        choice = self.cfg.system.get("engine") if self.cfg is not None else None
+        if choice == "v2" and self.cfg.v2_profile == BETA_PROFILE:
+            return "v2_1"                      # engine v2 with the 2.1 beta profile (kept for logs and old cards)
+        return choice if choice == "v2" else "v1"
+
+    def _engine_name(self):
+        """The engine family the system setting chooses: "v1" (the half-hour plan) or "v2" (values and exit conditions;
+        engine 2.1 beta is engine v2 with a profile of settings, so it is "v2" everywhere the app asks)."""
+        return "v1" if self._engine_choice() == "v1" else "v2"
+
+    def _reserve_soc(self):
+        """The reserve the running engine keeps back in normal running: engine v2's own, else engine v1's Minimum
+        reserve. What the code shared by both engines (the RAM follow check, the energy flow card) compares against."""
+        if self._engine_name() == "v2":
+            return float(self.cfg.engine_v2.reserve_soc)
+        return float(self.cfg.safety.get("min_reserve_soc", 12))
+
+    def _wear_p(self):
+        """The battery wear cost (p/kWh) of the running engine: engine v2's, else engine v1's Battery wear cost."""
+        if self._engine_name() == "v2":
+            return float(self.cfg.engine_v2.wear_p)
+        return float(self.cfg.safety.get("battery_wear_p", 2.0))
+
+    def _v2_preview_on(self):
+        """True while engine v1 is in control and the preview setting is on: engine v2 then works out its decision
+        in its tick, publishes its sensors and sends nothing."""
+        return self.cfg is not None and self._engine_name() == "v1" and bool(self.cfg.engine_v2.preview_when_v1)
+
+    def _engine_profile(self):
+        """The engine v2 settings profile in use, or None under engine v1 (which has none)."""
+        return self.cfg.v2_profile if self.cfg is not None and self._engine_name() == "v2" else None
+
+    def _engine_attrs(self):
+        """Attributes of sensor.pe_state_engine: v2_preview only once the preview has really run (its engine exists)."""
+        attrs = {"v2_available": True, "choice": self._engine_choice()}
+        if self._engine_profile() is not None:
+            attrs["profile"] = self._engine_profile()
+        if self._v2_preview_on() and self.__dict__.get("_v2") is not None:
+            attrs["v2_preview"] = True
+        return attrs
+
+    def _v2_refusal(self):
+        """Why engine v2 may not send commands (it only drives RAM remote control in this release), or None."""
+        if self._engine_name() == "v2" and self.cfg.system.get("control_method") != "ram_remote":
+            return "Engine v2 needs RAM remote control"
+        return None
+
+    def _v2_state_path(self):
+        return os.path.join(os.path.dirname(self._save_path()), "engine_v2_state.json")
+
+    def _engine_v2(self):
+        """The engine, built on first use from the saved state (a broken file is ignored with a warning) and kept in
+        step with the settings."""
+        eng = self._v2
+        if eng is None:
+            state = None
+            try:
+                with open(self._v2_state_path(), encoding="utf-8") as fh:
+                    state = json.load(fh)
+                if not isinstance(state, dict):
+                    raise ValueError("not a mapping")
+            except FileNotFoundError:
+                state = None
+            except (OSError, ValueError) as err:
+                self.log(f"Engine v2: the saved state could not be read ({err}); starting fresh", level="WARNING")
+                state = None
+            try:
+                eng = EngineV2(self.cfg.engine_v2, state)
+            except Exception as err:
+                self.log(f"Engine v2: the saved state was not usable ({err!r}); starting fresh", level="WARNING")
+                eng = EngineV2(self.cfg.engine_v2)
+            self._v2, self._v2_saved = eng, datetime.now(timezone.utc)
+        elif eng.s != self.cfg.engine_v2:
+            eng.update_settings(self.cfg.engine_v2)
+        eng.profile = self.cfg.v2_profile
+        return eng
+
+    def _save_engine_state(self, now=None):
+        eng = self.__dict__.get("_v2")
+        if eng is None:
+            return
+        self._v2_saved = now or datetime.now(timezone.utc)
+        path = self._v2_state_path()
+        try:
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump(eng.state(), fh, separators=(",", ":"), default=str)
+            os.replace(tmp, path)
+        except (OSError, TypeError, ValueError) as err:
+            self.log(f"Engine v2: could not save its state ({err!r})", level="WARNING")
+
+    def _publish_v2_settings(self):
+        """The v2 settings catalogue with the values in use (the config page's schema)."""
+        cfg = self.cfg
+        state, attrs = v2publish.settings_state(cfg.engine_v2 if cfg is not None else V2Settings(),
+                                                cfg.v2_profile if cfg is not None else None,
+                                                cfg.v2_profiles if cfg is not None else None)
+        self._publish_if_changed("diag_v2_settings", state, attrs)
+        state, attrs = v2publish.profiles_state(cfg.v2_profile if cfg is not None else None,
+                                                cfg.v2_profiles if cfg is not None else None)
+        self._publish_if_changed("diag_v2_profiles", state, attrs)
+
+    def _engine_switched(self, was):
+        """The engine setting changed in a config save. Active, Passive and Pause stay as they are. Engine v2 starts
+        from its saved state and works its values out at once; going back to v1 hands control to v1's next cycle (the
+        inverter keeps its last command, and the RAM refresh carries on, meanwhile)."""
+        now, was = ENGINE_LABELS[self._engine_choice()], ENGINE_LABELS.get(was, was)
+        self._save_engine_state()
+        self._v2 = None                                    # rebuilt from the saved state; its first step revalues
+        self._v2_cache, self._v2_learned_sig = {}, None
+        self.log(f"Engine changed from {was} to {now}: the mode (Active, Passive or Pause) is unchanged; "
+                 + ("engine v2 works out its values on its next tick" if self._engine_name() == "v2"
+                    else "engine v1 takes over at its next cycle"))
+        self._logbook(f"planning engine changed from {was} to {now}")
+        self._notify("health", (f"engine:{now}:{datetime.now(timezone.utc).isoformat(timespec='minutes')}",
+                                f"PowerEngine: engine {now}",
+                                f"The planning engine was changed from {was} to {now}. Active, Passive and Pause "
+                                "are unchanged."))
+
+    def _cold_factor_now(self, now):
+        """The cold-battery caution's charge fraction for the half-hour running now (1.0: none)."""
+        if not self.cfg.features.get("cold_caution", True) or not getattr(self, "_caution", None):
+            return 1.0
+        _, fac, _ = self._cold_in_use()
+        return learning.slot_factors([slot_start(now)], self._caution, fac)[0]
+
+    def _hard_floor(self) -> float:
+        """Engine v2's hard floor: the typed one, raised to where the battery has been seen to stop."""
+        floor = float(self.cfg.safety.get("battery_floor_soc", 12))
+        lr = getattr(self, "learned", None)
+        if lr is not None and self.cfg.features.get("learn_reserve", True) and lr.reserve_soc is not None \
+                and floor < lr.reserve_soc <= floor + 15:
+            floor = float(lr.reserve_soc)                         # learned: the battery really stops here
+        return floor
+
+    def _v2_facts(self, r):
+        """The battery and supply as the engine needs them, from the same sources v1's planner and controller use."""
+        p, pc = self._params(r), self._control_params(r)
+        floor = self._hard_floor()
+        limits = self._bms_limits(r, pc.max_charge_kw * 1000)
+        bms_c = limits.charge_w / 1000 if limits.charge_source == "bms" and limits.charge_w is not None else None
+        bms_d = limits.discharge_w / 1000 if limits.discharge_source == "bms" and limits.discharge_w is not None \
+            else None
+        return BatteryFacts(capacity_kwh=p.capacity_kwh, eta_charge=p.efficiency, eta_discharge=p.efficiency,
+                            max_charge_kw=p.max_charge_kw, max_discharge_kw=p.max_discharge_kw, taper=p.taper,
+                            dtaper=p.dtaper, hard_floor_soc=floor, export_limit_kw=p.export_limit_kw,
+                            fuse_kw=p.fuse_kw, ev_charger_kw=p.ev_charger_kw,
+                            charge_factor=self._cold_factor_now(r.now), bms_charge_kw=bms_c, bms_discharge_kw=bms_d)
+
+    def _v2_cached(self, key, now, make):
+        """Something slow to make that the 10-second tick may reuse for a minute."""
+        held = self._v2_cache.get(key)
+        if held is None or (now - held[0]).total_seconds() >= V2_CACHE_SECONDS:
+            held = self._v2_cache[key] = (now, make())
+        return held[1]
+
+    def _hold(self):
+        """What keeps the rate and smart-slot lists through a short outage of their sensors (pe_core/hold.py)."""
+        if getattr(self, "_hold_lists", None) is None:
+            self._hold_lists = Hold(self.log)
+        return self._hold_lists
+
+    def _v2_input(self, r, send, method, preview=False):
+        now = r.now
+        facts = self._v2_facts(r)
+        reason = "" if send else (V2_PREVIEW_REASON if preview else (self._v2_refusal() or self.mode.reason))
+        solar = self._v2_cached("solar", now, self._solar_forecast)
+        sig = ((facts.capacity_kwh, facts.eta_charge, facts.max_charge_kw, facts.max_discharge_kw, facts.taper,
+                facts.dtaper, facts.hard_floor_soc, facts.export_limit_kw, facts.ev_charger_kw),
+               float(self.profile.days) if self.profile else None)
+        learned = v2_triggers.learned_moved(self._v2_learned_sig, sig)
+        if learned or self._v2_learned_sig is None:           # the reference moves only when something counted
+            self._v2_learned_sig = sig
+        situation = Situation(active=send, mode_reason=reason, override=self._active_override(),
+                              house_load_includes_ev=bool(self.cfg.system.get("house_load_includes_ev", True)),
+                              control_method=method)
+        # a fixed setting, not learned (getattr: a settings object from before an update can outlive the reload once)
+        slot_c = float(getattr(self.cfg.engine_v2, "slot_odds_pct", 60)) / 100
+        return StepInput(now=now, readings=r, facts=facts, situation=situation, tz=self.tz or timezone.utc,
+                         solar_points=solar, load_profile=self.profile,
+                         slot_certainty=lambda _s, _f: slot_c, slot_hold=lambda: slot_c,
+                         slot_first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
+                         overnight=self._overnight(), learned_changed=learned,
+                         slots_whole_house=bool(self.cfg.features.get("slots_whole_house", True)))
+
+    def _engine_tick(self, kwargs):
+        """Engine v2's tick (every sample_s): read, step the engine, publish its sensors, and hand its decision to the
+        same control path v1 uses. On engine v1 it is a preview (setting preview_when_v1): the engine is stepped and its
+        sensors published, and its decision goes nowhere (not to _hand_over, the inverter, the activity log or
+        self._decision). Skips a tick while the last one is still running."""
+        preview = self._v2_preview_on()
+        if (self._engine_name() != "v2" and not preview) or self.cfg_error or self.mode.effective == "unconfigured":
+            return
+        if not self._v2_lock.acquire(blocking=False):
+            return
+        started = monotonic()
+        marks = {}                                 # seconds spent in each part, for the log when a tick is slow
+        try:
+            r = read(self.cfg, self._state_all, None,
+                     self._tariff(), self._events(), self._ev(), self._forecast(), self._hold())
+            marks["read"] = monotonic() - started
+            eng = self._engine_v2()
+            method = self._control_method()
+            ram = method == "ram_remote"
+            active = self.mode.effective == "active"
+            send = active and ram and not preview
+            out = eng.step(self._v2_input(r, send, method, preview))
+            marks["step"] = monotonic() - started
+            tz = self.tz or timezone.utc
+            for key, (state, attrs) in v2publish.entity_states(out, eng, eng.s, tz, preview).items():
+                if key == "state_engine":                      # it also names the choice (v2 or 2.1 beta)
+                    attrs = {**attrs, "choice": self._engine_choice(), "profile": self._engine_profile()}
+                self._publish_if_changed(key, state, attrs)
+            self._record_v2_history(r.now, out, send, preview, r)
+            self._record_forecast_log(r.now, out, r)
+            marks["publish"] = monotonic() - started
+            if not preview:
+                if send:
+                    self._note_command(out.decision)
+                else:
+                    self.recorder.note(None, None)
+                self._hand_over(r, out.decision, send=ram)   # timed windows: logged, counted, nothing sent
+                marks["hand over"] = monotonic() - started
+            else:
+                self._publish_if_changed("state_engine", "v1", self._engine_attrs())   # now says v2_preview
+            if (r.now - self._v2_saved).total_seconds() >= V2_SAVE_SECONDS:
+                self._save_engine_state(r.now)
+        except Exception as err:                   # never let one bad tick stop the app
+            self.log(f"Engine v2 tick failed: {err!r}", level="WARNING")
+        finally:
+            self._v2_lock.release()
+            self._note_slow_tick(started, marks)
+
+    def _note_slow_tick(self, started, marks):
+        """AppDaemon runs every callback of the app on one thread, so a long tick holds up the rest. Say where the time
+        went (each part's own time) once a tick has taken SLOW_TICK_S or more."""
+        total = monotonic() - started
+        if total < SLOW_TICK_S:
+            return
+        parts, last = [], 0.0
+        for name, at in marks.items():
+            parts.append(f"{name} {at - last:.1f} s")
+            last = at
+        parts.append(f"rest {total - last:.1f} s")
+        self.log(f"Slow engine tick: {total:.1f} s ({', '.join(parts)})")
+
+    # --- manual override (pe_core/override.py, docs/plans/mode-override.md) -------------------------
+
+    def _override_file(self):
+        return os.path.join(self._real_dir(), "override.json")
+
+    def _override_reply(self, ok, message):
+        self.log(f"Override: {message}", level="INFO" if ok else "WARNING")
+        self.host.fire_event(OVERRIDE_RESULT_EVENT, ok=ok, message=message)
+
+    def _on_override(self, event_name, data, kwargs):
+        """The card's override button (pe_override: set / clear). Only the event named pe_override is handled."""
+        if event_name != OVERRIDE_EVENT:
+            return
+        data = data if isinstance(data, dict) else {}
+        action, now = data.get("action"), datetime.now(timezone.utc)
+        if action == "clear":
+            if self._override is None:
+                return self._override_reply(True, "No override was on.")
+            self._set_override(None)
+            self._override_reply(True, "Override cancelled: back to the plan.")
+            return self._cycle(None)
+        if action != "set":
+            return self._override_reply(False, "The override action isn't understood.")
+        if self._demo or self.cfg is None or self.mode.effective != "active":
+            return self._override_reply(False, "An override works only while PowerEngine is Active. "
+                                               "Nothing was changed.")
+        window_end = None
+        if self.plan is not None and getattr(self.plan, "windows", None):
+            w = self.plan.windows[0]
+            if w.get("end"):
+                window_end = datetime.fromisoformat(w["end"])
+        ov, why = manual.parse(data, now, window_end)
+        if ov is None:
+            return self._override_reply(False, why)
+        self._set_override(ov)
+        self._override_reply(True, f"Override on: {manual.describe(ov, self.tz)}.")
+        self._cycle(None)
+
+    def _active_override(self):
+        """The override that is in force: only in Active (the plan and decisions both use this)."""
+        return self._override if self.mode.effective == "active" else None
+
+    def _mark_manual(self, slots, now):
+        """The slots an override covers, from the half-hour running now until it ends, carry its action, so the plan
+        is made around them. A grid event in progress or planned keeps its slot (it wins over an override)."""
+        ov = self._active_override()
+        if ov is None:
+            return slots
+        axle = bool(self.cfg.features.get("axle"))
+        return [dataclasses.replace(s, manual=ov.mode)
+                if s.end > now and (ov.until is None or s.start < ov.until) and not (axle and s.axle) else s
+                for s in slots]
+
+    def _set_override(self, ov):
+        self._override = ov
+        try:
+            manual.save(self._override_file(), ov)
+        except OSError as err:
+            self.log(f"Could not save the override ({err}); it will not survive a restart.", level="WARNING")
+        self._publish_override()
+
+    def _expire_override(self, now):
+        if manual.expired(self._override, now):
+            self.log(f"Override ended ({manual.describe(self._override, self.tz)}): back to the plan.")
+            self._set_override(None)
+
+    def _publish_override(self):
+        ov = self._override
+        attrs = {"mode": None, "until": None, "set_at": None, "text": None} if ov is None else \
+            {**ov.as_dict(), "text": manual.describe(ov, self.tz)}
+        self._publish_if_changed("state_override", "none" if ov is None else ov.mode, attrs)
+
+    def _early_target(self, r, decision):
+        """The plan's charge target for this half-hour is reached (the decision would be a Hold until it ends): if
+        there is time left, replan now from the live battery level so the best action takes over for the rest of the
+        slot (#175). Looked at once per half-hour; every look is recorded, with why a hold stayed
+        (pe_core/earlytarget.py)."""
+        e = self._early
+        reached = decision.details.get("reached") if decision.rule == "plan" else None
+        if not isinstance(reached, dict) or not reached.get("slot"):
+            e.note_decision(r.now, decision.action, decision.rule, None)
+            return decision
+        slot = reached["slot"]
+        if not e.first_look(slot):
+            return decision
+        start = datetime.fromisoformat(slot)
+        left = earlytarget.minutes_left(start, r.now)
+        nxt = self.plan.slots[1] if self.plan is not None and len(self.plan.slots) > 1 else None
+        rec = {"t": r.now.isoformat(timespec="seconds"), "slot": slot,
+               "slot_end": (start + earlytarget.SLOT).isoformat(), "left_min": round(left, 1),
+               "soc": r.battery_soc, "target": reached.get("target"),
+               "price_p": round(r.import_rate * 100, 2) if r.import_rate is not None else None,
+               "car_charging": r.ev_state() == "charging", "mode": self.mode.effective,
+               "next_action": nxt.action if nxt else None,
+               "next_price_p": round(nxt.slot.price * 100, 2) if nxt and nxt.slot.price is not None else None}
+        why = earlytarget.evaluate(left, self.plan is not None)
+        if why:
+            rec["outcome"] = why
+            e.record(rec, replanned=False)
+            return decision
+        try:
+            self._maybe_replan(r, force=True)
+            new = self._bridge_data_gap(decide(r, self.cfg, decision, self.tz, plan=self.plan,
+                                               override=self._active_override()), r.now)
+        except Exception as err:
+            self.log(f"Early-target replan failed: {err!r}", level="WARNING")
+            rec["outcome"] = "error"
+            e.record(rec, replanned=False)
+            return decision
+        still = new.rule == "plan" and isinstance(new.details.get("reached"), dict)
+        rec.update(outcome="replanned_still_hold" if still else "replanned_changed", new_action=new.action,
+                   new_rule=new.rule, new_reason=new.reason[:90], new_target=new.target_soc)
+        e.record(rec, replanned=True)
+        self.log(f"Target reached with {left:.0f} min left: replanned, now {new.action} ({new.reason[:60]})")
+        return new
+
+    def _bridge_data_gap(self, decision, now):
+        """A reading missing for a moment (the import rate went unavailable for one cycle on 4 Oct 2026, 08:21)
+        keeps the last real decision for up to DATA_GAP_GRACE_S, instead of handing the inverter to Self-use and
+        straight back (two RAM writes). A longer gap, or no earlier decision, decides as before."""
+        if decision.rule != "no_data":
+            self._no_data_since = None
+            return decision
+        prev = self._decision
+        if self._no_data_since is None:
+            self._no_data_since = now
+        if prev is None or prev.rule in ("no_data", "unconfigured") \
+                or (now - self._no_data_since).total_seconds() > DATA_GAP_GRACE_S:
+            return decision
+        return prev
+
+    # --- cost accounting -------------------------------------------------------------
+
+    def _today(self):
+        return datetime.now(self.tz or timezone.utc).date()
+
+    def _current_export_rate(self):
+        spec = (self.cfg.inputs.get("export_rate") if self.cfg else None) or {}
+        try:
+            return float(spec["value"]) if "value" in spec else float(self.host.get_state(spec.get("entity")))
+        except (TypeError, ValueError, KeyError):
+            return None
+
+    def _note_command(self, decision):
+        """Record what PowerEngine is asking the inverter for this half-hour (only when it's in control)."""
+        if self.mode.effective != "active" or decision is None:
+            self.recorder.note(None, None)
+            return
+        kw = None
+        if decision.action in ("grid_charge", "export"):
+            rated = self._control_params()
+            kw = decision.power_w / 1000 if decision.power_w else (
+                rated.max_charge_kw if decision.action == "grid_charge" else rated.max_discharge_kw)
+        self.recorder.note(decision.action, kw)
+
+    def _record_costs(self, r):
+        if self.costbook is None:
+            return
+        if r.export_rate:
+            self.costbook.export_fallback = r.export_rate
+        hh = self.recorder.add(r)
+        if hh is None:
+            return
+        w = getattr(self, "_wlive", None)
+        if w is not None:                              # for learning: outside and estimated battery temperature
+            hh.temp_c = w.at(hh.start + timedelta(minutes=15))
+            measured = self._temperature("battery_temperature")
+            hh.tb_c = measured if measured is not None else (getattr(self, "_tb", None) or {}).get(
+                learning.hour_of(hh.start))
+        try:
+            rec = self.costbook.add(hh, r, engine=self._engine_name(), live=self.mode.effective == "active",
+                                    profile=self._engine_profile(), **self._cost_params())
+            if rec is None:
+                return
+            if rec["v"].get("event"):
+                self._refresh_months()
+            self._publish_costs()
+        except Exception as err:
+            self.log(f"Cost accounting failed for {hh.start.isoformat()}: {err!r}", level="WARNING")
+
+    def _params(self, readings=None, conversion=True):
+        """Planner/simulation parameters, with the measured battery efficiency once there is enough data.
+
+        conversion=False leaves out the learned inverter conversion losses: the cost accounting values the battery's
+        own flows, where the round trip measured from them is the right one."""
+        p = params_from(self.cfg, readings)
+        m = getattr(self, "measured", None)
+        if m and m.get("measured") and m.get("efficiency") and use_measured(self.cfg, "battery_round_trip"):
+            p = dataclasses.replace(p, efficiency=m["efficiency"])
+        if m and m.get("capacity_measured") and m.get("capacity_kwh") and use_measured(self.cfg, "battery_capacity"):
+            p = dataclasses.replace(p, capacity_kwh=m["capacity_kwh"])
+        over = self._learned_overrides(p)
+        if not conversion:
+            over.pop("efficiency", None)
+        return dataclasses.replace(p, **over)
+
+    def _control_params(self, readings=None):
+        """What the inverter is asked for: the configured rates (the learned ones only shape the plan, so the
+        controller keeps asking for the full rate and the learning can see if it's reached)."""
+        return params_from(self.cfg, readings)
+
+    def _learned_overrides(self, p) -> dict:
+        """Planner parameters replaced by what PowerEngine has learned, where chosen and plausible."""
+        lr = getattr(self, "learned", None)
+        if lr is None or self.cfg is None:
+            return {}
+        out: dict = {}
+        if lr.max_charge_kw and use_measured(self.cfg, "battery_max_charge_power") \
+                and 0.5 * p.max_charge_kw <= lr.max_charge_kw <= 1.2 * p.max_charge_kw:
+            out["max_charge_kw"] = lr.max_charge_kw
+        if lr.max_discharge_kw and use_measured(self.cfg, "battery_max_discharge_power") \
+                and 0.5 * p.max_discharge_kw <= lr.max_discharge_kw <= 1.2 * p.max_discharge_kw:
+            out["max_discharge_kw"] = lr.max_discharge_kw
+        f = self.cfg.features
+        if f.get("learn_taper", True) and lr.taper:
+            out["taper"] = lr.taper
+        if f.get("learn_taper", True) and lr.dtaper:
+            out["dtaper"] = lr.dtaper
+        if f.get("learn_conversion", True) and lr.charge_conv and lr.discharge_conv:
+            # the battery's own one-way efficiency (measured or configured) times the inverter's AC/DC conversion
+            # each way: grid-to-grid, which is what arbitrage really gets
+            eff = p.efficiency * (lr.charge_conv * lr.discharge_conv) ** 0.5
+            if 0.7 <= eff <= 1.0:
+                out["efficiency"] = round(eff, 4)
+        if f.get("learn_reserve", True) and lr.reserve_soc is not None \
+                and p.min_reserve_soc < lr.reserve_soc <= p.min_reserve_soc + 15:
+            out["min_reserve_soc"] = lr.reserve_soc                    # only ever raises the floor
+        if f.get("learn_export", True) and lr.export_kw is not None and lr.export_kw < p.export_limit_kw:
+            out["export_limit_kw"] = lr.export_kw
+        if f.get("learn_car", True) and lr.car_kw is not None and 1.0 <= lr.car_kw <= 22:
+            out["ev_charger_kw"] = lr.car_kw
+        return out
+
+    # --- cold-battery caution --------------------------------------------------------------------------
+
+    def _cold_settings(self) -> learning.ColdSettings:
+        s = self.cfg.safety
+        where = self.cfg.system.get("battery_location", "garage")
+        lag = LOCATION_LAG_H.get(where, s.get("battery_temp_lag_h", 24.0))      # "custom": the setting
+        return learning.ColdSettings(threshold_c=s.get("cold_caution_temp_c", 4.0),
+                                     factor=s.get("cold_charge_pct", 50) / 100,
+                                     release_c=s.get("cold_release_c", 3.0), lag_h=lag)
+
+    def _temperature(self, role):
+        """A mapped temperature input (°C), or None."""
+        eid = self._role_entity(role)
+        if not eid:
+            return None
+        try:
+            return float(self.host.get_state(eid))
+        except (TypeError, ValueError):
+            return None
+
+    def _cold_in_use(self):
+        """(threshold, factor, learned?) the caution uses now."""
+        c = self._cold_settings()
+        lr = getattr(self, "learned", None)
+        if self.cfg.features.get("cold_learning", True) and lr is not None:
+            thr = lr.cold_threshold_c if lr.cold_threshold_c is not None else c.threshold_c
+            fac = lr.cold_factor if lr.cold_factor is not None else c.factor
+            return thr, fac, lr.cold_threshold_c is not None or lr.cold_factor is not None
+        return c.threshold_c, c.factor, False
+
+    def _refresh_temps(self, now):
+        """Hourly: the last 3 days and next 3 of outside temperature (Open-Meteo), and the battery estimate."""
+        f = self.cfg.features
+        if not (f.get("cold_caution", True) or f.get("cold_learning", True)):
+            self._tb, self._caution = {}, {}
+            return
+        last = getattr(self, "_temps_at", None)
+        if last is not None and (now - last).total_seconds() < 3600:
+            return
+        self._temps_at = now
+        w = getattr(self, "_wlive", None)
+        if w is None:
+            try:
+                lat = float(self.host.get_state("zone.home", attribute="latitude"))
+                lon = float(self.host.get_state("zone.home", attribute="longitude"))
+            except (TypeError, ValueError):
+                return
+            w = self._wlive = Weather(os.path.join(self._sim_folder(), "weather_live.json"), lat, lon)
+        try:
+            w.refresh_recent()
+        except Exception as err:
+            self.log(f"Outside temperature not available (Open-Meteo): {err!r}", level="WARNING")
+        local = self._temperature("outside_temperature")
+        if local is not None:                             # your own sensor wins for the hours it has seen
+            w.set_local(now, local)
+        try:
+            w.save()
+        except OSError as err:
+            self.log(f"Could not save temperatures: {err!r}", level="WARNING")
+        self._cold_model(now)
+
+    def _cold_model(self, now):
+        w = getattr(self, "_wlive", None)
+        if w is None:
+            return
+        c = self._cold_settings()
+        outside = w.series(now - timedelta(days=4), now + timedelta(days=3))
+        measured = self._temperature("battery_temperature")
+        anchor = (learning.hour_of(now), measured) if measured is not None else None
+        self._tb = learning.battery_temps(outside, c.lag_h, anchor=anchor)
+        thr, _, _ = self._cold_in_use()
+        self._caution = learning.caution_by_hour(self._tb, thr, c.release_c)
+        tb_now = self._tb.get(learning.hour_of(now))
+        self._publish_if_changed("diag_battery_temperature", tb_now if tb_now is not None else "unknown", {
+            "outside_c": outside.get(learning.hour_of(now)), "caution_now": bool(self._caution.get(
+                learning.hour_of(now))), "threshold_c": thr, "lag_h": c.lag_h,
+            "measured": measured is not None, "location": self.cfg.system.get("battery_location", "garage"),
+            "outside_source": "your sensor" if self._role_entity("outside_temperature") else "Open-Meteo forecast",
+            "note": "the battery's own sensor now; estimated ahead" if measured is not None
+            else "estimated from the outside temperature; it lags behind it"})
+        self._plan_sig = None                                          # re-plan with the new temperatures
+
+    def _apply_cold(self, slots, now):
+        """Slow the planned charge rate in slots where the battery is expected to be cold."""
+        if not self.cfg.features.get("cold_caution", True) or not getattr(self, "_caution", None):
+            return slots, None
+        thr, fac, was_learned = self._cold_in_use()
+        starts = [s.start for s in slots]
+        factors = learning.slot_factors(starts, self._caution, fac)
+        slots = [dataclasses.replace(s, charge_factor=f) if f != 1.0 else s for s, f in zip(slots, factors,
+                                                                                           strict=True)]
+        return slots, learning.cold_summary(starts, factors, self._tb, now, thr, fac, was_learned, self.tz)
+
+    def _learn(self):
+        """Re-learn limits from the recorded half-hours (daily, and at start-up)."""
+        if self.costbook is None or self.cfg is None:
+            return
+        try:
+            p = params_from(self.cfg)
+            halves = self.costbook.halves(self._today())
+            self.learned = learning.learn(halves, p.max_charge_kw, p.max_discharge_kw, p.min_reserve_soc,
+                                          p.export_limit_kw, self._cold_settings())
+            lr, used = self.learned, self._params()
+            self._in_use = self._in_use_report()
+            thr, fac, cold_learned = self._cold_in_use()
+            rows = [
+                ("Max charge rate", f"{p.max_charge_kw:.2f} kW", lr.max_charge_kw, "kW", lr.charge_samples,
+                 f"{used.max_charge_kw:.2f} kW"),
+                ("Max discharge rate", f"{p.max_discharge_kw:.2f} kW", lr.max_discharge_kw, "kW",
+                 lr.discharge_samples, f"{used.max_discharge_kw:.2f} kW"),
+                ("Charge taper near full", "none", ", ".join(f"{int(a)}%+: {b:.0%}" for a, b in lr.taper) or None,
+                 "", lr.taper_samples, ", ".join(f"{int(a)}%+: {b:.0%}" for a, b in used.taper) or "none"),
+                ("Discharge taper near empty", "none",
+                 ", ".join(f"<{int(a)}%: {b:.0%}" for a, b in lr.dtaper) or None, "", lr.dtaper_samples,
+                 ", ".join(f"<{int(a)}%: {b:.0%}" for a, b in used.dtaper) or "none"),
+                ("Inverter conversion (charge / sell)", "not counted",
+                 f"{lr.charge_conv:.0%} / {lr.discharge_conv:.0%}" if lr.charge_conv and lr.discharge_conv else None,
+                 "", lr.conv_samples, f"round trip {used.efficiency ** 2:.0%} grid to grid"),
+                ("Reserve (where discharge stops)", f"{p.min_reserve_soc:g}%", lr.reserve_soc, "%",
+                 lr.reserve_samples, f"{used.min_reserve_soc:g}%"),
+                ("Export limit", f"{p.export_limit_kw:g} kW", lr.export_kw, "kW", lr.export_samples,
+                 f"{used.export_limit_kw:g} kW"),
+                ("Car charge rate", f"{p.ev_charger_kw:g} kW", lr.car_kw, "kW", lr.car_samples,
+                 f"{used.ev_charger_kw:g} kW"),
+                ("Cold caution below", f"{self._cold_settings().threshold_c:g} °C", lr.cold_threshold_c, "°C",
+                 lr.cold_slow + lr.cold_fast, f"{thr:g} °C"),
+                ("Cold charge rate", f"{self._cold_settings().factor:.0%}",
+                 f"{lr.cold_factor:.0%}" if lr.cold_factor is not None else None, "", lr.cold_slow, f"{fac:.0%}"),
+            ]
+            table = [{"what": a, "configured": b, "learned": (f"{c:g} {u}".strip() if isinstance(c, float) else c)
+                      if c is not None else "not yet", "samples": n, "in_use": e} for a, b, c, u, n, e in rows]
+            n = sum(1 for r in table if r["learned"] != "not yet")
+            self._publish_state("diag_learned", f"{n} learned", {"rows": table, "raw": lr.as_dict(),
+                                                                  "cold_learned": cold_learned,
+                                                                  "use": self._in_use,
+                                                                  "days": len({h["start"][:10] for h in halves})})
+            if getattr(self, "_wlive", None) is not None:
+                self._cold_model(datetime.now(timezone.utc))      # the learned threshold may have moved
+        except Exception as err:
+            self.log(f"Could not learn from recorded use: {err!r}", level="WARNING")
+
+    def _in_use_report(self) -> dict:
+        """For each figure that can be measured or learned: the sentence the config page shows under it (what is in
+        use, and why it is not the measured or learned one). The numbers are the ones the plan reads."""
+        out: dict = {}
+        try:
+            p, used = params_from(self.cfg), self._params()
+            plain = self._params(conversion=False)
+            m, lr = getattr(self, "measured", None) or {}, getattr(self, "learned", None)
+            flag = lambda k: use_measured(self.cfg, k)           # noqa: E731
+            out["battery_capacity"] = inuse.capacity(
+                p.capacity_kwh, m.get("capacity_kwh"), int(m.get("capacity_samples") or 0),
+                bool(m.get("capacity_measured")), used.capacity_kwh, flag("battery_capacity"), MIN_MEASURE_DAYS)
+            out["battery_round_trip"] = inuse.round_trip(
+                p.efficiency, m.get("rte") if m.get("measured") else None, plain.efficiency, used.efficiency,
+                flag("battery_round_trip"), MIN_MEASURE_DAYS)
+            if lr is not None:
+                out["battery_max_charge_power"] = inuse.rate(
+                    p.max_charge_kw, lr.max_charge_kw, used.max_charge_kw, flag("battery_max_charge_power"), False)
+                out["battery_max_discharge_power"] = inuse.rate(
+                    p.max_discharge_kw, lr.max_discharge_kw, used.max_discharge_kw,
+                    flag("battery_max_discharge_power"), True)
+                f, kw = self.cfg.features, (lambda v: f"{v:g} kW")      # noqa: E731
+                out["ev_charger_kw"] = inuse.learned(
+                    kw(p.ev_charger_kw), kw(lr.car_kw) if lr.car_kw is not None else None, kw(used.ev_charger_kw),
+                    "Learn: car charge rate", bool(f.get("learn_car", True)), "it is outside 1 to 22 kW")
+                out["export_limit_kw"] = inuse.learned(
+                    kw(p.export_limit_kw), kw(lr.export_kw) if lr.export_kw is not None else None,
+                    kw(used.export_limit_kw), "Learn: export ceiling", bool(f.get("learn_export", True)),
+                    "it is not lower than the limit you entered")
+                pc = lambda v: f"{v:g}%"                                 # noqa: E731
+                out["min_reserve_soc"] = inuse.learned(
+                    pc(p.min_reserve_soc), pc(lr.reserve_soc) if lr.reserve_soc is not None else None,
+                    pc(used.min_reserve_soc), "Learn: where discharging stops", bool(f.get("learn_reserve", True)),
+                    "it is not within 15 points above the one you entered")
+                floor = float(self.cfg.safety.get("battery_floor_soc", 12))
+                floor_used = self._hard_floor()
+                out["battery_floor_soc"] = inuse.learned(
+                    pc(floor), pc(lr.reserve_soc) if lr.reserve_soc is not None else None, pc(floor_used),
+                    "Learn: where discharging stops", bool(f.get("learn_reserve", True)),
+                    "it is not within 15 points above the one you entered")
+        except Exception as err:
+            self.log(f"Could not work out what is in use: {err!r}", level="WARNING")
+        return out
+
+    def _measure(self, revalue=True):
+        """Measure battery efficiency and system losses; publish them; re-value costs if the efficiency moved."""
+        if self.costbook is None or self.cfg is None:
+            return
+        try:
+            old = self.measured or {}
+            before = old.get("efficiency")
+            cap_before = old.get("capacity_kwh") if old.get("capacity_measured") and use_measured(
+                self.cfg, "battery_capacity") else None
+            self.measured = self.costbook.measure(self._today(), params_from(self.cfg).capacity_kwh)
+            m = self.measured
+            configured = params_from(self.cfg).efficiency
+            eff = m["efficiency"] if m["measured"] and use_measured(self.cfg, "battery_round_trip") else configured
+            self._publish_state("diag_battery_efficiency", round(eff * eff * 100, 1), {
+                "measured": m["measured"], "one_way": round(eff, 4), "configured_one_way": configured,
+                "measured_round_trip": round(m["rte"] * 100, 1) if m["measured"] else None,
+                "use_measured": use_measured(self.cfg, "battery_round_trip"),
+                "days": m["days"], "battery_in_kwh": m["battery_in"], "battery_out_kwh": m["battery_out"],
+                "note": "measured over the last 30 days" if m["measured"]
+                else f"estimated (configured figure) until {MIN_MEASURE_DAYS} full days are recorded"})
+            self._publish_state("diag_system_losses", m.get("losses_yesterday") if m.get("losses_yesterday") is not None
+                                else "unknown", {"average_kwh": m.get("losses_avg"),
+                                                 "percent_yesterday": m.get("losses_pct_yesterday"),
+                                                 "average_percent": m.get("losses_pct_avg"), "by_day": m["losses"]})
+            if m["measured"]:
+                self.log(f"Battery round trip measured at {m['rte'] * 100:.1f}% over {m['days']} days")
+            self._publish_state("diag_battery_capacity", m["capacity_kwh"] if m.get("capacity_kwh") else "unknown", {
+                "measured": m.get("capacity_measured"), "configured_kwh": params_from(self.cfg).capacity_kwh,
+                "use_measured": use_measured(self.cfg, "battery_capacity"),
+                "in_use_kwh": self._params().capacity_kwh,
+                "samples": m.get("capacity_samples"), "max_charge_kw": m.get("max_charge_kw"),
+                "max_discharge_kw": m.get("max_discharge_kw"), "min_soc_seen": m.get("min_soc")})
+            cap_now = m.get("capacity_kwh") if m.get("capacity_measured") and use_measured(
+                self.cfg, "battery_capacity") else None
+            eff_moved = m["measured"] and use_measured(self.cfg, "battery_round_trip") and (
+                before is None or abs(m["efficiency"] - before) > 0.002)
+            cap_moved = cap_now is not None and (cap_before is None or abs(cap_now - cap_before) > 0.2)
+            self._learn()
+            if revalue and (eff_moved or cap_moved):
+                n = self.costbook.revalue(**self._cost_params())
+                self.log(f"Costs re-valued ({n} half-hours) with the measured battery efficiency/capacity")
+                self._refresh_months()
+        except Exception as err:
+            self.log(f"Could not measure losses: {err!r}", level="WARNING")
+
+    def _cost_params(self):
+        p = self._params(conversion=False)
+        return {"capacity": p.capacity_kwh, "eff": p.efficiency, "floor_soc": p.min_reserve_soc,
+                "max_kw": p.max_discharge_kw, "includes_ev": p.hold_for_car, "axle_value": p.axle_value,
+                "axle_plus_export": p.axle_plus_export}
+
+    def _scenario_params(self):
+        """The subset of _cost_params() that pe_core.costs.day_scenarios() (via day_summary) understands."""
+        p = self._cost_params()
+        return {"capacity": p["capacity"], "eff": p["eff"], "floor_soc": p["floor_soc"],
+                "max_kw": p["max_kw"], "includes_ev": p["includes_ev"], "axle_value": p["axle_value"]}
+
+    def _backfill(self, kwargs):
+        """Fill recent days that PowerEngine didn't record (or only partly) from HA history, one day per callback."""
+        if self.costbook is None or self.cfg is None:
+            return
+        days = self.costbook.days_to_backfill(self._today(), BACKFILL_DAYS)
+        if not days:
+            return
+        plain, full = history_entities(self.cfg)
+        units = {}
+        for eid in plain:
+            try:
+                units[eid] = {"unit_of_measurement": self.host.get_state(eid, attribute="unit_of_measurement")}
+            except Exception:
+                units[eid] = {}
+        self.log(f"Cost backfill: {len(days)} day(s) from HA history ({days[0]:%d %b} to {days[-1]:%d %b})")
+        self._bf = {"days": days, "plain": plain, "full": full, "units": units, "added": 0, "errors": 0}
+        self.host.run_in(self._backfill_day, 1)
+
+    def _backfill_day(self, kwargs):
+        job = self._bf
+        if not job["days"]:
+            n = self.costbook.revalue(**self._cost_params())
+            failed = f"; {job['errors']} fetch(es) failed" if job["errors"] else ""
+            self.log(f"Cost backfill done: {job['added']} half-hours added from history; "
+                     f"{n} half-hours re-valued{failed}")
+            self._refresh_months()
+            self._measure()
+            return
+        day = job["days"].pop(0)
+        tz = self.tz or timezone.utc
+        start = datetime(day.year, day.month, day.day, tzinfo=tz).astimezone(timezone.utc)
+        end = (datetime(day.year, day.month, day.day, tzinfo=tz) + timedelta(days=1)).astimezone(timezone.utc)
+        timelines = {}
+        for eid in job["plain"] + job["full"]:
+            try:
+                if eid in job["full"]:
+                    rows = self.host.get_history(entity_id=eid, start_time=start - timedelta(days=1), end_time=end)
+                else:
+                    rows = self._history(eid, start, end)
+                timelines[eid] = Timeline(rows, job["units"].get(eid))
+            except Exception as err:
+                job["errors"] += 1
+                if job["errors"] <= 3:
+                    self.log(f"Cost backfill: couldn't read {eid} for {day:%d %b} ({err!r})", level="WARNING")
+        rec, kw, added = Recorder(), self._cost_params(), 0
+        last = None
+        try:
+            stop = min(end + timedelta(seconds=30), datetime.now(timezone.utc) - timedelta(minutes=1))
+            for r in replay(self.cfg, timelines, start, stop):
+                hh = rec.add(r)
+                last = r
+                if hh is not None and self.costbook.add(hh, r, keep_existing=True, **kw):
+                    added += 1
+        except Exception as err:
+            job["errors"] += 1
+            self.log(f"Cost backfill failed for {day:%d %b}: {err!r}", level="WARNING")
+        job["added"] += added
+        if last is not None:
+            self.log(f"Cost backfill: {day:%a %d %b}: {added} half-hours from history")
+        self.host.run_in(self._backfill_day, 1)
+
+    def _refresh_months(self, prune=False):
+        if self.costbook is None:
+            return
+        try:
+            if prune:
+                self.costbook.prune(self._today())
+                for keeper in (self.__dict__.get("_fcsnap"), self.__dict__.get("_v2hist"), self.__dict__.get("_flog")):
+                    if keeper is not None:
+                        keeper.prune(self._today())
+            self._months = self.costbook.months(self._today())
+            self._publish_costs()
+            self._health()
+        except Exception as err:
+            self.log(f"Could not summarise costs: {err!r}", level="WARNING")
+
+    def _publish_costs(self):
+        if self.costbook is None or not hasattr(self, "_published"):      # (not before the publisher is chosen)
+            return
+        sp = self._scenario_params() if self.cfg is not None else None
+        for key, (state, attrs) in cost_entity_states(self.costbook, self._today(), self._months, sp).items():
+            self._publish_if_changed(key, state, attrs)
+
+    def _logbook(self, message):
+        """Write to the HA logbook.
+
+        Only name + message: AppDaemon moves `entity_id` into a service target (logbook.log rejects it) and
+        reserves `domain` as its own argument name.
+        """
+        try:
+            self.host.call_service("logbook/log", name="PowerEngine", message=message)
+        except Exception as err:
+            self.log(f"Could not write to the logbook: {err!r}", level="WARNING")
+
+    def _publish_if_changed(self, key, state, attrs):
+        if self._published.get(key) != (state, attrs):
+            self._published[key] = (state, attrs)
+            self._publish_state(key, state, attrs)
+
+    # --- forecasting and planning --------------------------------------------------
+
+    def _role_entity(self, role):
+        spec = (self.cfg.inputs if self.cfg else {}).get(role) or {}
+        return spec.get("entity")
+
+    def _learn_load(self, kwargs):
+        """Start reading 14 days of house-load (and car) history from HA, one day per callback.
+
+        A busy power sensor can log ~15,000 readings a day; asking for 14 days at once returns nothing,
+        so history is fetched a day at a time in the background.
+        """
+        house, car = self._role_entity("house_load_power"), self._role_entity("ev_charge_power")
+        if not house:
+            if not self.__dict__.get("_load_history_noted"):        # once, and only information: not a fault
+                self._load_history_noted = True
+                self.log("Load history: no house-load input mapped yet")
+            return
+        def unit(eid):
+            try:
+                return self.host.get_state(eid, attribute="unit_of_measurement") if eid else None
+            except Exception:
+                return None
+        now = datetime.now(timezone.utc)
+        ids = {"house": house, "car": car, "grid": None, "check": None}
+        if self.cfg.features.get("use_check_meter", True) and self._role_entity("grid_power_reference"):
+            ids["grid"], ids["check"] = self._role_entity("grid_power"), self._role_entity("grid_power_reference")
+        self._hist_job = {"now": now, "days": list(range(HISTORY_DAYS, 0, -1)), "errors": 0, "ids": ids,
+                          "units": {k: unit(e) for k, e in ids.items()}, "rows": {k: [] for k in ids}}
+        self.host.run_in(self._learn_load_day, 1)
+
+    def _history(self, eid, start, end):
+        try:
+            return self.host.get_history(entity_id=eid, start_time=start, end_time=end,
+                                    minimal_response=True, no_attributes=True)
+        except TypeError:                              # older AppDaemon without those options
+            return self.host.get_history(entity_id=eid, start_time=start, end_time=end)
+
+    def _learn_load_day(self, kwargs):
+        job = self._hist_job
+        if job["days"]:
+            d = job["days"].pop(0)
+            start = job["now"] - timedelta(days=d)
+            end = start + timedelta(days=1)
+            for key in job["ids"]:
+                eid = job["ids"][key]
+                if not eid:
+                    continue
+                try:
+                    job["rows"][key] += parse_history(self._history(eid, start, end), unit=job["units"][key], gaps=True)
+                except Exception as err:
+                    job["errors"] += 1
+                    if job["errors"] == 1:
+                        self.log(f"Load history: couldn't read {eid} for {start:%d %b} ({err!r})", level="WARNING")
+            self.host.run_in(self._learn_load_day, 1)
+            return
+        house_rows, car_rows = job["rows"]["house"], job["rows"]["car"]
+        self._hist_means = house_only_means(house_rows, car_rows, job["now"],
+                                            bool(self.cfg.system.get("house_load_includes_ev", True)))
+        self._hist_fixed = set()
+        if job["rows"].get("grid") and job["rows"].get("check"):
+            def signed(key, role):
+                flip = -1.0 if (self.cfg.inputs.get(role) or {}).get("invert") else 1.0
+                return half_hour_means([(t, None if v is None else flip * v) for t, v in job["rows"][key]], job["now"])
+            self._hist_means, self._hist_fixed = meter_corrected(
+                self._hist_means, signed("grid", "grid_power"), signed("check", "grid_power_reference"))
+            self.log(f"Load history: {len(self._hist_fixed)} half-hours corrected by the check meter")
+        failed = f" ({job['errors']} day(s) failed)" if job["errors"] else ""
+        self.log(f"Load history from HA: {len(house_rows)} house readings, {len(car_rows)} car readings "
+                 f"-> {len(self._hist_means)} half-hours{failed}")
+        if not self._hist_means:
+            self.log("Load history from HA was empty; retrying in an hour. "
+                     "PowerEngine's own load record is still used.", level="WARNING")
+            self.host.run_in(self._learn_load, 3600)
+        self._rebuild_profile()
+
+    def _grid_check(self, r):
+        """Compare the inverter's grid meter with a second one, when one is mapped (Configuration: Grid and house)."""
+        if r.grid_ref_power is None:
+            return
+        try:
+            gc = getattr(self, "_gridcheck", None)
+            if gc is None:
+                gc = self._gridcheck = gridcheck.GridCheck()
+            inv = r.grid_power_inverter
+            gc.add(str(self._today()), r.now, r.battery_power, inv, r.grid_ref_power, r.grid_ref_at)
+            last = getattr(self, "_gridcheck_published", None)
+            if last is None or (r.now - last).total_seconds() >= 60:
+                self._gridcheck_published = r.now
+                diff = None if inv is None else round(inv - r.grid_ref_power)
+                attrs = {"inverter_meter_w": inv, "reference_meter_w": r.grid_ref_power, "in_use": r.grid_source,
+                         "battery_w": r.battery_power, "battery_state": gridcheck.battery_state(r.battery_power),
+                         **gc.summary()}
+                self._publish_state("diag_grid_check", "unknown" if diff is None else diff, attrs)
+        except Exception as err:
+            self.log(f"Grid meter cross-check failed: {err!r}", level="WARNING")
+
+    def _record_load(self, r):
+        """Add the current house-only load to PowerEngine's own half-hourly record."""
+        if self.loadstore.add(r.now, r.house_power):
+            try:
+                self.loadstore.save()
+            except OSError as err:
+                self.log(f"Could not save the load record: {err}", level="WARNING")
+            if r.now.minute < 30:                                   # rebuild once an hour
+                self._rebuild_profile()
+
+    def _rebuild_profile(self):
+        # PowerEngine's own record wins; HA's history only fills the half-hours it lacks. The record is the live house
+        # load, already corrected by the check meter tick by tick; history rebuilt from two meters read at different
+        # moments (and either one dropping out) put 45 to 52 kWh days into the profile (14 to 19 Oct 2026, actual 19
+        # to 26), and the plan expected the house to draw about 2 kW all night.
+        means = {**self._hist_means, **self.loadstore.means}
+        if not means:
+            return
+        self.profile = profile_from_means(means, datetime.now(timezone.utc), self.tz)
+        self.log(f"Load profile: {self.profile.days:.1f} days ({len(self._hist_means)} half-hours from HA history, "
+                 f"{len(self.loadstore.means)} recorded by PowerEngine)")
+        self._plan_sig = None                                       # re-plan with the new profile
+
+    def _site(self) -> Site:
+        """Which plant this home has (config.yaml's `site:`; today's plant until the config is read)."""
+        return self.cfg.site if self.cfg else Site()
+
+    def _unverified(self):
+        """Why Active is refused for the site's inverter (a definition not yet proven on real hardware), or None.
+        Not checked in a demo: nothing there is controlled."""
+        if self._demo or self.cfg is None:
+            return None
+        site = self._site()
+        return active_refusal(site.inverter, site.inverter_firmware)
+
+    def _adapter(self, attr, kind, key, *args):
+        """The adapter the site names for `key`, built once and rebuilt when the site changes it. "none" is the null
+        adapter (reads nothing). `attr` is where it is kept."""
+        name = getattr(self._site(), key)
+        held = getattr(self, attr, None)
+        if held is None or held[0] != name:
+            factory = NULL_ADAPTERS[key] if name == "none" else registry.get(kind, name)
+            held = (name, factory(self._role_entity, *args))
+            setattr(self, attr, held)
+        return held[1]
+
+    def _forecast(self):
+        """The generation forecast adapter (the site's: Solcast, or none)."""
+        return self._adapter("_forecast_adapter", "forecast", "forecast", self.tz)
+
+    def _solar_forecast(self):
+        """The forecast as neutral half-hourly points, from every mapped forecast role."""
+        fc = self._forecast()
+        return fc.points(fc.read(lambda eid, attr: self.host.get_state(eid, attribute=attr),
+                                 [self._role_entity(role) for role in FORECAST_ROLES]))
+
+    def _car_idle(self, r) -> bool:
+        """The last smart slot passed with the car drawing nothing (it's full)."""
+        try:
+            return bool(self.slots.car_idle(r.now)) if getattr(self, "slots", None) else False
+        except Exception:
+            return False
+
+    def _plan_signature(self, r):
+        """What a plan depends on: when it changes, the plan is remade. The car's state is in it (start and stop of
+        charging), and the half-hour while it charges: the plan assumes the charge ends by the end of the running
+        half-hour, so a car still charging in the next one gets a new plan."""
+        return (len(r.rates), r.rates[0].start if r.rates else None,
+                tuple((w.start, w.end) for w in r.dispatches), r.axle_start, r.axle_end, r.free_start, r.free_end,
+                self.profile.days if self.profile else None, json.dumps(self.cfg.safety, sort_keys=True),
+                json.dumps(self.cfg.features, sort_keys=True), json.dumps(self.cfg.system, sort_keys=True),
+                r.ev_state(),
+                slot_start(r.now) if r.ev_state() == "charging" else None,
+                json.dumps(self._active_override().as_dict()) if self._active_override() else None)  # set / cancelled
+
+    def _min_charge_min(self) -> float:
+        """The shortest unbroken charge (minutes) that counts as a smart slot used: the setting, or with learning on
+        (`learn_car_min`) that setting moved towards what the supplier-confirmed slots show."""
+        setting = float(self.cfg.safety.get("car_min_charge_min", DEFAULT_MIN_CHARGE_MIN))
+        if not self.cfg.features.get("learn_car_min", True) or getattr(self, "slots", None) is None:
+            return setting
+        return learn_min_charge(self.slots.slots, setting)[0]
+
+    def _fixed_window(self):
+        """The owner's fixed overnight window as half-hours of the day, or None to use the one learned from the rates
+        (the setting says learned, or the two times don't make a window)."""
+        if self.cfg is None or self.cfg.system.get("overnight_window") != "fixed":
+            return None
+        s = self.cfg.safety
+        return fixed_window(s["overnight_start_h"], s["overnight_end_h"]) or None
+
+    def _sync_window(self):
+        """Hand the cost book the fixed window (None: learned). True if the window in use changed."""
+        old = self.costbook.window()
+        self.costbook.fixed_window = self._fixed_window()
+        return self.costbook.window() != old
+
+    def _overnight(self):
+        """The regular cheap overnight window (half-hours of the day) the plan relies on: fixed or learned."""
+        if self.costbook is not None:
+            return self.costbook.window()
+        return self._fixed_window() or set()
+
+    def _publish_overnight(self, window):
+        """Show on the config page which window is in use, and what has been learned from the rates."""
+        learned = overnight_window(self.costbook.cheap_history) if self.costbook is not None else set()
+        fixed = self._fixed_window()
+        wanted_fixed = self.cfg.system.get("overnight_window") == "fixed"
+        self._publish_if_changed("diag_overnight", describe_window(window), {
+            "source": "fixed" if fixed else "learned", "fixed_not_valid": bool(wanted_fixed and not fixed),
+            "learned": describe_window(learned),
+            "learned_days": len(self.costbook.cheap_history) if self.costbook is not None else 0,
+            "fixed": describe_window(fixed) if fixed else None})
+
+    def _maybe_replan(self, r, force=False):
+        sig = self._plan_signature(r)
+        due = self._plan_time is None or (r.now - self._plan_time).total_seconds() >= REPLAN_SECONDS
+        if (sig == self._plan_sig and not due and not force) or r.battery_soc is None:
+            return
+        cert = Certainty(self.slots.slots, self.tz, self._min_charge_min())
+        window = self._overnight()
+        self._publish_overnight(window)
+        slots = build_slots(r, self._solar_forecast(), self.profile, self.tz, certainty=cert,
+                            first_seen={k: v.get("first_seen") for k, v in self.slots.slots.items()},
+                            overnight=window, whole_house=bool(self.cfg.features.get("slots_whole_house", True)))
+        slots, cold = self._apply_cold(slots, r.now)
+        slots = self._mark_manual(slots, r.now)
+        strategy = "optimiser" if self.cfg.features.get("optimised_plan", True) else "rules"
+        first_h = self._first_slot_hours(slots, r.now)
+        self.plan = make_plan(slots, r.battery_soc, self._params(r), r.now, self.tz,
+                              auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)),
+                              wear_p=self.cfg.safety.get("battery_wear_p", 2.0), strategy=strategy,
+                              prev_action=self._decision.action if getattr(self, "_decision", None) else None,
+                              stick=0.0 if force else self._mid_slot_stick(r.now), first_h=first_h)
+        self._plan_sig, self._plan_time = sig, r.now
+        self._snapshot_plan(r.now)
+        self._record_ran(r.now)
+        extra = {"load_profile_days": round(self.profile.days, 1) if self.profile else 0,
+                 "slot_certainty": slot_certainty_rows(slots, self.tz), "certainty": cert.summary(), "cold": cold}
+        if self.plan.strategy != "optimiser":
+            try:                                          # the optimiser, for comparison only
+                p = self._params(r)
+                opt = optimise(slots, r.battery_soc, p, wear=p.wear_p / 100, first_h=first_h)
+                extra["optimiser"] = compare(self.plan, opt, p)
+            except Exception as err:
+                self.log(f"Optimiser comparison failed: {err!r}", level="WARNING")
+        try:                                              # the writes the plan implies, for the plan chart
+            sm = self._slot_map() if self._control_method() != "ram_remote" else None
+            if sm is None and self.cfg is not None and self._control_method() == "ram_remote":
+                extra["writes_forecast"], extra["writes_forecast_24h"] = {}, 0
+            if sm and self.plan is not None:
+                ents = self._slot_keys(sm)
+                have = self._inverter().read(ents)
+                pc = self._control_params(r)
+                now_local = r.now.astimezone(self.tz) if self.tz else r.now
+                wf = forecast_writes(self.plan.slots, now_local, self.tz, have, BATTERY_VOLTS,
+                                     pc.max_charge_kw * 1000, pc.max_discharge_kw * 1000)
+                extra["writes_forecast"], extra["writes_forecast_24h"] = wf, sum(wf.values())
+        except Exception as err:
+            self.log(f"Could not forecast inverter writes: {err!r}", level="WARNING")
+        for key, (state, attrs) in plan_entity_states(self.plan, extra).items():
+            self._publish_if_changed(key, state, attrs)
+
+    def _snapshot_plan(self, now):
+        """Keep the first plan of each local day (Health tab accuracy), and the first plan of each hour (Plan
+        history tab)."""
+        if self.costbook is None or self.plan is None:
+            return
+        tz = self.tz or timezone.utc
+        local = now.astimezone(tz)
+        day, hour = local.date(), f"{local.hour:02d}:00"
+        if getattr(self, "_snap_hour", None) == (day, hour):
+            return
+        self._snap_hour = (day, hour)
+        try:
+            start = datetime(day.year, day.month, day.day, tzinfo=tz)
+            end = datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=tz)
+            snap = plan_snapshot(self.plan, start, end)
+            if self.costbook.plan_snapshot(day) is None:
+                self.costbook.save_plan_snapshot(day, snap)
+            if hour not in self.costbook.plan_history(day):
+                self.costbook.save_plan_history(day, hour, snap)
+        except Exception as err:
+            self.log(f"Could not save the plan snapshot: {err!r}", level="WARNING")
+
+    def _record_ran(self, now):
+        """Keep the plan that actually ran (Plan history, "As run"): the plan's slot for the half-hour now running,
+        written when it first appears and again if a replan changes it."""
+        if self.costbook is None or self.plan is None or self._engine_name() != "v1":
+            return              # only while engine v1 is the chosen engine: otherwise its plan did not run
+        try:
+            tz = self.tz or timezone.utc
+            local = now.astimezone(tz)
+            start = local.replace(minute=local.minute - local.minute % 30, second=0, microsecond=0)
+            ps = next((x for x in self.plan.slots if x.slot.start == start), None)
+            if ps is None:
+                return
+            slot = slot_snapshot(ps)
+            window = next(({k: w[k] for k in WINDOW_KEYS if k in w} for w in getattr(self.plan, "windows", []) or []
+                           if w.get("start") and w.get("end")
+                           and datetime.fromisoformat(w["start"]) <= start < datetime.fromisoformat(w["end"])), None)
+            if getattr(self, "_ran_last", None) == (slot, window):
+                return
+            self.costbook.record_ran(local.date(), slot, window)
+            self._ran_last = (slot, window)
+        except Exception as err:
+            self.log(f"Could not save the plan that ran: {err!r}", level="WARNING")
+
+    def _on_history_day(self, event_name, data, kwargs):
+        """The card's date picker (pe_history_day {date}): show that day, if the app can still hold it."""
+        if event_name != HISTORY_DAY_EVENT or self.costbook is None:
+            return
+        try:
+            day = date.fromisoformat(str((data or {}).get("date")))
+        except ValueError:
+            return
+        today = datetime.now(timezone.utc).astimezone(self.tz or timezone.utc).date()
+        if not today - timedelta(days=KEEP_DAYS) <= day <= today:
+            return
+        self._history_date = day
+        self._publish_history()
+
+    def _publish_history(self, *args, **kwargs):
+        """The Plan history tab: the chosen day and plan against what happened."""
+        if self.costbook is None or self._get_publisher() is None:
+            return
+        try:
+            tz = self.tz or timezone.utc
+            now = datetime.now(timezone.utc)
+            today = now.astimezone(tz).date()
+            day = self._history_date or today - timedelta(days=1)
+            info = self._day_engine(day, today)
+            label, snap = chosen_plan(self.costbook.plan_snapshot(day), self.costbook.ran_plan(day),
+                                      info["engine"] if info else None)
+            view = day_view(day, self.costbook.day_records(day), snap, label, tz, now)
+            view["in_control"], view["live"] = (info["engine"], info["live"]) if info else (None, None)
+            if info and info.get("profile") is not None:
+                view["profile"] = info["profile"]
+            recorded = self.costbook.recorded_days()
+            view["earliest"] = min(recorded[0], day.isoformat()) if recorded else day.isoformat()  # for the picker
+            view["latest"] = today.isoformat()
+            self._publish_state("plan_history", day.isoformat(), view)
+        except Exception as err:
+            self.log(f"Could not build the plan history: {err!r}", level="WARNING")
+
+    def _warn_daily(self, key, msg):
+        """One warning per kind a day (a failing recorder must not fill the log, nor stop the cycle)."""
+        today = datetime.now(timezone.utc).astimezone(self.tz or timezone.utc).date()
+        if self.__dict__.setdefault("_warned_days", {}).get(key) != today:
+            self._warned_days[key] = today
+            self.log(msg, level="WARNING")
+
+    def _snapshot_forecast(self, r):
+        """Forecast snapshots (pe_core/fcsnap.py): what changed in the forecast, rates, dispatches, free-power and
+        grid-event entities, the house profile and the smart slots' first-seen times. Never in a demo; a failure
+        warns once a day and the cycle goes on."""
+        w = self.__dict__.get("_fcsnap")
+        if w is None or self._demo or self.cfg is None:
+            return
+        try:
+            roles = fcsnap.snapshot_roles(self.cfg)
+            states = {}
+            for eid in dict.fromkeys(roles.values()):
+                st = self.host.get_state(eid, attribute="all")
+                if isinstance(st, dict):
+                    states[eid] = {"state": st.get("state"), "attributes": st.get("attributes") or {}}
+            local = r.now.astimezone(self.tz or timezone.utc)
+            seen = fcsnap.slot_first_seen(self.slots.slots, local.date(), self.tz or timezone.utc) \
+                if getattr(self, "slots", None) else None
+            w.observe(r.now, roles, states, self.profile, seen)
+        except Exception as err:
+            self._warn_daily("fcsnap", f"Could not save the forecast snapshot: {err!r}")
+
+    def _day_engine(self, day, today=None):
+        """{"engine": "v1"|"v2"|"mixed", "live": bool} for a day from its cost records; for today before there is a
+        record, the engine chosen now."""
+        info = self.costbook.day_engine_info(day) if self.costbook is not None else None
+        if info is None and (today is None or day == today):
+            info = {"engine": self._engine_name(), "live": self.mode.effective == "active"}
+            if self._engine_profile() is not None:
+                info["profile"] = self._engine_profile()
+        return info
+
+    def _record_forecast_log(self, now, out, readings):
+        """Forecast against actual (pe_core/forecastlog.py): the plan each time it is made, and the real level, price,
+        sun and house load every five minutes. A failure warns once a day and the cycle goes on."""
+        log = self.__dict__.get("_flog")
+        if log is None:
+            return
+        try:
+            if out.revalued and out.value is not None:
+                obs = out.observation
+                level = obs.level_filtered if obs.level_filtered is not None else obs.level_reported
+                log.plan(now, level, out.value)
+            log.actual(now, readings)
+        except Exception as err:
+            self._warn_daily("flog", f"Could not record the forecast log: {err!r}")
+
+    def _publish_forecast_score(self, *args, **kwargs):
+        """sensor.pe_diag_forecast: how the expected battery level compared with the real one over the last 7 days."""
+        log = self.__dict__.get("_flog")
+        if log is None or self._get_publisher() is None:
+            return
+        try:
+            today = datetime.now(timezone.utc).astimezone(self.tz or timezone.utc).date()
+            sc = log.score(7, today)
+            lv = sc["level"].get("+120 min")
+            state = (f"+2 h: off by {lv['mean_abs_error']} points on average" if lv else "collecting")
+            self._publish_state("diag_forecast", state, {"days": 7, **sc})
+        except Exception as err:
+            self._warn_daily("flog_score", f"Could not score the forecast log: {err!r}")
+
+    def _record_v2_history(self, now, out, send, preview, readings=None):
+        h = self.__dict__.get("_v2hist")
+        if h is None:
+            return
+        try:
+            ln, obs = out.mode.lines, out.observation
+            level = obs.level_reported if obs.level_reported is not None else obs.level_filtered
+            wrote = h.tick(now, mode=out.mode.mode, why=out.mode.why, level=level,
+                           import_p=ln.import_p if ln else None, export_p=ln.export_p if ln else None,
+                           value_p=ln.value_p if ln else None, sent=bool(send), preview=bool(preview),
+                           path=out.value.path if out.value is not None else None,
+                           buy_line_p=ln.buy_line_p if ln else None, sell_line_p=ln.sell_line_p if ln else None,
+                           grid_w=getattr(readings, "grid_power", None), car_w=getattr(readings, "ev_power", None),
+                           replanned=bool(out.revalued),
+                           slot=bool(readings is not None and readings.current_dispatch() is not None),
+                           free=bool(readings is not None and readings.free_active and self.cfg.engine_v2.free_power))
+            if wrote:
+                self._publish_v2_history()
+        except Exception as err:
+            self._warn_daily("v2history", f"Could not save engine v2's history: {err!r}")
+
+    def _on_v2_replan(self, event_name, data, kwargs):
+        """The plan card's "Re-plan now" (pe_v2_replan): drop what the engine had cached (solar forecast, learned
+        figures) and work the values out again from the live readings now. Active, Passive and Pause are unchanged."""
+        if event_name != V2_REPLAN_EVENT or self._demo or self.cfg is None or self._engine_name() != "v2":
+            return
+        eng = self.__dict__.get("_v2")
+        if eng is None:
+            return
+        self._v2_cache, self._v2_learned_sig = {}, None
+        eng.ask_replan()
+        self.log("Engine v2: re-plan asked for from the card")
+        return self._cycle(None)
+
+    def _on_v2_history_day(self, event_name, data, kwargs):
+        """The Engine v2 history's date picker (pe_v2_history_day {date}): show that day, if it is still kept."""
+        if event_name != V2_HISTORY_DAY_EVENT or self.__dict__.get("_v2hist") is None:
+            return
+        try:
+            day = date.fromisoformat(str((data or {}).get("date")))
+        except ValueError:
+            return
+        today = datetime.now(timezone.utc).astimezone(self.tz or timezone.utc).date()
+        if not today - timedelta(days=V2_HISTORY_KEEP_DAYS) <= day <= today:
+            return
+        self._v2_history_date = day
+        self._publish_v2_history()
+
+    def _publish_v2_history(self, *args, **kwargs):
+        """sensor.pe_v2_history: the chosen day (today by default) as engine v2 ran it."""
+        h = self.__dict__.get("_v2hist")
+        if h is None or self._get_publisher() is None:
+            return
+        try:
+            today = datetime.now(timezone.utc).astimezone(self.tz or timezone.utc).date()
+            day = self._v2_history_date or today
+            info = self._day_engine(day, today)
+            attrs = h.attributes(day, today, info["engine"] if info else None, info["live"] if info else None)
+            if info and info.get("profile") is not None:
+                attrs = {**attrs, "profile": info["profile"]}
+            self._publish_state("v2_history", day.isoformat(), attrs)
+            flows = self._day_flows(day, today, datetime.now(timezone.utc))
+            self._publish_state("v2_flows", day.isoformat(), flows or {"date": day.isoformat(), "m": []})
+        except Exception as err:
+            self._warn_daily("v2history_pub", f"Could not build engine v2's history: {err!r}")
+        self._publish_v2_recent()
+
+    def _day_flows(self, day, today, now):
+        """The grid and the car through the day at the time they happened (`v2flows.real_flows`), from Home Assistant's
+        own history of those readings. None for a day the recorder no longer holds or when reading fails. A past day
+        is read once; today again every few minutes; a failure is retried after ten."""
+        if self.cfg is None or day > today:
+            return None
+        cache = self._flows_cache
+        cached = cache.get(day)
+        if cached is not None:
+            age = (now - cached[1]).total_seconds()
+            if age < (600 if cached[0] is None else 240) or (day < today and cached[0] is not None):
+                return cached[0]
+        tz = self.tz or timezone.utc
+        flows = None
+        try:
+            start = datetime(day.year, day.month, day.day, tzinfo=tz).astimezone(timezone.utc)
+            plain, _ = history_entities(self.cfg, V2_FLOW_ROLES, plants=True)
+            timelines = {eid: Timeline(self._history(eid, start, v2_day_end(day, tz)),
+                                       {"unit_of_measurement": self.host.get_state(
+                                           eid, attribute="unit_of_measurement")})
+                         for eid in plain}
+            flows = real_flows(replay(self.cfg, timelines, start, min(v2_day_end(day, tz), now - timedelta(minutes=1))),
+                               tz, day)
+        except Exception as err:
+            self.log(f"Could not read the grid history for {day}: {err!r}", level="WARNING")
+        cache[day] = (flows, now)
+        for old in sorted(cache)[:-6]:
+            del cache[old]
+        return flows
+
+    def _publish_v2_recent(self):
+        """sensor.pe_v2_recent: the last 18 hours as engine v2 ran them, for the plan chart's scrollback. Independent of
+        the day the history's picker shows."""
+        h = self.__dict__.get("_v2hist")
+        if h is None or self._get_publisher() is None:
+            return
+        try:
+            attrs = h.recent_attributes(datetime.now(timezone.utc))
+            self._publish_state("v2_recent", str(len(attrs["series"])), attrs)
+        except Exception as err:
+            self._warn_daily("v2recent_pub", f"Could not build engine v2's recent hours: {err!r}")
+
+    # --- notifications: messages routed to channels (pe_core/router.py) --------------------
+
+    def _outbox(self):
+        """What the router remembers (held messages, kinds seen, the last deliveries), kept beside the config."""
+        box = self.__dict__.get("_box")
+        if box is None:
+            try:
+                path = os.path.join(os.path.dirname(self._save_path()), "notify_outbox.json")
+            except Exception:
+                path = None
+            box = self._box = Outbox(path)
+        return box
+
+    def _notify(self, event, msg):
+        """Send (key, title, message) of this kind of message to the channels the rules name, once per key."""
+        if not msg or self.cfg is None:
+            return
+        key, title, message = msg
+        now = datetime.now(timezone.utc)
+        if not self.notifier.should_send(key, now):
+            return
+        if self._deliver(Message(event, key, title, message), now):
+            self.notifier.mark(key, now)
+            self.log(f"Notified: {title}")
+
+    def _publish_notify(self):
+        """sensor.pe_ui_notify: the channels and rules, the kinds of message that can be routed, what is held and
+        the last deliveries, for the Config page."""
+        if self.cfg is None:
+            return
+        try:
+            box = self._outbox()
+            snap = box.snapshot()
+            self._publish_state("ui_notify", str(len(box.held)), {
+                "model": public_model(self.cfg.notifications), "kinds": kind_list(box.seen),
+                "held": snap["held"], "log": snap["log"]})
+        except Exception as err:
+            self.log(f"Could not publish the notification settings: {err!r}", level="WARNING")
+
+    def _publish_notify_cycle(self, kwargs):
+        self._publish_notify()
+
+    def _deliver(self, msg, now=None):
+        """Put a message on every channel its rules name: now if the channel's hours are open, else held until they
+        open or skipped (the channel's choice). True when it is dealt with (sent, held or skipped); False when no rule
+        takes it or every send failed, so the caller may try again."""
+        now = now or datetime.now(timezone.utc)
+        model, box, tz = self.cfg.notifications, self._outbox(), getattr(self, "tz", None)
+        box.see(msg, now)
+        names = channels_for(model, msg.kind)
+        if not names:
+            self._publish_notify()                         # a kind seen for the first time is listed
+            return False
+        handled = False
+        for name in names:
+            ch = model["channels"][name]
+            if not is_open(ch, now, tz):
+                if ch["outside_hours"] == "hold" and (msg.expires is None or msg.expires > now):
+                    box.hold(name, msg, now)
+                    box.record(now, msg, name, "held", "outside this channel's hours")
+                    self.log(f"Held for {ch['label']} until its hours open: {msg.title}")
+                else:
+                    box.record(now, msg, name, "skipped", "outside this channel's hours")
+                handled = True
+                continue
+            sent, tried = self._send(name, ch, msg, now)
+            box.record(now, msg, name, "sent" if sent else "failed", f"{sent} of {tried}")
+            handled = handled or sent > 0
+        self._publish_notify()
+        return handled
+
+    def _send(self, name, ch, msg, now, held_at=None):
+        """The HA calls that put a message on a channel: (how many reached, how many tried). Never raises."""
+        title, body = render(ch, msg, held_at, now, getattr(self, "tz", None))
+        kind = ch["type"]
+        if kind == "bell":
+            calls = [("persistent_notification/create", {"title": title, "message": body,
+                                                         "notification_id": _notice_id(msg.key)},
+                      "send a notification")]
+        elif kind == "notify":
+            calls = [(ch["service"].replace(".", "/", 1), {"title": title, "message": body},
+                      f"send a notification via {ch['service']}")]
+        elif kind == "alexa":
+            calls = [(x.replace(".", "/", 1), {"message": body, "data": {"type": "announce"}}, f"announce via {x}")
+                     for x in ch["services"]]
+        else:
+            calls = [("whatsapp/send_message", {"target": t, "message": body}, f"send to WhatsApp ({t})")
+                     for t in ch["targets"]]
+        sent = 0
+        for svc, kw, what in calls:
+            try:
+                self.host.call_service(svc, **kw)
+                sent += 1
+            except Exception as err:
+                self.log(f"Could not {what}: {err!r}", level="WARNING")
+        return sent, len(calls)
+
+    def _flush_held(self, now):
+        """Send what was held for a channel whose hours have opened (one per channel each time, marked as held)."""
+        box = self._outbox()
+        if not box.held:
+            return
+        for name, ch, msg, held_at in box.release(now, self.cfg.notifications, getattr(self, "tz", None)):
+            sent, tried = self._send(name, ch, msg, now, held_at)
+            box.record(now, msg, name, "released" if sent else "failed", f"{sent} of {tried}")
+            self.log(f"Sent the held message to {ch['label']}: {msg.title}")
+        self._publish_notify()
+
+    def _clear_notice(self, key):
+        """The problem behind a notification is over: allow it again, take it out of HA's notification area and forget
+        it if it is still held."""
+        self.notifier.clear(key)
+        self._outbox().cancel(key)
+        if self.cfg is not None and any(c["type"] == "bell" for c in self.cfg.notifications["channels"].values()):
+            try:
+                self.host.call_service("persistent_notification/dismiss", notification_id=_notice_id(key))
+            except Exception as err:
+                self.log(f"Could not dismiss a notification: {err!r}", level="WARNING")
+
+    def _on_pe_notify(self, event_name, data, kwargs):
+        """A message from elsewhere (the family dashboard, an automation): the event pe_notify with kind, text and
+        optionally title, speech, chat, key, source, label and hold_hours. It goes where the rules send that kind;
+        a kind never seen before is listed on the Config page so a rule can be made for it."""
+        if self.cfg is None:
+            return
+        data = data or {}
+        kind, text = data.get("kind"), data.get("text")
+        if not (isinstance(kind, str) and re.fullmatch(r"[a-z0-9_]{1,40}", kind) and isinstance(text, str)
+                and text.strip()):
+            self.log("pe_notify ignored: it needs a kind (lowercase letters, digits, underscores) and some text",
+                     level="WARNING")
+            return
+
+        def short(name, limit):
+            v = data.get(name)
+            return v.strip()[:limit] if isinstance(v, str) and v.strip() else None
+        now = datetime.now(timezone.utc)
+        key = short("key", 100) or hashlib.sha1(f"{kind}|{text}|{now:%Y%m%d%H%M}".encode()).hexdigest()[:16]
+        hours = data.get("hold_hours")
+        msg = Message(kind, key if key.startswith("ext:") else f"ext:{key}", short("title", 120) or kind,
+                      text.strip()[:1000], short("speech", 1000), short("chat", 1000),
+                      short("source", 30) or "external", short("label", 60),
+                      now + timedelta(hours=min(float(hours), 72)) if isinstance(hours, (int, float))
+                      and not isinstance(hours, bool) and hours > 0 else None)
+        if not self.notifier.should_send(msg.key, now):
+            return
+        if self._deliver(msg, now):
+            self.notifier.mark(msg.key, now)
+            self.log(f"Notified ({msg.source}): {msg.title}")
+
+    def _guard_state(self, eid):
+        """A guard's state. AppDaemon's copy of HA's states can miss an entity that was re-created after it started
+        (the other controller restarting does this), so when it has nothing, ask Home Assistant directly. If that
+        can't be checked either, the guard is "unverified", which never counts as safe."""
+        state = self.host.get_state(eid)
+        if state is not None:
+            return state
+        try:
+            live = str(self.host.render_template(f"{{{{ states('{eid}') }}}}")).strip()
+        except Exception as err:
+            self.log(f"Couldn't check {eid} with Home Assistant: {err!r}", level="WARNING")
+            return UNVERIFIED
+        self._guard_live = True                       # AppDaemon can't tell us when it changes: keep rechecking
+        return live or UNVERIFIED
+
+    def _note_absent_guards(self, absent):
+        """Guard entities HA doesn't have (e.g. the other controller not connected) count as safe; say so once, and
+        when they're back."""
+        before = set(getattr(self, "_absent_guards", ()))
+        now = set(absent)
+        if now - before:
+            names = ", ".join(sorted(now - before))
+            self.log(f"Handover guard not available ({names}); treated as safe: it can't be controlling anything",
+                     level="WARNING")
+            self._notify("health", ("guard:absent", "PowerEngine: handover guard not available",
+                                    f"{names} isn't in Home Assistant right now (e.g. the other controller isn't "
+                                    "connected). "
+                                    "PowerEngine treats it as safe, since it can't be controlling the inverter, "
+                                    "and carries on."))
+        if before and not now:
+            self.log("Handover guards available again")
+            self._clear_notice("guard:absent")
+        self._absent_guards = now
+
+    def _watch_inputs(self, checks, required):
+        now = datetime.now(timezone.utc)
+        for key in required:
+            status, message = checks.get(key, ("unmapped", "Not set"))
+            if status == OK:
+                if self._bad_since.pop(key, None) is not None:
+                    self._clear_notice(f"input:{key}")
+                continue
+            since = self._bad_since.setdefault(key, now)
+            if (now - since).total_seconds() >= 15 * 60:
+                role = ROLE_BY_KEY.get(key)
+                self._notify("inputs", input_message(key, fill(role.label) if role else key, status, message))
+
+    def _watch_events(self, r):
+        if r.axle_start and r.axle_start > r.now:
+            self._notify("axle", axle_message(r.axle_start, r.axle_end, r.now, self.tz))
+        if r.free_start and r.free_start > r.now:
+            self._notify("free_power", free_message(r.free_start, r.free_end, r.now, self.tz))
+
+    def _announce_event(self, r):
+        """Reminders for a grid event: hours before it (default 8, 5, 2, 1 and as it starts), each sent once to the
+        channels the rules name for them (the Alexa speakers, WhatsApp, ...), which hold or skip one outside their
+        hours. Says the battery level and whether it looks ready (pe_core/announce.py)."""
+        n = self.cfg.notifications
+        if not (r.axle_start and r.axle_end) or not channels_for(n, "grid_reminder"):
+            return
+        h = alexa_due(r.axle_start, r.axle_end, r.now, n["reminder_hours"])
+        if h is None:
+            return
+        key = f"alexa:{r.axle_start.isoformat()}:{h:g}"
+        if not self.notifier.should_send(key, r.now):
+            return
+        timeline = (self._published.get("v2_timeline") or (None, None))[1]
+        need = None
+        try:
+            need = pre_axle_reserve(r, self.cfg)
+        except Exception:
+            pass
+        ready = alexa_readiness(timeline, r.axle_start, r.axle_end, r.battery_soc, need)
+        text = alexa_message(h, r.axle_start, r.axle_end, r.now, self.tz, r.battery_soc, ready)
+        msg = Message("grid_reminder", key, "Grid event reminder", text, speech=text, expires=r.axle_start)
+        if self._deliver(msg, r.now):
+            self.notifier.mark(key, r.now)
+            self.log(f"Grid event reminder ({h:g} h before): {text}")
+
+    def _on_alexa_test(self, event_name, data, kwargs):
+        """The older Config page's "Play a test announcement" (pe_alexa_test {services, intro, whatsapp}): say "<intro>
+        Test message." on the speakers ticked there and send it to the WhatsApp targets there, now, whatever the hours
+        say. Nothing is marked as sent."""
+        if event_name != ALEXA_TEST_EVENT:
+            return
+        data = data or {}
+        services = alexa_trial_speakers(data.get("services"))
+        chats = whatsapp_targets(data.get("whatsapp"))
+        if not services and not chats:
+            self.host.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False,
+                                 message="No Alexa speaker or WhatsApp group was chosen.")
+            return
+        intro = data.get("intro")
+        intro = intro[:80].strip() if isinstance(intro, str) else ""
+        text = alexa_trial_message(intro)
+        base = {"label": "", "intro": intro, "hours": None, "outside_hours": "hold"}
+        speakers = self._send("test", {**base, "type": "alexa", "services": services}, self._test_message(),
+                              datetime.now(timezone.utc)) if services else (0, 0)
+        texted = self._send("test", {**base, "type": "whatsapp", "targets": chats}, self._test_message(),
+                            datetime.now(timezone.utc)) if chats else (0, 0)
+        self.log(f"Alexa test announced on {speakers[0]} of {len(services)} speakers, "
+                 f"WhatsApp {texted[0]} of {len(chats)}: {text}")
+        if speakers[0] or texted[0]:
+            parts = []
+            if services:
+                parts.append(f"{speakers[0]} of {len(services)} speakers")
+            if chats:
+                parts.append(f"{texted[0]} of {len(chats)} WhatsApp chats")
+            bad = len(services) + len(chats) - speakers[0] - texted[0]
+            note = f" ({bad} failed: see the log)" if bad else ""
+            self.host.fire_event(ALEXA_TEST_RESULT_EVENT, ok=True,
+                            message=f"Sent to {' and '.join(parts)}: \"{text}\"{note}")
+        else:
+            self.host.fire_event(ALEXA_TEST_RESULT_EVENT, ok=False,
+                            message="Home Assistant would not play or send it anywhere. See the AppDaemon log.")
+
+    @staticmethod
+    def _test_message():
+        return Message("test", "test", "PowerEngine test", "Test message.", speech="Test message.")
+
+    def _on_notify_test(self, event_name, data, kwargs):
+        """The Config page's "Send a test" for a channel (pe_notify_test {channel: {...}}): "Test message." to that
+        channel as set on the page (saved or not), now, whatever its hours say. Nothing is marked as sent."""
+        if event_name != NOTIFY_TEST_EVENT:
+            return
+        try:
+            ch = parse_channel((data or {}).get("channel"), "test")
+        except ConfigError as err:
+            self.host.fire_event(NOTIFY_TEST_RESULT_EVENT, ok=False, message=str(err))
+            return
+        sent, tried = self._send("test", ch, self._test_message(), datetime.now(timezone.utc))
+        self.log(f"Test message to a {ch['type']} channel: {sent} of {tried}")
+        self.host.fire_event(NOTIFY_TEST_RESULT_EVENT, ok=sent > 0,
+                        message=(f"Sent to {sent} of {tried}." + (" See the AppDaemon log for the ones that failed."
+                                                                  if sent < tried else "")) if tried else
+                        "There is nothing to send to.")
+
+    # --- the car charger during a grid event (pe_core/carstop.py) -----------------------
+
+    def _car_stop_file(self):
+        return os.path.join(os.path.dirname(self._save_path()), "car_stop.json")
+
+    def _car_stop_state(self):
+        """What PowerEngine has stopped, kept on disk so a restart in the middle of an event still puts it back."""
+        stop = self.__dict__.get("_car_stop")
+        if stop is None:
+            try:
+                with open(self._car_stop_file(), encoding="utf-8") as fh:
+                    stop = CarStop.from_dict(json.load(fh))
+            except (OSError, ValueError, AttributeError):
+                stop = CarStop()
+            self._car_stop = stop
+        return stop
+
+    def _car_stop_step(self, r):
+        """While a grid event runs (and the setting is on, in Active mode) stop the car charger, so the battery's
+        export isn't charged into the car; when the event ends, put the charger's mode back."""
+        if self._demo or self.cfg is None:
+            return
+        stop = self._car_stop_state()
+        eid = self._role_entity("ev_charge_mode")
+        feats = self.cfg.features
+        want = bool(feats.get("axle") and feats.get("axle_stop_car", True) and r.axle_active
+                    and self.mode.effective == "active" and not self._test_running()
+                    and eid and eid.startswith("select."))
+        if not (want or stop.held) or not eid or not eid.startswith("select."):
+            return
+        try:
+            options = self.host.get_state(eid, attribute="options")
+        except Exception:
+            options = None
+        before, note_before = stop.to_dict(), stop.note
+        action = stop.step(r.now, want, r.ev_mode, options if isinstance(options, list) else None)
+        if action is not None:
+            try:
+                self.host.call_service("select/select_option", entity_id=eid, option=action.option)
+                self.log(f"Car charger: {action.text}")
+                self._logbook(f"Car charger: {action.text}")
+            except Exception as err:
+                self.log(f"Car charger: could not set {eid} to {action.option}: {err!r}", level="WARNING")
+        if stop.note != note_before and stop.note is not None and r.axle_start:
+            self._run_note(r, "car", stop.note, stop.mode_before)
+        if stop.to_dict() != before:
+            try:
+                with open(self._car_stop_file(), "w", encoding="utf-8") as fh:
+                    json.dump(stop.to_dict(), fh)
+            except OSError as err:
+                self.log(f"Could not save the car charger state: {err!r}", level="WARNING")
+
+    def _setback_file(self):
+        return os.path.join(os.path.dirname(self._save_path()), "heating_setback.json")
+
+    def _setback_state(self):
+        """What PowerEngine has switched on, kept on disk so a restart mid-event still switches it off."""
+        sb = self.__dict__.get("_setback")
+        if sb is None:
+            try:
+                with open(self._setback_file(), encoding="utf-8") as fh:
+                    sb = Setback.from_dict(json.load(fh))
+            except (OSError, ValueError, AttributeError):
+                sb = Setback()
+            self._setback = sb
+        return sb
+
+    def _heating_setback_step(self, r):
+        """Turn the owner's heating set-back switch on `heating_pump_overrun_min` before a grid event starts and off
+        when it ends (pe_core/setback.py), so the boiler's pump isn't drawing power during the event. Active mode
+        only."""
+        if self._demo or self.cfg is None:
+            return
+        sb = self._setback_state()
+        eid = self._role_entity("heating_setback")
+        feats = self.cfg.features
+        if not eid or eid.split(".")[0] not in ("switch", "input_boolean"):
+            return
+        lead = float(self.cfg.safety.get("heating_pump_overrun_min", 15))
+        win = setback_window(r.axle_start, r.axle_end, lead)
+        want = bool(feats.get("axle") and feats.get("axle_heating_setback", False) and win is not None
+                    and win[0] <= r.now < win[1] and self.mode.effective == "active" and not self._test_running())
+        if not (want or sb.held):
+            return
+        try:
+            state = self.host.get_state(eid)
+        except Exception:
+            state = None
+        before, note_before = sb.to_dict(), sb.note
+        event = r.axle_start.isoformat() if r.axle_start else None
+        action = sb.step(want, event, state, lead)
+        if sb.note != note_before and sb.note is not None and r.axle_start:
+            self._run_note(r, "heat", sb.note)
+        if action is not None:
+            try:
+                self.host.call_service(f"{eid.split('.')[0]}/{action.service}", entity_id=eid)
+                self.log(f"Heating set-back: {action.text}")
+                self._logbook(f"Heating set-back: {action.text}")
+            except Exception as err:
+                self.log(f"Heating set-back: could not {action.service} {eid}: {err!r}", level="WARNING")
+        if sb.to_dict() != before:
+            try:
+                with open(self._setback_file(), "w", encoding="utf-8") as fh:
+                    json.dump(sb.to_dict(), fh)
+            except OSError as err:
+                self.log(f"Could not save the heating set-back state: {err!r}", level="WARNING")
+
+    def _free_loads_file(self):
+        return os.path.join(os.path.dirname(self._save_path()), "free_loads.json")
+
+    def _free_load_states(self) -> dict:
+        """What PowerEngine has switched on for free power, by entity, kept on disk so a restart mid-session still
+        switches it off."""
+        st = self.__dict__.get("_free_loads")
+        if st is None:
+            try:
+                with open(self._free_loads_file(), encoding="utf-8") as fh:
+                    raw = json.load(fh)
+            except (OSError, ValueError):
+                raw = {}
+            raw = raw if isinstance(raw, dict) else {}
+            st = self._free_loads = {eid: FreeLoadState.from_dict(v) for eid, v in raw.items()}
+        return st
+
+    def _free_loads_step(self, r):
+        """Turn each switch in `free_power_loads` on while a free-electricity session is running and off when it ends
+        (pe_core/freeloads.py). Active mode only; a switch already on is left alone."""
+        if self._demo or self.cfg is None or not self.cfg.free_power_loads:
+            return
+        states = self._free_load_states()
+        want = bool(r.free_active and self.mode.effective == "active" and not self._test_running())
+        before = {eid: s.to_dict() for eid, s in states.items()}
+        for load in self.cfg.free_power_loads:
+            st = states.setdefault(load.entity, FreeLoadState())
+            if not (want or st.held or st.seen):
+                continue
+            try:
+                state = self.host.get_state(load.entity)
+            except Exception:
+                state = None
+            action = st.step(want, state)
+            if action is None:
+                continue
+            label = load.name or load.entity
+            try:
+                self.host.call_service(f"{load.entity.split('.')[0]}/{action.service}", entity_id=load.entity)
+                self.log(f"Free power: {label}: {action.text}")
+                self._logbook(f"Free power: {label}: {action.text}")
+            except Exception as err:
+                st.held, st.seen = (False, False) if action.service == "turn_on" else (True, st.seen)   # try again
+                self.log(f"Free power: could not {action.service} {load.entity}: {err!r}", level="WARNING")
+        if {eid: s.to_dict() for eid, s in states.items()} != before:
+            try:
+                with open(self._free_loads_file(), "w", encoding="utf-8") as fh:
+                    json.dump({eid: s.to_dict() for eid, s in states.items()}, fh)
+            except OSError as err:
+                self.log(f"Could not save the free power switch state: {err!r}", level="WARNING")
+
+    # --- the announcement when a grid event has finished (pe_core/announce.py) ---------------
+
+    def _event_run_file(self):
+        return os.path.join(os.path.dirname(self._save_path()), "event_run.json")
+
+    def _event_run(self) -> dict:
+        """The grid event being followed: its start and end, what PowerEngine did for it, and whether it has been
+        announced. Kept on disk so a restart mid-event, or before the summary is spoken, loses nothing."""
+        run = self.__dict__.get("_run")
+        if run is None:
+            try:
+                with open(self._event_run_file(), encoding="utf-8") as fh:
+                    run = json.load(fh)
+            except (OSError, ValueError):
+                run = {}
+            self._run = run if isinstance(run, dict) else {}
+        return self._run
+
+    def _save_event_run(self):
+        try:
+            with open(self._event_run_file(), "w", encoding="utf-8") as fh:
+                json.dump(self._event_run(), fh)
+        except OSError as err:
+            self.log(f"Could not save the grid event record: {err!r}", level="WARNING")
+
+    def _follow_event(self, r) -> dict:
+        """The record of the event `r` shows (the current or next one), started afresh if it is a different one."""
+        run = self._event_run()
+        if run.get("start") != r.axle_start.isoformat():
+            run = self._run = {"start": r.axle_start.isoformat(), "end": r.axle_end.isoformat(), "done": False}
+        elif r.axle_end:
+            run["end"] = r.axle_end.isoformat()
+        return run
+
+    def _run_note(self, r, key, note, extra=None):
+        if not (r.axle_start and r.axle_end):
+            return
+        run = self._follow_event(r)
+        run[key] = note
+        if extra is not None:
+            run[f"{key}_mode"] = extra
+        self._save_event_run()
+
+    def _event_finish_step(self, r):
+        """When a grid event has finished, say how it went: what the house used, what was exported, what it should pay,
+        and anything PowerEngine switched for it with the state it is back to. Sent once to the channels the rules name
+        for it, which hold it until their hours open (up to FINISH_KEEP_H hours) or skip it."""
+        if self._demo or self.cfg is None:
+            return
+        if r.axle_active and r.axle_start and r.axle_end:
+            before = dict(self._event_run())
+            self._follow_event(r)
+            if self._event_run() != before:
+                self._save_event_run()
+            return
+        run = self._event_run()
+        if not run.get("start") or run.get("done"):
+            return
+        start, end = datetime.fromisoformat(run["start"]), datetime.fromisoformat(run["end"])
+        ready = end.replace(minute=0 if end.minute == 0 else 30, second=0, microsecond=0)
+        if end.minute not in (0, 30) or end.second:
+            ready += timedelta(minutes=30)
+        if r.now < end or r.now < ready + timedelta(seconds=45):
+            return                                    # not over yet, or the last half-hour is not recorded yet
+        if (r.now - end) > timedelta(hours=FINISH_KEEP_H) or not channels_for(self.cfg.notifications, "grid_summary"):
+            run["done"] = True
+            self._save_event_run()
+            return
+        days = {start.astimezone(self.tz).date(), end.astimezone(self.tz).date()} if self.tz else {start.date()}
+        records = []
+        try:
+            for d in sorted(days):
+                records += self.costbook.day_records(d) if self.costbook is not None else []
+        except Exception as err:
+            self.log(f"Could not read the event's cost records: {err!r}", level="WARNING")
+        summary = alexa_event_summary(records, start, end)
+        if summary is None and (r.now - end) < timedelta(minutes=5):
+            return                                    # wait a little for the cost records
+        text = alexa_finish_message("", start, end, r.now, self.tz, summary, run.get("heat"), run.get("car"),
+                                    run.get("car_mode"))
+        msg = Message("grid_summary", f"alexa:summary:{run['start']}", "Grid event summary", text, speech=text,
+                      expires=end + timedelta(hours=FINISH_KEEP_H))
+        if self._deliver(msg, r.now):
+            run["done"] = True
+            self._save_event_run()
+            self.log(f"Grid event summary: {text}")
+            self._logbook(f"Grid event summary: {text}")
+
+    # --- inverter writes (EEPROM wear) ---------------------------------------------------
+
+    CONTROL_ROLES = ("timed_charge_start_hour", "timed_charge_start_minute", "timed_charge_end_hour",
+                     "timed_charge_end_minute", "timed_charge_current", "timed_discharge_start_hour",
+                     "timed_discharge_start_minute", "timed_discharge_end_hour", "timed_discharge_end_minute",
+                     "timed_discharge_current", "timed_update_button", "storage_mode", "inverter_export_limit",
+                     "inverter_clock_sync")
+
+    def _watch_controls(self):
+        """Count writes to the inverter's control entities by whatever controls it now (e.g. another controller)."""
+        for handle in self._write_listeners:
+            try:
+                self.host.cancel_listen_state(handle)
+            except Exception:
+                pass
+        self._write_listeners = []
+        if self.cfg is None:
+            return
+        for role in self.CONTROL_ROLES:
+            eid = self._role_entity(role)
+            if eid:
+                self._write_listeners.append(self._listen_state(self._on_control_change, eid))
+        for eid in [self._role_entity(key) for key, _ in GUARDS] + [PAUSE_ENTITY]:
+            if eid:                                   # re-check the mode as soon as a guard or pause changes
+                self._write_listeners.append(self._listen_state(self._on_guard_change, eid))
+        self._write_listeners = [h for h in self._write_listeners if h is not None]
+
+    def _listen_state(self, callback, entity_id):
+        """listen_state, except for the demo world's entities: they live inside the app, not in Home Assistant, so
+        AppDaemon would warn that they don't exist, and nothing could ever change them from outside anyway."""
+        if self._demo and self._demo_world().is_demo(entity_id):
+            return None
+        return self.host.listen_state(callback, entity_id)
+
+    def _on_guard_change(self, entity, attribute, old, new, kwargs):
+        if old != new:
+            self._evaluate()
+
+    def _on_control_change(self, entity, attribute, old, new, kwargs):
+        if old == new or old in (None, "unknown", "unavailable") or new in (None, "unknown", "unavailable"):
+            return
+        if is_staged(entity):                    # window times stay in HA until the update button sends them
+            return
+        self.writes.observed(self._today(), entity)
+
+    def _count_would_writes(self, r, decision):
+        try:
+            p = self._control_params(r)
+            events = self.write_model.step(r.now, decision, p.max_charge_kw * 1000, p.max_discharge_kw * 1000)
+            self.writes.would(self._today(), len(events))
+            block_end = None
+            if self.plan is not None and self.plan.windows and self.plan.windows[0]["action"] == decision.action:
+                block_end = datetime.fromisoformat(self.plan.windows[0]["end"])
+            events = self.block_model.step(r.now, decision, p.max_charge_kw * 1000, p.max_discharge_kw * 1000,
+                                           block_end, self.tz)
+            self.writes.would(self._today(), len(events), "would_block")
+            slots = self._slot_map()
+            if slots and self.plan is not None:                 # the three-slot strategy on a virtual inverter
+                now_local = r.now.astimezone(self.tz) if self.tz else r.now
+                virt = getattr(self, "_virtual", None)
+                if virt is None:
+                    virt = self._virtual = self._inverter().read(self._slot_keys(slots))
+                want, ws = self._inverter().slot_writes(
+                    periods(self.plan.slots, now_local, self.tz, decision.action), virt, now_local,
+                    decision.action, decision.power_w, p.max_charge_kw * 1000, p.max_discharge_kw * 1000)
+                for w in ws:
+                    if w.kind != "button":
+                        virt[w.role] = w.value
+                self.writes.would(self._today(), len(ws), "would_slots")
+            if r.now.minute % 10 == 0 and r.now.second < CYCLE_SECONDS:     # save every 10 minutes
+                self._publish_writes()
+                self._publish_writes_today()
+        except Exception as err:
+            self.log(f"Could not count inverter writes: {err!r}", level="WARNING")
+
+    # --- inverter control (Active mode; previewed in Passive) --------------------------------
+
+    def _inverter(self):
+        """The inverter adapter the site names (from its definition, for the site's firmware). Rebuilt when the
+        inverter or its firmware changes."""
+        site = self._site()
+        key = (site.inverter, site.inverter_firmware)
+        held = getattr(self, "_inv", None)
+        if held is None or held[0] != key:
+            held = (key, registry.get("inverter", site.inverter)(self.host, self._role_entity, BATTERY_VOLTS,
+                                                                 firmware=site.inverter_firmware))
+            self._inv = held
+        return held[1]
+
+    def _tariff(self):
+        """The tariff adapter: the site's, or (site tariff "auto") Kraken's EDF or Octopus, told apart by the rate
+        sensor's integration."""
+        tariff = getattr(self, "_tariff_adapter", None)
+        name = self._site().tariff
+        if name == "auto":
+            name = supplier_of(self._role_entity("import_rate_now") if self.cfg else None)
+        if tariff is None or tariff.name != name:  # rebuilt if the site or the rate sensor moves supplier
+            tariff = self._tariff_adapter = registry.get("tariff", name)(self._role_entity)
+        return tariff
+
+    def _ev(self):
+        """The car charger adapter the site names (Zappi, or none)."""
+        return self._adapter("_ev_adapter", "ev", "ev_charger")
+
+    def _names(self):
+        """What this user's supplier and devices are called, from the adapters (neutral words before the config is
+        read). Also what the pure functions read for their texts."""
+        if self.cfg is None:
+            names = neutral_names()
+        else:
+            names = build_names(self._tariff(), self._ev(), self._forecast(), self._inverter(), self._events())
+        set_current(names)
+        return names
+
+    def _demo_days_preview(self):
+        """The demo days the welcome offers, titled as the demo will show them (its own names, e.g. the event
+        provider's, which the unconfigured app has no adapters to know), so the welcome and the banner agree."""
+        try:
+            names = default_names()
+            return [{"key": k, "title": fill(v.get("title", k), names)} for k, v in load_demo_pack()["days"].items()]
+        except Exception:
+            return []
+
+    def _publish_names(self):
+        """The version sensor carries the names map (a small attribute; the card fills its placeholders from it)."""
+        attrs = {"names": self._names(), "min_card_version": MIN_CARD_VERSION,
+                 "setup": "configured" if self._real_config_exists() else "unconfigured",
+                 "demo": self._demo_info() if self._demo else None}
+        if attrs["setup"] == "unconfigured" and not self._demo:
+            attrs["demo_days"] = self._demo_days_preview()
+        attrs.update(self._site_attributes())
+        attrs["other_controller"] = other_controller(self.cfg)      # none / predbat / other / unset (derived)
+        self._publish_state("diag_version", __version__, attrs)
+
+    def _site_attributes(self):
+        """What the card's "Your system" block reads (compact: the version sensor's attributes must stay small):
+        `site` (the current choices), `site_options` (per key: {id, name, status, firmware_variants}),
+        `firmware_detected` (what the inverter reports, when its definition names an entity for that, else null) and
+        `retest_required` (the site's inverter or firmware changed and the supervised tests are still to be re-run),
+        and `wizard` (what the card's setup wizard looks for: pe_core/wizard.py)."""
+        try:
+            detected = self._inverter().firmware_detected()
+        except Exception:
+            detected = None
+        out = {"site": self._site().as_dict(), "site_options": site_options(), "wizard": wizard_info(),
+               "firmware_detected": detected, "retest_required": self._retest_required()}
+        if self.cfg is not None and self.cfg.devices:            # read-only devices (M1); absent for one inverter
+            out["devices"] = [{"id": d.id, "name": d.name, "adapter": d.adapter, "control": d.control,
+                               "inputs": sorted(d.inputs)} for d in self.cfg.devices]
+        return out
+
+    def _events(self):
+        """The grid-event adapter the site names (Axle, or none)."""
+        return self._adapter("_events_adapter", "event", "events")
+
+    def _split_v2_settings(self):
+        """Once (0.9.168), for a real config saved before engine v2 had settings of its own: write into the saved
+        `engine_v2` block the values it was following from v1 (arbitrage, grid events, free power, reserve), and mark
+        the config `v2_split`, so engine v2 behaves exactly as before and v1's settings no longer move it. If the save
+        fails the same values are used in memory and it tries again at the next start."""
+        cfg = self.cfg
+        if cfg is None or self._demo or "v2_split" in cfg.raw or not self._real_config_exists() \
+                or self.cfg_path not in self._real_paths:
+            return
+        try:
+            profile = profile_values(cfg.v2_profile, cfg.v2_profiles)
+            block = split_block(cfg.raw.get("engine_v2"), cfg.features, cfg.safety, profile)
+            new = {**copy.deepcopy(cfg.raw), "v2_split": True}
+            if block or "engine_v2" in cfg.raw:
+                new["engine_v2"] = block
+            text = ", ".join(f"{k} {v}" for k, v in block.items() if k not in (cfg.raw.get("engine_v2") or {})) \
+                or "none needed"
+            try:
+                self.cfg, backup = save_config(self._save_path(), new)
+            except OSError as err:
+                self.cfg = parse_config(new)
+                self.log(f"Engine v2 settings: could not save the split ({err}); using the same values in memory",
+                         level="WARNING")
+                return
+            self.log(f"Engine v2 settings are now its own; values it was following from v1: {text}; "
+                     f"backup: {backup or 'none'}")
+        except (ConfigError, SettingsError) as err:
+            self.log(f"Engine v2 settings: could not separate them from v1's ({err})", level="WARNING")
+
+    # --- the site: which plant this home has ---------------------------------------------------
+
+    def _add_site(self):
+        """A real config with no `site:` gets one describing how PowerEngine has always run (Solis, Zappi, tariff
+        detected, Solcast, Axle), saved through the usual save-with-backup path. Never in demo mode, never with no
+        real config (nothing to write), and once only: a config that has a `site` is left alone. If the save fails the
+        app carries on with the same choices in memory and tries again at the next start.
+        The parts are not left out ("none") when their inputs are unmapped: the adapters read nothing from an
+        unmapped role either way, but "none" would change the words in user text (the names map), so only the site's
+        owner picks it."""
+        cfg = self.cfg
+        if cfg is None or self._demo or "site" in cfg.raw or not self._real_config_exists():
+            return
+        if self.cfg_path not in self._real_paths:
+            return
+        assumed = False
+        try:
+            site = Site()
+            inverter = registry.get("inverter", site.inverter)(self.host, self._role_entity, BATTERY_VOLTS)
+            firmware = inverter.firmware_detected()
+            if firmware is None:                           # not readable: the variant PowerEngine has always used
+                firmware = (load_definition(site.inverter).get("firmware") or {}).get("default")
+                assumed = firmware is not None
+            site = dataclasses.replace(site, inverter_firmware=firmware)
+        except Exception as err:
+            self.log(f"Site: could not detect the inverter firmware: {err!r}", level="WARNING")
+            site = Site()
+        fw = (f"firmware {site.inverter_firmware}" + (" (assumed: the variant PowerEngine has always used; not "
+                                                       "readable from the inverter)" if assumed else "")
+              if site.inverter_firmware else "firmware not set")
+        text = (f"inverter {site.inverter} ({fw}), "
+                f"ev_charger {site.ev_charger}, car {site.car}, tariff {site.tariff}, forecast {site.forecast}, "
+                f"events {site.events}")
+        try:
+            new = {**copy.deepcopy(cfg.raw), "site": site.as_dict()}
+            self.cfg, backup = save_config(self._save_path(), new)
+        except (ConfigError, OSError) as err:
+            self.log(f"Could not add the site to the configuration ({err}); carrying on with the same choices "
+                     f"in memory: {text}", level="WARNING")
+            return
+        self.log(f"Site added to the configuration: {text}; backup: {backup or 'none'}")
+
+    def _state_file(self):
+        return os.path.join(os.path.dirname(self._save_path()), "site_state.json")
+
+    def _retest_required(self):
+        """True after the site's inverter or firmware changed, until a supervised RC test passes."""
+        try:
+            with open(self._state_file(), encoding="utf-8") as fh:
+                return bool(json.load(fh).get("retest_required"))
+        except (OSError, ValueError, AttributeError):
+            return False
+
+    def _set_retest(self, required):
+        if self._demo or self._retest_required() == required:
+            return
+        try:
+            with open(self._state_file(), "w", encoding="utf-8") as fh:
+                json.dump({"retest_required": required}, fh)
+        except OSError as err:
+            self.log(f"Could not save the test state: {err}", level="WARNING")
+
+    @staticmethod
+    def _variant(site):
+        """What the site's inverter and firmware come to: the definition and the firmware variant that applies (so
+        no firmware and the definition's default one are the same)."""
+        try:
+            return site.inverter, load_definition(site.inverter, site.inverter_firmware).variant
+        except Exception:                                  # no definition file: the firmware as given
+            return site.inverter, site.inverter_firmware
+
+    def _site_guard(self, new):
+        """(the config to save, whether the inverter or its firmware changed from the saved site). A card that doesn't
+        know the `site:` section keeps the saved one. When the inverter or the firmware variant that applies changes,
+        PowerEngine goes to Passive whatever was asked: the definition, and so the writes, are different now, and the
+        supervised tests have to be run again on it. Other site keys only rebuild their adapters."""
+        old = self.cfg.raw.get("site") if self.cfg else None
+        if old is not None and "site" not in new:
+            new = {**new, "site": old}
+        if old is None:
+            return new, False
+        before, after = parse_config({"site": old}).site, parse_config(new).site
+        if self._variant(before) == self._variant(after):
+            return new, False
+        return (with_operation(new, "passive") if (new.get("operation") or {}).get("mode") == "active" else new), True
+
+    def _slot_map(self):
+        """{slot n: {role: entity}} when all the inverter's timed slots exist (SolaX '_2'/'_3' names), else None."""
+        if self.cfg is None:
+            return None
+        m, warn = self._inverter().slot_map(datetime.now(timezone.utc))
+        if warn:
+            n = self._inverter().slot_count
+            self.log(f"Inverter windows {'2 and 3' if n == 3 else f'2 to {n}'} not found (the '_2'/'_3' entities); "
+                     "using the single rolling window for now, rechecking every 10 minutes", level="WARNING")
+        return m
+
+    def _slot_keys(self, slots):
+        return self._inverter().slot_keys(slots)
+
+    def _control(self, r, decision):
+        method = self._control_method()
+        if method == "ram_remote":
+            return self._control_ram(r, decision)
+        if getattr(self, "_ram_was_on", False) and self.mode.effective == "active":
+            self._ram_off("control method changed to timed windows")
+        self._publish_method("timed_windows")
+        slots = self._slot_map()
+        if slots:
+            return self._control_slots(r, decision, slots)
+        try:
+            p = self._control_params(r)
+            now_local = r.now.astimezone(self.tz) if self.tz else r.now
+            kind = KINDS.get(decision.action)
+            ctl = getattr(self, "_ctl", {"kind": None, "end": None, "last_write": None})
+            block_end = None
+            if self.plan is not None and self.plan.windows and self.plan.windows[0]["action"] == decision.action:
+                be = datetime.fromisoformat(self.plan.windows[0]["end"])
+                block_end = be.astimezone(self.tz) if self.tz else be
+            current_end = ctl["end"] if ctl["kind"] == kind else None
+            kind, end, want = self._inverter().rolling(decision, now_local, current_end, block_end,
+                                                       CONTROL_STRATEGY, p.max_charge_kw * 1000,
+                                                       p.max_discharge_kw * 1000)
+            entities = {role: self._role_entity(role) for role in list(want) + [self._inverter().button_role]}
+            missing = sorted(role for role, eid in entities.items() if not eid)
+            have = self._inverter().read(entities)
+            writes = writes_needed(want, have, self._inverter().button_role)
+            state = "not mapped" if missing else (f"{len(writes)} write{'s' if len(writes) != 1 else ''}"
+                                                   if writes else "no change")
+            attrs = {"decision": decision.action, "strategy": CONTROL_STRATEGY, "missing": missing,
+                     "window_end": end.strftime("%H:%M") if end else None,
+                     "writes": [w.as_dict() for w in writes],
+                     "settings": {role: {"want": v, "now": have.get(role)} for role, v in want.items()}}
+            self._publish_if_changed("diag_control", state, attrs)
+            recent = ctl["last_write"] is not None and (r.now - ctl["last_write"]).total_seconds() < 60
+            if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
+                    and not self._test_running()
+                    and (not recent or kind != ctl["kind"]) and self._within_write_limit(_real(writes))):
+                self._write_why = f"rolling window: {decision.action} ({decision.rule})"
+                self._execute(writes, entities)
+                ctl["last_write"] = r.now
+            ctl["kind"], ctl["end"] = kind, end
+            self._ctl = ctl
+        except Exception as err:
+            self.log(f"Control step failed: {err!r}", level="WARNING")
+
+    def _shadows(self):
+        sh = getattr(self, "_damp_shadows", None)
+        if sh is None:
+            sh = self._damp_shadows = {k: damping.Shadow(*v) for k, v in damping.SHADOWS.items()}
+        return sh
+
+    def _shadow_damping(self, now, now_local, pers, decision, have, p):
+        """Measure the dampening settings: run the three shadow inverters and count their writes (Active only)."""
+        try:
+            sft, day = self.cfg.safety, self._today()
+            for kind, sh in self._shadows().items():
+                n = sh.step(now, now_local, pers, decision.action, decision.power_w, decision.rule, have,
+                            BATTERY_VOLTS, p.max_charge_kw * 1000, p.max_discharge_kw * 1000, str(day),
+                            float(sft.get("damp_burst_window_min", 10)), float(sft.get("damp_burst_settle_min", 5)),
+                            self._inverter().slot_count, self._inverter().button_role)
+                if n:
+                    self.writes.would(day, n, kind)
+        except Exception as err:
+            self.log(f"Could not measure dampening: {err!r}", level="WARNING")
+
+    def _damp_restart(self, now):
+        if not hasattr(self, "damper"):
+            self.damper = damping.Damper()
+        cfg = getattr(self, "cfg", None)                  # not loaded yet when called from initialize()
+        try:
+            mins = float(cfg.safety.get("damp_restart_min", 5)) if cfg else 5.0
+        except (TypeError, ValueError):
+            mins = 5.0
+        self.damper.restarted(now, mins)
+        for sh in self._shadows().values():
+            sh.damper.restarted(now, mins)
+
+    def _damp(self, now, writes, want, decision):
+        """Dampening tuning (config page): the writes to make now, or none while held back."""
+        if not hasattr(self, "damper"):
+            self.damper = damping.Damper()
+        f, sft = self.cfg.features, self.cfg.safety
+        day = str(self._today())
+        before = self.damper.last_reason
+        out = self.damper.filter(now, day, writes, want, decision.rule,
+                                 bool(f.get("damp_restart", True)), bool(f.get("damp_bursts", False)),
+                                 float(sft.get("damp_burst_window_min", 10)),
+                                 float(sft.get("damp_burst_settle_min", 5)))
+        if not out and self.damper.last_reason and self.damper.last_reason != before:
+            self.damper.count_held(day)
+            self.log(f"Writes held back ({self.damper.last_reason})")
+        return out
+
+    # --- RAM remote control (control method) ---------------------------------------------------
+
+    def _ram(self):
+        rc = getattr(self, "_ramctl", None)
+        if rc is None:
+            rc = self._ramctl = ramcontrol.RamController()
+        return rc
+
+    def _control_method(self):
+        """The configured control method, falling back to timed windows (and saying so) if RAM remote control is
+        chosen but SolaX Modbus's Battery control override entities can't be found."""
+        method = (self.cfg.system.get("control_method") if self.cfg else None) or "timed_windows"
+        self._ram_fallback = None
+        if method == "ram_remote":
+            gone = self._inverter().rc_missing(self._rc_entities())
+            if gone:
+                self._ram_fallback = "remote-control entities not found: " + ", ".join(gone)
+                self._notify("health", ("control:ram_missing", "PowerEngine: using timed windows",
+                                        "RAM remote control is selected but SolaX Modbus's Battery control override "
+                                        f"entities weren't found ({', '.join(gone)}). PowerEngine is using the "
+                                        "timed windows until they're back."))
+                return "timed_windows"
+        return method
+
+    def _publish_method(self, method, extra=None):
+        ram = self._ram()
+        day = str(self._today())
+        attrs = {"method": method, "fallback": getattr(self, "_ram_fallback", None),
+                 "refresh_min": float(self.cfg.safety.get("ram_refresh_min", 1)) if self.cfg else None,
+                 "ram_changes_today": ram.changes.get(day, 0), "ram_refreshes_today": ram.refreshes.get(day, 0),
+                 "following": ram.follow if method == "ram_remote" else None}
+        attrs.update(extra or {})
+        label = "RAM remote control" if method == "ram_remote" else "Timed windows"
+        if attrs.get("fallback"):
+            label = "Timed windows (fallback)"
+        self._publish_if_changed("state_control_method", label, attrs)
+
+    def _control_ram(self, r, decision):
+        try:
+            ram, rc, now = self._ram(), self._rc_entities(), r.now
+            p = self._control_params(r)
+            want = self._inverter().ram_command(decision.action, decision.power_w, p.max_charge_kw * 1000,
+                                                p.max_discharge_kw * 1000,
+                                                float(self.cfg.safety.get("ram_max_power_w", 5000)))
+            limits = self._bms_limits(r, p.max_charge_kw * 1000)
+            want, capped = bms.cap_command(want, limits)             # never ask for more than the battery will take
+            want = ram.apply_ceiling(now, want)                      # ...nor above a step-down after a miss
+            self._note_bms_cap(capped)
+            active = self.mode.effective == "active"
+            if self._test_running():
+                self._ram_forget()                             # the test drives remote control itself
+            elif active and not getattr(self, "_halted", False):
+                if not getattr(self, "_ram_was_on", False):     # taking over: close the timed windows once
+                    self.log("RAM remote control takes over: timed windows closed, then left alone")
+                    self._release()
+                    self._ram_was_on = True
+                    self._ram_forget()
+                refresh = timedelta(minutes=float(self.cfg.safety.get("ram_refresh_min", 1)))
+                writes, why = ram.step(now, want, refresh)
+                sending = self._ram_sending()
+                if writes and not sending:
+                    if self._writes_off_thread():
+                        self._ram_send_later(writes, rc, why, want, now)
+                        sending = True
+                    elif self._ram_send(writes, rc, why, want):
+                        self._ram_sent(now, want, why)
+                floor = self._reserve_soc()
+                expected = ramcontrol.inverter_expected_w(
+                    ram.sent, bms.expected_w(ram.sent, limits),
+                    float(self.cfg.safety.get("inverter_max_output_w", 6000)), r.solar_power)
+                follow = ram.check_following(now, r.battery_power, r.battery_soc, floor, expected)
+                self._bms_sample(now, r, ram, limits, follow, expected)
+                if sending:
+                    pass                                   # a command is on its way: judge what follows once it landed
+                elif follow == "not following" and self._ram_step_down(now, ram, r):
+                    pass                                   # re-sent lower next cycle; reported once by _ram_step_down
+                elif follow == "not following":
+                    pw = self.host.get_state(rc.get(ram.sent.power_role)) if ram.sent.power_role else None
+                    self.log(f"RAM remote control: inverter not following {ram.sent.text()} (battery "
+                             f"{round(r.battery_power or 0)} W, SoC {r.battery_soc}, power setting reads {pw}, "
+                             f"mode reads {self.host.get_state(rc.get('rc_mode'))})", level="WARNING")
+                    self._notify("health", (f"control:ram_follow:{ram.changed_at}",
+                                            "PowerEngine: inverter not following remote control",
+                                            f"Asked for {ram.sent.text()} but the battery is at "
+                                            f"{round(r.battery_power or 0)} W (+ discharging) after 3 minutes "
+                                            f"(power setting reads {pw}). Check the inverter and SolaX Modbus; "
+                                            "switch the Control method back to Timed windows if it persists."))
+            if active and not self._test_running():
+                self._simulate_windows(r, decision, p)          # what timed windows would have written meanwhile
+            sent = ram.sent
+            self._publish_method("ram_remote", {
+                "command": sent.text() if sent and active else want.text() + (" (would send)" if not active else ""),
+                "last_sent": ram.sent_at.isoformat(timespec="seconds") if ram.sent_at else None,
+                "entities": rc})
+            self._publish_if_changed("diag_control", "RAM remote control", {
+                "decision": decision.action, "strategy": "ram_remote", "command": want.text(),
+                "rows": [{"kind": "remote control", "slot": "", "want": want.text(),
+                          "now": sent.text() if sent else "unknown"}],
+                "writes": [w.as_dict() for w in want.writes()], "following": ram.follow})
+        except Exception as err:
+            self.log(f"RAM control step failed: {err!r}", level="WARNING")
+
+    def _bms_limits(self, r, rated_charge_w):
+        """The battery's own limits now (bms.Limits), from the optional BMS sensors. With none mapped and no cold
+        caution, every field is None and nothing changes."""
+        def raw(role):
+            eid = self._role_entity(role)
+            return self.host.get_state(eid) if eid else None
+        try:
+            lim = bms.read_limits(raw("battery_bms_charge_limit"), raw("battery_bms_discharge_limit"),
+                                  None, BATTERY_VOLTS, r.battery_power,
+                                  self._cold_charge_w(r.now, rated_charge_w))
+            rec = getattr(self, "recorder", None)
+            if lim.charge_source == "bms" and rec is not None:   # kept per half-hour to learn the charge taper
+                rec.note_limit(r.battery_soc, lim.charge_w)
+            return lim
+        except Exception as err:
+            self.log(f"BMS limits not read: {err!r}", level="WARNING")
+            return bms.Limits()
+
+    def _cold_charge_w(self, now, rated_w):
+        """Fallback when the BMS charge limit is unusable: the charge power the cold-battery caution allows now."""
+        try:
+            if not self.cfg.features.get("cold_caution", True) or not getattr(self, "_caution", None):
+                return None
+            if not self._caution.get(learning.hour_of(now)):
+                return None
+            _, fac, _ = self._cold_in_use()
+            return rated_w * fac if fac < 1.0 else None
+        except Exception:
+            return None
+
+    def _note_bms_cap(self, capped):
+        """Log a BMS cap once per change of reason."""
+        if capped != getattr(self, "_bms_note", None):
+            self._bms_note = capped
+            if capped:
+                self.log(f"RAM remote control: command {capped}")
+
+    def _bms_sample(self, now, r, ram, limits, follow, expected=None):
+        """One row for the diagnostics export: command, expected and actual battery power, BMS limits."""
+        sent = ram.sent
+        if sent is None or sent.option == rctest.OPTION_OFF:
+            return
+        ring = self.__dict__.get("_bms_ring")
+        if ring is None:
+            ring = self.__dict__["_bms_ring"] = bms.SampleRing()
+        exp = bms.expected_w(sent, limits) if expected is None else expected
+        ring.add(now, sent.text(), {"expected_w": exp, "solar_w": r.solar_power, "battery_w": r.battery_power,
+                                    "soc": r.battery_soc,
+                                    "follow": follow, "limits": limits.as_dict()})
+
+    def _ram_step_down(self, now, ram, r):
+        """A charge or discharge that still isn't being followed after the alarm time: one step lower (5000 -> 4000
+        -> 3000 W), reported once. False at the floor, so the normal 'not following' report goes out."""
+        was, first = ram.sent, ram.ceiling_w is None
+        new = ram.step_down(now, r.battery_power)
+        if new is None:
+            return False
+        self.log(f"RAM remote control: the command {was.text()} did not take (battery "
+                 f"{round(r.battery_power or 0)} W, SoC {r.battery_soc}); trying {new} W", level="WARNING")
+        if first:                                      # the notification once; each step is in the log
+            self._notify("health", (f"control:ram_stepdown:{now.date()}:{was.option}",
+                                    "PowerEngine: remote control stepped down",
+                                    f"Asked for {was.text()} but the battery is at {round(r.battery_power or 0)} W "
+                                    f"(+ discharging). Trying lower powers, down to {ramcontrol.STEP_DOWN_FLOOR_W} W; "
+                                    "it goes back up when the command changes or after an hour."))
+        return True
+
+    def _simulate_windows(self, r, decision, p):
+        """While on RAM control: run the timed-window shadow inverters on the same plan and decisions, so the EEPROM
+        writes timed windows would have made are counted ('simulated' on the Writes today tile). The plan under RAM
+        switches more freely (lower switch cost), so this is an upper estimate for timed windows."""
+        slots = self._slot_map()
+        if not slots:
+            return
+        now_local = r.now.astimezone(self.tz) if self.tz else r.now
+        have = self._inverter().read(self._slot_keys(slots))
+        pers = periods(self.plan.slots if self.plan else [], now_local, self.tz, decision.action)
+        self._shadow_damping(r.now, now_local, pers, decision, have, p)
+
+    def _simulated_today(self) -> int | None:
+        """Timed-window writes today from the shadow inverter with your current dampening settings."""
+        if self.cfg is None:
+            return None
+        f = self.cfg.features
+        kind = ("damp_both" if f.get("damp_bursts", False) else "damp_restart") if f.get("damp_restart", True) \
+            else "damp_none"
+        return self.writes.data.get(kind, {}).get(self._today().isoformat(), 0)
+
+    def _ram_relatch(self, kwargs):
+        """The power once more, a few seconds after a change of command (see ramcontrol.Command.writes)."""
+        ram = self._ram()
+        if ram.sent is None or ram.sent.power_role != kwargs["role"] or ram.sent.watts != kwargs["watts"]:
+            return                                         # superseded
+        eid = self._rc_entities().get(kwargs["role"])
+        if eid and self.mode.effective == "active":
+            try:
+                service, data = self._inverter().service_for(Write(kwargs["role"], kwargs["watts"], "number"))
+            except Exception as err:
+                return self.log(f"RAM remote control: could not re-send {eid}: {err!r}", level="WARNING")
+
+            def send():
+                try:
+                    self.host.call_service(service, entity_id=eid, **data)
+                except Exception as err:
+                    said = f"RAM remote control: could not re-send {eid}: {err!r}"      # (err is gone after this block)
+                    self.host.run_in(lambda kw: self.log(said, level="WARNING"), 0)
+            if self._writes_off_thread():
+                self._ram_worker().submit(send)                    # behind a command still being sent, in order
+            else:
+                try:
+                    self.host.call_service(service, entity_id=eid, **data)
+                except Exception as err:
+                    self.log(f"RAM remote control: could not re-send {eid}: {err!r}", level="WARNING")
+
+    # --- remote-control writes off the callback thread
+    # Every call to the inverter waits for the Modbus integration to reach it (2 to 4 seconds each on a slow day, three
+    # calls to a command). AppDaemon runs the app's callbacks on one thread, so sending in the tick held up everything
+    # else for up to 15 seconds. Under AppDaemon (not the demo, not the tests' fake) the calls go to a worker thread,
+    # in order, and what follows a send (the books, the log) runs back on the callback thread. One send at a time:
+    # while one is on its way the tick asks for nothing more, and anything else that writes to remote control (the
+    # relatch, Off) joins the same line, so nothing overtakes it.
+
+    def _writes_off_thread(self):
+        return bool(getattr(self.host, "background_writes", False)) and not self._demo
+
+    def _ram_worker(self):
+        worker = self.__dict__.get("_ram_worker_thread")
+        if worker is None:
+            worker = self.__dict__["_ram_worker_thread"] = Worker(self.host.log)
+        return worker
+
+    def _ram_sending(self):
+        """Is a command still being sent? (Not for longer than RAM_SEND_PATIENCE_S: then it is given up on.)"""
+        since = self.__dict__.get("_ram_send_since")
+        if since is None:
+            return False
+        if (datetime.now(timezone.utc) - since).total_seconds() > RAM_SEND_PATIENCE_S:
+            self.log(f"RAM remote control: a command has been on its way for over {RAM_SEND_PATIENCE_S} s; "
+                     "sending afresh", level="WARNING")
+            self._ram_forget()
+            return False
+        return True
+
+    def _ram_forget(self):
+        """Forget what was sent, and let any command still on its way be forgotten when it lands (a newer
+        generation has begun)."""
+        self._ram().forget()
+        self.__dict__["_ram_gen"] = self.__dict__.get("_ram_gen", 0) + 1
+        self.__dict__["_ram_send_since"] = None
+
+    def _ram_sent(self, now, want, why):
+        self._ram().done(now, str(self._today()), want, why)
+        if why == "change" and want.power_role:                    # and once more once the mode has landed
+            self.host.run_in(self._ram_relatch, 5, role=want.power_role, watts=want.watts)
+
+    def _ram_send_later(self, writes, rc, why, want, now):
+        """_ram_send, with the calls made on the worker. The books and the log follow on the callback thread."""
+        journal = getattr(self, "journal", None)
+        prepared, failed = [], False
+        for w in writes:
+            eid = rc.get(w.role)
+            if not eid:
+                failed = True
+                continue
+            try:
+                before = self.host.get_state(eid) if why == "change" and journal is not None else None
+                service, data = self._inverter().service_for(w)
+                prepared.append((w, eid, service, data, before))
+            except Exception as err:
+                failed = True
+                self._ram().errors += 1
+                self.log(f"RAM remote control: could not set {eid}: {err!r}", level="WARNING")
+        generation = self.__dict__.get("_ram_gen", 0)
+        self.__dict__["_ram_send_since"] = datetime.now(timezone.utc)
+
+        def work():
+            errors = []
+            for _, eid, service, data, _ in prepared:
+                try:
+                    self.host.call_service(service, entity_id=eid, **data)
+                    errors.append(None)
+                except Exception as err:
+                    errors.append(err)
+            return errors
+
+        def back(errors):
+            if self.__dict__.get("_ram_gen", 0) != generation:
+                return                                             # superseded (Off, a test, a restart): not the books'
+            self.__dict__["_ram_send_since"] = None
+            ok = not failed
+            for (w, eid, _, _, before), err in zip(prepared, errors or [Exception("the send failed")] * len(prepared),
+                                                   strict=False):
+                if why == "change" and journal is not None:
+                    journal.add(now, eid, w.value, before, f"RAM remote control: {want.text()}")
+                if err is not None:
+                    ok = False
+                    self._ram().errors += 1
+                    self.log(f"RAM remote control: could not set {eid}: {err!r}", level="WARNING")
+            if why == "change":
+                self.log(f"RAM remote control: {want.text()}")
+                try:
+                    if journal is not None:
+                        journal.save(now)
+                except OSError:
+                    pass
+                self._publish_writes_today()
+            if ok:
+                self._ram_sent(now, want, why)
+
+        self._ram_worker().submit(work, lambda errors: self.host.run_in(lambda kw: back(errors), 0))
+
+    def _ram_send(self, writes, rc, why, want):
+        """Send remote-control writes (temporary settings: not counted as EEPROM writes). Changes are journalled;
+        refreshes aren't. True if all were sent."""
+        now = datetime.now(timezone.utc)
+        journal = getattr(self, "journal", None)
+        ok = True
+        for w in writes:
+            eid = rc.get(w.role)
+            if not eid:
+                ok = False
+                continue
+            try:
+                if why == "change" and journal is not None:
+                    journal.add(now, eid, w.value, self.host.get_state(eid), f"RAM remote control: {want.text()}")
+                service, data = self._inverter().service_for(w)
+                self.host.call_service(service, entity_id=eid, **data)
+            except Exception as err:
+                ok = False
+                self._ram().errors += 1
+                self.log(f"RAM remote control: could not set {eid}: {err!r}", level="WARNING")
+        if why == "change":
+            self.log(f"RAM remote control: {want.text()}")
+            try:
+                if journal is not None:
+                    journal.save(now)
+            except OSError:
+                pass
+            self._publish_writes_today()
+        return ok
+
+    def _ram_off(self, reason):
+        rc = self._rc_entities()
+        self._ram_was_on = False
+        self._ram_forget()
+        if rc.get("rc_mode"):
+            self.log(f"RAM remote control Off ({reason})")
+            cmd = self._inverter().ram_off_command()
+            if self._writes_off_thread():
+                self._ram_off_later(cmd.writes()[0], rc, cmd)       # behind a command still being sent
+            else:
+                self._ram_send([cmd.writes()[0]], rc, "change", cmd)
+
+    def _ram_off_later(self, write, rc, cmd):
+        eid = rc.get(write.role)
+        if not eid:
+            return
+        try:
+            service, data = self._inverter().service_for(write)
+        except Exception as err:
+            self._ram().errors += 1
+            return self.log(f"RAM remote control: could not set {eid}: {err!r}", level="WARNING")
+
+        def work():
+            try:
+                self.host.call_service(service, entity_id=eid, **data)
+            except Exception as err:
+                return err
+
+        def back(err):
+            if err is not None:
+                self._ram().errors += 1
+                self.log(f"RAM remote control: could not set {eid}: {err!r}", level="WARNING")
+            else:
+                self.log(f"RAM remote control: {cmd.text()}")
+        self._ram_worker().submit(work, lambda err: self.host.run_in(lambda kw: back(err), 0))
+
+    @staticmethod
+    def _first_slot_hours(slots, now):
+        """Hours of the plan's first half-hour still to run, so a plan made part-way through it is for the rest of it
+        (at least a minute, so a plan made just before the boundary stays sensible). None: a whole half-hour."""
+        if not slots:
+            return None
+        left = (slots[0].end - now).total_seconds()
+        if left >= 1800:
+            return None
+        return max(left, 60.0) / 3600
+
+    def _mid_slot_stick(self, now):
+        """A replan part-way through a half-hour (not in its first two minutes, when the plan's next half-hour takes
+        over) keeps the running action unless changing it clearly pays: near-ties flip-flopped the inverter."""
+        from pe_core.optimiser import MID_SLOT_STICK
+        local = now.astimezone(self.tz) if self.tz else now
+        into = (local.minute % 30) * 60 + local.second
+        started = getattr(self, "_started_at", None)
+        if started is not None:
+            # just started: the first plans use a default load profile and no weather yet, so their choice isn't
+            # worth keeping. Stay free for the rest of the half-hour the warm-up ends in (not just the warm-up
+            # itself), so a choice made on unsettled inputs is never locked in for that half-hour.
+            warm = (started + STICK_WARMUP).astimezone(self.tz) if self.tz else started + STICK_WARMUP
+            free_until = warm.replace(minute=warm.minute - warm.minute % 30, second=0, microsecond=0) \
+                + timedelta(minutes=30)
+            if now < free_until:
+                return 0.0
+        return MID_SLOT_STICK if into > 120 and getattr(self, "_decision", None) is not None else 0.0
+
+    def _control_slots(self, r, decision, slots):
+        """The three-slot strategy: program the plan's next charge and discharge periods into the inverter."""
+        try:
+            p = self._control_params(r)
+            now_local = r.now.astimezone(self.tz) if self.tz else r.now
+            ctl = getattr(self, "_ctl", {"kind": None, "end": None, "last_write": None})
+            entities = self._slot_keys(slots)
+            missing = sorted(k for k, e in entities.items() if not e)
+            have = self._inverter().read(entities)
+            pers = periods(self.plan.slots if self.plan else [], now_local, self.tz, decision.action)
+            want, writes = self._inverter().slot_writes(pers, have, now_local, decision.action, decision.power_w,
+                                                        p.max_charge_kw * 1000, p.max_discharge_kw * 1000)
+            state = "not mapped" if missing else (f"{len(writes)} write{'s' if len(writes) != 1 else ''}"
+                                                   if writes else "no change")
+            sched = {k: [f"{want[f'timed_{k}_start_hour#{n}']:02d}:{want[f'timed_{k}_start_minute#{n}']:02d}-"
+                         f"{want[f'timed_{k}_end_hour#{n}']:02d}:{want[f'timed_{k}_end_minute#{n}']:02d}"
+                         for n in (1, 2, 3)] for k in ("charge", "discharge")}
+            def hhmm(src, k, n):
+                try:
+                    v = [int(float(src.get(f"timed_{k}_{p}#{n}"))) for p in
+                         ("start_hour", "start_minute", "end_hour", "end_minute")]
+                except (TypeError, ValueError):
+                    return "?"
+                return "closed" if v == [0, 0, 0, 0] else f"{v[0]:02d}:{v[1]:02d}-{v[2]:02d}:{v[3]:02d}"
+            rows = [{"kind": k, "slot": n, "want": hhmm(want, k, n), "now": hhmm(have, k, n)}
+                    for k in ("charge", "discharge") for n in (1, 2, 3)]
+            rows += [{"kind": f"{k} current (A)", "slot": "", "want": want.get(f"timed_{k}_current", "unchanged"),
+                      "now": have.get(f"timed_{k}_current")} for k in ("charge", "discharge")]
+            rows.append({"kind": "storage mode", "slot": "", "want": want.get("storage_mode"),
+                         "now": have.get("storage_mode")})
+            attrs = {"decision": decision.action, "strategy": "slots", "missing": missing, "windows": sched,
+                     "rows": rows, "writes": [w.as_dict() for w in writes]}
+            self._publish_if_changed("diag_control", state, attrs)
+            recent = ctl["last_write"] is not None and (r.now - ctl["last_write"]).total_seconds() < 60
+            if writes and not urgent(writes, want, have, now_local):
+                ok, self._pending_want = settled(getattr(self, "_pending_want", None), want, r.now)
+                if not ok:
+                    writes = []                          # only later windows change: wait for the plan to settle
+            else:
+                self._pending_want = None
+            if self.mode.effective == "active" and not missing:
+                self._shadow_damping(r.now, now_local, pers, decision, have, p)
+            if self.mode.effective == "active" and writes and not missing:
+                wanted = writes
+                writes = self._damp(r.now, writes, want, decision)
+                if wanted and not writes:
+                    attrs["damping"] = self.damper.last_reason
+                    self._publish_if_changed("diag_control", f"held: {len(wanted)} writes", attrs)
+            if (self.mode.effective == "active" and not missing and writes and not getattr(self, "_halted", False)
+                    and not self._test_running() and not recent and self._within_write_limit(_real(writes))):
+                self._write_why = f"three windows: {decision.action} ({decision.rule})"
+                self._execute(writes, entities)
+                self.damper.wrote(r.now, writes)
+                ctl["last_write"] = r.now
+            self._ctl = ctl
+        except Exception as err:
+            self.log(f"Control step failed: {err!r}", level="WARNING")
+
+    def _write(self, writes, entities):
+        """Send writes to the inverter's control entities (never bump/boost ones). Each is journalled with why."""
+        now = datetime.now(timezone.utc)
+        journal = getattr(self, "journal", None)
+        if journal is None:
+            try:
+                journal = self.journal = WriteJournal(os.path.join(os.path.dirname(self._save_path()),
+                                                                   "write_journal.json"))
+            except Exception:                         # no data folder (tests): write without a journal
+                journal = None
+        why = getattr(self, "_write_why", "") or "control"
+        numbers, buttons = [], []
+        for w in writes:
+            eid = entities.get(w.role)
+            if not eid or is_forbidden_control(eid):
+                continue
+            if w.kind == "button":
+                buttons.append(eid)
+                continue
+            if journal is not None:
+                journal.add(now, eid, w.value, self.host.get_state(eid), why)
+            service, data = self._inverter().service_for(w)
+            self.host.call_service(service, entity_id=eid, **data)
+            if w.kind == "number":
+                numbers.append((eid, w.value))
+            if self._inverter().write_storage(w) != "staged":  # window times only sent by the update button
+                self.writes.own(self._today())      # 'observed' is counted by the state listener
+        if buttons:
+            # The Solis "update times" button sends the window entities' current values to the inverter. Pressed at
+            # once, it can go before the new values have landed and send the old ones (the inverter then runs one
+            # change behind), so press it once they read back, a few seconds later.
+            args = {"buttons": buttons, "numbers": numbers, "why": why, "tries": 1}
+            if numbers:
+                self.host.run_in(self._press_buttons, BUTTON_DELAY_S, **args)
+            else:
+                self._press_buttons(args)            # nothing to wait for (e.g. the clock sync button)
+        try:
+            if journal is not None:
+                journal.save(now)
+        except OSError as err:
+            self.log(f"Could not save the write journal: {err!r}", level="WARNING")
+        self._publish_writes_today()
+
+    def _press_buttons(self, kwargs):
+        pending = [eid for eid, v in kwargs["numbers"] if not self._inverter().confirmed(eid, v)]
+        if pending and kwargs["tries"] < 4:
+            self.host.run_in(self._press_buttons, BUTTON_DELAY_S, **dict(kwargs, tries=kwargs["tries"] + 1))
+            return
+        if pending:
+            self.log(f"Window values not confirmed before applying them ({pending}); applying anyway",
+                     level="WARNING")
+        now = datetime.now(timezone.utc)
+        journal = getattr(self, "journal", None)
+        for eid in kwargs["buttons"]:
+            self.host.call_service("button/press", entity_id=eid)
+            self.writes.own(self._today())
+            if journal is not None:
+                journal.add(now, eid, None, None, kwargs["why"])
+        try:
+            if journal is not None:
+                journal.save(now)
+        except OSError as err:
+            self.log(f"Could not save the write journal: {err!r}", level="WARNING")
+        self._publish_writes_today()
+
+    def _execute(self, writes, entities, attempt=1):
+        """Active mode, pause and leaving Active. Write, then verify."""
+        self._write(writes, entities)
+        self.host.run_in(self._verify_writes, 15, writes=[w.as_dict() for w in writes if w.kind != "button"],
+                    entities=entities, attempt=attempt)
+
+    def _verify_writes(self, kwargs):
+        bad = [w for w in kwargs["writes"]
+               if not self._inverter().confirmed(kwargs["entities"][w["role"]], w["value"])]
+        if not bad:
+            return
+        if kwargs["attempt"] == 1:
+            self.log(f"Inverter read-back mismatch ({[w['role'] for w in bad]}); retrying once", level="WARNING")
+            self._write_why = "read-back retry"
+            self._execute([Write(w["role"], w["value"], w["kind"]) for w in bad], kwargs["entities"], attempt=2)
+            return
+        self._halted = True                              # no more writes until AppDaemon restarts
+        self._publish_status()
+        self.log("Inverter writes could not be confirmed; control stopped until restart", level="WARNING")
+        self._notify("health", ("control:verify", "PowerEngine: inverter writes not confirmed",
+                                "Settings written to the inverter didn't read back correctly twice. Check the "
+                                "inverter and the SolaX Modbus integration."))
+
+    def _within_write_limit(self, n):
+        """False (and pause control) if these writes would take today's own writes past the daily limit."""
+        limit = int(self.cfg.safety.get("max_writes_per_day", 150))
+        today = self.writes.own_today(self._today())
+        base = self._cap_base = self.writes.base(self._today())     # 0 on a new day or if never resumed today
+        if today - base + n <= limit:
+            return True
+        self.log(f"Daily write limit reached ({today - base} writes, limit {limit}); pausing control",
+                 level="WARNING")
+        pub = self._get_publisher()
+        if pub is not None:                       # the pause switch; its change returns the inverter to Self-Use
+            pub.preset("ctl_pause", "ON")
+        self._notify("health", (f"control:limit:{self._today()}", "PowerEngine: control paused",
+                                f"PowerEngine made {today - base} inverter writes today, reaching the daily limit "
+                                f"of {limit}. The inverter is back on Self-Use. Check the Health tab, then resume "
+                                "from the Monitoring tab."))
+        return False
+
+    def _control_entities(self, roles):
+        entities = {role: self._role_entity(role) for role in list(roles) + [self._inverter().button_role]}
+        missing = sorted(role for role, eid in entities.items() if not eid)
+        return entities, missing
+
+    def _ram_grace_s(self) -> int:
+        """Seconds remote control rides out missing inputs: RAM_INPUT_GRACE_SECONDS, less when the refresh interval is
+        long (refresh interval + grace stays under RAM_FAILSAFE_MARGIN_S), none at the 4 minute maximum."""
+        refresh_s = float(self.cfg.safety.get("ram_refresh_min", 1)) * 60 if self.cfg is not None else 60.0
+        return int(max(0.0, min(RAM_INPUT_GRACE_SECONDS, RAM_FAILSAFE_MARGIN_S - refresh_s)))
+
+    def _why_not_ready(self) -> str:
+        """' - battery_charge_power: Entity is unavailable (sensor.x)' for the inputs the last check found not ready, so
+        a diagnostics export says why (unavailable, not found, stale, wrong unit), not only which."""
+        why = getattr(self, "_missing_why", "")
+        return f" - {why}" if why else ""
+
+    def _leave_active(self, old, new, guards=()):
+        """Leaving Active hands the inverter back to Self-Use once (pause, choosing Passive, or inputs that stopped
+        working), except when a handover guard tripped: then another controller has taken over and PowerEngine
+        writes nothing to the timed windows. With RAM remote control, remote control is always switched Off (a
+        temporary setting, so harmless even when something else has taken over)."""
+        if getattr(self, "_ram_off_due", None) is not None and new.effective not in ("active", "unconfigured"):
+            # paused, Passive or a guard tripped while remote control was riding out missing inputs: off now
+            self._ram_off_due = None
+            if getattr(self, "_ram_was_on", False):
+                self._ram_off(f"leaving Active ({new.label})")
+        if old is None or old.effective != "active" or new.effective == "active":
+            return
+        inputs_gone = (new.effective == "unconfigured" and new.configured == "active" and not self.cfg_error
+                       and not guards)
+        ram_grace = self._ram_grace_s() if inputs_gone and getattr(self, "_ram_was_on", False) else 0
+        if ram_grace:
+            # Inputs missing, not a decision to stop: a blip of a power sensor (40 of them overnight on 7 Oct 2026, one
+            # every 5 minutes, each switching remote control Off and, 27 s later, on again). Carry on; if they are back
+            # within the grace nothing is written, if not remote control goes Off. The inverter's own failsafe returns
+            # it to Self-use if PowerEngine itself stopped refreshing.
+            self._ram_off_due = datetime.now(timezone.utc) + timedelta(seconds=ram_grace)
+        elif getattr(self, "_ram_was_on", False):
+            self._ram_off(f"leaving Active ({new.label})")
+        if guards and new.configured == "active":
+            self.log(f"Leaving Active: {new.reason}", level="WARNING")
+            self._notify("health", ("control:guard", "PowerEngine: control stopped", new.reason))
+            return
+        if new.effective == "unconfigured" and new.configured == "active" and not self.cfg_error:
+            # inputs gone (e.g. HA or the inverter integration restarting): leave the programmed windows running
+            # for a while rather than rewriting them; hand back to Self-Use only if the inputs stay missing
+            self._release_due = datetime.now(timezone.utc) + timedelta(seconds=INPUT_GRACE_SECONDS)
+            kept = (f"remote control carries on for {ram_grace} seconds while they come back" if ram_grace else
+                    f"the inverter keeps its programmed windows for {INPUT_GRACE_SECONDS // 60} minutes while they "
+                    "come back")
+            self.log(f"Inputs not ready ({new.reason}{self._why_not_ready()}); {kept}", level="WARNING")
+            return
+        self.log(f"Leaving Active ({new.label}: {new.reason}); returning the inverter to Self-Use",
+                 level="INFO" if new.effective == "paused" or new.configured == "passive" else "WARNING")
+        if new.effective == "paused":
+            self._logbook("control paused; inverter returned to Self-Use")
+        elif new.configured == "passive":
+            self._logbook("control stopped (Passive); inverter returned to Self-Use")
+        else:
+            self._logbook(f"control stopped ({new.reason}); inverter returned to Self-Use")
+            self._notify("health", ("control:inputs", "PowerEngine: control stopped",
+                                    f"{new.reason} The inverter is back on Self-Use; control resumes by itself "
+                                    "when the inputs are working again."))
+        self._release()
+
+    def _release_if_still_missing(self):
+        """After the grace period, inputs still missing: hand the inverter back to Self-Use, once."""
+        ram_due = getattr(self, "_ram_off_due", None)
+        if ram_due is not None:
+            if self.mode.effective == "active":
+                self._ram_off_due = None             # back inside the grace: carried on, nothing written
+            elif datetime.now(timezone.utc) >= ram_due:
+                self._ram_off_due = None
+                if getattr(self, "_ram_was_on", False):
+                    self.log(f"Inputs still not ready after {self._ram_grace_s()} seconds ({self.mode.reason}"
+                             f"{self._why_not_ready()}); switching remote control Off", level="WARNING")
+                    self._ram_off("inputs still not ready")
+        due = getattr(self, "_release_due", None)
+        if due is None:
+            return
+        if self.mode.effective == "active":
+            self._release_due = None
+            self.log("Inputs back; control resumed without rewriting the inverter")
+            return
+        if datetime.now(timezone.utc) < due:
+            return
+        self._release_due = None
+        if self.mode.effective != "unconfigured":
+            return                                   # paused, Passive or a guard since: handled when that happened
+        reason = self.mode.reason
+        self.log(f"Inputs still not ready after {INPUT_GRACE_SECONDS // 60} minutes ({reason}); returning the "
+                 "inverter to Self-Use", level="WARNING")
+        self._logbook(f"control stopped ({reason}); inverter returned to Self-Use")
+        self._notify("health", ("control:inputs", "PowerEngine: control stopped",
+                                f"{reason} The inverter is back on Self-Use; control resumes by itself when the "
+                                "inputs are working again."))
+        self._release()
+
+    def _release(self):
+        slots = self._slot_map()
+        if slots:
+            try:
+                entities = self._slot_keys(slots)
+                have = self._inverter().read(entities)
+                writes = self._inverter().release_slots(entities, have)
+                if writes:
+                    self._write_why = "return to Self-Use"
+                    self._execute(writes, entities)
+            except Exception as err:
+                self.log(f"Could not return the inverter to Self-Use: {err!r}", level="WARNING")
+            return
+        try:
+            want = self._inverter().release_rolling()
+            entities, missing = self._control_entities(want)
+            if missing:
+                return
+            have = self._inverter().read(entities)
+            writes = writes_needed(want, have, self._inverter().button_role)
+            if writes:
+                self._write_why = "return to Self-Use"
+                self._execute(writes, entities)
+        except Exception as err:
+            self.log(f"Could not return the inverter to Self-Use: {err!r}", level="WARNING")
+
+    # --- inverter clock ------------------------------------------------------------------------
+
+    def _clock_step(self, kwargs):
+        try:
+            eid, button = self._inverter().clock_entities()
+            if not eid:
+                return
+            now = datetime.now(timezone.utc)
+            retries = getattr(self, "_clock_retries", 0)
+            status = self._inverter().clock_status(now, self.tz, retries)
+            drift = status["drift"]
+            old = getattr(self, "_clock_drift", None)
+            self._clock_drift = drift
+            synced, due = status["synced"], status["due"]
+            self._clock_synced = synced
+            if drift is not None and abs(drift) < clock.SYNC_DRIFT_S:
+                self._clock_retries = 0
+            self._publish_if_changed("diag_inverter_clock", drift if drift is not None else "unknown", {
+                "inverter_time": status["inverter_time"],
+                "last_sync": synced.isoformat(timespec="seconds") if synced else None,
+                "sync_due": due, "sync_button": button})
+            if due and button and self.mode.effective == "active" and not self._test_running():
+                if due == "retry":
+                    self._clock_retries = retries + 1
+                    self.log(f"The inverter clock is still {drift} s out after a sync; syncing again "
+                             f"({self._clock_retries} of {clock.MAX_RETRIES})", level="WARNING")
+                self.log(f"Syncing the inverter clock ({due}; drift {drift} s)")
+                self._write_why = "clock sync"
+                self._write([self._inverter().clock_sync_write()], {"inverter_clock_sync": button})
+                self._logbook(f"inverter clock synced ({due}, was {drift} s out)")
+            ram = self._control_method() == "ram_remote"
+            if (clock.finding(old, ram) is None) != (clock.finding(drift, ram) is None):
+                self._health()
+        except Exception as err:
+            self.log(f"Inverter clock check failed: {err!r}", level="WARNING")
+
+    # --- supervised test writes ------------------------------------------------------------
+
+    def _test_running(self):
+        run = getattr(self, "_test", None)
+        return run is not None and not run.done
+
+    def _publish_test(self):
+        run = self._test
+        self._publish_state("diag_test_write", run.status, run.as_dict())
+
+    def _battery_now(self):
+        try:
+            r = read(self.cfg, self._state_all, None,
+                     self._tariff(), self._events(), self._ev(), self._forecast())
+            return {"soc": r.battery_soc, "battery_w": r.battery_power, "grid_w": r.grid_power}
+        except Exception:
+            return {}
+
+    def _on_test(self, event_name, data, kwargs):
+        user = self._user_name(data)
+        now = datetime.now(timezone.utc)
+        if data.get("action") == "stop":
+            if self._test_running():
+                self.log(f"Supervised test stopped by {user}")
+                self._test_end({"stopped": True})
+            return
+        req_roles = self._inverter().test_roles()
+        entities, missing = self._control_entities(req_roles) if self.cfg else ({}, ["config"])
+        guards = guard_problems(self.cfg, self._guard_state) if self.cfg else ["no config"]
+        req, err = testwrite.validate(data, guards, missing, self._test_running())
+        if not err and self.mode.effective == "active":
+            err = "PowerEngine is in control; pause it first"
+        if err:
+            self.log(f"Supervised test by {user} refused: {err}", level="WARNING")
+            self._test = testwrite.TestRun({"action": data.get("action")}, now)
+            self._test.problems.append(err)
+            self._test.finish("refused")
+            self._publish_test()
+            self.host.fire_event("pe_test_result", ok=False, message=f"Refused: {err}")
+            return
+        rc = self._rc_entities() if req and req["action"] in rctest.RC_TESTS else {}
+        if req and not err and req["action"] in rctest.RC_TESTS:
+            err = self._inverter().rc_test_problem(rc, req["action"])
+            if err:
+                self.log(f"Supervised test by {user} refused: {err}", level="WARNING")
+                self._test = testwrite.TestRun({"action": req["action"]}, now)
+                self._test.problems.append(err)
+                self._test.finish("refused")
+                self._publish_test()
+                self.host.fire_event("pe_test_result", ok=False, message=f"Refused: {err}")
+                return
+        run = self._test = testwrite.TestRun(req, now)
+        if req["action"] in rctest.RC_TESTS:
+            self._rc_start(req, run, rc, now, user)
+            return
+        p = self._control_params(self._last_readings) if getattr(self, "_last_readings", None) else None
+        max_c, max_d = (p.max_charge_kw * 1000, p.max_discharge_kw * 1000) if p else (4800, 4800)
+        now_local = now.astimezone(self.tz) if self.tz else now
+        want = self._inverter().test_window(req, now_local, max_c, max_d)
+        have = self._inverter().read({role: entities[role] for role in want})
+        writes = writes_needed(want, have, self._inverter().button_role)
+        run.step(now, "before", **self._battery_now(), settings=have)
+        self._write_why = f"supervised test: {req['action']}"
+        self._write(writes, entities)
+        run.step(now, "wrote", writes=[w.as_dict() for w in writes])
+        self.log(f"Supervised test started by {user}: {req['action']} for {req['minutes']} min "
+                 f"({len(writes)} writes)")
+        self._logbook(f"supervised test started by {user}: {req['action']} for {req['minutes']} min")
+        self._publish_test()
+        self.host.fire_event("pe_test_result", ok=True,
+                             message=f"Test started: {req['action']} for {req['minutes']} min")
+        self._test_handles = [self.host.run_in(self._test_check, 10, phase="start", want=want, entities=entities),
+                              self.host.run_every(self._test_observe, "now+60", 60),
+                              self.host.run_in(self._test_end, req["minutes"] * 60)]
+
+    def _test_observe(self, kwargs):
+        if self._test_running():
+            self._test.step(datetime.now(timezone.utc), "battery", **self._battery_now())
+            self._publish_test()
+
+    def _test_check(self, kwargs):
+        run = self._test
+        have = {role: self.host.get_state(kwargs["entities"][role]) for role in kwargs["want"]}
+        bad = readback_mismatches(kwargs["want"], have)
+        run.step(datetime.now(timezone.utc), f"read back ({kwargs['phase']})", ok=not bad, mismatched=bad,
+                 **self._battery_now())
+        if bad:
+            run.problems.append(f"{kwargs['phase']}: {', '.join(bad)} did not read back")
+        if kwargs["phase"] == "end":
+            run.finish("stopped" if kwargs.get("stopped") and not run.problems else None)
+            self.log(f"Supervised test {run.status}" + (f": {run.problems}" if run.problems else ""),
+                     level="WARNING" if run.problems else "INFO")
+            self._logbook(f"supervised test {run.status}")
+            self._notify("health", (f"test:{run.started.isoformat()}", f"PowerEngine test {run.status}",
+                                    "; ".join(run.problems) or "Settings read back correctly; inverter is back on "
+                                    "Self-Use."))
+        self._publish_test()
+
+    def _test_end(self, kwargs):
+        run = self._test
+        if run.req.get("action") in rctest.RC_TESTS:
+            self._rc_end(kwargs)
+            return
+        for handle in getattr(self, "_test_handles", []):
+            try:
+                self.host.cancel_timer(handle)
+            except Exception:
+                pass
+        self._test_handles = []
+        run.status = "reverting"
+        want = release()
+        entities, _ = self._control_entities(want)
+        have = {role: self.host.get_state(entities[role]) for role in want}
+        writes = writes_needed(want, have, self._inverter().button_role)
+        self._write_why = "supervised test: revert"
+        self._write(writes, entities)
+        run.step(datetime.now(timezone.utc), "reverted to Self-Use", writes=[w.as_dict() for w in writes])
+        self._publish_test()
+        self.host.run_in(self._test_check, 10, phase="end", want=want, entities=entities, stopped=kwargs.get("stopped"))
+
+    # --- supervised remote-control (RC register) tests ------------------------------------------
+
+    def _rc_entities(self):
+        """SolaX Modbus's remote-control entities, found by name (looked up at most every 10 minutes)."""
+        return self._inverter().rc_entities(datetime.now(timezone.utc))
+
+    def _rc_start(self, req, run, rc, now, user):
+        if "_ram_worker_thread" in self.__dict__:
+            self._ram_worker().idle(20)                           # a send still on its way must not overlap the test
+        test = req["action"]
+        power = req["power_w"] = rctest.power_for(test, req.get("power_w"))
+        # the timed windows closed first, so they can't be what moves the battery
+        want = release()
+        windows, _ = self._control_entities(want)
+        have = self._inverter().read({role: windows[role] for role in want})
+        writes = writes_needed(want, have, self._inverter().button_role)
+        run.step(now, "before", **self._battery_now(), rc_entities=rc)
+        self._write_why = f"supervised RC test: {test} (timed windows closed first)"
+        self._write(writes, windows)
+        run.step(now, "timed windows closed", writes=[w.as_dict() for w in writes])
+        prole, option, rc_writes = self._inverter().rc_test_writes(test, power)
+        self._write_why = f"supervised RC test: {test}"
+        self._write(rc_writes, rc)
+        run.step(now, f"remote control: {option} at {power} W")
+        self._rc = {"rc": rc, "prole": prole, "power": power, "want": want, "windows": windows,
+                    "stop_at": None, "samples": []}
+        self.log(f"Supervised RC test started by {user}: {test} at {power} W for {req['minutes']} min")
+        self._logbook(f"supervised RC test started by {user}: {test} for {req['minutes']} min")
+        self._publish_test()
+        self.host.fire_event("pe_test_result", ok=True, message=f"Test started: {test} for {req['minutes']} min")
+        self._test_handles = [self.host.run_in(self._rc_relatch, 5),
+                              self.host.run_every(self._rc_sample, f"now+{rctest.SAMPLE_S}", rctest.SAMPLE_S),
+                              self.host.run_in(self._rc_end, req["minutes"] * 60)]
+        if test == "rc_failsafe":
+            self._test_handles.append(self.host.run_in(self._rc_stop_resending, rctest.FAILSAFE_FORCE_S))
+
+    def _rc_relatch(self, kwargs):
+        """The power again after the force option: some firmware only takes the power once RC is on."""
+        if self._test_running():
+            rc = self._rc
+            self._write_why = "supervised RC test: power again after the force option"
+            self._write([Write(rc["prole"], rc["power"], "number")], rc["rc"])
+
+    def _rc_sample(self, kwargs):
+        if not self._test_running():
+            return
+        now = datetime.now(timezone.utc)
+        sample = {"time": now.isoformat(timespec="seconds"), **self._battery_now(),
+                  "rc": self.host.get_state(self._rc["rc"]["rc_mode"])}
+        self._rc["samples"].append(sample)
+        self._test.step(now, "reading", **{k: v for k, v in sample.items() if k != "time"})
+        self._publish_test()
+
+    def _rc_stop_resending(self, kwargs):
+        """rc_failsafe: stop SolaX Modbus re-sending the force command (reload it) without writing Off."""
+        if not self._test_running():
+            return
+        now = datetime.now(timezone.utc)
+        self._rc["stop_at"] = now.isoformat(timespec="seconds")
+        self.host.call_service("homeassistant/reload_config_entry", entity_id=self._rc["rc"]["rc_mode"])
+        self._test.step(now, "stopped re-sending (SolaX Modbus reloaded; Off NOT written) - watching for the "
+                             "inverter to drop the force charge by itself")
+        self._publish_test()
+
+    def _rc_end(self, kwargs):
+        run, rc = self._test, self._rc
+        for handle in getattr(self, "_test_handles", []):
+            try:
+                self.host.cancel_timer(handle)
+            except Exception:
+                pass
+        self._test_handles = []
+        run.status = "reverting"
+        self._write_why = "supervised RC test: end (remote control Off)"
+        self._write([self._inverter().ram_off_command().writes()[0]], rc["rc"])
+        run.step(datetime.now(timezone.utc), "remote control Off", **self._battery_now())
+        self._publish_test()
+        self.host.run_in(self._rc_finish, 15, stopped=kwargs.get("stopped"))
+
+    def _rc_finish(self, kwargs):
+        run, rc = self._test, self._rc
+        now = datetime.now(timezone.utc)
+        have = {role: self.host.get_state(rc["windows"][role]) for role in rc["want"]}
+        changed = readback_mismatches(rc["want"], have)
+        if changed:
+            run.problems.append("timed-window settings changed during the test: " + ", ".join(changed))
+        mode = self.host.get_state(rc["rc"]["rc_mode"])
+        if self._inverter().app_option(mode) not in (rctest.OPTION_OFF, None):
+            run.problems.append(f"remote control still shows '{mode}' after switching Off")
+        run.verdict, run.explanation = rctest.judge(run.req["action"], rc["power"], rc["samples"], rc["stop_at"])
+        run.step(now, f"result: {run.verdict}", note=run.explanation, **self._battery_now())
+        good = run.verdict in ("worked", "reverted") and not run.problems
+        run.finish("stopped" if kwargs.get("stopped") else ("passed" if good else "failed"))
+        if good and not kwargs.get("stopped"):
+            self._set_retest(False)                        # the tests have been run again on this site
+        self.log(f"Supervised RC test {run.status}: {run.verdict} ({run.explanation})"
+                 + (f"; {run.problems}" if run.problems else ""), level="INFO" if good else "WARNING")
+        self._logbook(f"supervised RC test {run.status}: {run.verdict}")
+        self._notify("health", (f"test:{run.started.isoformat()}", f"PowerEngine RC test {run.status}",
+                                f"{run.req['action']}: {run.verdict} - {run.explanation}"
+                                + ("; " + "; ".join(run.problems) if run.problems else "")))
+        self._publish_test()
+
+    def _publish_writes_today(self):
+        """Today's real inverter writes (from the journal): count, by reason and the latest ones."""
+        try:
+            journal = getattr(self, "journal", None)
+            if journal is None:
+                journal = self.journal = WriteJournal(os.path.join(os.path.dirname(self._save_path()),
+                                                                   "write_journal.json"))
+            now = datetime.now(timezone.utc)
+            local = now.astimezone(self.tz) if self.tz else now
+            since = local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+            s = day_summary(journal.entries, since.isoformat(timespec="seconds"), self.tz)
+            s["limit"] = int(self.cfg.safety.get("max_writes_per_day", 150)) if self.cfg else None
+            d = getattr(self, "damper", None)
+            s["held"] = d.held.get(str(self._today()), 0) if d else 0
+            if self.cfg:
+                s["damping"] = {"restart": bool(self.cfg.features.get("damp_restart", True)),
+                                "bursts": bool(self.cfg.features.get("damp_bursts", False))}
+                try:
+                    today = datetime.fromisoformat(str(self._today())).date()
+                    days = [(today - timedelta(days=i)).isoformat() for i in range(6, -1, -1)]
+                    s["damping_week"] = damping.week_summary(self.writes.data, days)
+                except Exception:
+                    pass
+            try:
+                s["observed"] = self.writes.summary(self._today())["observed"]["today"]
+            except Exception:
+                s["observed"] = None
+            s["method"] = self._control_method()
+            s["simulated"] = self._simulated_today()          # timed windows, same plan (shadow inverter)
+            self._publish_state("diag_writes_today", s["writes"], s)
+        except Exception as err:
+            self.log(f"Could not publish today's writes: {err!r}", level="WARNING")
+
+    def _publish_writes(self):
+        self._publish_writes_today()
+        try:
+            self.writes.save()
+            s = self.writes.summary(self._today())
+            self._publish_state("diag_inverter_writes", s["would"]["per_day"] if s["would"]["per_day"] is not None
+                                else "unknown", s)
+        except Exception as err:
+            self.log(f"Could not publish inverter writes: {err!r}", level="WARNING")
+
+    # --- smart-charge optimisation (FR-8) -------------------------------------------------
+
+    def _watch_ready_by(self):
+        if getattr(self, "_ready_by_handle", None):
+            try:
+                self.host.cancel_listen_state(self._ready_by_handle)
+            except Exception:
+                pass
+        self._ready_by_handle = None
+        eid = self._role_entity("smart_target_time") if self.cfg else None
+        if eid:
+            self._ready_by_handle = self._listen_state(self._on_ready_by_change, eid)
+
+    def _on_ready_by_change(self, entity, attribute, old, new, kwargs):
+        if old == new or new in (None, "unknown", "unavailable") or old in (None, "unknown", "unavailable"):
+            return                                   # coming back after a restart isn't anyone's request
+        ours = self._our_write
+        if ours and ours[0] == str(new)[:5] and (datetime.now(timezone.utc) - ours[1]).total_seconds() < 120:
+            return                                                   # PowerEngine's own change
+        r = self._last_readings
+        self.smart.observe_external(datetime.now(timezone.utc), str(old)[:5] if old else None, str(new)[:5],
+                                    r.dispatches if r else [])
+        self._save_smart()
+
+    def _save_smart(self):
+        try:
+            self.smart.save()
+        except OSError as err:
+            self.log(f"Could not save smart-charge requests: {err}", level="WARNING")
+        self._health()
+
+    def _smart_step(self, r):
+        self._last_readings = r
+        changed = self.smart.resolve(r.now, r.dispatches)
+        eid = self._role_entity("smart_target_time")
+        if not eid or not self.cfg.features.get("smart_charge_optimisation"):
+            if changed:
+                self._save_smart()
+            return
+        st = self.host.get_state(eid, attribute="all") or {}
+        options = self._tariff().ready_by_options(st)
+        cheap_p = cheap_limit(r, self.cfg, self._wear_p())
+        safety, feats = self.cfg.safety, self.cfg.features
+        worth = worth_asking(r.ev_state(), r.dispatches, r.now,
+                             r.import_rate is not None and r.import_rate * 100 <= cheap_p, r.battery_soc,
+                             safety["grid_charge_target_soc"], bool(feats.get("arbitrage")),
+                             r.export_rate * 100 if r.export_rate is not None else None, cheap_p,
+                             lookahead=timedelta(hours=safety["smart_lookahead_h"]),
+                             whole_house=bool(feats.get("slots_whole_house", True)),
+                             car_full=r.ev_complete() or self._car_idle(r),
+                             skip_full=bool(feats.get("smart_skip_full_car", False)))
+        active = self.mode.effective == "active"
+        now_local = r.now.astimezone(self.tz) if self.tz else r.now
+        a = self.smart.step(r.now, now_local, worth, options, st.get("state"), r.dispatches, active,
+                            settled=self._smart_settled(r.now, st.get("state")),
+                            daily_cap=int(safety["smart_max_requests_per_day"]),
+                            min_gap=timedelta(minutes=safety["smart_min_gap_min"]))
+        if a:
+            verb = "Asking" if active else "Would ask"
+            self.log(ask_message(verb, a, self._names()))
+            if active:
+                self._request_slots(eid, a["to"])
+        if a or changed:
+            self._save_smart()
+
+    def _smart_settled(self, now, ready_by_state):
+        """True once PowerEngine has run for SETTLE and EDF's dispatch and ready-by entities have been available
+        for SETTLE: right after a restart of AppDaemon, HA or the EDF integration, an empty slot list may only
+        mean it hasn't loaded, so no requests are made until things have settled."""
+        from pe_core.smartcharge import SETTLE
+        disp = self._role_entity("smart_dispatches")
+        bad = ready_by_state in (None, "unknown", "unavailable") or (
+            disp and self.host.get_state(disp) in (None, "unknown", "unavailable"))
+        since = getattr(self, "_smart_ok_since", None)
+        if bad or since is None:
+            self._smart_ok_since = None if bad else now
+            return False
+        return now - since >= SETTLE
+
+    def _request_slots(self, eid, value):
+        """Active mode only: set the ready-by time (and keep the charge target at 100%)."""
+        try:
+            self._our_write = (value, datetime.now(timezone.utc))
+            service, data = self._tariff().ready_by_call(eid, value)
+            self.host.call_service(service, **data)
+            target = self._role_entity("smart_target_soc")
+            call = self._tariff().charge_target_call(target, self.host.get_state(target) if target else None)
+            if call:
+                self.host.call_service(call[0], **call[1])
+        except Exception as err:
+            self.log(f"Could not request smart-charge slots: {err!r}", level="WARNING")
+
+    def _track_slots(self, r):
+        dt = (r.now - self._slots_last).total_seconds() if self._slots_last else 0.0
+        self._slots_last = r.now
+        charging = r.ev_state() == "charging"
+        if self.slots.update(r.now, r.dispatches, r.completed_dispatches, charging, r.ev_power, min(dt, 300.0)):
+            try:
+                self.slots.save()
+            except OSError as err:
+                self.log(f"Could not save the slot record: {err}", level="WARNING")
+            self._health()
+
+    # --- tariff Simulator (#54), overnight ---------------------------------------------------
+
+    def _sim_folder(self):
+        return os.path.join(os.path.dirname(self._save_path()), "simulator")
+
+    def _sim_start(self, kwargs):
+        if self.cfg is None or self.costbook is None or not self.cfg.features.get("tariff_simulator", True):
+            return
+        if getattr(self, "_sim_job", None) is not None:
+            return
+        try:
+            self._sim_store = SimStore(self._sim_folder())
+            ctx = self._sim_context()
+            region = (ctx.current or {}).get("region")
+            if region and self._sim_store.catalogue.get("region") != region:     # tariff codes are per region
+                self._sim_store.catalogue.update({"region": region, "products": [], "fetched": None})
+            cb = self.costbook
+            self._sim_job = sim_run(self._sim_store, cb.recorded_days(),
+                                    lambda d: cb.day_records(datetime.fromisoformat(d).date()),
+                                    self._params(), self.tz or timezone.utc, datetime.now(timezone.utc),
+                                    float(self.cfg.safety.get("ev_charger_kw", 7.4)),
+                                    log=lambda m: self.log(m, level="WARNING"), ctx=ctx)
+            self._sim_steps, self._sim_began = 0, datetime.now(timezone.utc)
+            self.log("Simulator: overnight run started")
+            self.host.run_in(self._sim_step, 1)
+        except Exception as err:
+            self._sim_job = None
+            self.log(f"Simulator could not start: {err!r}", level="WARNING")
+
+    def _sim_step(self, kwargs):
+        job = getattr(self, "_sim_job", None)
+        if job is None:
+            return
+        started = datetime.now(timezone.utc)
+        try:
+            while (datetime.now(timezone.utc) - started).total_seconds() < SIM_SLICE_SECONDS:
+                out = next(job)
+                self._sim_steps += 1
+                if out.get("done"):
+                    self._sim_job = None
+                    took = (datetime.now(timezone.utc) - self._sim_began).total_seconds()
+                    self.log(f"Simulator: done in {took:.0f} s ({self._sim_steps} steps)")
+                    self._sim_publish()
+                    self._sim_notify(out)
+                    return
+        except StopIteration:
+            self._sim_job = None
+            return
+        except Exception as err:
+            self._sim_job = None
+            self.log(f"Simulator run failed: {err!r}", level="WARNING")
+            return
+        self.host.run_in(self._sim_step, 1)
+
+    def _sim_context(self) -> SimContext:
+        """Your tariff (from the rate sensor's 'tariff' attribute), history, heat pump, location."""
+        ctx = SimContext(history=History(os.path.join(self._sim_folder(), "history")),
+                         house_includes_car=bool(self.cfg.system.get("house_load_includes_ev", True)),
+                         hp=HeatPumpSettings.from_dict(self._sim_settings().get("heat_pump")),
+                         equipment=EquipmentSettings.from_dict(self._sim_settings().get("equipment")),
+                         auto_cheap=bool(self.cfg.features.get("auto_cheap_threshold", True)))
+        eid = self._role_entity("import_rate_now")
+        code = str(self.host.get_state(eid, attribute="tariff") or "") if eid else ""
+        if code.startswith("E-1R-") and len(code) > 7:
+            supplier = supplier_of(eid)
+            ctx.current = {"supplier": supplier, "product": code[5:-2], "tariff": code, "region": code[-1],
+                           "name": "your tariff"}
+        spec = self.cfg.inputs.get("export_rate") or {}
+        try:
+            ctx.export_p = float(spec["value"]) if "value" in spec else float(self.host.get_state(spec.get("entity")))
+        except (TypeError, ValueError, KeyError):
+            ctx.export_p = None
+        try:
+            lat = float(self.host.get_state("zone.home", attribute="latitude"))
+            lon = float(self.host.get_state("zone.home", attribute="longitude"))
+            ctx.weather = Weather(os.path.join(self._sim_folder(), "weather.json"), lat, lon)
+        except (TypeError, ValueError):
+            ctx.weather = None
+        return ctx
+
+    def _sim_settings(self) -> dict:
+        try:
+            with open(os.path.join(self._sim_folder(), "settings.json"), encoding="utf-8") as fh:
+                return json.load(fh)
+        except (OSError, ValueError):
+            return {}
+
+    def _sim_history_request(self) -> dict:
+        """Months the Simulator card should read from HA's statistics, and which sensors."""
+        if self.cfg is None or self.costbook is None:
+            return {}
+        days = self.costbook.recorded_days()
+        first = datetime.fromisoformat(days[0]).date() if days else None
+        have = set(History(os.path.join(self._sim_folder(), "history")).months())
+        check = self.cfg.features.get("use_check_meter", True)
+        ent = {"house": [self._role_entity("house_load_today")], "car": [self._role_entity("ev_energy_today")],
+               "grid_import": [self._role_entity("grid_import_today_check") if check else None,
+                               self._role_entity("grid_import_today")],
+               "grid_export": [self._role_entity("grid_export_today_check") if check else None,
+                               self._role_entity("grid_export_today")],
+               "solar": [p.energy_today.get("entity") for p in self.cfg.solar_plants if p.enabled]}
+        ent = {k: [e for e in v if e] for k, v in ent.items()}
+        return {"months": [m for m in months_wanted(self._today(), first) if m not in have], "entities": ent,
+                "imported": sorted(have)}
+
+    def _on_sim_history(self, event_name, data, kwargs):
+        """A month of hourly statistics from the Simulator card (admin's browser)."""
+        month = str(data.get("month", ""))
+        req = self._sim_history_request()
+        if month not in months_wanted(self._today(), None) or not req:
+            self.log(f"Simulator: ignored history for '{month}'", level="WARNING")
+            return
+        hours = parse_upload(data.get("stats") or {}, req["entities"], prefer_first=("grid_import", "grid_export"))
+        History(os.path.join(self._sim_folder(), "history")).save_month(month, hours, datetime.now(timezone.utc))
+        n = len(hours.get("house", {}))
+        self.log(f"Simulator: imported {month} from HA statistics ({n} hours of house load)")
+        self._sim_publish()
+
+    def _on_sim_settings(self, event_name, data, kwargs):
+        s = HeatPumpSettings.from_dict(data.get("heat_pump"))
+        e = EquipmentSettings.from_dict(data.get("equipment"))
+        problems = s.problems() + e.problems()
+        if problems:
+            self.host.fire_event("pe_sim_result", ok=False, message="Not saved: " + "; ".join(problems))
+            return
+        path = os.path.join(self._sim_folder(), "settings.json")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump({"heat_pump": s.as_dict(), "equipment": e.as_dict()}, fh, indent=1)
+        self.log(f"Simulator: settings saved by {self._user_name(data)}")
+        self.host.fire_event("pe_sim_result", ok=True, message="Saved. Tonight's run includes them.")
+        self._sim_publish()
+
+    def _sim_publish(self):
+        store = getattr(self, "_sim_store", None) or SimStore(self._sim_folder())
+        s = store.summary or {}
+        meta = {"updated": s.get("updated"), "all_days": s.get("all_days"), "imported_days": s.get("imported_days"),
+                "new_products": s.get("new_products", []), "catalogue_updated": store.catalogue.get("fetched"),
+                "history_request": self._sim_history_request(), "settings": self._sim_settings(),
+                "running": getattr(self, "_sim_job", None) is not None}
+
+        def trim(win, rows=30):
+            if not win:
+                return None
+            out = {k: v for k, v in win.items() if k != "ranking"}
+            out["ranking"] = [{k: v for k, v in r.items() if k not in ("import_kwh", "export_kwh")}
+                              for r in win.get("ranking", [])[:rows]]
+            return out
+        short = trim((s.get("windows") or {}).get("30"))
+        best = next((r for r in (short or {}).get("ranking", []) if r["id"] != "current"), None)
+        self._publish_state("cost_simulator", best["name"][:250] if best else "unknown", {**meta, "window": short})
+        year = trim((s.get("windows") or {}).get("year"), 20)        # shares its sensor with the tables below
+        self._publish_state("cost_simulator_year", year["days"] if year else "unknown",
+                            {"window": year, "heat_pump": s.get("heat_pump"), "planner": s.get("planner"),
+                             "equipment": s.get("equipment")})
+
+    # --- low-write study (docs/plans/low-write-mode.md, stage L1): shadow accounting, changes nothing ---------------
+
+    def _lowwrite_start(self, kwargs=None):
+        if self.cfg is None or self.costbook is None or self._demo:
+            return
+        try:
+            study = getattr(self, "_lowwrite_study", None) or LowWriteStudy(self._sim_folder())
+            self._lowwrite_study = study
+            cb = self.costbook
+            p = self._params()
+            summary = study.run(cb.recorded_days(), lambda d: cb.day_records(datetime.fromisoformat(d).date()), p,
+                                float(self.cfg.safety.get("window_switch_cost_p", 5.0)), self.tz or timezone.utc,
+                                datetime.now(timezone.utc), limit=LOWWRITE_SLICE)
+            self._lowwrite_publish()
+            if summary.get("pending"):
+                self.host.run_in(self._lowwrite_start, 60)
+        except Exception as err:
+            self.log(f"Low-write study failed: {err!r}", level="WARNING")
+
+    def _lowwrite_publish(self):
+        study = getattr(self, "_lowwrite_study", None)
+        if study is None:
+            try:
+                study = LowWriteStudy(self._sim_folder())
+            except Exception:
+                return
+        s = study.summary or {}
+        rows = {r["id"]: r for r in s.get("profiles", [])}
+        cycle = rows.get("overnight_cycle")
+        state = (f"overnight cycle keeps {cycle['kept_pct']}%" if cycle and cycle.get("kept_pct") is not None
+                 else "waiting for recorded days")
+        self._publish_state("diag_lowwrite", state, s or {"days": 0})
+
+    # --- same-day engine comparison (docs/plans/engine-pages-and-comparison.md, 2.4): never touches Home Assistant ----
+    #
+    # Each night a separate process (pe_core.compare.run, the whole app against a fake AppDaemon in a temp folder)
+    # replays yesterday once with each engine from the day's forecast record; this side starts it, looks at it every
+    # five minutes, stops it at 90 minutes, runs one at a time, and publishes sensor.pe_cost_engines.
+
+    def _compare_on(self):
+        return self.cfg is not None and not self._demo and bool(self.cfg.features.get("engine_compare", True))
+
+    def _compare_costs(self):
+        return os.path.join(os.path.dirname(self._save_path()), "costs")
+
+    def _compare_scheduler(self):
+        sched = self.__dict__.get("_compare")
+        if sched is None:
+            sched = self._compare = CompareScheduler(os.path.dirname(self._save_path()),
+                                                     os.path.dirname(os.path.abspath(__file__)))
+        return sched
+
+    def _compare_start(self, kwargs=None):
+        if not self._compare_on():
+            return
+        try:
+            sched = self._compare_scheduler()
+            today = self._today()
+            days = sched.nightly(today)
+            compare_results.prune(self._compare_costs(), today)
+            if days:
+                self.log("Engine comparison: replaying " + ", ".join(d.isoformat() for d in days))
+            self._compare_events(sched.poll())
+        except Exception as err:
+            self.log(f"Engine comparison could not start: {err!r}", level="WARNING")
+        self._compare_publish()
+
+    def _compare_poll(self, kwargs=None):
+        sched = self.__dict__.get("_compare")
+        if sched is None or not self._compare_on():
+            return
+        try:
+            was = sched.running
+            events = sched.poll()
+            self._compare_events(events)
+            if events or was != sched.running:
+                self._compare_publish()
+        except Exception as err:
+            self.log(f"Engine comparison check failed: {err!r}", level="WARNING")
+
+    def _on_compare_recheck(self, event_name, data, kwargs):
+        """Engines compared's "Compare again" (pe_compare_recheck {day}): replay that finished day once more tonight's
+        way, now, in the background (the same runner, one day at a time)."""
+        if event_name != COMPARE_RECHECK_EVENT:
+            return
+        def say(ok, message):
+            self.host.fire_event(COMPARE_RECHECK_RESULT, ok=ok, message=message, day=str((data or {}).get("day")))
+        if not self._compare_on():
+            return say(False, "The engine comparison is switched off.")
+        try:
+            day = date.fromisoformat(str((data or {}).get("day")))
+        except ValueError:
+            return say(False, "That is not a date.")
+        try:
+            why = self._compare_scheduler().recheck(day, self._today())
+        except Exception as err:
+            self.log(f"Engine comparison: could not queue {day}: {err!r}", level="WARNING")
+            return say(False, "It could not be started. See the AppDaemon log.")
+        if why:
+            return say(False, f"Not started: {why}.")
+        self.log(f"Engine comparison: replaying {day} again, asked for from the card")
+        self._compare_publish()
+        say(True, f"Comparing {day.isoformat()} again. It runs in the background and takes about 15 minutes.")
+
+    def _compare_events(self, events):
+        for ev in events:
+            if ev.get("status") == "failed":
+                self.log(f"Engine comparison for {ev['day']} failed: {ev.get('message')}", level="WARNING")
+            else:
+                self.log(f"Engine comparison for {ev['day']}: {ev.get('status')} in {ev.get('took_s')} s")
+
+    def _compare_results(self, today):
+        costs = self._compare_costs()
+        days = [today - timedelta(days=n) for n in range(1, compare_sensor.DAYS_SHOWN + 1)]
+        res = {d.isoformat(): compare_results.read_result(costs, d) for d in days}
+        snaps = {d.isoformat() for d in days if os.path.exists(snapshot_path(costs, d))}
+        return res, snaps
+
+    def _compare_next_run(self):
+        now = datetime.now(self.tz or timezone.utc)
+        hh, mm, ss = (int(x) for x in COMPARE_START.split(":"))
+        nxt = now.replace(hour=hh, minute=mm, second=ss, microsecond=0)
+        return (nxt if nxt > now else nxt + timedelta(days=1)).isoformat(timespec="seconds")
+
+    def _compare_publish(self):
+        try:
+            if self.cfg is None:
+                return
+            on = self._compare_on()
+            res, snaps = self._compare_results(self._today()) if not self._demo else ({}, set())
+            sched = self.__dict__.get("_compare")
+            running = ({"day": sched.day.isoformat(), "since": sched.started.isoformat(timespec="seconds")}
+                       if sched is not None and sched.running else None)
+            state, attrs = compare_sensor.build(self._today(), res, snaps, feature_on=on, running=running,
+                                                next_run=self._compare_next_run() if on else None)
+            self._publish_if_changed("cost_engines", state, attrs)
+        except Exception as err:
+            self.log(f"Engine comparison sensor failed: {err!r}", level="WARNING")
+
+    def _compare_bundle(self):
+        """The diagnostics export's `engine_compare`: the last week's result files and the job's state."""
+        res, snaps = self._compare_results(self._today())
+        sched = self.__dict__.get("_compare")
+        state, attrs = compare_sensor.build(self._today(), res, snaps, feature_on=self._compare_on(),
+                                            running=None, next_run=None)
+        return {"feature": self._compare_on(), "state": state, "running": bool(sched and sched.running),
+                "queue": [d.isoformat() for d in (sched.queue if sched else [])],
+                "forecast_records": sorted(snaps), "results": [r for r in res.values() if r],
+                "calib": attrs["calib"], "totals": attrs["totals"]}
+
+    def _sim_notify(self, out):
+        month = self._today().strftime("%Y-%m")
+        opps = out.get("opportunities") or []
+        if opps:
+            top = opps[:3]
+            lines = [f"{o['name']}: about £{o['saving_month']:.0f} a month less" + (f" ({o['notes']})" if o.get("notes")
+                                                                                    else "")
+                     for o in top]
+            wins = (getattr(self, "_sim_store", None).summary or {}).get("windows", {})
+            long = wins.get("year") or {}
+            days = (long if long.get("days", 0) >= 90 else wins.get("30") or {}).get("days")
+            self._notify("simulator", (f"sim:{top[0]['id']}:{month}", "PowerEngine: a tariff worth a look",
+                                       f"Over your last {days} days, with the battery run the same way: "
+                                       + "; ".join(lines) + ". See the Simulator tab."))
+        new = out.get("new_products") or []
+        if new:
+            names = ", ".join(sorted({p["name"] for p in new}))[:300]
+            self._notify("simulator", ("sim:new:" + ",".join(sorted(p["code"] for p in new))[:120],
+                                       "PowerEngine: new tariffs", f"New tariffs published: {names}. They're in "
+                                       "tonight's Simulator comparison."))
+
+    def _daily_summary(self, kwargs):
+        if self.costbook is None:
+            return
+        today = self._today()
+        sp = self._scenario_params() if self.cfg is not None else None
+        s = self.costbook.summary(today - timedelta(days=1), today, scenario_params=sp)
+        if s:
+            steps = waterfall([s], "yesterday")["steps"] if s.get("scenarios") and s.get("complete") else None
+            self._notify("daily", daily_message(s, steps))
+
+    def _health(self):
+        if self.costbook is None or self._get_publisher() is None:
+            return
+        if self.cfg is None:                            # nothing to check yet (no config, or one that didn't load)
+            if not self.cfg_error:
+                self._publish_state("diag_health", NOT_SET_UP, {"findings": []})
+            return
+        try:
+            h = self.costbook.health(self._today(), getattr(self, "_checks", None))
+            h["slots"] = self.slots.summary(datetime.now(timezone.utc), tz=self.tz,
+                                                max_kw=float(self.cfg.safety.get("ev_charger_kw", 7.4)),
+                                                min_charge_min=self._min_charge_min())
+            h["smart_requests"] = self.smart.summary(datetime.now(timezone.utc), tz=self.tz)
+            f = clock.finding(getattr(self, "_clock_drift", None), self._control_method() == "ram_remote",
+                              getattr(self, "_clock_synced", None), datetime.now(self.tz))
+            if f:
+                h["findings"].append(f)
+            from pe_core.health import finding_key
+            for x in h["findings"]:
+                x["key"] = finding_key(x)
+            gone = self._dismissed()
+            h["all_findings"] = list(h["findings"])
+            h["findings"] = [x for x in h["findings"] if x["key"] not in gone]
+            h["dismissed"] = [{"title": v.get("title"), "at": v.get("at")}
+                              for v in sorted(gone.values(), key=lambda v: v.get("at", ""), reverse=True)[:5]]
+            h["state"] = overall(h["findings"])
+            self._health_last = h
+            self._publish_state("diag_health", h["state"], {k: v for k, v in h.items() if k != "all_findings"})
+            self._notify("health", health_message(h))
+        except Exception as err:
+            self.log(f"Could not evaluate health: {err!r}", level="WARNING")
+
+    def _sync_solar_entities(self):
+        """Discover a power sensor for each enabled solar plant, and retire any no longer enabled (plants
+        removed or disabled since the last time this ran). HA's own state, not a file PowerEngine keeps, is
+        the record of what's currently published (the same lookup RAM remote control uses for its entities)."""
+        if self.cfg is None or self._get_publisher() is None:
+            return
+        wanted = {p.id: p.name for p in self.cfg.solar_plants if p.enabled}
+        try:
+            ids = list((self.host.get_state() or {}).keys())
+        except Exception:
+            ids = []
+        published = {pid for pid in (solar_plant_id_from_entity(e) for e in ids) if pid}
+        for pid, name in wanted.items():
+            ent = solar_plant_entity(pid, name)
+            self._get_publisher().discover(ent, __version__)
+        for pid in published - set(wanted):
+            self._get_publisher().retire(solar_plant_entity(pid, ""))
+
+    def _sync_device_entities(self):
+        """Discover a sensor for each input a read-only device has mapped, and retire any no longer wanted (same
+        approach as the solar plants: HA's own state is the record of what is published)."""
+        if self.cfg is None or self._get_publisher() is None:
+            return
+        input_field = {"battery_soc": "soc", "battery_power": "battery_power", "solar_power": "solar_power"}
+        wanted = {(d.id, input_field[k]): d.name for d in self.cfg.devices for k in d.inputs}
+        try:
+            ids = list((self.host.get_state() or {}).keys())
+        except Exception:
+            ids = []
+        published = {ref for ref in (device_ref_from_entity(e) for e in ids) if ref}
+        for (did, fname), name in wanted.items():
+            self._get_publisher().discover(device_entity(did, name, fname), __version__)
+        for did, fname in published - set(wanted):
+            self._get_publisher().retire(device_entity(did, "", fname))
+
+    def _energy_flow_card(self):
+        plants = self.cfg.solar_plants if self.cfg else ()
+        if self.cfg is not None and getattr(self, "_last_readings", None) is not None:
+            capacity_wh = round(self._control_params(self._last_readings).capacity_kwh * 1000 / 100) * 100
+        else:
+            capacity_wh = 18000
+        reserve_soc = self._reserve_soc() if self.cfg else 12
+        has_ev = bool(self._role_entity("ev_charge_power")) if self.cfg else False
+        return energy_flow_card(plants, capacity_wh, reserve_soc, has_ev, self._inverter().card_model)
+
+    def _sync_dashboard(self):
+        targets = [os.path.join(os.path.dirname(self._save_path()), "dashboard.yaml")]
+        if self._demo and not self._real_config_exists():           # nobody's set up yet: the registered dashboard
+            targets.append(os.path.join(self._real_dir(), "dashboard.yaml"))    # shows the demo
+        for target in targets:
+            try:
+                engine = self._engine_name() if self.cfg is not None and not self._demo else None
+                if sync_dashboard(target, card=self._energy_flow_card(), names=self._names(), engine=engine):
+                    self.log(f"Dashboard updated: {target} (refresh the PowerEngine dashboard to see it)")
+            except OSError as err:
+                self.log(f"Could not write the dashboard file {target}: {err}", level="WARNING")
+
+    # --- PowerEngine's own Home Assistant package files -----------------------------------
+
+    def _ha_config_dir(self):
+        return os.path.dirname(os.path.dirname(self._save_path()))        # e.g. /homeassistant
+
+    def _package_sync(self, why="start"):
+        """Keep the package files in <ha config>/packages in step with this version and with the chosen other
+        controller. Never in a demo or a shadow run, never creates the folder, never raises: a problem is a warning
+        and the sensor."""
+        if self._demo or getattr(self, "_shadow", False) or self.cfg is None:
+            return
+        try:
+            controller = other_controller(self.cfg)
+            result = hapackage.sync(self._ha_config_dir(), controller, hapackage.shipped_texts(),
+                                    datetime.now().strftime("%Y%m%d-%H%M%S"))
+            self._pkg_result = result
+            for a in hapackage.changes(result):
+                self.log(f"Home Assistant package: {hapackage.describe_change(a)}")
+            for _name, err in result["errors"]:
+                self.log(f"Home Assistant package could not be written: {err}", level="WARNING")
+            if not result["dir_exists"] and why == "start":
+                self.log("Home Assistant package: there is no packages folder, so PowerEngine does not write its "
+                         "package (see the install guide)")
+            changed = hapackage.changes(result)
+            if changed:
+                key = "package:" + ",".join(f"{a.name}:{a.action}" for a in changed) + ":" + datetime.now(
+                    timezone.utc).strftime("%Y%m%d")
+                self._notify("health", (key, "PowerEngine updated its Home Assistant package",
+                                        "PowerEngine updated its Home Assistant package: press \"Load PowerEngine's "
+                                        "Home Assistant changes\" on the Config page so Home Assistant "
+                                        "uses the change."))
+        except Exception as err:
+            self._pkg_result = {"dir_exists": True, "actions": [], "controller": "unset",
+                                "errors": [("", f"{err!r}")]}
+            self.log(f"Home Assistant package sync failed: {err!r}", level="WARNING")
+        self._publish_package()
+
+    def _entity_present(self, entity_id):
+        try:
+            return self.host.get_state(entity_id) is not None
+        except Exception:
+            return True                                   # can't tell: don't claim a reload is needed
+
+    def _publish_package(self):
+        result = self.__dict__.get("_pkg_result")
+        if result is None or self._demo:
+            return
+        state, attrs = hapackage.report(result, self._entity_present)
+        self._publish_if_changed("diag_package", state, attrs)
+
+    # --- saving from the config card -------------------------------------------------
+
+    def _save_path(self):
+        if self.cfg_path:
+            return self.cfg_path
+        for path in self.paths:
+            root = os.path.dirname(os.path.dirname(path))   # e.g. /homeassistant
+            if os.path.isdir(root):
+                return path
+        return self.paths[0]
+
+    def _on_save(self, event_name, data, kwargs):
+        new = data.get("config")
+        user = self._user_name(data)
+        try:
+            if not isinstance(new, dict):
+                raise ConfigError("no configuration received")
+            new = coerce_flags(new)          # true/false that arrived as text or 0/1 (the demo's settings save)
+            controller_before = other_controller(self.cfg)
+            old_devices = self.cfg.raw.get("devices") if self.cfg else None
+            if old_devices is not None and "devices" not in new:     # a card that doesn't know devices keeps them
+                new = {**new, "devices": old_devices}
+            old_loads = self.cfg.raw.get("free_power_loads") if self.cfg else None
+            if old_loads is not None and "free_power_loads" not in new:   # older cards don't send them: keep
+                new = {**new, "free_power_loads": old_loads}
+            if self.cfg and "v2_split" in self.cfg.raw and "v2_split" not in new:
+                new = {**new, "v2_split": self.cfg.raw["v2_split"]}      # the mark that v2 has its own settings
+            new, switched = self._site_guard(new)
+            _, backup = save_config(self._save_path(), new)
+        except (ConfigError, OSError) as err:
+            self.log(f"Config save by {user} rejected: {err}", level="WARNING")
+            self.host.fire_event(RESULT_EVENT, ok=False, message=str(err))
+            return
+        changed = self._changes(self.cfg.raw if self.cfg else {}, new)
+        self.log(f"Config saved by {user} ({changed}); backup: {backup or 'none (first save)'}")
+        self._logbook(f"configuration saved by {user}: {changed}")
+        if switched:
+            self._set_retest(True)
+            self.log(f"Site: the inverter or its firmware was changed by {user}; PowerEngine is Passive and the "
+                     f"supervised tests need running again", level="WARNING")
+            self._logbook(f"site changed by {user}: the inverter or its firmware; Passive until the tests are re-run")
+        # answer as soon as the file is saved: the reload below re-checks inputs, rewrites the dashboard and runs a
+        # cycle, which on a slow host (or behind an engine v2 calculation on the app's thread) outlasted the card's wait
+        self.host.fire_event(RESULT_EVENT, ok=True, message=f"Saved. {changed}."
+                        + (" The inverter changed, so PowerEngine is Passive until the tests are re-run."
+                           if switched else ""))
+        self._reload()
+        if other_controller(self.cfg) != controller_before:
+            self._package_sync("save")
+        if switched:
+            self._notify("health", (f"site:{new['site'].get('inverter')}:{new['site'].get('inverter_firmware')}",
+                                    "PowerEngine: inverter changed",
+                                    "The inverter or its firmware was changed in the site settings. PowerEngine is "
+                                    "Passive (nothing is controlled) until you run the supervised tests again."))
+
+    def _check_update(self, kwargs):
+        """HACS replaces the app's files but AppDaemon keeps the old modules loaded. When the version on disk differs
+        from the one running, fire pe_update_installed once; the handover package's automation restarts AppDaemon.
+        (PowerEngine can't restart AppDaemon itself: that needs admin rights it deliberately doesn't have.)"""
+        installed = installed_version(os.path.join(os.path.dirname(os.path.abspath(__file__)), "pe_core",
+                                                   "__init__.py"))
+        if installed is None or installed == __version__ or getattr(self, "_update_seen", None) == installed:
+            return
+        self._update_seen = installed
+        self.log(f"Version {installed} installed (running {__version__}); asking Home Assistant to restart AppDaemon")
+        self.host.fire_event("pe_update_installed", running=__version__, installed=installed)
+
+    def _listen_for_commands(self):
+        """Direct mode only: HA has no integration behind our entities, so hear its service calls. (With MQTT the
+        switches are real and the app just watches their state, so nothing is registered.)"""
+        pub = self._get_publisher()
+        if pub is not None and not pub.retains:
+            self.host.listen_event(self._on_call_service, "call_service")
+            self.host.listen_event(self._on_pe_command, "pe_command")
+
+    def _on_call_service(self, event_name, data, kwargs):
+        """Direct mode: a switch, select or number of ours was operated in HA (see pe_core/commands.py)."""
+        data = data or {}
+        for ent, value in from_service(str(data.get("domain")), str(data.get("service")),
+                                       data.get("service_data") or {}, self.host.get_state):
+            self._on_command(ent.key, value)
+
+    def _on_pe_command(self, event_name, data, kwargs):
+        """Direct mode: the card's own command event, for when HA refuses a service call for a missing platform."""
+        for ent, value in from_pe_command(data, self.host.get_state):
+            self._on_command(ent.key, value)
+
+    def _on_command(self, key, value):
+        """One place a command from HA lands: set the entity, and the state listeners (pause and guards, history)
+        react to the change exactly as they do when MQTT delivers it."""
+        pub = self._get_publisher()
+        if pub is not None:
+            self.log(f"Command from Home Assistant: {key} = {value}")
+            pub.preset(key, value)
+
+    def _on_set_control(self, event_name, data, kwargs):
+        """The handover scripts' event: Active when handed to PowerEngine, Passive when handed to the other controller.
+        Only the optional handover package fires it; with none installed nothing happens here. Saved like any config
+        change (with a backup), so it survives restarts."""
+        mode = (data or {}).get("operation")
+        try:
+            if self.cfg is None:
+                raise ConfigError(self.cfg_error or "no configuration yet")
+            if self.cfg.raw.get("operation", {}).get("mode") == mode:
+                self.log(f"Controller switch: already {mode}")
+                self._reload()                             # re-evaluate (pause may just have changed)
+                return
+            new = with_operation(self.cfg.raw, mode)
+            _, backup = save_config(self._save_path(), new)
+        except (ConfigError, OSError) as err:
+            self.log(f"Controller switch to {mode!r} refused: {err}", level="WARNING")
+            self._notify("health", ("control:switch", "PowerEngine: switch failed", str(err)))
+            return
+        self.log(f"Controller switch: operation set to {mode}; backup: {backup or 'none'}")
+        self._logbook(f"operation set to {mode} by the battery controller switch")
+        self._reload()
+
+    def _reload(self):
+        """Re-read config.yaml in place and republish status (no app restart)."""
+        self._temps_at = None                              # cold settings may have changed: recompute soon
+        engine_before, choice_before = self._engine_name(), self._engine_choice()
+        p_before = self._params(conversion=False) if self.cfg is not None else None
+        self.cfg_error = None
+        try:
+            self.cfg, self.cfg_path = load_config(self.paths)
+        except ConfigError as err:
+            self.cfg, self.cfg_error = None, str(err)
+        self._watch_controls()
+        self._watch_ready_by()
+        if self.cfg is not None:
+            self._publish_names()                          # the site's adapters may have changed
+            self._publish_v2_settings()
+            self._publish_notify()
+            self._publish_if_changed("state_engine", self._engine_name(), self._engine_attrs())    # the choice, now
+            if self._engine_name() != engine_before:
+                self._engine_switched(choice_before)
+            elif self._engine_choice() != choice_before:         # v2 and 2.1 beta: one engine, other settings
+                now, was = ENGINE_LABELS[self._engine_choice()], ENGINE_LABELS[choice_before]
+                self.log(f"Engine changed from {was} to {now}: it works its values out again with the new settings")
+                self._logbook(f"planning engine changed from {was} to {now}")
+        if self.cfg is not None and self.costbook is not None:
+            fid = flow_id(self.cfg)
+            if fid != self.costbook.flow_id:              # inputs that shape the flows changed: rebuild from history
+                self.costbook.flow_id = fid
+                self.log("Cost inputs changed; recent days will be rebuilt from HA history")
+                self.host.run_in(self._backfill, 30)
+            else:
+                p_after = self._params(conversion=False)
+                if p_before is not None and (abs(p_after.capacity_kwh - p_before.capacity_kwh) > 0.05
+                                             or abs(p_after.efficiency - p_before.efficiency) > 0.001):
+                    n = self.costbook.revalue(**self._cost_params())      # e.g. 'use measured' toggled
+                    self.log(f"Battery now {p_after.capacity_kwh:.2f} kWh, {p_after.efficiency ** 2 * 100:.1f}% "
+                             f"round trip; costs re-valued ({n} half-hours)")
+                    self._refresh_months()
+            if self._sync_window():                        # a different overnight window: past half-hours re-valued
+                n = self.costbook.revalue(**self._cost_params())
+                self.log(f"Overnight window now {describe_window(self.costbook.window())}; costs re-valued ({n} "
+                         "half-hours)")
+                self._refresh_months()
+                self._plan_sig = None
+            self._measure(revalue=False)                   # republish which capacity is in use
+        self._last_checks = None
+        self._evaluate()
+        self._sync_solar_entities()
+        self._sync_device_entities()
+        self._sync_dashboard()
+        self._cycle({})
+
+    # --- diagnostics export ------------------------------------------------------------------------
+
+    def log(self, msg, *args, **kwargs):
+        """The host's log, also kept in a small in-memory ring for the diagnostics export."""
+        ring = self.__dict__.get("_log_ring")
+        if ring is None:
+            ring = self.__dict__["_log_ring"] = diagnostics.LogRing()
+        ring.add(datetime.now(timezone.utc), kwargs.get("level", "INFO"), msg)
+        return self.host.log(msg, *args, **kwargs)
+
+    def _diag_bundle(self, now):
+        s = diagnostics.safe
+        journal = getattr(self, "journal", None)
+        if journal is None:
+            journal = s(lambda: WriteJournal(os.path.join(os.path.dirname(self._save_path()), "write_journal.json")))
+        mode = getattr(self, "mode", None)
+        run = getattr(self, "_test", None)
+        return {
+            "app": {"version": __version__, "min_card_version": MIN_CARD_VERSION,
+                    "generated": now.isoformat(timespec="seconds"),
+                    "timezone": str(self.tz) if self.tz else None},
+            "mode": s(lambda: {"configured": mode.configured, "effective": mode.effective, "reason": mode.reason,
+                               "halted": bool(getattr(self, "_halted", False)),
+                               "cap_base": getattr(self, "_cap_base", 0)}) if mode else None,
+            "config": s(lambda: self.cfg.raw) if self.cfg else {"error": getattr(self, "cfg_error", "no config")},
+            "writes": s(lambda: self.writes.summary(self._today())),
+            "journal": s(lambda: diagnostics.recent_journal(journal.entries, now)),
+            "plan": s(lambda: plan_snapshot(self.plan, now - timedelta(hours=1), now + timedelta(hours=36)))
+            if getattr(self, "plan", None) is not None else None,
+            "test": run.as_dict() | {"status": run.status} if run is not None else None,
+            "smart_requests": s(lambda: self.smart.attempts[-40:]) if getattr(self, "smart", None) else None,
+            "smart_slots": s(lambda: self.slots.summary(now, tz=self.tz, min_charge_min=self._min_charge_min()))
+            if getattr(self, "slots", None) else None,
+            "bms": s(self._bms_bundle),
+            "engine_v2": s(lambda: diagnostics.engine_v2_section(
+                self.__dict__.get("_v2"), self._engine_name(), now,
+                (self._published.get("v2_timeline") or (None, None))[1],
+                {name: (self._published.get(key) or (None, None))[1] for name, key in (
+                    ("mode", "v2_mode"), ("value", "v2_value"), ("value_curve", "v2_value_curve"),
+                    ("learning", "diag_v2"))},
+                profile=self._engine_profile())),
+            "forecast_snapshots": s(lambda: fcsnap.summary(self._fcsnap.folder))
+            if self.__dict__.get("_fcsnap") else None,
+            "v2_history": s(lambda: v2history.summary(self._v2hist.folder, self.tz)) if self.__dict__.get("_v2hist")
+            else None,
+            "coverage": s(lambda: coverage.summary(self.costbook.folder, datetime.now(timezone.utc).astimezone(
+                self.tz or timezone.utc).date())) if self.__dict__.get("costbook") is not None else None,
+            "forecast_log": s(lambda: forecastlog.summary(self._flog.folder, datetime.now(timezone.utc).astimezone(
+                self.tz or timezone.utc).date())) if self.__dict__.get("_flog") else None,
+            "early_target": s(lambda: {**self._early.summary(), "records": self._early.records[-60:]}),
+            "engine_compare": s(self._compare_bundle),
+            "attribute_sizes": s(lambda: diagnostics.largest_attrs(self.__dict__.get("_attr_sizes", {}))),
+            "log": list(getattr(self.__dict__.get("_log_ring"), "lines", [])),
+        }
+
+    def _bms_bundle(self):
+        """The BMS limit sensors (charge, discharge) now, and the recent command / expected / actual rows, so
+        the first cold spell can be read back: command, battery power and the limits side by side."""
+        roles = ("battery_bms_charge_limit", "battery_bms_discharge_limit")
+        now_raw = {k: {"entity": self._role_entity(k),
+                       "state": self.host.get_state(self._role_entity(k)) if self._role_entity(k) else None}
+                   for k in roles}
+        ring = self.__dict__.get("_bms_ring")
+        return {"mapped": {k: bool(v["entity"]) for k, v in now_raw.items()}, "sensors": now_raw,
+                "recent": ring.as_list() if ring is not None else [],
+                "note": f"limits are in amps; watts use the nominal battery voltage ({BATTERY_VOLTS:g} V)"}
+
+    def _on_diag_request(self, event_name, data, kwargs):
+        now = datetime.now(timezone.utc)
+        rid = str(data.get("id", ""))[:40]
+        bundle = self._diag_bundle(now)
+        stamp = (now.astimezone(self.tz) if self.tz else now).strftime("%Y%m%d-%H%M%S")
+        saved = diagnostics.safe(diagnostics.save_copy,
+                                 os.path.join(os.path.dirname(self._save_path()), "diagnostics"), stamp, bundle)
+        self.log(f"Diagnostics exported for {self._user_name(data)} ({saved if isinstance(saved, str) else saved})")
+        self.host.fire_event(diagnostics.BUNDLE_EVENT, id=rid, bundle=json.loads(json.dumps(bundle, default=str)),
+                        saved=saved if isinstance(saved, str) else None)
+
+    def _user_name(self, data):
+        ctx = (data.get("metadata") or {}).get("context") or data.get("context") or {}
+        uid = ctx.get("user_id")
+        if uid:
+            for person in (self.host.get_state("person") or {}).values():
+                if (person.get("attributes") or {}).get("user_id") == uid:
+                    return person["attributes"].get("friendly_name", uid)
+        return uid or "unknown user"
+
+    @staticmethod
+    def _changes(old, new):
+        o, n = old.get("inputs") or {}, new.get("inputs") or {}
+        changed = sorted(k for k in set(o) | set(n) if o.get(k) != n.get(k))
+        other = [k for k in set(old) | set(new) if k != "inputs" and old.get(k) != new.get(k)]
+        parts = []
+        if changed:
+            labels = [fill(ROLE_BY_KEY[k].label) if k in ROLE_BY_KEY else k for k in changed]
+            more = "…" if len(labels) > 6 else ""
+            parts.append(f"{len(changed)} input(s) changed: " + ", ".join(labels[:6]) + more)
+        if other:
+            parts.append("also " + ", ".join(sorted(other)))
+        return "; ".join(parts) or "no changes"
+
+    # --- helpers -------------------------------------------------------------------
+
+    def _retire_old_entities(self):
+        """Remove entities an earlier release published (entities.RETIRED_ENTITIES). MQTT: clear their retained
+        topics (harmless to repeat). Direct: only those HA still has, so a fresh install gets no stray entity."""
+        pub = self._get_publisher()
+        for ent in RETIRED_ENTITIES:
+            try:
+                if pub.retains or self.host.get_state(ent.entity_id) is not None:
+                    pub.retire(ent)
+            except Exception as err:
+                self.log(f"Could not retire {ent.entity_id}: {err!r}", level="WARNING")
+
+    def _ui_defaults(self):
+        """Set dashboard preferences to their defaults once (HA and the broker keep them after that)."""
+        path = os.path.join(os.path.dirname(self._save_path()), "ui.json")
+        try:
+            with open(path, encoding="utf-8") as fh:
+                done = json.load(fh)
+        except (OSError, ValueError):
+            done = {}
+        pub = self._get_publisher()
+        if not pub.retains:                       # direct: nothing survives a start, so set them again
+            done = {}
+        changed = False
+        if not done.get("right_align"):
+            pub.preset("ui_right_align", "ON")               # right-aligned numbers by default
+            done["right_align"] = changed = True
+        if changed and pub.retains:
+            try:
+                with open(path, "w", encoding="utf-8") as fh:
+                    json.dump(done, fh)
+            except OSError as err:
+                self.log(f"Could not save dashboard defaults: {err}", level="WARNING")
+
+    # --- demo mode (demo plan C2): a simulated home and battery, and nothing written to the real system -----------
+
+    def _demo_setup(self, day):
+        """`demo: <day>` in apps.yaml. The settings are a fresh copy of demo/config.template in a separate folder, so
+        the real configuration, costs, journal and learned data are never touched; the app's get_state, call_service,
+        fire_event, set_state and get_history become the demo gate's (pe_core/demo/gate.py); publishing is direct."""
+        pack = load_demo_pack()
+        if day not in pack["days"]:
+            first = next(iter(pack["days"]))
+            self.log(f"Demo: no day called {day!r} (the pack has {', '.join(pack['days'])}); using {first}",
+                     level="WARNING")
+            day = first
+        self._demo = day
+        self.cfg_path = None
+        demo_dir = os.path.join(self._real_dir(), "demo")
+        shutil.rmtree(demo_dir, ignore_errors=True)                  # a fresh demo each start
+        os.makedirs(demo_dir, exist_ok=True)
+        shutil.copyfile(os.path.join(os.path.dirname(__file__), "demo", "config.template"),
+                        os.path.join(demo_dir, "config.yaml"))
+        self.paths = [os.path.join(demo_dir, "config.yaml")]
+        real_set = self.host.method("set_state")
+        gate = self._demo_gate = DemoGate(
+            self._demo_world, self.host.method("get_state"),
+            self.host.lossless_set_state(real_set, self._told_once) if real_set is not None else None,
+            self.host.method("fire_event"), self.log,
+            allowed_events=(RESULT_EVENT, "pe_test_result", "pe_sim_result", diagnostics.BUNDLE_EVENT,
+                            DEMO_RESULT_EVENT))
+        self.host.override(get_state=gate.get_state, get_history=gate.get_history, call_service=gate.call_service,
+                           set_state=gate.set_state, fire_event=gate.fire_event)
+        self.log(f"Demo mode: the {day} day, simulated home and battery; nothing outside {demo_dir} is changed")
+
+    def _real_dir(self):
+        """The folder the real config lives in (or would): where demo.json, the demo folder and, before the app is set
+        up, the dashboard go. Not the demo folder, even while the demo runs."""
+        paths = self.__dict__.get("_real_paths") or list(DEFAULT_PATHS)
+        for path in paths:
+            if os.path.isdir(os.path.dirname(os.path.dirname(path))):
+                return os.path.dirname(path)
+        return os.path.dirname(paths[0])
+
+    def _real_config_exists(self):
+        return any(os.path.isfile(p) for p in (self.__dict__.get("_real_paths") or list(DEFAULT_PATHS)))
+
+    def _demo_file(self):
+        return os.path.join(self._real_dir(), "demo.json")
+
+    def _saved_demo_day(self):
+        """The day a dashboard start chose (demo.json), honoured only while there is no real config."""
+        path = self._demo_file()
+        if not os.path.isfile(path):
+            return None
+        if self._real_config_exists():
+            self.log(f"Ignoring {path}: a real config exists, so no demo starts by itself", level="WARNING")
+            return None
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return str(json.load(fh).get("day") or "") or None
+        except (OSError, ValueError, AttributeError):
+            return None
+
+    def _demo_reply(self, ok, message):
+        self.log(f"Demo: {message}", level="INFO" if ok else "WARNING")
+        self.host.fire_event(DEMO_RESULT_EVENT, ok=ok, message=message)
+
+    def _on_demo(self, event_name, data, kwargs):
+        """The card's demo buttons (pe_demo: start / day / exit). Only the event named pe_demo is handled."""
+        if event_name != DEMO_EVENT:
+            return
+        data = data if isinstance(data, dict) else {}
+        action, day = data.get("action"), data.get("day")
+        if self.__dict__.get("_touched") is None:           # started configured: never re-initialised in place
+            return self._demo_reply(False, "The demo can only start on a PowerEngine that isn't set up yet, so it "
+                                           "never takes over a real system.")
+        pack = load_demo_pack()
+        if action in ("start", "day"):
+            if action == "start" and not self._demo and self._real_config_exists():
+                return self._demo_reply(False, "The demo can only start on a PowerEngine that isn't set up yet, "
+                                               "so it never takes over a real system.")
+            if not isinstance(day, str) or day not in pack["days"]:
+                return self._demo_reply(False, f"There's no demo day called {day!r}. Choose one of: "
+                                               f"{', '.join(pack['days'])}.")
+            if action == "day" and not self._demo:
+                return self._demo_reply(False, "No demo is running. Start it first.")
+            if self.host.args.get("demo"):
+                return self._demo_reply(False, f"The demo is set in apps.yaml (demo: {self.host.args['demo']}); change "
+                                               "that line and restart AppDaemon to pick another day.")
+            try:
+                os.makedirs(self._real_dir(), exist_ok=True)
+                tmp = self._demo_file() + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    json.dump({"day": day}, fh)
+                os.replace(tmp, self._demo_file())
+            except OSError as err:
+                return self._demo_reply(False, f"Couldn't save the demo choice ({err}).")
+            title = fill(pack["days"][day].get("title", day), self._names())
+            self._demo_reply(True, f"Starting the demo: {title}." if action == "start" else f"Switched to: {title}.")
+        elif action == "exit":
+            if self.host.args.get("demo"):
+                return self._demo_reply(False, f"The demo is set in apps.yaml (demo: {self.host.args['demo']}); remove "
+                                               "that line and restart AppDaemon to leave it.")
+            try:
+                os.remove(self._demo_file())
+            except FileNotFoundError:
+                pass
+            except OSError as err:
+                return self._demo_reply(False, f"Couldn't end the demo ({err}).")
+            self._demo_reply(True, "The demo has ended.")
+        else:
+            return self._demo_reply(False, f"I don't know the demo action {action!r}.")
+        self.initialize()                                            # again, cleanly: see _wipe
+
+    def _demo_world(self):
+        world = self.__dict__.get("_world")
+        if world is None:
+            pack = load_demo_pack()
+            # The recorded days are UK wall-clock days (offsets from local midnight in the pack's time zone), so the
+            # demo always runs on that zone, not on whatever AppDaemon's `time_zone` happens to be: a fresh install
+            # is often set to UTC, which shifted the whole day (the sunny day's solar, the events, the forecast) by
+            # an hour against the clock the owner sees.
+            world = self._world = DemoWorld(pack, self._demo, ZoneInfo(pack["tz"]), lambda: datetime.now(timezone.utc))
+        return world
+
+    def _demo_info(self):
+        """What the demo banner shows (published on the version sensor)."""
+        names = self._names()
+        pack = self._demo_world().pack["days"]
+        return {"day": self._demo, "title": fill(self._demo_world().title(), names),
+                "days": [{"key": k, "title": fill(v.get("title", k), names)} for k, v in pack.items()],
+                "note": "Recorded data from a real home. Nothing is controlled."}
+
+    def _publisher_choice(self):
+        if self._demo:
+            return "direct"
+        choice = ((getattr(self.cfg, "system", None) or {}).get("publisher") if self.cfg else None) or "auto"
+        return choice
+
+    def _get_publisher(self):
+        """The one door for every entity the app publishes (MQTT or direct; the core never knows which)."""
+        pub = self.__dict__.get("_publisher_obj")
+        if pub is None:
+            pub = select_publisher(self._publisher_choice(), getattr(self, "mqtt", None),
+                                   self.host.state_writer(self._told_once, demo=bool(self._demo)),
+                                   native=None if self._demo else self.host.native_entities,
+                                   told_once=self._told_once)
+            self._publisher_obj = pub
+        return pub
+
+    def _told_once(self, key, message, level="INFO"):
+        told = self.__dict__.setdefault("_told", set())
+        if key not in told:
+            told.add(key)
+            self.log(message, level=level)
+
+    def _mqtt_api(self, quiet=False):
+        try:
+            api = self.host.plugin_api("MQTT")
+        except Exception as err:  # plugin not configured
+            api = None
+            if not quiet:
+                self.log(f"MQTT plugin error: {err}", level="WARNING")
+        if api is None and quiet:
+            self.log("No MQTT plugin in AppDaemon: publishing entities directly.")
+        elif api is None:
+            self.log("MQTT plugin not configured in appdaemon.yaml; entities can't be published. "
+                     "See docs/INSTALL.md, Step 3.", level="WARNING")
+        return api
+
+    def _publish_state(self, key, state, attributes=None):
+        pub = self._get_publisher()
+        if pub is None:
+            return
+        if attributes is None:
+            pub.publish(key, state)
+        else:
+            payload = attributes if isinstance(attributes, str) else json.dumps(attributes, default=str)
+            try:                                  # measured as HA's recorder stores it: compact JSON, UTF-8
+                compact = json.dumps(json.loads(payload), separators=(",", ":"), ensure_ascii=False)
+            except ValueError:
+                compact = payload
+            size = len(compact.encode("utf-8"))
+            sizes = self.__dict__.setdefault("_attr_sizes", {})
+            if diagnostics.track_attr_size(sizes, key, size):
+                self.log(f"sensor.pe_{key}: attributes are {size} bytes, near Home Assistant's "
+                         f"{diagnostics.ATTR_LIMIT}-byte limit (over it, HA stops recording this sensor's history)",
+                         level="WARNING")
+            pub.publish(key, state, payload)
+
+    def _publish_chunked(self, key, state, attributes):
+        """A catalogue on one sensor, or on numbered ones when it is too big for one (chunks.py). Unused parts are
+        emptied so a list that shrank leaves nothing stale."""
+        parts = chunks.split(attributes)
+        if len(parts) > chunks.MAX_PARTS:
+            self.log(f"sensor.pe_{key}: needs {len(parts)} parts, only {chunks.MAX_PARTS} exist", level="ERROR")
+            parts = parts[:chunks.MAX_PARTS]
+        for n in range(1, chunks.MAX_PARTS + 1):
+            name = chunks.part_key(key, n)
+            if n <= len(parts):
+                items = sum(len(v) for v in parts[n - 1].values() if isinstance(v, list))
+                self._publish_state(name, state if n == 1 else str(items), parts[n - 1])
+            elif n > 1:
+                self._publish_state(name, "0", {})
+
+    def _publish_status(self):
+        """The Monitoring page's Mode tile: one word, coloured by the dashboard. Stopped (writes couldn't be confirmed)
+        and Blocked (a config with inputs not ready, or Active refused) are both shown red. Before there is a config the
+        word is "Not set up yet", shown neutral."""
+        mode = getattr(self, "mode", None)
+        if mode is None:
+            return
+        if getattr(self, "_halted", False):
+            word, why = "Stopped", "Inverter writes couldn't be confirmed; control stopped until AppDaemon restarts."
+        elif mode.effective == "active":
+            word, why = "Active", mode.reason
+        elif mode.effective == "paused":
+            word, why = "Paused", mode.reason
+        elif mode.effective == "passive" and mode.configured != "active":
+            word, why = "Passive", mode.reason
+        elif self.cfg is None and not self.cfg_error:
+            word, why = NOT_SET_UP, mode.reason
+        else:
+            word, why = "Blocked", mode.reason
+        self._publish_state("state_status", word, {"reason": why, "mode": mode.effective})
+
+    def _beat(self, kwargs):
+        self._publish_state("diag_heartbeat", datetime.now(timezone.utc).isoformat(timespec="seconds"))
+
+    def _remove_entities(self):
+        self._get_publisher().retire_all()
+        self.log("remove_entities is set: removed all PowerEngine entities. The app is now idle; "
+                 "remove it in HACS or set remove_entities: false to bring them back.", level="WARNING")
+
+
+if hass is not None:
+    class PowerEngine(Engine, hass.Hass):
+        """The AppDaemon app (apps.yaml: `class: PowerEngine`): the engine, run by AppDaemon. The engine reaches
+        AppDaemon only through its host (pe_core/host_appdaemon.py)."""
+
+        def _hass_log(self, msg, *args, **kwargs):
+            return hass.Hass.log(self, msg, *args, **kwargs)

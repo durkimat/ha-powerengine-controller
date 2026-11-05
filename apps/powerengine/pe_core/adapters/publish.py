@@ -193,9 +193,66 @@ class DirectPublisher:
                 self._set(ent.entity_id, state="unavailable", attributes=self.attributes(ent))
 
 
+class NativePublisher(DirectPublisher):
+    """Real Home Assistant entities, made by the integration the engine runs under (host.native_entities): the engine
+    says what each is (`discover`), writes its state and extra attributes as it goes, and says when it is up or down.
+    They are in the entity registry with a unique id (`powerengine_<key>`, as with MQTT) and belong to the PowerEngine
+    device, so they keep their place across restarts, can be renamed and given an area."""
+
+    name = "native"
+    retains = True
+
+    def __init__(self, native: Any, set_state: Callable[..., Any], told_once: Callable[..., Any] | None = None):
+        super().__init__(set_state, None)
+        self._native = native
+        self._told = told_once or (lambda *a, **k: None)
+        self._plain: set[str] = set()                      # keys the integration would not make native: plain states
+
+    def attributes(self, ent: EntityDef) -> dict[str, Any]:
+        if ent.key in self._plain:
+            return super().attributes(ent)
+        return dict(self._json.get(ent.key, {}))           # the entity itself carries the rest
+
+    def discover(self, ent: EntityDef, version: str) -> None:
+        self._ents[ent.key] = ent
+        try:
+            self._native.define(ent.component, ent.key, ent.name, _definition_options(ent))
+            self._plain.discard(ent.key)
+        except Exception as err:                           # not connected, or the integration cannot make it
+            self._plain.add(ent.key)
+            self._told("native_define", f"Could not make {ent.entity_id} a native entity ({err}); "
+                                        "writing a plain state instead", "WARNING")
+        self._write(ent, self._state.get(ent.key, "unknown"))
+
+    def retire(self, ent: EntityDef) -> None:
+        self._ents.pop(ent.key, None)
+        self._state.pop(ent.key, None)
+        self._json.pop(ent.key, None)
+        try:
+            self._native.retire(ent.entity_id)
+        except Exception as err:
+            self._told("native_retire", f"Could not remove {ent.entity_id}: {err}", "WARNING")
+
+    def available(self, online: bool) -> None:
+        try:
+            self._native.online(online)
+        except Exception as err:
+            self._told("native_online", f"Could not tell Home Assistant the engine is {'up' if online else 'down'}: "
+                                        f"{err}", "WARNING")
+
+
+def _definition_options(ent: EntityDef) -> dict[str, Any]:
+    """What the integration needs to make the entity (what MQTT discovery would carry, minus the topics)."""
+    return {k: v for k, v in ent.options.items() if not k.endswith("_topic") and k not in ("optimistic", "retain")}
+
+
 def select_publisher(choice: str, mqtt_api: Any, set_state: Callable[..., Any] | None,
-                     remove_state: Callable[[str], Any] | None = None) -> StatePublisher | None:
-    """`auto`: MQTT when the AppDaemon MQTT plugin is there, else direct. `mqtt` without the plugin: None."""
-    if choice == "direct" or (choice == "auto" and mqtt_api is None):
+                     remove_state: Callable[[str], Any] | None = None, native: Any = None,
+                     told_once: Callable[..., Any] | None = None) -> StatePublisher | None:
+    """`auto`: native entities where the host makes them (the integration), else MQTT when the AppDaemon MQTT plugin is
+    there, else direct. `mqtt` without the plugin: None."""
+    if native is not None and set_state is not None and choice in ("auto", "native"):
+        return NativePublisher(native, set_state, told_once)
+    if choice == "direct" or (choice in ("auto", "native") and mqtt_api is None):
         return DirectPublisher(set_state, remove_state) if set_state is not None else None
     return MqttPublisher(mqtt_api) if mqtt_api is not None else None

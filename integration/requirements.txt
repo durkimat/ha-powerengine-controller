@@ -1,0 +1,4 @@
+# What the integration's tests need (integration/tests): the Home Assistant version they are written against, and its
+# test plugin (which pins that exact version). Home Assistant 2026.10 needs Python 3.14.
+pytest-homeassistant-custom-component==0.13.375
+pytest-timeout>=2

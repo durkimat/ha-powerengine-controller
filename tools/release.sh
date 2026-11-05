@@ -336,6 +336,10 @@ verify_prepared() {
   [ "$now" = "$VERSION" ] || die "the branch's __version__ is '$now', not $VERSION"
   grep -q "^## $VERSION (beta)\$" "$dir/CHANGELOG.md" || die "CHANGELOG.md has no '## $VERSION (beta)' section on the branch"
   grep -q "$VERSION" "$dir/docs/INSTALL.md" || die "docs/INSTALL.md does not mention $VERSION on the branch"
+  if [ -f "$dir/tools/build_integration.py" ] && [ -d "$dir/custom_components/powerengine" ]; then
+    python3 "$dir/tools/build_integration.py" --check >/dev/null \
+      || die "custom_components/powerengine is out of date on the branch: run tools/build_integration.py --sync and commit"
+  fi
   if [ "$DRY" = 0 ]; then
     gitn -C "$dir" fetch -q origin main
     behind="$(git -C "$dir" rev-list --count HEAD..origin/main)"
@@ -515,6 +519,10 @@ main() {
     change_file app_version "$APP_WORK/apps/powerengine/pe_core/__init__.py" "$VERSION"
     change_file install "$APP_WORK/docs/INSTALL.md" "$VERSION"
     change_file app_changelog "$APP_WORK/CHANGELOG.md" "$VERSION" "$APP_NOTES"
+    # the Home Assistant integration carries a copy of the engine and its version (tools/build_integration.py)
+    if [ ! -d "$APP_WORK/custom_components/powerengine" ]; then :
+    elif [ "$DRY" = 1 ]; then dry "python3 tools/build_integration.py --sync  (custom_components/powerengine)"
+    else python3 "$APP_WORK/tools/build_integration.py" --sync >/dev/null || die "could not bring custom_components/powerengine up to date"; fi
   fi
   if [ -n "$CARD_NOTES" ] && [ "$PREPARED" = 0 ]; then
     WORK="$CARD_WORK"
@@ -528,8 +536,9 @@ main() {
   local title app_title card_title
   title="${TITLE:-$(first_line "$APP_NOTES")}"
   app_title="$VERSION${title:+: $title}"
-  release_repo "App" "$APP_REPO_SLUG" "$APP_WORK" "$APP_BR" "$VERSION" "$APP_NOTES" "$app_title" \
-    apps/powerengine/pe_core/__init__.py docs/INSTALL.md CHANGELOG.md
+  app_files=(apps/powerengine/pe_core/__init__.py docs/INSTALL.md CHANGELOG.md)
+  [ ! -d "$APP_WORK/custom_components/powerengine" ] || app_files+=(custom_components)
+  release_repo "App" "$APP_REPO_SLUG" "$APP_WORK" "$APP_BR" "$VERSION" "$APP_NOTES" "$app_title" "${app_files[@]}"
   SUMMARY+=("app:  PR $REL_PR  release $REL_URL  merge $REL_SHA")
   if [ -n "$CARD_NOTES" ]; then
     card_title="$VERSION (card)${TITLE:+: $TITLE}"
