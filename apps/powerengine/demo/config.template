@@ -71,7 +71,7 @@ inputs:
   guard_read_only:
     entity: switch.demo_other_controller_read_only
   guard_off_1:
-    entity: automation.demo_legacy_battery_control
+    entity: automation.demo_other_battery_control
   battery_capacity:
     value: 18
   battery_max_charge_power:

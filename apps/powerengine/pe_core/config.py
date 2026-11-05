@@ -54,7 +54,7 @@ KNOWN_KEYS = frozenset(
         "v2_profile",
         "v2_profiles",
         "v2_split",
-        "remove_entities",
+        "remove_entities",           # retired (the AppDaemon app's uninstall switch): accepted and ignored
     }
 )
 
@@ -135,7 +135,6 @@ SYSTEM_CHOICES = {
                           ("v2", "Engine v2: acts on conditions (a level reached, a price change, "
                                  "the sun falling short)"))),
     "other_controller": ("control", (("none", "No other battery controller"),
-                                     ("predbat", "Predbat, switched over with the handover package"),
                                      ("other", "Another controller: PowerEngine checks the guard entities below"))),
     "publisher": ("system", (("auto", "Automatic (the integration's own entities)"),
                              ("mqtt", "MQTT"),
@@ -173,10 +172,9 @@ SETTING_TEXT = {
                           "below it, not even for a grid event. Engine v1 uses its Minimum reserve instead."),
     "other_controller": ("Other battery controller", "",
                          "Whether anything else also controls the battery. With none, PowerEngine does not check or "
-                         "need the handover guards below, and Active is allowed. With "
-                         "Predbat or another controller, PowerEngine stays Passive unless the guard entities show "
-                         "that controller is switched off or read only. If you have not chosen, PowerEngine goes "
-                         "by the guards you have mapped."),
+                         "need the handover guards below, and Active is allowed. With another controller, "
+                         "PowerEngine stays Passive unless the guard entities show that controller is switched off "
+                         "or read only. If you have not chosen, PowerEngine goes by the guards you have mapped."),
     "engine": ("Planning engine", "",
                "Which engine plans and decides. Engine v1 plans in half-hours. Engine v2 works out what a stored "
                "kWh is worth and acts when a condition is met. Engine v2 has settings profiles (for "
@@ -457,7 +455,6 @@ class Config:
     features: dict[str, bool] = field(default_factory=lambda: dict(FEATURE_DEFAULTS))
     safety: dict[str, float] = field(default_factory=lambda: {k: v[0] for k, v in SAFETY.items()})
     system: dict = field(default_factory=lambda: dict(SYSTEM_DEFAULTS))
-    remove_entities: bool = False
     notifications: dict[str, Any] = field(default_factory=lambda: _parse_notifications(None))
     inputs: dict[str, Any] = field(default_factory=dict)
     solar_plants: tuple[SolarPlant, ...] = ()
@@ -785,10 +782,6 @@ def parse_config(data: Any) -> Config:
     if mode not in MODES:
         raise ConfigError("'operation.mode' must be 'passive' or 'active'")
 
-    remove_entities = data.get("remove_entities", False)
-    if not isinstance(remove_entities, bool):
-        raise ConfigError("'remove_entities' must be true or false")
-
     inputs = data.get("inputs") or {}
     if not isinstance(inputs, dict):
         raise ConfigError("'inputs' must be a mapping")
@@ -842,6 +835,8 @@ def parse_config(data: Any) -> Config:
     for key, value in raw_system.items():
         if key not in SYSTEM_DEFAULTS:
             raise ConfigError(f"unknown system setting '{key}'")
+        if key == "other_controller" and value == "predbat":
+            value = "other"                       # Predbat is no longer a choice of its own: its guards are the others'
         if key in SYSTEM_CHOICES:
             if value not in [v for v, _ in SYSTEM_CHOICES[key][1]] + ([""] if key == "other_controller" else [])\
                     + (list(ENGINE_ALIAS) if key == "engine" else []):
@@ -871,7 +866,6 @@ def parse_config(data: Any) -> Config:
         features=features,
         safety=safety,
         system=system,
-        remove_entities=remove_entities,
         notifications=notifications,
         inputs=dict(inputs),
         solar_plants=_parse_plants(data.get("solar_plants")),
@@ -1015,8 +1009,8 @@ OTHER_CONTROLLER_UNSET = "unset"
 
 
 def other_controller(cfg: Config | None) -> str:
-    """Whether another battery controller is installed: none, predbat, other, or unset (never chosen and no guard
-    mapped). Not chosen: derived from the guards, so an install that has them mapped behaves as it always did.
+    """Whether another battery controller is installed: none, other, or unset (never chosen and no guard mapped).
+    Not chosen: derived from the guards, so an install that has them mapped behaves as it always did.
     Nothing is written to the saved config."""
     if cfg is None:
         return OTHER_CONTROLLER_UNSET
@@ -1024,8 +1018,6 @@ def other_controller(cfg: Config | None) -> str:
     if chosen:
         return chosen
     mapped = {k: (cfg.inputs.get(k) or {}).get("entity") for k in GUARD_KEYS}
-    if "predbat" in str(mapped["guard_read_only"] or "").lower():
-        return "predbat"
     if any(mapped.values()):
         return "other"
     return OTHER_CONTROLLER_UNSET

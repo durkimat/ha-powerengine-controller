@@ -310,9 +310,6 @@ class Engine:
             return
         self.log(f"Entity publishing: {self._get_publisher().name}"
                  + (" (set 'Entity publishing' on the Config page to change it)" if choice == "auto" else ""))
-        if self.cfg is not None and self.cfg.remove_entities:
-            self._remove_entities()
-            return
 
         for ent in ENTITIES:
             self._get_publisher().discover(ent, __version__)
@@ -2742,7 +2739,7 @@ class Engine:
         if attrs["setup"] == "unconfigured" and not self._demo:
             attrs["demo_days"] = self._demo_days_preview()
         attrs.update(self._site_attributes())
-        attrs["other_controller"] = other_controller(self.cfg)      # none / predbat / other / unset (derived)
+        attrs["other_controller"] = other_controller(self.cfg)      # none / other / unset (derived)
         self._publish_state("diag_version", __version__, attrs)
 
     def _site_attributes(self):
@@ -4523,14 +4520,12 @@ class Engine:
         return os.path.dirname(os.path.dirname(self._save_path()))        # e.g. /homeassistant
 
     def _package_sync(self, why="start"):
-        """Keep the package files in <ha config>/packages in step with this version and with the chosen other
-        controller. Never in a demo or a shadow run, never creates the folder, never raises: a problem is a warning
-        and the sensor."""
+        """Keep the package file in <ha config>/packages in step with this version. Never in a demo or a shadow
+        run, never creates the folder, never raises: a problem is a warning and the sensor."""
         if self._demo or getattr(self, "_shadow", False) or self.cfg is None:
             return
         try:
-            controller = other_controller(self.cfg)
-            result = hapackage.sync(self._ha_config_dir(), controller, hapackage.shipped_texts(),
+            result = hapackage.sync(self._ha_config_dir(), hapackage.shipped_texts(),
                                     datetime.now().strftime("%Y%m%d-%H%M%S"))
             self._pkg_result = result
             for a in hapackage.changes(result):
@@ -4549,8 +4544,7 @@ class Engine:
                                         "Home Assistant changes\" on the Config page so Home Assistant "
                                         "uses the change."))
         except Exception as err:
-            self._pkg_result = {"dir_exists": True, "actions": [], "controller": "unset",
-                                "errors": [("", f"{err!r}")]}
+            self._pkg_result = {"dir_exists": True, "actions": [], "errors": [("", f"{err!r}")]}
             self.log(f"Home Assistant package sync failed: {err!r}", level="WARNING")
         self._publish_package()
 
@@ -5087,11 +5081,6 @@ class Engine:
 
     def _beat(self, kwargs):
         self._publish_state("diag_heartbeat", datetime.now(timezone.utc).isoformat(timespec="seconds"))
-
-    def _remove_entities(self):
-        self._get_publisher().retire_all()
-        self.log("remove_entities is set: removed all PowerEngine entities. The app is now idle; "
-                 "remove it in HACS or set remove_entities: false to bring them back.", level="WARNING")
 
 
 class PowerEngine(Engine):

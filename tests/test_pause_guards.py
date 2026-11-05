@@ -13,9 +13,9 @@ from pe_core.entities import ENTITIES
 from pe_core.modes import CHOOSE_CONTROLLER, effective_mode, guard_problems
 
 GUARDED = {"operation": {"mode": "active"}, "inputs": {
-    "guard_read_only": {"entity": "switch.predbat_set_read_only"},
+    "guard_read_only": {"entity": "switch.other_controller_read_only"},
     "guard_off_1": {"entity": "automation.other_battery_control"}}}
-SAFE = {"switch.predbat_set_read_only": "on", "automation.other_battery_control": "off"}
+SAFE = {"switch.other_controller_read_only": "on", "automation.other_battery_control": "off"}
 
 
 # --- guards and mode --------------------------------------------------------------------
@@ -36,8 +36,8 @@ def test_guards_safe():
     assert guard_problems(parse_config(GUARDED), SAFE.get) == []
 
 
-def test_predbat_not_read_only_or_legacy_on_is_reported():
-    states = {"switch.predbat_set_read_only": "off", "automation.other_battery_control": "on"}
+def test_another_controller_not_read_only_or_still_on_is_reported():
+    states = {"switch.other_controller_read_only": "off", "automation.other_battery_control": "on"}
     probs = guard_problems(parse_config(GUARDED), states.get)
     assert len(probs) == 2 and "must be on" in probs[0] and "must be off" in probs[1]
 
@@ -45,10 +45,10 @@ def test_predbat_not_read_only_or_legacy_on_is_reported():
 def test_absent_guard_counts_as_safe_but_is_reported():
     from pe_core.modes import guard_status
     for gone in ("unavailable", "unknown", None):
-        states = dict(SAFE, **{"switch.predbat_set_read_only": gone})
+        states = dict(SAFE, **{"switch.other_controller_read_only": gone})
         assert guard_problems(parse_config(GUARDED), states.get) == []
-        assert guard_status(parse_config(GUARDED), states.get)[1] == ["switch.predbat_set_read_only"]
-    states = dict(SAFE, **{"switch.predbat_set_read_only": "off"})           # present and off: not safe
+        assert guard_status(parse_config(GUARDED), states.get)[1] == ["switch.other_controller_read_only"]
+    states = dict(SAFE, **{"switch.other_controller_read_only": "off"})           # present and off: not safe
     assert guard_problems(parse_config(GUARDED), states.get)
 
 
@@ -204,7 +204,7 @@ def test_readback_failure_marks_test_failed(app):
 
 
 def test_test_refused_when_guards_unsafe(app):
-    app.states["switch.predbat_set_read_only"] = "off"
+    app.states["switch.other_controller_read_only"] = "off"
     app._on_test("pe_test_write", {"action": "hold", "confirm": True}, {})
     assert app._test.status == "refused" and not app.calls
 
@@ -344,7 +344,7 @@ def test_clock_never_synced_in_passive(app):
     assert not app.calls and app.published[-1][2]["sync_due"] == "drift"
 
 
-# --- the Predbat/PowerEngine switch (0.7.4) ----------------------------------------------
+# --- setting the operation mode (0.7.4) ----------------------------------------------
 
 def test_with_operation_sets_mode_and_leaves_the_rest():
     from pe_core.config import ConfigError
@@ -402,18 +402,18 @@ def test_unconfigured_rechecks_every_cycle(app):
 
 
 def test_guard_missing_from_appdaemon_is_checked_with_ha(app):
-    app.states.pop("switch.predbat_set_read_only")
+    app.states.pop("switch.other_controller_read_only")
     app.render_template = lambda t: "on"
-    assert app._guard_state("switch.predbat_set_read_only") == "on" and app._guard_live
+    assert app._guard_state("switch.other_controller_read_only") == "on" and app._guard_live
     app.render_template = lambda t: "off"
     assert guard_problems(app.cfg, app._guard_state)                            # really off: not safe
     app.render_template = lambda t: "unknown"
     from pe_core.modes import guard_status
-    assert guard_status(app.cfg, app._guard_state) == ([], ["switch.predbat_set_read_only"])
+    assert guard_status(app.cfg, app._guard_state) == ([], ["switch.other_controller_read_only"])
 
 
 def test_guard_that_cannot_be_checked_is_never_safe(app):
-    app.states.pop("switch.predbat_set_read_only")
+    app.states.pop("switch.other_controller_read_only")
 
     def boom(t):
         raise RuntimeError("no REST")

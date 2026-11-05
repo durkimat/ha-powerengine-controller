@@ -41,11 +41,11 @@ def test_the_engines_own_entities_are_the_shadows_and_nobody_elses_are():
     assert shadow.to_ha("sensor.pe_state_status") == "sensor.pe_shadow_state_status"
     assert shadow.to_ha("switch.pe_ctl_pause") == "switch.pe_shadow_ctl_pause"
     assert shadow.to_ha("sensor.pe_state_dev_car_power") == "sensor.pe_shadow_state_dev_car_power"
-    for other in ("sensor.solis_inverter_battery_soc", "sensor.pe_modbus_probe", "number.pe_state_x", "zone.home"):
+    for other in ("sensor.solis_inverter_battery_soc", "sensor.pe_other_sensor", "number.pe_state_x", "zone.home"):
         assert shadow.to_ha(other) == other
     assert shadow.from_ha("sensor.pe_shadow_state_status") == "sensor.pe_state_status"
     assert shadow.from_ha("sensor.pe_state_status") is None                 # the live engine's: not the shadow's to see
-    assert shadow.from_ha("sensor.pe_modbus_probe") == "sensor.pe_modbus_probe"
+    assert shadow.from_ha("sensor.pe_other_sensor") == "sensor.pe_other_sensor"
     assert shadow.from_ha("sensor.solis_x") == "sensor.solis_x"
 
 

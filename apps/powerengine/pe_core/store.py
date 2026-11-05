@@ -68,7 +68,7 @@ def _flag(value):
 
 def coerce_flags(data):
     """A copy of a config from the card with its true/false settings as booleans (features, the on/off system
-    settings, notification events, plant `enabled`, an input's `invert` / `use_measured`, `remove_entities`).
+    settings, notification events, plant `enabled`, an input's `invert` / `use_measured`).
     Choice settings (which hold text like "garage") and numbers are left alone."""
     from .config import SYSTEM_CHOICES
     if not isinstance(data, dict):
@@ -90,8 +90,6 @@ def coerce_flags(data):
             for key in ("invert", "use_measured"):
                 if key in spec:
                     spec[key] = _flag(spec[key])
-    if "remove_entities" in out:
-        out["remove_entities"] = _flag(out["remove_entities"])
     return out
 
 

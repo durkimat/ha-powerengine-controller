@@ -231,7 +231,7 @@ _BASE_ROLES: tuple[Role, ...] = (
          suggest=(r"^select\.edf_energy_.*_intelligent_target_time$",)),
     # --- handover guards: Active is refused unless every mapped guard is in its safe state ---
     Role("guard_read_only", "handover", "Other controller read-only", "Must be on (e.g. a read-only switch).",
-         "binary", required="no", domains=_GUARD, suggest=(r"^switch\.predbat_set_read_only$",)),
+         "binary", required="no", domains=_GUARD),
     Role("guard_off_1", "handover", "Other control off (1)", "Must be off (another control).",
          "binary", required="no", domains=_GUARD),
     Role("guard_off_2", "handover", "Other control off (2)", "Must be off.",

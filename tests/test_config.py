@@ -16,8 +16,11 @@ def test_missing_file_means_unconfigured(tmp_path):
 def test_defaults_are_safe():
     cfg = parse_config({})
     assert cfg.mode == "passive"
-    assert cfg.remove_entities is False
     assert cfg.solar_plants == ()
+
+
+def test_the_retired_remove_entities_switch_in_a_saved_config_is_accepted_and_ignored():
+    assert parse_config({"remove_entities": True}).mode == "passive"
 
 
 def test_valid_file(tmp_path):
