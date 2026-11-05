@@ -6,6 +6,9 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
+> **Newer way to install:** PowerEngine can run as a Home Assistant integration, with no AppDaemon and no MQTT, and
+> updates then restart only its engine. See [INTEGRATION.md](INTEGRATION.md). This guide is the AppDaemon route.
+
 **Version this guide matches:** 0.9.207 (beta; Passive by default, Active available)
 
 ---

@@ -41,10 +41,13 @@ jobs:
         run: pytest -q -n auto --dist loadscope
 
   hacs:
-    name: HACS validation
+    name: HACS validation (${{ matrix.category }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        category: [integration, appdaemon]       # the repository installs either way (docs/INTEGRATION.md)
     steps:
       - uses: hacs/action@main
         with:
-          category: appdaemon
+          category: ${{ matrix.category }}
           ignore: brands description topics

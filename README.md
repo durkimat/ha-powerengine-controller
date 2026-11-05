@@ -10,7 +10,10 @@ smart-charge slots and VPP events, and explains every decision in plain English.
 
 ## Install
 
-Follow the **[installation guide](docs/INSTALL.md)**. It covers the MQTT broker,
+**As a Home Assistant integration (recommended):** no AppDaemon, no MQTT, and updates restart only the engine, not Home
+Assistant. See **[docs/INTEGRATION.md](docs/INTEGRATION.md)**, which also covers moving from the AppDaemon app.
+
+**As an AppDaemon app (still supported):** follow the **[installation guide](docs/INSTALL.md)**. It covers the MQTT broker,
 AppDaemon setup, HACS, the PowerEngine dashboard, configuration, updating, rollback, uninstalling and
 troubleshooting, with a check at each step.
 
