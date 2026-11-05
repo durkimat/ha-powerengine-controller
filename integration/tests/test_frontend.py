@@ -62,3 +62,58 @@ async def test_without_the_frontend_nothing_is_added_and_nothing_breaks(hass, tm
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def lovelace_resources(hass):
+    """Home Assistant's own Lovelace set up, with resources kept in storage (the usual way)."""
+    from homeassistant.components.lovelace import LOVELACE_DATA
+    from homeassistant.setup import async_setup_component
+    assert await async_setup_component(hass, "lovelace", {})
+    return hass.data[LOVELACE_DATA].resources
+
+
+async def ours(resources):
+    await resources.async_get_info()
+    return [i for i in resources.async_items() if i["url"].split("?")[0] == frontend.CARD_URL]
+
+
+async def test_the_card_is_a_lovelace_resource_so_the_dashboard_waits_for_it(hass, tmp_path, monkeypatch):
+    resources = await lovelace_resources(hass)
+    entry = await setup_without_engine(hass, tmp_path, monkeypatch)
+    (item,) = await ours(resources)
+    assert item["type"] == "module" and re.fullmatch(r"\?v=[0-9a-f]{12}", item["url"][len(frontend.CARD_URL):])
+    assert hass.data[DATA_EXTRA_MODULE_URL] == set()                   # not also loaded as a page-wide module
+    await frontend.async_refresh(hass)
+    assert await ours(resources) == [item]                              # unchanged: no second entry
+    await hass.config_entries.async_unload(entry.entry_id)
+    assert await ours(resources) == []
+
+
+async def test_a_replaced_card_changes_its_resource_and_duplicates_are_tidied(hass, tmp_path, monkeypatch):
+    card = tmp_path / "card.js"
+    card.write_text("// one")
+    monkeypatch.setattr(frontend, "CARD_FILE", card)
+    resources = await lovelace_resources(hass)
+    await resources.async_get_info()
+    await resources.async_create_item({"res_type": "module", "url": frontend.CARD_URL + "?v=old"})
+    await resources.async_create_item({"res_type": "module", "url": "/hacsfiles/other/other.js"})
+    entry = await setup_without_engine(hass, tmp_path, monkeypatch)
+    (first,) = await ours(resources)
+    assert first["url"] != frontend.CARD_URL + "?v=old"
+    card.write_text("// two")
+    await frontend.async_refresh(hass)
+    (second,) = await ours(resources)
+    assert second["id"] == first["id"] and second["url"] != first["url"]
+    await resources.async_create_item({"res_type": "module", "url": frontend.CARD_URL + "?v=again"})
+    await frontend.async_refresh(hass)
+    assert len(await ours(resources)) == 1
+    await hass.config_entries.async_unload(entry.entry_id)
+    assert [i["url"] for i in resources.async_items()] == ["/hacsfiles/other/other.js"]     # others are never touched
+
+
+async def test_the_card_is_served_with_a_long_cache_lifetime(hass, hass_client, tmp_path, monkeypatch):
+    entry = await setup_without_engine(hass, tmp_path, monkeypatch)
+    (url,) = hass.data[DATA_EXTRA_MODULE_URL]
+    response = await (await hass_client()).get(url)
+    assert "max-age" in response.headers.get("Cache-Control", "")
+    await hass.config_entries.async_unload(entry.entry_id)

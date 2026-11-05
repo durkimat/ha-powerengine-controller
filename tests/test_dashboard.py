@@ -263,3 +263,26 @@ def test_costs_page_follows_one_shared_period():
     view = _costs_view()
     for gone in ("Today so far", "How yesterday's", "macro headline"):
         assert gone not in view, gone
+
+
+def test_slot_table_copes_with_every_status_a_slot_can_have():
+    """A slot status the table does not name (EDF's `superseded`, 0.9.178) made the card fail with a template error."""
+    import re
+
+    import jinja2
+
+    from pe_core import slots
+    d = yaml.safe_load(open(SOURCE))
+    card = next(c for c in _all_cards(d) if c.get("type") == "markdown" and "s.recent" in c.get("content", ""))
+    statuses = set(re.findall(r'rec\["status"\] = "(\w+)"|status\s*==\s*"(\w+)"|"status": "(\w+)"',
+                              open(slots.__file__).read()))
+    statuses = {s for group in statuses for s in group if s}
+    statuses |= {"planned", "done", "cancelled", "superseded", "cut_short"}
+    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    attrs = {"days": 7, "slots": 1, "used": 0, "done_no_car": 0, "cancelled": 0, "cut_short": 0, "upcoming": 0,
+             "car_kwh": 0, "planned_kwh": 0,
+             "recent": [{"day": "Mon", "time": "03:00", "status": st, "confirmed": False, "planned_kwh": 1.0,
+                         "car_kwh": 0, "charging_min": 0} for st in sorted(statuses)]}
+    text = env.from_string(card["content"].replace("<<supplier>>", "EDF")).render(
+        state_attr=lambda entity, name: attrs if name == "slots" else None)
+    assert text.count("| Mon |") == len(statuses)
