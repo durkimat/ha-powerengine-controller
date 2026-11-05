@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+<defs><mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
+<rect width="256" height="256" fill="white"/>
+<path d="M146 24 L90 128 H126 L108 232 L172 112 H134 L166 24 Z" fill="black" stroke="black" stroke-width="9" stroke-linejoin="round"/></mask></defs>
+<g mask="url(#cut)"><path transform="translate(3.2 5.8) scale(10.4)" d="M6 3.5H12V5H10.5V7H14.5V5.5H17.5V7H19V10H23V17H19V20H4V17H1V10H4V7H7.5V5H6Z" fill="#D9E6FF"/></g>
+<path d="M146 24 L90 128 H126 L108 232 L172 112 H134 L166 24 Z" fill="#FFC21A" stroke="#FFC21A" stroke-width="2" stroke-linejoin="round"/>
+</svg>
