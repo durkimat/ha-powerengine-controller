@@ -46,14 +46,5 @@ jobs:
     steps:
       - uses: hacs/action@main
         with:
-          category: integration         # how the repository is installed from 0.9.208 (docs/INTEGRATION.md)
-          ignore: brands description topics
-
-  hacs-appdaemon:
-    name: HACS validation (AppDaemon app)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: hacs/action@main
-        with:
-          category: appdaemon           # and still, as the AppDaemon app
+          category: integration         # how the repository is installed (docs/INSTALL.md)
           ignore: brands description topics

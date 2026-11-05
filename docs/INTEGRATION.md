@@ -1,6 +1,6 @@
 # PowerEngine as a Home Assistant integration
 
-PowerEngine can run as a Home Assistant **integration** instead of an AppDaemon app. The integration is thin and
+PowerEngine runs as a Home Assistant **integration**. The integration is thin and
 rarely changes; the engine that plans and controls is a separate process that it starts and watches. So:
 
 - no AppDaemon, no `apps.yaml` and no MQTT broker are needed (PowerEngine's entities are real Home Assistant entities
@@ -10,18 +10,8 @@ rarely changes; the engine that plans and controls is a separate process that it
 - the engine keeps its settings and data in `/config/powerengine`, as the app does, and nothing in them changes.
 
 It works wherever Home Assistant runs its own Python (OS, Supervised, Container, Core). Tested against Home Assistant
-2026.10. The rest of this page is for a new install and for moving from the AppDaemon app; after either, the dashboard,
-configuration and first-day checks are steps 5 to 7 of [INSTALL.md](INSTALL.md).
-
-## New install
-
-1. HACS, three dots, **Custom repositories**: add `https://github.com/durkimat/ha-powerengine-controller`, category
-   **Integration**. Download **PowerEngine**, then restart Home Assistant.
-2. Settings, Devices & services, **Add integration**, PowerEngine, mode **Live**. The engine starts; with no
-   `config.yaml` yet it waits in Passive ("No config.yaml yet; set PowerEngine up on the config page").
-3. Continue with INSTALL.md steps 5 to 7 (the dashboard, configuring PowerEngine, first-day checks). Skip steps 1 to 4:
-   there is no MQTT broker, AppDaemon or PowerEngine user to set up. A fresh install is Passive until you switch it
-   on.
+2026.10. [INSTALL.md](INSTALL.md) is the full guide: install, the dashboard, configuration and first-day checks. The rest of
+this page covers moving from the old AppDaemon app (no longer released), and the shadow run.
 
 ## Moving from the AppDaemon app
 
@@ -35,7 +25,7 @@ time (no grid event, no cheap-rate charge or sale running or about to start) and
 2. **Put the app in Passive** (Config page). It hands the inverter back to Self-Use, so nothing after this can leave it
    in a forced state.
 3. In HACS **remove the PowerEngine AppDaemon app** (keep a copy of its folder if you like), then add the repository
-   again as an **Integration** (as above) and download it. Restart Home Assistant. Restart the AppDaemon add-on, so the
+   again as an **Integration** (INSTALL.md, Step 1) and download it. Restart Home Assistant. Restart the AppDaemon add-on, so the
    app is really gone.
 4. Add the integration, mode **Live**. It waits, and a Repair tells you why.
 5. Run **`powerengine.migrate_from_mqtt`** (Developer tools, Actions). It saves a snapshot of the old entities in

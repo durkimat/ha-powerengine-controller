@@ -2,6 +2,27 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.210 (beta)
+
+### Behaviour changes
+
+- **The AppDaemon route is gone.** PowerEngine is now released and documented only as a Home Assistant integration:
+  the install guide (`docs/INSTALL.md`) is four steps (HACS, the dashboard, configuring, first-day checks) with no MQTT
+  broker, AppDaemon add-on or `apps.yaml`; the repository is checked by HACS as an integration only; the AppDaemon app
+  definition (`powerengine.yaml`) is no longer shipped. Moving from the old app is still covered in
+  `docs/INTEGRATION.md`.
+- **The handover package no longer restarts AppDaemon.** Its update script installs the integration and card from HACS
+  and restarts the engine (`powerengine.restart_engine`), and the two "Restart AppDaemon" automations are removed
+  (Home Assistant drops them when it reloads automations; press **Load** on the Config page after updating, or reload
+  automations and scripts). The watchdog is unchanged.
+- The engine no longer checks for a newly installed version to ask Home Assistant to restart AppDaemon
+  (`pe_update_installed`): the integration's supervisor restarts the engine itself.
+
+### Behind the scenes
+
+- The engine's AppDaemon host (`host_appdaemon.py`) and the tests that run the engine on a fake AppDaemon are still in
+  the repository; they are the next clean-up, with the engine's own tests moving onto the integration's host.
+
 ## 0.9.209 (beta)
 
 ### Behaviour changes

@@ -1,15 +1,12 @@
 # PowerEngine: installation guide
 
-A complete, from-scratch setup, in order: seven steps, about 45 minutes. Each step ends with a **Check** so
+A complete, from-scratch setup, in order: four steps, about 30 minutes. Each step ends with a **Check** so
 you know it worked before moving on.
 
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-> **Newer way to install:** PowerEngine can run as a Home Assistant integration, with no AppDaemon and no MQTT, and
-> updates then restart only its engine. See [INTEGRATION.md](INTEGRATION.md). This guide is the AppDaemon route.
-
-**Version this guide matches:** 0.9.209 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.9.210 (beta; Passive by default, Active available)
 
 ---
 
@@ -19,10 +16,10 @@ You need:
 
 | Requirement | Why | Notes |
 | --- | --- | --- |
-| Home Assistant OS or Supervised | Add-ons (called *Apps* in newer HA) | Container/Core installs need AppDaemon and Mosquitto run separately |
+| Home Assistant (OS, Supervised, Container or Core) | PowerEngine runs as an integration with its own engine process | Tested against 2026.10 |
 | [HACS](https://hacs.xyz/) | Installs and updates PowerEngine | |
-| Admin access to HA | Creating users, add-ons, dashboards | |
-| A terminal on the HA machine | Editing AppDaemon's config | The **Advanced SSH & Web Terminal** add-on (Open Web UI) or **Studio Code Server** |
+| Admin access to HA | Adding the integration, dashboards | |
+| A terminal on the HA machine (optional) | Looking at files and logs | The **Advanced SSH & Web Terminal** add-on or **Studio Code Server** |
 
 Tested with: Solis hybrid inverter via the SolaX Modbus integration, Fox ESS
 batteries, Solcast, myenergi Zappi, EDF (edf_energy) tariff, Axle VPP.
@@ -41,144 +38,29 @@ batteries, Solcast, myenergi Zappi, EDF (edf_energy) tariff, Axle VPP.
 >   remote control works on 420044; Remote Dispatch needs FB00 or later). Run the supervised tests on your own
 >   firmware before going Active.
 
-> **Terminal tip:** every command below runs **in HA's terminal** (the add-on),
-> not on your own computer. If you see `Unknown command: ha`, you're in the
-> wrong terminal.
-
 ---
 
-## Step 1: MQTT broker
+## Step 1: install PowerEngine
 
-PowerEngine creates its entities through MQTT.
+PowerEngine is a Home Assistant integration. The integration is thin and rarely changes; the engine that plans and
+controls is a separate process it starts and watches. No AppDaemon, no MQTT broker and no `apps.yaml` are needed, and
+PowerEngine's entities are ordinary Home Assistant entities (`sensor.pe_...`).
 
-1. **Settings → Add-ons → Add-on store → Mosquitto broker → Install**, then
-   **Start**, and turn on *Start on boot*.
-2. **Settings → Devices & services**: accept the discovered **MQTT**
-   integration (or add it: *Add integration → MQTT*).
-
-**Check:** *Settings → Devices & services → MQTT* shows as configured.
-
-Skip this step if you already use Mosquitto (e.g. for Zigbee2MQTT).
-
----
-
-## Step 2: a login for PowerEngine
-
-A dedicated, non-admin HA user that AppDaemon uses to log in to Mosquitto
-(Mosquitto accepts HA logins).
-
-1. Your profile → turn on **Advanced mode** (needed to see *Users*).
-2. **Settings → People → Users → Add user**
-   - Name: `powerengine`
-   - A strong password
-   - **Can only log in from the local network**: on
-   - **Administrator**: off
-
-**Check:** the user appears in the list, without the admin badge.
-
----
-
-## Step 3: AppDaemon add-on
-
-1. **Settings → Add-ons → Add-on store → AppDaemon → Install**, turn on
-   *Start on boot* and *Watchdog*, then **Start** once so it creates its
-   config folder.
-
-2. **Store the MQTT login** (replace the placeholder with the password from
-   Step 2 before pressing Enter):
-
-   ```bash
-   cat >> /addon_configs/a0d7b954_appdaemon/secrets.yaml <<'SECRETS'
-   powerengine_mqtt_user: powerengine
-   powerengine_mqtt_password: "PASTE-PASSWORD-HERE"
-   SECRETS
-   ```
-
-3. **Point AppDaemon at the folder HACS installs into.** HACS puts AppDaemon
-   apps in `/homeassistant/appdaemon/apps/`, but the add-on reads its own
-   folder by default, so it would never see PowerEngine.
-
-   If you already have AppDaemon apps, copy them across first (this copies,
-   so the originals stay as a fallback):
-
-   ```bash
-   mkdir -p /homeassistant/appdaemon/apps
-   cp -rn /addon_configs/a0d7b954_appdaemon/apps/. /homeassistant/appdaemon/apps/
-   ```
-
-4. **Edit AppDaemon's config:** `nano /addon_configs/a0d7b954_appdaemon/appdaemon.yaml`
-
-   Add the `app_dir` line directly under `appdaemon:`, and the `MQTT:` block
-   under `plugins:` next to `HASS:`. Indentation matters (spaces, not tabs):
-
-   ```yaml
-   appdaemon:
-     app_dir: /homeassistant/appdaemon/apps
-     # ...your existing latitude/longitude/time_zone lines stay here...
-     plugins:
-       HASS:
-         type: hass
-         token: !env_var SUPERVISOR_TOKEN
-       MQTT:
-         type: mqtt
-         namespace: mqtt
-         client_host: core-mosquitto
-         client_port: 1883
-         client_user: !secret powerengine_mqtt_user
-         client_password: !secret powerengine_mqtt_password
-         client_id: appdaemon-powerengine
-         client_topics: NONE   # publish only; don't subscribe to every topic
-   ```
-
-   Save with **Ctrl+O**, **Enter**, then exit with **Ctrl+X**.
-
-5. **Restart AppDaemon:** `ha apps restart a0d7b954_appdaemon`
-
-**Check:**
-
-```bash
-sleep 20; ha apps logs a0d7b954_appdaemon | grep -iE "mqtt|error" | tail -10
-```
-
-You should see `Connected to MQTT broker at URL core-mosquitto:1883`, and
-your existing apps (if any) starting as before.
-
-**To undo:** remove the `app_dir` line and the `MQTT:` block, then restart.
-
----
-
-## Step 4: install PowerEngine through HACS
-
-1. **Enable AppDaemon apps in HACS:** *Settings → Devices & services → HACS →
-   Configure* → tick the AppDaemon apps option → Submit.
-2. **HACS → ⋮ → Custom repositories**, add both:
-   - `https://github.com/durkimat/ha-powerengine-controller`, category **AppDaemon**
+1. **HACS → ⋮ → Custom repositories**, add both:
+   - `https://github.com/durkimat/ha-powerengine-controller`, category **Integration**
    - `https://github.com/durkimat/ha-powerengine-card`, category **Dashboard**
-3. **Download both, at the latest version of each.** The card is only released when it changes, so its version
-   can be behind the app's. While PowerEngine is in beta, turn
-   on pre-releases for each repo in HACS, then pick the latest version.
-4. Restart AppDaemon: `ha apps restart a0d7b954_appdaemon`
-5. Reload the browser page (so the card's resource loads).
+2. **Download both, at the latest version of each.** The card is only released when it changes, so its version can be
+   behind the integration's. While PowerEngine is in beta, turn on pre-releases for each repo in HACS, then pick the
+   latest version.
+3. **Restart Home Assistant**, then reload the browser page (so the card's resource loads).
+4. **Settings → Devices & services → Add integration → PowerEngine**, mode **Live**. The engine starts; with no
+   `config.yaml` yet it waits in Passive ("No config.yaml yet; set PowerEngine up on the config page").
 
-**Check the log:**
-
-```bash
-sleep 20; ha apps logs a0d7b954_appdaemon | grep -i powerengine | tail -10
-```
-
-Expected (before any configuration):
-
-```
-PowerEngine 0.9.209 starting
-No config.yaml found (...); running unconfigured.
-Inputs: unconfigured; mode unconfigured (...)
-Published NN entities under the PowerEngine device
-```
-
-**Check the device:** *Settings → Devices & services → MQTT → PowerEngine*:
+**Check the device:** *Settings → Devices & services → PowerEngine*:
 
 | Entity | Expected |
 | --- | --- |
+| Engine | running, on the version you installed |
 | Version | matches what you installed |
 | Heartbeat | a time that moves on every minute |
 | Config OK | Off (until configured) |
@@ -186,9 +68,20 @@ Published NN entities under the PowerEngine device
 | Input mapping | unconfigured |
 | Input catalogue / Settings catalogue | the number of inputs and settings PowerEngine knows about |
 
+**Check the log** (*Settings → System → Logs*, search for `powerengine`). Before any configuration it says:
+
+```
+PowerEngine 0.9.210 starting
+No config.yaml found (...); running unconfigured.
+Inputs: unconfigured; mode unconfigured (...)
+```
+
+If the engine does not start, a Repair on the integration says why. The engine's own log lines are in the
+**Diagnostics** log sensor (`sensor.pe_diag_log`) and Home Assistant's log (search for `powerengine`).
+
 ---
 
-## Step 5: the PowerEngine dashboard
+## Step 2: the PowerEngine dashboard
 
 PowerEngine ships its own dashboard and keeps it up to date: on every start it
 writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once.
@@ -230,10 +123,8 @@ writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once
    ha core check && ha core restart
    ```
 
-   When HA is back, restart AppDaemon: `ha apps restart a0d7b954_appdaemon`
-
 **Check:** *Power Engine* appears in the sidebar with five tabs: **Monitoring** (it says *UNCONFIGURED*
-until Step 6), **Plan**, **Costs**, **Health** and **Config** (the configuration card, with suggested entities
+until Step 3), **Plan**, **Costs**, **Health** and **Config** (the configuration card, with suggested entities
 pre-filled).
 
 Anyone can open the Config tab, but only admins can save; other users see it
@@ -248,7 +139,7 @@ read-only.
 
 ---
 
-## Step 6: configure PowerEngine
+## Step 3: configure PowerEngine
 
 **Prefer to be guided?** The **Your system** card on the Config tab lists what PowerEngine uses and has a **Change your system** button. Its panel
 finds your devices in Home Assistant, fills the inputs from them, checks the signs and puts the result in a draft; **Apply to System** then saves it (see
@@ -314,7 +205,7 @@ lists the inputs still needing attention.
 
 ---
 
-## Step 7: first-day checks
+## Step 4: first-day checks
 
 | Tab | What to expect |
 | --- | --- |
@@ -437,7 +328,7 @@ The *Operation* setting further down the Config tab is what the switch sets; you
 
    and that the `packages` folder exists next to it (`/config/packages/`), then restart Home Assistant once if you
    had to add either. After that PowerEngine writes and updates its own files in that folder when it starts (so after
-   every update): `powerengine_handover.yaml` (everyone: the update button, the AppDaemon restarts and the watchdog)
+   every update): `powerengine_handover.yaml` (everyone: the update button and the watchdog)
    and, only while *Other battery controller* is Predbat, `powerengine_predbat_handover.yaml` (the switch between the
    two). Each file starts with a line saying PowerEngine manages it; edits are replaced, and the old file is kept
    beside it as `<name>.bak-<date>`. A file in that folder that PowerEngine did not write is never touched. It never
@@ -505,7 +396,7 @@ later is the same one step.
 - **Stopped app:** windows set ahead keep running as planned. The watchdog automation in the handover package closes
   every window (Self-Use) if PowerEngine's heartbeat stops for 15 minutes while it's the battery controller.
 - **Read-back:** every write is read back after 6 seconds and retried once; if it still doesn't match, control
-  stops until AppDaemon restarts and you're notified.
+  stops until the engine restarts (the Restart engine button) and you're notified.
 - **Daily write limit:** control pauses if PowerEngine's own writes reach it in a day. Resuming allows the limit
   again. Only real inverter writes count: update-button presses (each sends a whole block of window times),
   currents, the storage mode and remote-control settings. Window start/end times are staged in HA until the button
@@ -561,39 +452,29 @@ gives a verdict:
 
 ## Updating
 
-The dashboard updates itself with the app; refresh the browser after updating.
+HACS shows the update as for any integration. **Download** it (or press **Update** on the Configuration page, which
+installs the latest integration and card from HACS and waits for the new version): the engine restarts by itself
+within a minute, the PowerEngine device's Engine sensor says when, and you get a *PowerEngine updated* notification.
+A Repair says if Home Assistant needs a restart too, which only happens when the integration and the engine have
+changed how they talk. The Restart engine button and `powerengine.restart_engine` do it at once. The dashboard updates
+with the card; refresh the browser after updating. Read the release notes' **Behaviour changes** first: they list
+anything that changes what PowerEngine does.
 
-**One button (0.9.42 or later, with the handover package):** Configuration → **Update**. It installs the latest app
-and card from HACS, restarts AppDaemon if the app changed, waits for the new version, and leaves a notification
-saying what's running. Then refresh the browser. It needs HACS's update entities for both repositories (enabled by
-default). Doing it by hand instead:
+Update the card too, when HACS offers it. The card is only released when it changes, so its version can be behind the
+integration's; that's fine. Each warns only if the other is older than the minimum it needs.
 
-1. HACS shows updates under *Settings → Updates*, with the version number.
-   With the handover package installed (0.8.3 or later), AppDaemon restarts by itself about a minute after
-   the update is installed; you get a *PowerEngine updated* notification. Then refresh the browser.
-2. Update **both** repos to the latest version of each. The card is only released when it changes, so its version
-   can be behind the app's; that's fine. Each warns only if the other is older than the minimum it needs.
-3. Restart AppDaemon (automatic with the handover package), then reload the browser.
-4. Read the release notes' **Behaviour changes** first: they list anything that changes what PowerEngine does.
-
-Your settings (`/homeassistant/powerengine/config.yaml`) live outside the app
-folder, so updates never touch them.
+Your settings (`/config/powerengine/config.yaml`) live outside the integration's folder, so updates never touch them.
 
 ## Rolling back
 
-HACS → the repo → ⋮ → **Redownload** → pick the previous version. Do the same
-for the card, then restart AppDaemon.
+HACS → PowerEngine → ⋮ → **Redownload** → pick the previous version. The engine restarts on it within a minute. Do
+the same for the card if you need to.
 
 ## Uninstalling
 
-1. Remove PowerEngine's entities: add `remove_entities: true` to
-   `/homeassistant/powerengine/config.yaml` (create the file with just that
-   line if it doesn't exist), restart AppDaemon, and wait for the log to say
-   the entities were removed.
+1. Settings → Devices & services → PowerEngine → **Delete**. Its entities go with it.
 2. HACS: remove both repos.
-3. Optional: remove the `powerengine-dash:` entry from `configuration.yaml`, delete `/homeassistant/powerengine/`, the
-   `powerengine` HA user, and the `MQTT:` block in `appdaemon.yaml`. Keep
-   `app_dir` if other AppDaemon apps now live in `/homeassistant/appdaemon/apps/`.
+3. Optional: remove the `powerengine-dash:` entry from `configuration.yaml`, and delete `/config/powerengine/`.
 
 ---
 
@@ -601,23 +482,20 @@ for the card, then restart AppDaemon.
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| No `PowerEngine` lines in the AppDaemon log | AppDaemon isn't reading the HACS folder | Step 3.3–3.4 (`app_dir`) |
-| `MQTT plugin not configured` in the log | No `MQTT:` block, or wrong indentation | Step 3.4 |
-| MQTT connection refused / not authorised | Wrong login in `secrets.yaml`, or the user is limited wrongly | Step 2 and 3.2; check the Mosquitto add-on log |
-| PowerEngine entities show *Unavailable* | App stopped or AppDaemon restarting | Check the AppDaemon log; the Heartbeat entity expires after 5 minutes without an update |
-| Card says *app not detected* | App not running, or MQTT not set up | Steps 3–4 |
+| PowerEngine entities show *Unavailable* | The engine is stopped or restarting | Check the Engine sensor and the integration's Repairs; the Restart engine button restarts it |
+| Card says *app not detected* | The engine is not running | Step 1; check the Engine sensor and Repairs |
 | Card warns that the app (or the card) is too old | One of them is older than the other's minimum version | Update the one named in the warning to its latest version, then reload the page |
 | `Unknown command: ha` | Commands run on your own computer | Use HA's terminal add-on |
 | `Config problem: ...` in the log | `config.yaml` has an error | The message names the problem; fix or restore the backup |
-| Dashboard missing from the sidebar | `lovelace:` entry not added, or HA not restarted | Step 5 |
-| Energy flow or plan chart says *Custom element doesn't exist* | Sunsynk Power Flow Card or ApexCharts Card not installed | Step 5.1, then reload the browser |
+| Dashboard missing from the sidebar | `lovelace:` entry not added, or HA not restarted | Step 2 |
+| Energy flow or plan chart says *Custom element doesn't exist* | Sunsynk Power Flow Card or ApexCharts Card not installed | Step 2.1, then reload the browser |
 | Plan says *house load learned from 0 days* | No history for the house-load input yet (new install, or recorder excludes it) | Wait a day; check the recorder keeps the house-load entity |
-| PowerEngine missing from HACS (repos disappeared) but still running | HACS lost its record of the custom repositories | Re-add both under *HACS → ⋮ → Custom repositories* and download the latest version; settings and dashboard are unaffected |
-| Dashboard values are *unknown* | Inputs not configured, or mode *unconfigured* | Step 6 |
+| PowerEngine missing from HACS (repos disappeared) but still running | HACS lost its record of the custom repositories | Re-add both under *HACS → ⋮ → Custom repositories* (PowerEngine as **Integration**) and download the latest version; settings and dashboard are unaffected |
+| Dashboard values are *unknown* | Inputs not configured, or mode *unconfigured* | Step 3 |
 | Save says *could not send* | You're not an admin | Log in as an admin user |
-| Save says *no reply from PowerEngine* | App not running, or can't write its folder | Check the AppDaemon log for the reason |
+| Save says *no reply from PowerEngine* | The engine is not running, or can't write its folder | Check the Engine sensor and Home Assistant's log for the reason |
 | Mode stays *unconfigured* after saving | Required inputs missing or failing checks | See the reason on *Operation mode*; fix the inputs flagged on the card |
-| Costs tab empty after a few minutes | The backfill couldn't read history (recorder excludes an input, or a sensor was renamed) | Check the AppDaemon log for `Cost backfill` lines and warnings |
-| Health: *Battery power never shows charging* | Unsigned battery power sensor | Step 6.4: map the charging/discharging pair |
+| Costs tab empty after a few minutes | The backfill couldn't read history (recorder excludes an input, or a sensor was renamed) | Check Home Assistant's log for `Cost backfill` lines and warnings |
+| Health: *Battery power never shows charging* | Unsigned battery power sensor | Step 3.4: map the charging/discharging pair |
 | Costs: *Unexplained* is pounds a day | A sensor is wrong or missing (house load, grid, battery, solar) | Compare the *Energy by day* table with the inverter's daily counters |
 | Health: many inverter writes a day | Your current controller (e.g. Predbat) writes often | See the EEPROM section on the Health tab |

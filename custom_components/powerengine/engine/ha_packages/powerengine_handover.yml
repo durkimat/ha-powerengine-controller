@@ -1,5 +1,5 @@
 # Managed by PowerEngine: rewritten when PowerEngine updates. Edits here are replaced (a backup is kept).
-# PowerEngine package: the one-button update, the AppDaemon restarts and the watchdog.
+# PowerEngine package: the one-button update and the watchdog.
 #
 # Install: nothing to copy. PowerEngine keeps this file in step itself, in your Home Assistant packages folder, and
 # keeps a backup of anything it replaces. One-off: configuration.yaml needs `homeassistant: packages: !include_dir_named
@@ -7,13 +7,13 @@
 # Load on its Config page so Home Assistant picks up a changed file.
 # Needed by every install. It names no other battery controller.
 #
-# A one-button update (latest app and card from HACS, then restart AppDaemon); restart AppDaemon when a new
-# PowerEngine version is installed (or PowerEngine stops); and a watchdog that closes the inverter's windows if
-# PowerEngine stops while it is in control. Everything is named "PowerEngine - ..." so it's easy to find.
+# A one-button update (latest integration and card from HACS, then restart the engine); and a watchdog that closes
+# the inverter's windows if PowerEngine stops while it is in control. Everything is named "PowerEngine - ..." so it's
+# easy to find.
 
 script:
-  # One button (Configuration page): install the latest PowerEngine app and card from HACS, then restart AppDaemon
-  # so the new app (and its dashboard) is loaded. Finds HACS's update entities for PowerEngine by name.
+  # One button (Configuration page): install the latest PowerEngine integration and card from HACS, then restart the
+  # engine so the new version is running. Finds HACS's update entities for PowerEngine by name.
   powerengine_update:
     alias: PowerEngine - Update to the latest release
     icon: mdi:update
@@ -60,16 +60,7 @@ script:
           - condition: template
             value_template: "{{ installed != '' and installed != states('sensor.pe_diag_version') }}"
         then:
-          - choose:
-              - conditions:                    # installed as the integration: restart only its engine, not AppDaemon
-                  - condition: template
-                    value_template: "{{ integration_entities('powerengine') | count > 0 }}"
-                sequence:
-                  - action: powerengine.restart_engine
-            default:
-              - action: hassio.addon_restart
-                data:
-                  addon: a0d7b954_appdaemon
+          - action: powerengine.restart_engine
           - wait_template: "{{ states('sensor.pe_diag_version') == installed }}"
             timeout: "00:03:00"
             continue_on_timeout: true
@@ -87,7 +78,7 @@ script:
             Updates checked.
             {%- endif %}
             {% if pending | count == 0 %}Nothing new to install.{% else %}Installed the
-            {% for e in pending %}{{ 'card' if 'card' in e else 'app' }}{{ ' and ' if not loop.last }}{% endfor %}.
+            {% for e in pending %}{{ 'card' if 'card' in e else 'integration' }}{{ ' and ' if not loop.last }}{% endfor %}.
             {%- endif %} Refresh the browser (or reopen the app) so the dashboard loads the matching card.
 
 automation:
@@ -160,63 +151,4 @@ automation:
           title: PowerEngine watchdog
           message: >-
             PowerEngine stopped updating for 15 minutes, so the inverter's charge and discharge windows were closed
-            (Self-Use). Check AppDaemon, then resume.
-
-  # HACS replaces PowerEngine's files but AppDaemon keeps running the old code. PowerEngine notices the new version
-  # on disk (within a minute) and fires pe_update_installed; restart AppDaemon so it loads it.
-  - alias: PowerEngine - Restart AppDaemon after an update
-    id: powerengine_restart_after_update
-    mode: single
-    triggers:
-      - trigger: event
-        event_type: pe_update_installed
-    conditions:                    # the update button restarts AppDaemon itself; the integration restarts its own engine
-      - condition: state
-        entity_id: script.powerengine_update
-        state: "off"
-      - condition: template
-        value_template: "{{ integration_entities('powerengine') | count == 0 }}"
-    actions:
-      - delay: "00:00:30"          # let HACS finish writing the files
-      - action: hassio.addon_restart
-        data:
-          addon: a0d7b954_appdaemon
-      - action: persistent_notification.create
-        data:
-          notification_id: powerengine_updated
-          title: PowerEngine updated
-          message: >-
-            Version {{ trigger.event.data.installed }} installed (was {{ trigger.event.data.running }}); AppDaemon
-            restarted to load it. Refresh the browser so the dashboard loads the matching card.
-
-  # If PowerEngine stops updating (e.g. an update left AppDaemon unable to load it), restart AppDaemon once. At most
-  # once an hour, so a real fault doesn't cause a restart loop; the watchdog above still closes the windows at 15 min.
-  - alias: PowerEngine - Restart AppDaemon if PowerEngine stops
-    id: powerengine_restart_if_stopped
-    mode: single
-    triggers:
-      - trigger: template
-        value_template: >-
-          {{ (now() - as_datetime(states('sensor.pe_diag_heartbeat'), now())).total_seconds() > 420 }}
-      - trigger: state
-        entity_id: sensor.pe_diag_heartbeat
-        to: unavailable
-        for: "00:07:00"
-    conditions:
-      - condition: template              # (the integration watches and restarts its own engine, and raises a Repair)
-        value_template: "{{ integration_entities('powerengine') | count == 0 }}"
-      - condition: template
-        value_template: >-
-          {{ this.attributes.last_triggered is none
-             or (now() - this.attributes.last_triggered).total_seconds() > 3600 }}
-    actions:
-      - action: hassio.addon_restart
-        data:
-          addon: a0d7b954_appdaemon
-      - action: persistent_notification.create
-        data:
-          notification_id: powerengine_restarted
-          title: PowerEngine stopped
-          message: >-
-            PowerEngine hadn't updated for 7 minutes, so AppDaemon was restarted. If this keeps happening, check the
-            AppDaemon log.
+            (Self-Use). Check PowerEngine's Engine sensor and Repairs, then resume.
