@@ -60,9 +60,16 @@ script:
           - condition: template
             value_template: "{{ installed != '' and installed != states('sensor.pe_diag_version') }}"
         then:
-          - action: hassio.addon_restart
-            data:
-              addon: a0d7b954_appdaemon
+          - choose:
+              - conditions:                    # installed as the integration: restart only its engine, not AppDaemon
+                  - condition: template
+                    value_template: "{{ integration_entities('powerengine') | count > 0 }}"
+                sequence:
+                  - action: powerengine.restart_engine
+            default:
+              - action: hassio.addon_restart
+                data:
+                  addon: a0d7b954_appdaemon
           - wait_template: "{{ states('sensor.pe_diag_version') == installed }}"
             timeout: "00:03:00"
             continue_on_timeout: true
@@ -75,7 +82,7 @@ script:
             PowerEngine {{ installed }} is running.
             {%- elif installed %}
             PowerEngine {{ installed }} is installed but {{ states('sensor.pe_diag_version') }} is still running:
-            check the AppDaemon log.
+            check PowerEngine's log.
             {%- else %}
             Updates checked.
             {%- endif %}
@@ -163,10 +170,12 @@ automation:
     triggers:
       - trigger: event
         event_type: pe_update_installed
-    conditions:                    # the update button restarts AppDaemon itself
+    conditions:                    # the update button restarts AppDaemon itself; the integration restarts its own engine
       - condition: state
         entity_id: script.powerengine_update
         state: "off"
+      - condition: template
+        value_template: "{{ integration_entities('powerengine') | count == 0 }}"
     actions:
       - delay: "00:00:30"          # let HACS finish writing the files
       - action: hassio.addon_restart
@@ -194,6 +203,8 @@ automation:
         to: unavailable
         for: "00:07:00"
     conditions:
+      - condition: template              # (the integration watches and restarts its own engine, and raises a Repair)
+        value_template: "{{ integration_entities('powerengine') | count == 0 }}"
       - condition: template
         value_template: >-
           {{ this.attributes.last_triggered is none

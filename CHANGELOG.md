@@ -2,6 +2,22 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.209 (beta)
+
+### Behaviour changes
+
+- **Updating PowerEngine installed as the integration no longer restarts AppDaemon.** The handover package's update
+  script restarts only PowerEngine's engine (`powerengine.restart_engine`) when PowerEngine is an integration, and its
+  two "restart AppDaemon" automations (after an update; if PowerEngine stops) stand down, since the integration restarts
+  and watches its own engine and raises a Repair if it keeps stopping. Nothing changes for the AppDaemon app: the
+  package restarts AppDaemon as before when there is no PowerEngine integration. The engine itself no longer fires
+  `pe_update_installed` when it runs as the integration's process.
+
+### Behind the scenes
+
+- Found moving a live system from the AppDaemon app to the integration: the first update afterwards restarted the
+  AppDaemon add-on (and so the other AppDaemon apps) for nothing. `tests/test_version_check.py` covers the engine side.
+
 ## 0.9.208 (beta)
 
 ### Behaviour changes

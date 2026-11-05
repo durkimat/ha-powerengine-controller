@@ -39,6 +39,30 @@ def test_update_event_fires_once(monkeypatch):
     assert fired == [("pe_update_installed", {"running": __version__, "installed": "99.0.0"})]
 
 
+def test_the_integrations_engine_does_not_ask_for_an_appdaemon_restart(monkeypatch):
+    """Run as the integration's process, the engine is restarted by its supervisor: no pe_update_installed."""
+    import sys
+    import types
+
+    class Hass:
+        pass
+
+    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
+    hassapi.Hass = Hass
+    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
+    sys.modules.pop("powerengine", None)
+    import powerengine
+    a = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
+    fired = []
+    a.__dict__["_host"] = types.SimpleNamespace(native_entities=object(), fire_event=lambda ev, **kw: fired.append(ev))
+    a.log = lambda *args, **kw: None
+    monkeypatch.setattr(powerengine, "installed_version", lambda path: "99.0.0")
+    a._check_update({})
+    assert fired == []
+
+
 def test_write_journal_keeps_three_days(tmp_path):
     from datetime import datetime, timedelta, timezone
 
