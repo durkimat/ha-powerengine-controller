@@ -9,8 +9,8 @@ Assistant token, and this side reads and acts for it (bridge.py).
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 

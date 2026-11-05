@@ -264,4 +264,4 @@ class PowerEngineSwitch(PowerEngineEntity, SwitchEntity, RestoreEntity):
             if last.state in ("on", "off"):
                 self._state = last.state
         if self._state is None and self._native.snapshot.state(self.entity_id) in ("on", "off"):
-            self._state = self._native.snapshot.state(self.entity_id)         # the old switch's state, after a migration
+            self._state = self._native.snapshot.state(self.entity_id)     # the old switch's state (a migration)

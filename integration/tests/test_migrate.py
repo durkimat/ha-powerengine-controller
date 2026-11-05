@@ -11,11 +11,11 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_mock_service
+from tests.test_setup import engine, running, start, wait_for
 
 from custom_components.powerengine import const
 from custom_components.powerengine.const import DOMAIN
 from custom_components.powerengine.migrate import SNAPSHOT_DIR, old_entries
-from tests.test_setup import engine, running, start, wait_for
 
 OLD = (("sensor", "diag_version"), ("sensor", "state_status"), ("switch", "ctl_pause"), ("switch", "ui_right_align"))
 
@@ -73,7 +73,7 @@ async def test_the_migration_replaces_the_old_entities_with_native_ones_under_th
     assert not [e for domain, key in OLD for e in registry.entities if e == f"{domain}.pe_{key}_2"]
     assert not ir.async_get(hass).async_get_issue(DOMAIN, const.ISSUE_OLD_ENTITIES)
     pause = registry.async_get("switch.pe_ctl_pause")
-    assert pause.platform == DOMAIN and pause.area_id == area.id                       # what the owner set, carried over
+    assert pause.platform == DOMAIN and pause.area_id == area.id               # what the owner set, carried over
     assert pause.name == "Pause PowerEngine" and pause.icon == "mdi:pause"
     await wait_for(hass, lambda: hass.states.get("switch.pe_ctl_pause").state == "on", what="the pause switch's state")
     await hass.config_entries.async_unload(entry.entry_id)
