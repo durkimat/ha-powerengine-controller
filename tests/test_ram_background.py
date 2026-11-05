@@ -177,17 +177,14 @@ def test_the_relatch_joins_the_same_line():
     assert len(inverter.calls) == 5                                  # (and the new command's own relatch)
 
 
-def test_under_the_fake_appdaemon_and_in_the_demo_nothing_goes_off_thread():
+def test_under_the_fake_home_and_in_the_demo_nothing_goes_off_thread():
     pe, engine, _, _ = make()
     assert engine._writes_off_thread()
     engine.__dict__["_demo"] = "car"
     assert not engine._writes_off_thread()
-    from pe_core.compare.harness import _fake_appdaemon
-    from pe_core.host_appdaemon import AppDaemonHost
-    fake = _fake_appdaemon()()
-    assert AppDaemonHost(fake).background_writes is False
-    fake.AD = object()                                               # the real AppDaemon has one
-    assert AppDaemonHost(fake).background_writes is True
+    from pe_core.compare.harness import fake_home
+    from pe_core.host_local import LocalHost
+    assert LocalHost(fake_home()()).background_writes is False
 
 
 def test_the_worker_runs_work_in_order_reports_and_survives_a_failure():

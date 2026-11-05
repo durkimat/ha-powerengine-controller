@@ -10,8 +10,8 @@ import pytest
 from host_support import FakeHome, Recorder, connected, wait_for
 
 from pe_core import host, protocol
-from pe_core.compare.harness import _fake_appdaemon
-from pe_core.host_appdaemon import AppDaemonHost
+from pe_core.compare.harness import fake_home
+from pe_core.host_local import LocalHost
 from pe_core.host_socket import HostError, HostUnavailable, SocketHost
 
 
@@ -21,13 +21,13 @@ def test_the_socket_host_is_a_host_with_every_method_the_appdaemon_host_has():
     assert isinstance(SocketHost("tcp:127.0.0.1:1", "s"), host.Host)
 
 
-# --- the same questions, the same answers (the AppDaemon host over the fake AppDaemon is the reference)
+# --- the same questions, the same answers (the local host over the fake Home Assistant is the reference)
 @pytest.fixture(params=["appdaemon", "socket"])
 def world(request):
     """(put, host): `put(entity, state, attributes)` sets Home Assistant's state; `host` is the host under test."""
     if request.param == "appdaemon":
-        app = _fake_appdaemon()()
-        yield app.set_fake, AppDaemonHost(app)
+        app = fake_home()()
+        yield app.set_fake, LocalHost(app)
     else:
         with connected() as (home, _, h):
             yield home.put, h

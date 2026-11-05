@@ -17,12 +17,11 @@ from pathlib import Path
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
-from homeassistant.core import Event, HomeAssistant, ServiceCall, SupportsResponse, callback
+from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ConfigEntryError, ServiceValidationError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.util import dt as dt_util
 
 from .bridge import HassHome
 from .const import (
@@ -30,25 +29,18 @@ from .const import (
     CONF_SETTINGS_DIR,
     DEFAULT_SETTINGS_FOLDER,
     DOMAIN,
-    HEARTBEAT_ENTITY,
     ISSUE_CRASHING,
     ISSUE_FILES,
     ISSUE_NO_SOURCE,
-    ISSUE_OLD_ENTITIES,
     ISSUE_PROTOCOL,
-    ISSUE_RUNNING_ELSEWHERE,
     MODE_SHADOW,
     PLATFORMS,
-    RUNNING_ELSEWHERE_WITHIN_S,
-    SERVICE_MIGRATE,
     SERVICE_REFRESH_SHADOW,
     SERVICE_RESTART_ENGINE,
     SHADOW_FOLDER,
     STATUS_NEEDS_RESTART,
-    STATUS_WAITING,
 )
 from .host_server import HostServer
-from .migrate import Snapshot, async_migrate, old_entries
 from .native import NativeEntities
 from .protocol import new_secret
 from .shadow import Ledger, clear, seed
@@ -92,14 +84,6 @@ def live_dir(hass: HomeAssistant) -> Path:
     return Path(hass.config.path(DEFAULT_SETTINGS_FOLDER))
 
 
-def running_elsewhere(hass: HomeAssistant) -> bool:
-    """Is another PowerEngine (the AppDaemon app) beating? Two would both control the inverter."""
-    state = hass.states.get(HEARTBEAT_ENTITY)
-    if state is None or state.state in ("unavailable", "unknown"):
-        return False
-    return (dt_util.utcnow() - state.last_updated).total_seconds() < RUNNING_ELSEWHERE_WITHIN_S
-
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not await hass.async_add_executor_job((ENGINE_DIR / "engine_main.py").is_file):
         ir.async_create_issue(hass, DOMAIN, ISSUE_FILES, is_fixable=False, severity=ir.IssueSeverity.ERROR,
@@ -134,8 +118,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ledger = Ledger(folder / "shadow_ledger.jsonl", notify=lambda: hass.loop.call_soon_threadsafe(changed)) \
         if shadow else None
     native = NativeEntities(hass, entry)
-    if not shadow:
-        native.snapshot = await hass.async_add_executor_job(Snapshot.load, folder)
     home = HassHome(hass, native, ledger)
     secret = new_secret()
     server = HostServer(home, secret, on_watch=home.watch, on_listen=home.listen,
@@ -163,22 +145,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.async_add_executor_job(supervisor.refresh_installed)
 
     async def check(now: datetime | None = None) -> None:
-        """Every minute: start the engine once nothing else is running PowerEngine; restart it when an update replaced
-        its files."""
+        """Every minute: start the engine if it is not started; restart it when an update replaced its files."""
         await hass.async_add_executor_job(supervisor.refresh_installed)     # (a file read: not on the event loop)
         if not supervisor.started:
-            blocker = None                    # the app is running, or its entities are still there (see migrate.py)
-            if not shadow:
-                blocker = ISSUE_RUNNING_ELSEWHERE if running_elsewhere(hass) else \
-                    ISSUE_OLD_ENTITIES if old_entries(hass) else None
-            for issue in (ISSUE_RUNNING_ELSEWHERE, ISSUE_OLD_ENTITIES):
-                if issue != blocker:
-                    ir.async_delete_issue(hass, DOMAIN, issue)
-            if blocker:
-                if supervisor.status != STATUS_WAITING:
-                    supervisor.wait_for_other()
-                create_issue(blocker, ir.IssueSeverity.WARNING)
-                return
             supervisor.start()
         elif supervisor.update_needed():
             _LOGGER.info("PowerEngine %s is installed and %s is running: restarting the engine", supervisor.installed,
@@ -200,23 +169,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await hass.async_add_executor_job(seed, live_dir(hass), folder)
         supervisor.start()
 
-    async def migrate(call: ServiceCall) -> dict:
-        """Replace the AppDaemon app's entities with native ones (migrate.py), then let the engine start."""
-        if shadow:
-            raise ServiceValidationError("A shadow run does not take over from the app")
-        if running_elsewhere(hass):
-            raise ServiceValidationError("The AppDaemon app is still running (its heartbeat is less than five minutes "
-                                         "old): stop it first, and wait five minutes")
-        result = await async_migrate(hass, folder)
-        native.snapshot = await hass.async_add_executor_job(Snapshot.load, folder)      # the one it just wrote
-        await check()
-        return result.as_dict()
-
     if not hass.services.has_service(DOMAIN, SERVICE_RESTART_ENGINE):
         hass.services.async_register(DOMAIN, SERVICE_RESTART_ENGINE, restart_engine, schema=vol.Schema({}))
-    if not shadow and not hass.services.has_service(DOMAIN, SERVICE_MIGRATE):
-        hass.services.async_register(DOMAIN, SERVICE_MIGRATE, migrate, schema=vol.Schema({}),
-                                     supports_response=SupportsResponse.OPTIONAL)
     if shadow and not hass.services.has_service(DOMAIN, SERVICE_REFRESH_SHADOW):
         hass.services.async_register(DOMAIN, SERVICE_REFRESH_SHADOW, refresh_shadow, schema=vol.Schema({}))
     entry.async_on_unload(entry.add_update_listener(_reload))
@@ -246,10 +200,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await runtime.supervisor.stop()
     runtime.home.close()
     await hass.async_add_executor_job(runtime.server.stop)
-    for issue in (ISSUE_PROTOCOL, ISSUE_RUNNING_ELSEWHERE, ISSUE_OLD_ENTITIES, ISSUE_CRASHING, ISSUE_NO_SOURCE):
+    for issue in (ISSUE_PROTOCOL, ISSUE_CRASHING, ISSUE_NO_SOURCE):
         ir.async_delete_issue(hass, DOMAIN, issue)
     if not hass.config_entries.async_loaded_entries(DOMAIN):
-        for service in (SERVICE_RESTART_ENGINE, SERVICE_REFRESH_SHADOW, SERVICE_MIGRATE):
+        for service in (SERVICE_RESTART_ENGINE, SERVICE_REFRESH_SHADOW):
             if hass.services.has_service(DOMAIN, service):
                 hass.services.async_remove(DOMAIN, service)
     return ok

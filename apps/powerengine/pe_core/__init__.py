@@ -1,6 +1,6 @@
 """PowerEngine core: pure-Python decision logic with no Home Assistant dependency.
 
-Everything in this package must be importable and testable without AppDaemon.
+Everything in this package must be importable and testable without Home Assistant.
 """
 
 __version__ = "0.9.210"

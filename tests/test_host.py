@@ -1,12 +1,12 @@
-"""The Host seam (pe_core/host.py): the engine reaches AppDaemon only through `self.host`, and the engine class does
-not inherit from AppDaemon."""
+"""The Host seam (pe_core/host.py): the engine reaches Home Assistant only through `self.host`, and the engine class
+does not inherit from a client."""
 
 import ast
 import pathlib
 
 from pe_core import host
-from pe_core.compare.harness import _fake_appdaemon
-from pe_core.host_appdaemon import AppDaemonHost
+from pe_core.compare.harness import fake_home
+from pe_core.host_local import LocalHost
 
 APP = pathlib.Path(__file__).resolve().parents[1] / "apps" / "powerengine" / "powerengine.py"
 
@@ -21,23 +21,23 @@ def _engine_class():
     return next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Engine")
 
 
-def test_the_protocol_the_appdaemon_host_and_the_fake_appdaemon_have_the_same_methods():
+def test_the_protocol_the_appdaemon_host_and_thefake_home_have_the_same_methods():
     protocol = {n for n, v in vars(host.Host).items()
                 if not n.startswith("_") and (callable(v) or isinstance(v, property))}
     assert protocol == set(host.METHODS) | set(host.EXTRAS) | {"args"}
     for name in (*host.METHODS, *host.EXTRAS, "args"):
-        assert hasattr(AppDaemonHost, name), name
+        assert hasattr(LocalHost, name), name
     for name in host.METHODS:
-        assert callable(getattr(_fake_appdaemon(), name)), f"the fake AppDaemon has no {name}"
+        assert callable(getattr(fake_home(), name)), f"the fake Home Assistant has no {name}"
 
 
-def test_the_appdaemon_host_is_a_host():
-    assert isinstance(AppDaemonHost(_fake_appdaemon()()), host.Host)
+def test_the_local_host_is_a_host():
+    assert isinstance(LocalHost(fake_home()()), host.Host)
 
 
-def test_the_appdaemon_host_calls_the_apps_method_as_it_is_at_that_moment():
-    app = _fake_appdaemon()()
-    h = AppDaemonHost(app)
+def test_the_local_host_calls_the_apps_method_as_it_is_at_that_moment():
+    app = fake_home()()
+    h = LocalHost(app)
     app.set_fake("sensor.a", "1")
     assert h.get_state("sensor.a") == "1"
     app.get_state = lambda *a, **k: "swapped"          # what a test does
@@ -49,8 +49,8 @@ def test_the_appdaemon_host_calls_the_apps_method_as_it_is_at_that_moment():
 
 
 def test_an_override_replaces_a_call_until_it_is_cleared():
-    app = _fake_appdaemon()()
-    h = AppDaemonHost(app)
+    app = fake_home()()
+    h = LocalHost(app)
     app.set_fake("sensor.a", "1")
     h.override(get_state=lambda *a, **k: "gate")
     assert h.get_state("sensor.a") == "gate" and h.method("get_state")() == "gate"
@@ -92,18 +92,18 @@ def test_the_engine_uses_appdaemons_methods_only_through_the_host():
     assert not leaks, "use self.host.<name> instead:\n" + "\n".join(leaks)
 
 
-def test_the_appdaemon_app_is_the_engine_with_appdaemons_base():
+def test_powerengine_is_the_engine_and_nothing_else_from_the_apps_point_of_view():
+    """`PowerEngine` is the name the tests and the demo build the engine under (a fake Home Assistant beside it)."""
     tree = ast.parse(APP.read_text(encoding="utf-8"))
-    shell = [n for top in tree.body if isinstance(top, ast.If) for n in top.body
-             if isinstance(n, ast.ClassDef) and n.name == "PowerEngine"]
+    shell = [n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "PowerEngine"]
     assert len(shell) == 1
-    assert [ast.unparse(b) for b in shell[0].bases] == ["Engine", "hass.Hass"]
+    assert [ast.unparse(b) for b in shell[0].bases] == ["Engine"]
 
 
 def test_the_engine_hands_itself_to_nothing_that_could_call_appdaemon_through_it():
     """Adapters were once given the app and called `ha.get_state()` on it, which the demo's replacement of the app's
     methods reached; now they get the host. `self` may go only to getattr/setattr/hasattr and the host itself."""
-    allowed = {"getattr", "setattr", "hasattr", "AppDaemonHost", "isinstance"}
+    allowed = {"getattr", "setattr", "hasattr", "LocalHost", "isinstance"}
     leaks = []
     for node in ast.walk(_engine_class()):
         if isinstance(node, ast.Call):
@@ -117,22 +117,6 @@ def test_the_engine_hands_itself_to_nothing_that_could_call_appdaemon_through_it
                     and isinstance(node.args[1], ast.Constant) and node.args[1].value in HASS_NAMES):
                 leaks.append(f"line {node.lineno}: {node.func.id}(self, {node.args[1].value!r})")
     assert not leaks, "\n".join(leaks)
-
-
-def test_a_slow_call_to_home_assistant_is_logged_with_what_it_was(monkeypatch):
-    import time
-
-    from pe_core import host_appdaemon
-    app = _fake_appdaemon()()
-    logged = []
-    app._hass_log = lambda msg, *a, **k: logged.append(msg)
-    app.call_service = lambda service, **kw: time.sleep(0.03)
-    h = AppDaemonHost(app)
-    h.call_service("number/set_value", entity_id="number.x", value=1)
-    assert logged == []                                              # quick calls say nothing
-    monkeypatch.setattr(host_appdaemon, "SLOW_CALL_S", 0.01)
-    h.call_service("number/set_value", entity_id="number.x", value=1)
-    assert len(logged) == 1 and "call_service number/set_value number.x took 0." in logged[0]
 
 
 def test_a_slow_engine_tick_says_where_the_time_went():

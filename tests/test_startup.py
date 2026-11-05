@@ -1,7 +1,6 @@
 """Start-up smoke test: PowerEngine.initialize() runs against a do-nothing AppDaemon (0.9.12 failed to start)."""
 import shutil
 import sys
-import types
 
 import pytest
 
@@ -29,13 +28,9 @@ def engine(monkeypatch, tmp_path):
         def log(self, *a, **k):
             pass
 
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = Hass
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine
+    powerengine.PowerEngine = type("PowerEngine", (powerengine.PowerEngine, Hass), {})
     e = powerengine.PowerEngine()
     folder = tmp_path / "powerengine"
     folder.mkdir()

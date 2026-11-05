@@ -12,8 +12,8 @@ smart-charge slots and VPP events, and explains every decision in plain English.
 
 Follow the **[installation guide](docs/INSTALL.md)**: HACS, the PowerEngine dashboard, configuration, updating,
 rollback, uninstalling and troubleshooting, with a check at each step. No AppDaemon and no MQTT broker are needed, and
-updating restarts only the engine, not Home Assistant. If you ran the old AppDaemon app (no longer released), see
-**[docs/INTEGRATION.md](docs/INTEGRATION.md)** for moving over.
+updating restarts only the engine, not Home Assistant. See **[docs/INTEGRATION.md](docs/INTEGRATION.md)** for how the
+integration works.
 
 A fresh install runs in **Passive** mode: it monitors, plans and simulates, but
 never controls anything. Your settings live in

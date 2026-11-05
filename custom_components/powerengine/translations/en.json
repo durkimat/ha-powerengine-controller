@@ -3,8 +3,11 @@
     "step": {
       "user": {
         "title": "PowerEngine",
-        "description": "PowerEngine runs its engine as a process of Home Assistant. Live: the engine in control, which waits while the AppDaemon app is running. Shadow: a second engine on its own copy of the live data, whose entities are separate (sensor.pe_shadow_...) and which sends nothing. Leave the folder empty for the usual one.",
-        "data": { "mode": "Mode", "settings_dir": "Settings folder" }
+        "description": "PowerEngine runs its engine as a process of Home Assistant. Live: the engine in control. Shadow: a second engine on its own copy of the live data, whose entities are separate (sensor.pe_shadow_...) and which sends nothing. Leave the folder empty for the usual one.",
+        "data": {
+          "mode": "Mode",
+          "settings_dir": "Settings folder"
+        }
       }
     }
   },
@@ -12,12 +15,20 @@
     "step": {
       "init": {
         "title": "PowerEngine",
-        "data": { "mode": "Mode", "settings_dir": "Settings folder" }
+        "data": {
+          "mode": "Mode",
+          "settings_dir": "Settings folder"
+        }
       }
     }
   },
   "selector": {
-    "mode": { "options": { "live": "Live: the engine in control", "shadow": "Shadow: beside the live PowerEngine, sends nothing" } }
+    "mode": {
+      "options": {
+        "live": "Live: the engine in control",
+        "shadow": "Shadow: beside the live PowerEngine, sends nothing"
+      }
+    }
   },
   "issues": {
     "shadow_no_source": {
@@ -28,17 +39,9 @@
       "title": "Restart Home Assistant to finish updating PowerEngine",
       "description": "The updated engine and the PowerEngine integration speak different versions of their protocol, so the engine has stopped. Restarting Home Assistant loads the new integration and the engine starts again."
     },
-    "running_in_appdaemon": {
-      "title": "PowerEngine is already running in AppDaemon",
-      "description": "Two copies of PowerEngine would both control the inverter, so the engine has not been started. Stop the AppDaemon app (and keep a backup of apps.yaml); the engine starts within a minute of the app stopping."
-    },
     "engine_crashing": {
       "title": "The PowerEngine engine keeps stopping",
       "description": "The engine has stopped several times in the last quarter of an hour and is being started again after a wait. Download the integration's diagnostics for the engine's last log lines."
-    },
-    "old_entities": {
-      "title": "Finish taking over from the PowerEngine AppDaemon app",
-      "description": "The AppDaemon app's entities still exist, and the engine is not started until they are replaced (it would make duplicates called sensor.pe_..._2). With the app stopped, run the powerengine.migrate_from_mqtt service: it saves a snapshot of the old entities, clears their MQTT messages, removes them, and the engine then makes them again with the same entity ids and history."
     },
     "engine_files_missing": {
       "title": "PowerEngine's engine files are missing",
@@ -49,8 +52,12 @@
     "sensor": {
       "engine": {
         "state": {
-          "stopped": "Stopped", "waiting": "Waiting", "starting": "Starting", "running": "Running",
-          "restarting": "Restarting", "backing_off": "Starting again soon", "needs_restart": "Restart Home Assistant",
+          "stopped": "Stopped",
+          "starting": "Starting",
+          "running": "Running",
+          "restarting": "Restarting",
+          "backing_off": "Starting again soon",
+          "needs_restart": "Restart Home Assistant",
           "failed": "Failed"
         }
       }
@@ -60,10 +67,6 @@
     "restart_engine": {
       "name": "Restart engine",
       "description": "Restart the PowerEngine engine now, for example to start an update that has just been installed."
-    },
-    "migrate_from_mqtt": {
-      "name": "Take over from the AppDaemon app",
-      "description": "With the AppDaemon app stopped: save a snapshot of its entities, clear its MQTT messages and remove them, so the engine can make them as native entities with the same entity ids. Does nothing if there are none."
     },
     "refresh_shadow": {
       "name": "Refresh shadow data",

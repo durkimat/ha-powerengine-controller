@@ -250,11 +250,6 @@ def test_the_profile_takes_the_apps_own_record_over_rebuilt_history(monkeypatch)
     import sys
     import types
 
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = type("Hass", (), {})
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine as pe
 

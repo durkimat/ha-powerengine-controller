@@ -249,7 +249,7 @@ def device(version: str) -> dict[str, Any]:
         "identifiers": ["powerengine"],
         "name": "PowerEngine",
         "manufacturer": "PowerEngine",
-        "model": "AppDaemon app",
+        "model": "Home Assistant integration",
         "sw_version": version,
         "configuration_url": REPO_URL,
     }

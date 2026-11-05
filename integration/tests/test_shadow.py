@@ -171,11 +171,10 @@ async def test_a_shadow_engine_reads_the_live_house_but_its_own_entities_from_th
         await hass.config_entries.async_unload(entry.entry_id)
 
 
-async def test_the_shadow_is_not_held_back_by_the_live_powerengine_and_refuses_the_live_folder(hass):
+async def test_the_shadow_runs_beside_the_live_powerengine_and_refuses_the_live_folder(hass):
     live_folder(hass)
-    hass.states.async_set(const.HEARTBEAT_ENTITY, "beating")                          # the live engine is running
     entry = await start_shadow(hass)
-    await running(hass, SHADOW_VERSION)                                               # ...and the shadow runs anyway
+    await running(hass, SHADOW_VERSION)
     await hass.config_entries.async_unload(entry.entry_id)
     bad = MockConfigEntry(domain=DOMAIN, data={}, options={const.CONF_MODE: const.MODE_SHADOW,
                                                            const.CONF_SETTINGS_DIR: hass.config.path("powerengine")})

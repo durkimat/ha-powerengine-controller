@@ -1,5 +1,4 @@
 import sys
-import types
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -121,11 +120,6 @@ def test_the_outbox_holds_releases_one_per_channel_and_drops_the_stale(tmp_path)
 # --- the app ---
 
 def _app(monkeypatch, tmp_path, notifications=None):
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = type("Hass", (), {})
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine
     a = powerengine.PowerEngine.__new__(powerengine.PowerEngine)

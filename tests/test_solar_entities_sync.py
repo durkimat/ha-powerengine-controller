@@ -7,19 +7,6 @@ import pytest
 
 @pytest.fixture
 def engine(monkeypatch):
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-
-    class Hass:
-        def __getattr__(self, name):
-            raise AttributeError(name)
-
-        def log(self, *a, **k):
-            pass
-
-    hassapi.Hass = Hass
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine
     e = powerengine.PowerEngine.__new__(powerengine.PowerEngine)

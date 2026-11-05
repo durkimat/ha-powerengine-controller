@@ -59,11 +59,6 @@ def test_unreadable_switch_does_nothing_and_a_restart_keeps_the_state():
 
 
 def _app(monkeypatch, tmp_path, features=None, mode="active", entity="input_boolean.heating_off", safety=None):
-    hassapi = types.ModuleType("appdaemon.plugins.hass.hassapi")
-    hassapi.Hass = type("Hass", (), {})
-    for name in ("appdaemon", "appdaemon.plugins", "appdaemon.plugins.hass"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    monkeypatch.setitem(sys.modules, "appdaemon.plugins.hass.hassapi", hassapi)
     sys.modules.pop("powerengine", None)
     import powerengine
     a = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
