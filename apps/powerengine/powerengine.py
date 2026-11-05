@@ -1538,7 +1538,7 @@ class Engine:
             self.log(f"Could not summarise costs: {err!r}", level="WARNING")
 
     def _publish_costs(self):
-        if self.costbook is None or getattr(self, "mqtt", None) is None or not hasattr(self, "_published"):
+        if self.costbook is None or not hasattr(self, "_published"):      # (not before the publisher is chosen)
             return
         sp = self._scenario_params() if self.cfg is not None else None
         for key, (state, attrs) in cost_entity_states(self.costbook, self._today(), self._months, sp).items():
