@@ -1,7 +1,7 @@
 """Keep PowerEngine's Home Assistant package files in step (0.9.109).
 
-The app ships two package files (`ha_packages/*.yml`, not `.yaml`: AppDaemon loads every `.yaml` under apps/ as app
-config). This module decides, for each, what to do in the user's `<ha config>/packages/` folder, and does it:
+The engine ships one package file (`ha_packages/*.yml`). This module decides what to do with it in the user's
+`<ha config>/packages/` folder, and does it:
 
   write            absent and wanted
   update           present, recognised as PowerEngine's, and different
@@ -10,8 +10,8 @@ config). This module decides, for each, what to do in the user's `<ha config>/pa
   skip_unmanaged   present and not recognised: never touched
 
 Recognised means: the first lines carry the marker, or it is an older shipped version (by its header), or it is the old
-combined package (the handover scripts and the update/restart automations in one file). The main file is always wanted;
-the Predbat handover only while the effective other controller is `predbat`.
+combined package (the handover scripts and the update/restart automations in one file). The main file is always wanted.
+The Predbat handover file an earlier version installed is retired: when it is there and recognised it is removed.
 
 `plan` is pure (a file-reading function in, decisions out); `apply` does the writing, with a backup beside the old file
 named so that Home Assistant ignores it (it loads only `*.yaml` in the folder, and `.bak-DATE` is not that).
@@ -19,6 +19,7 @@ named so that Home Assistant ignores it (it loads only `*.yaml` in the folder, a
 
 from __future__ import annotations
 
+import glob
 import os
 import shutil
 from dataclasses import dataclass
@@ -27,13 +28,11 @@ MARKER = "# Managed by PowerEngine: rewritten when PowerEngine updates. Edits he
 _MARKER_PREFIX = "# Managed by PowerEngine:"
 
 MAIN = "powerengine_handover.yaml"
-PREDBAT = "powerengine_predbat_handover.yaml"
-NAMES = (MAIN, PREDBAT)
-SHIPPED_FILES = {MAIN: "powerengine_handover.yml", PREDBAT: "powerengine_predbat_handover.yml"}
+RETIRED = ("powerengine_predbat_handover.yaml",)          # shipped until 0.9.211; removed from a packages folder
+SHIPPED_FILES = {MAIN: "powerengine_handover.yml"}
 
 # What Home Assistant creates when a package is loaded (the stateless "is it loaded" check).
 MAIN_ENTITY = "script.powerengine_update"
-PREDBAT_ENTITY = "input_select.battery_controller"
 
 # The first line of every earlier shipped version (before the marker existed).
 _OLD_HEADERS = ("# PowerEngine package:", "# PowerEngine and Predbat handover (OPTIONAL", "# PowerEngine handover:")
@@ -65,30 +64,23 @@ def recognised(text: str) -> bool:
     return first.startswith(_OLD_HEADERS[2]) and _COMBINED_SIGNATURE in text
 
 
-def wanted_names(controller: str) -> tuple[str, ...]:
-    return (MAIN, PREDBAT) if controller == "predbat" else (MAIN,)
-
-
-def plan(packages_dir: str, controller: str, shipped: dict[str, str], read) -> list[FileAction]:
+def plan(packages_dir: str, shipped: dict[str, str], read) -> list[FileAction]:
     """One decision per file that is present or wanted. `read(path)` gives the text or None when there is no file."""
-    wanted = wanted_names(controller)
     out = []
-    for name in NAMES:
-        text = shipped[name]
+    for name, text in shipped.items():
         existing = read(os.path.join(packages_dir, name))
         if existing is None:
-            if name in wanted:
-                out.append(FileAction(name, "write", True, text))
+            out.append(FileAction(name, "write", True, text))
         elif not recognised(existing):
             out.append(FileAction(name, "skip_unmanaged", False))
-        elif name not in wanted and controller == "unset" and name == PREDBAT:
-            out.append(FileAction(name, "keep", True))          # not chosen yet: leave a handover file alone
-        elif name not in wanted:
-            out.append(FileAction(name, "remove", True))
         elif _norm(existing) == _norm(text):
             out.append(FileAction(name, "keep", True))
         else:
             out.append(FileAction(name, "update", True, text))
+    for name in RETIRED:
+        existing = read(os.path.join(packages_dir, name))
+        if existing is not None and recognised(existing):
+            out.append(FileAction(name, "remove", True))
     return out
 
 
@@ -99,6 +91,17 @@ def _backup_path(path: str, stamp: str) -> str:
         n += 1
         candidate = f"{base}-{n}"
     return candidate
+
+
+KEEP_BACKUPS = 3                      # of each file: a rewrite at every update would otherwise pile them up
+
+
+def _prune_backups(path: str) -> None:
+    for old in sorted(glob.glob(glob.escape(path) + ".bak-*"))[:-KEEP_BACKUPS]:
+        try:
+            os.remove(old)
+        except OSError:
+            pass
 
 
 def apply(packages_dir: str, actions: list[FileAction], stamp: str) -> list[tuple[str, str]]:
@@ -112,6 +115,7 @@ def apply(packages_dir: str, actions: list[FileAction], stamp: str) -> list[tupl
         try:
             if a.action in ("update", "remove"):
                 shutil.copy2(path, _backup_path(path, stamp))
+                _prune_backups(path)
             if a.action == "remove":
                 os.remove(path)
             else:
@@ -144,52 +148,37 @@ def shipped_texts(folder: str | None = None) -> dict[str, str]:
     return out
 
 
-def sync(ha_dir: str, controller: str, shipped: dict[str, str], stamp: str, read=read_text) -> dict:
+def sync(ha_dir: str, shipped: dict[str, str], stamp: str, read=read_text) -> dict:
     """Decide and apply for the HA config folder `ha_dir`. Never creates the packages folder. Returns
-    {"dir_exists", "actions", "errors", "controller"}; `actions` are what was decided (failed ones also in errors)."""
+    {"dir_exists", "actions", "errors"}; `actions` are what was decided (failed ones also in errors)."""
     packages = os.path.join(ha_dir, "packages")
     if not os.path.isdir(packages):
-        return {"dir_exists": False, "actions": [], "errors": [], "controller": controller}
-    actions = plan(packages, controller, shipped, read)
+        return {"dir_exists": False, "actions": [], "errors": []}
+    actions = plan(packages, shipped, read)
     errors = apply(packages, actions, stamp)
-    return {"dir_exists": True, "actions": actions, "errors": errors, "controller": controller}
+    return {"dir_exists": True, "actions": actions, "errors": errors}
 
 
 def _label(name: str) -> str:
-    return "Predbat handover package" if name == PREDBAT else "PowerEngine package"
+    return "PowerEngine package"
 
 
-def reload_needed(controller: str, result: dict, entity_present) -> bool:
-    """Is Home Assistant running something other than the files on disk? From entity presence alone (stateless):
-    the main package is loaded when `script.powerengine_update` exists, the Predbat one when
-    `input_select.battery_controller` does. A file that is not PowerEngine's, or could not be written, is not counted:
-    reloading would change nothing."""
+def reload_needed(result: dict, entity_present) -> bool:
+    """Is Home Assistant running something other than the file on disk? From entity presence alone (stateless): the
+    package is loaded when `script.powerengine_update` exists. A file that is not PowerEngine's, or could not be
+    written, is not counted: reloading would change nothing."""
     if not result["dir_exists"]:
         return False
     failed = {n for n, _ in result["errors"]}
-    by = {a.name: a for a in result["actions"]}
-    main = by.get(MAIN)
-    main_in_place = main is not None and main.managed and MAIN not in failed
-    if controller == "predbat":
-        predbat = by.get(PREDBAT)
-        predbat_in_place = predbat is not None and predbat.managed and PREDBAT not in failed
-        if predbat_in_place and not entity_present(PREDBAT_ENTITY):
-            return True
-    elif controller != "unset":
-        p = by.get(PREDBAT)
-        gone = p is None or (p.action == "remove" and PREDBAT not in failed)
-        if gone and entity_present(PREDBAT_ENTITY):                 # no file any more, but Home Assistant has it
-            return True
-    return main_in_place and not entity_present(MAIN_ENTITY)
+    main = {a.name: a for a in result["actions"]}.get(MAIN)
+    return main is not None and main.managed and MAIN not in failed and not entity_present(MAIN_ENTITY)
 
 
 def report(result: dict, entity_present) -> tuple[str, dict]:
     """The state and attributes of `sensor.pe_diag_package`."""
-    controller = result["controller"]
     files = [{"name": a.name, "action": a.action, "managed": a.managed} for a in result["actions"]]
-    needed = reload_needed(controller, result, entity_present)
-    wanted = wanted_names(controller)
-    unmanaged = [a.name for a in result["actions"] if a.action == "skip_unmanaged" and a.name in wanted]
+    needed = reload_needed(result, entity_present)
+    unmanaged = [a.name for a in result["actions"] if a.action == "skip_unmanaged"]
     if not result["dir_exists"]:
         state = "no_packages_dir"
         message = ("There is no packages folder in your Home Assistant configuration, so PowerEngine can't keep its "

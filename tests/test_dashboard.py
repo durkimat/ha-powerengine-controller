@@ -28,8 +28,7 @@ def test_no_stray_yaml_in_app_folder():
     yamls = sorted(p.relative_to(app).as_posix() for p in app.rglob("*.y*ml"))
     assert [y for y in yamls if y.endswith(".yaml")] == [], yamls
     assert [y for y in yamls if not y.endswith(".yaml")] == [
-        "ha_packages/powerengine_handover.yml", "ha_packages/powerengine_predbat_handover.yml",
-        "pe_core/adapters/devices/solis.yml"], yamls
+        "ha_packages/powerengine_handover.yml", "pe_core/adapters/devices/solis.yml"], yamls
 
 
 def test_dashboard_templates_parse():

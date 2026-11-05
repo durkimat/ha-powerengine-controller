@@ -25,7 +25,7 @@ from typing import Any
 
 SHADOW_PREFIX = "pe_shadow_"
 # the engine's own entities: PowerEngine's catalogue groups (pe_core/entities.py GROUPS), not another integration's
-# entities that happen to start with pe_ (pe_modbus_probe)
+# entities that happen to start with pe_ (someone else's pe_ entity)
 _KEY = r"((?:cfg|ctl|state|plan|map|diag|cost|event|ui|v2)(?:_[a-z0-9_]+)?)"
 OWN = re.compile(r"^(sensor|binary_sensor|switch)\.pe_" + _KEY + "$")
 SHADOW = re.compile(r"^(sensor|binary_sensor|switch)\." + SHADOW_PREFIX + _KEY + "$")

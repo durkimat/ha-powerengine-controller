@@ -168,7 +168,7 @@ def test_the_demos_guard_entities_exist_in_the_world_and_nothing_listens_to_them
     app = start(make)
     w = app._demo_world()
     assert w.get_state("switch.demo_other_controller_read_only") == "on"
-    assert w.get_state("automation.demo_legacy_battery_control") == "off"
+    assert w.get_state("automation.demo_other_battery_control") == "off"
     assert not [v for v in app.live.values() if v[0] == "state" and str(v[2]).split(".")[1].startswith("demo_")]
 
 
@@ -190,13 +190,13 @@ def test_coerce_flags_only_touches_true_false_settings():
            "system": {"battery_location": "garage", "house_load_includes_ev": "on"},
            "notifications": {"service": "notify.me", "events": {"health": "false"}},
            "solar_plants": [{"id": "m", "enabled": "true"}],
-           "inputs": {"battery_power": {"entity": "sensor.x", "invert": "true"}}, "remove_entities": "false"}
+           "inputs": {"battery_power": {"entity": "sensor.x", "invert": "true"}}}
     out = coerce_flags(raw)
     assert out["features"] == {"axle": True, "arbitrage": False, "x": True, "bad": "maybe"}
     assert out["system"] == {"battery_location": "garage", "house_load_includes_ev": True}
     assert out["notifications"]["events"] == {"health": False} and out["notifications"]["service"] == "notify.me"
     assert out["solar_plants"][0]["enabled"] is True and out["inputs"]["battery_power"]["invert"] is True
-    assert out["remove_entities"] is False and raw["features"]["axle"] == "true"     # a copy
+    assert raw["features"]["axle"] == "true"                                         # a copy
 
 
 # --- 8. words on the unconfigured screen ----------------------------------------------------------------------------

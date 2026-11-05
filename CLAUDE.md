@@ -38,9 +38,8 @@ owner approves each run on GitHub. It can't run `tools/release.sh` itself (it ne
   decision log, review findings). Start at `docs/logic/README.md`. A PR that changes planning or `decide` updates the matching page.
 - `docs/INSTALL.md`: the install guide. Keep it current: any release that changes setup updates it in the same PR.
 - `docs/ha/powerengine_handover.yaml`: the HA package everyone needs (update script, watchdog); it names no
-  other controller. `docs/ha/powerengine_predbat_handover.yaml`: the optional Predbat handover (input_select, two scripts, restart
-  Predbat). **PowerEngine installs and updates them itself** (0.9.109): the shipped copies are `apps/powerengine/ha_packages/*.yml`
-  (`.yml`, not `.yaml`), `docs/ha/*.yaml` must stay identical (a test), each starts with the
+  other controller. **PowerEngine installs and updates it itself** (0.9.109): the shipped copy is `apps/powerengine/ha_packages/*.yml`
+  (`.yml`, not `.yaml`), `docs/ha/*.yaml` must stay identical (a test), it starts with the
   `hapackage.MARKER` line, and `pe_core/hapackage.py` decides. Edit the docs file, then copy it over the shipped one. See "HA config" below.
 - `tools/release.sh`: the release (`docs/RELEASING.md`). `tools/diag_summary.py`: summarises a diagnostics export (`--help`).
   `tools/build_demo_pack.py`: rebuilds the demo pack. `tools/sim/`: the simulator (stored days through the real app with other code or

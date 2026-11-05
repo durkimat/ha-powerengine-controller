@@ -1697,7 +1697,7 @@ views:
           - type: custom:powerengine-demo-card
             grid_options: {columns: full}
           # one-button update, first for a set-up system (the demo banner above hides itself there): HACS checks GitHub now, then the handover package's script installs what's new and
-          # restarts AppDaemon (admins only)
+          # restarts the engine (admins only)
           - type: custom:powerengine-update-card
             grid_options: {columns: full}
           # setup checklist: what PowerEngine needs, with one-button HACS installs (admins only); hides itself once
@@ -1708,9 +1708,6 @@ views:
           # Apply to System); also exports a device's entity list for hardware PowerEngine doesn't support yet (hides
           # itself when the app is too old to publish what it needs)
           - type: custom:powerengine-system-card
-            grid_options: {columns: full}
-          # handover switch to another controller (only with docs/ha/powerengine_predbat_handover.yaml installed; the card hides itself otherwise)
-          - type: custom:powerengine-handover-card
             grid_options: {columns: full}
           - type: custom:powerengine-config-card
             grid_options: {columns: full}

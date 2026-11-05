@@ -77,7 +77,7 @@ IDS = {
     "rc_charge_power": "number.demo_inverter_battery_control_override_charge_power",
     "rc_discharge_power": "number.demo_inverter_battery_control_override_discharge_power",
     "guard_read_only": "switch.demo_other_controller_read_only",
-    "guard_off_1": "automation.demo_legacy_battery_control",
+    "guard_off_1": "automation.demo_other_battery_control",
 }
 RC_ROLES = ("rc_mode", "rc_charge_power", "rc_discharge_power")
 NUMBERS = {IDS["rc_charge_power"]: (0.0, LIMIT_W), IDS["rc_discharge_power"]: (0.0, LIMIT_W),

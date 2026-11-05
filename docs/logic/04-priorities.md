@@ -35,12 +35,12 @@ flowchart TD
     H -- no --> I["ACTIVE"]
 ```
 
-The guards depend on the system setting `other_controller` (`none` / `predbat` / `other`; page 7). With `none` nothing is
-checked and a mapped guard is ignored. With `predbat` or `other` every mapped guard must be safe, and at least one must be
-mapped. Not chosen: it is derived at read time from the mapped guards (`guard_read_only` containing `predbat` gives `predbat`,
-any other guard gives `other`; nothing is saved); with no guard mapped Active is refused with "Choose whether another battery
+The guards depend on the system setting `other_controller` (`none` / `other`; page 7; a saved `predbat` from an older version reads
+as `other`). With `none` nothing is checked and a mapped guard is ignored. With `other` every mapped guard must be safe,
+and at least one must be mapped. Not chosen: it is derived at read time from the mapped guards (any mapped guard gives
+`other`; nothing is saved); with no guard mapped Active is refused with "Choose whether another battery
 controller is installed (Config page, Inverter control)". `config.other_controller()` is the one place that derives it, and
-`sensor.pe_diag_version` publishes the result as attribute `other_controller` (`none`, `predbat`, `other` or `unset`).
+`sensor.pe_diag_version` publishes the result as attribute `other_controller` (`none`, `other` or `unset`).
 
 Leaving Active hands the inverter back to Self-Use once (RAM control: remote control is switched Off, always). Going Active
 (or resuming) starts a **5-minute restart hold-off** for timed-window writes (page 6).
