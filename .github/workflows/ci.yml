@@ -41,13 +41,19 @@ jobs:
         run: pytest -q -n auto --dist loadscope
 
   hacs:
-    name: HACS validation (${{ matrix.category }})
+    name: HACS validation               # the name the branch rule requires: keep it exactly
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        category: [integration, appdaemon]       # the repository installs either way (docs/INTEGRATION.md)
     steps:
       - uses: hacs/action@main
         with:
-          category: ${{ matrix.category }}
+          category: integration         # how the repository is installed from 0.9.208 (docs/INTEGRATION.md)
+          ignore: brands description topics
+
+  hacs-appdaemon:
+    name: HACS validation (AppDaemon app)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: appdaemon           # and still, as the AppDaemon app
           ignore: brands description topics
