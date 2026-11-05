@@ -20,6 +20,7 @@ from .adapters.kraken import KrakenTariff
 from .adapters.myenergi import ZappiCharger
 from .adapters.solcast import SolcastForecast
 from .config import Config
+from .hold import Hold, usable
 from .parsing import (  # noqa: F401
     State,
     Window,
@@ -141,10 +142,11 @@ def forecast_kwh(items: Any) -> float | None:
 
 def read(cfg: Config, get_state: GetState, now: datetime | None = None, tariff: KrakenTariff | None = None,
          events: AxleEvents | None = None, ev: ZappiCharger | None = None,
-         forecast: SolcastForecast | None = None) -> Readings:
+         forecast: SolcastForecast | None = None, hold: Hold | None = None) -> Readings:
     """Build Readings from the config's mappings using `get_state(entity_id)`. The supplier's tariff data and the
     aggregator's events are parsed by the tariff and event adapters, and the car charger's by the EV adapter (the
-    Kraken, Axle and Zappi ones unless given), and the forecast's by the forecast adapter (Solcast)."""
+    Kraken, Axle and Zappi ones unless given), and the forecast's by the forecast adapter (Solcast). `hold` keeps the
+    rate and smart-slot lists through a short outage of their sensors (see hold.py); without one they read as empty."""
     now = now or datetime.now(timezone.utc)
     tariff = tariff or KrakenTariff()
     events = events or AxleEvents()
@@ -240,6 +242,12 @@ def read(cfg: Config, get_state: GetState, now: datetime | None = None, tariff: 
     r.standing_charge = tariff.read_standing_charge(state)
     r.rates = tariff.read_rates(state)
     r.dispatches, r.completed_dispatches = tariff.read_dispatches(state)
+    if hold is not None:
+        rate_roles = [k for k in ("import_rates_today", "import_rates_tomorrow") if k in inputs]
+        r.rates = hold.keep("rates", r.rates, all(usable(state(k)) for k in rate_roles), r.now, "The rate lists")
+        slots_ok = usable(state("smart_dispatches")) if "smart_dispatches" in inputs else True
+        r.dispatches, r.completed_dispatches = hold.keep(
+            "dispatches", (r.dispatches, r.completed_dispatches), slots_ok, r.now, "The smart-charge slots")
 
     r.ev_plug, r.ev_status, r.ev_mode, r.ev_session_kwh = (ev_raw["plug"], ev_raw["status"], ev_raw["mode"],
                                                             ev_raw["session_kwh"])
