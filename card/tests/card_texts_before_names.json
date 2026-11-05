@@ -1,0 +1,237 @@
+{
+ "FEATURES": [
+  [
+   "auto_cheap_threshold",
+   "Automatic cheap threshold",
+   "Work out what counts as cheap from the prices ahead (the bottom fifth of the range, and only if storing it pays), capped by the Cheap import threshold setting."
+  ],
+  [
+   "fill_when_cheap",
+   "Top up when cheap",
+   "Charge to the grid-charge target in every cheap slot, not just what the forecast needs. A buffer in case the forecast is wrong."
+  ],
+  [
+   "smart_charge_optimisation",
+   "Smart-charge optimisation",
+   "Ask EDF for extra smart-charge slots by changing the car's ready-by time when it's worth it, with back-off and within the limits below. Replaces the fixed daily triggers. Sends nothing in Passive mode."
+  ],
+  [
+   "slots_whole_house",
+   "Smart slots cover the whole house",
+   "Tick if your supplier charges the whole house the slot rate during a smart-charge slot, even when the car isn't charging (EDF does). Off: PowerEngine plans slots at your normal rate for the house and battery, and doesn't ask for extra slots, since they'd only help the car."
+  ],
+  [
+   "smart_skip_full_car",
+   "Don't ask when the car is full",
+   "Skip requests while the charger says the charge is complete, or the car drew nothing in the last smart slot. Leave off if your supplier gives slots even when the car is full: the Config page's success rate shows whether requests for a full car work."
+  ],
+  [
+   "learn_car_min",
+   "Learn: shortest real charge",
+   "Move the Shortest real charge setting towards what the car's confirmed smart-charge slots show: half of a typical short real charge, a little at a time, and never below half or above double the setting. Until there are enough confirmed slots it uses the setting as it is."
+  ],
+  [
+   "arbitrage",
+   "Energy arbitrage",
+   "Sell stored energy just before a cheap refill when it pays after losses and wear, keeping enough for the house. In Passive mode this only plans and simulates it, so you can see what it would earn.",
+   "Check your export tariff terms first: some only pay for exported solar, not energy bought from the grid."
+  ],
+  [
+   "deep_overnight",
+   "Deeper selling overnight",
+   "Inside the fixed overnight window, where the cheap refill is guaranteed, arbitrage may sell below the band's bottom (down to the reserve plus 10%): one deeper sale and one refill instead of many shallow cycles, for the same money. Off: the band's bottom holds overnight too."
+  ],
+  [
+   "use_check_meter",
+   "Use the check meter",
+   "When a check meter is set and reporting, use it for grid power instead of the inverter's meter, and correct the inverter's house load by the difference (also in the learned usage history). If it stops reporting for 3 minutes, the inverter's meter is used again. Off: the check meter is only compared."
+  ],
+  [
+   "axle",
+   "Take part in grid events",
+   "Force-discharge during grid events (run by Axle) and hold charge beforehand, so the battery is full when one starts."
+  ],
+  [
+   "axle_plus_export",
+   "Grid events also earn the export rate",
+   "Your supplier pays its normal export rate on grid-event exports as well as the event payment (Axle: £1/kWh; EDF: £1 + 15p). Planning and the event figures count both. Off: the event payment only."
+  ],
+  [
+   "axle_stop_car",
+   "Stop the car charger during grid events",
+   "While a grid event (Axle) runs, set the car charger (Zappi) to Stopped, so the battery's export isn't charged into the car, and put its mode back when the event ends. Without this, a smart-charge slot or a manual charge can take the whole event's energy and the event earns almost nothing. Needs the Charger mode entity (a select) mapped. Applies in Active mode only."
+  ],
+  [
+   "axle_heating_setback",
+   "Turn the heating down before grid events",
+   "Turn your heating's set-back switch on shortly before a grid event (Axle) starts and off when it ends, so the boiler's pump isn't drawing power while the battery is exporting. Choose the switch below (for example input_boolean.heating_off) and how long before the event to start: the pump's overrun. A switch that is already on is left alone, and one you turn off during the set-back stays off. Applies in Active mode only."
+  ],
+  [
+   "free_power_days",
+   "Free-power sessions",
+   "Make full use of EDF free-electricity sessions."
+  ],
+  [
+   "optimised_plan",
+   "Optimised planning",
+   "The optimiser chooses each half-hour's action for the lowest cost (arbitrage band and safety rules included), with plain-English reasons. Off: the simpler rule-based planner."
+  ],
+  [
+   "learn_taper",
+   "Learn: charge and discharge slow-down",
+   "Plan with how much charging slows from 90% and 95%, and how much discharging slows below 40%, 30% and 20%, as seen: the overnight charge starts early enough to finish, and deep sales are planned at the speed they really run. Health tab, Learned from use, shows each learned figure and how many half-hours it's based on."
+  ],
+  [
+   "learn_conversion",
+   "Learn: inverter conversion losses",
+   "Measure how much grid energy reaches the battery when charging, and how much of the battery's output reaches the house and grid when selling (no solar, full rate). Plans then use the real grid-to-grid round trip, so arbitrage is only planned where it pays after all losses. Works for any inverter and battery, and re-learns if either changes."
+  ],
+  [
+   "learn_reserve",
+   "Learn: where discharging stops",
+   "Plan with the charge level where the battery has been seen to stop supplying the house. It only ever raises the reserve (engine 1) or the hard floor (engine 2), never lowers it."
+  ],
+  [
+   "learn_export",
+   "Learn: export ceiling",
+   "If selling is seen to top out below the battery's own rate (a grid limit), plan with that ceiling."
+  ],
+  [
+   "learn_car",
+   "Learn: car charge rate",
+   "Plan the car's share of smart-charge slots with its real charging kW instead of Car charger power."
+  ],
+  [
+   "cold_caution",
+   "Cold battery caution",
+   "Plan a slower charge when the battery is likely to be cold, estimated from the outside temperature (Open-Meteo forecast for your home's location) with a lag, so a cold spell is expected to chill it gradually and it stays cautious until the weather has been milder for a while. Settings under Cold battery."
+  ],
+  [
+   "cold_learning",
+   "Learn cold behaviour",
+   "Adjust the cold threshold and rate from what's seen: charging slowed at 5°C raises the threshold; charging normally at 3°C lowers it to 3°C."
+  ],
+  [
+   "damp_restart",
+   "Restart hold-off",
+   "After PowerEngine starts, or control resumes or goes live, write nothing for a few minutes (Restart hold-off setting) while the plan and its inputs settle. The inverter keeps running the windows already set. Safety changes (grid events, free power, the car charging, the reserve) never wait."
+  ],
+  [
+   "damp_bursts",
+   "Burst damping",
+   "The first change to a window slot, current or the mode goes straight through; another change to the same thing within the Burst window waits until the plan has been steady for the Burst settle time, so several quick changes become one write. Off by default while its effect is evaluated. Safety changes never wait."
+  ],
+  [
+   "engine_compare",
+   "Compare the two engines each night",
+   "Each night, replay yesterday with engine v1 and engine v2 (using the forecasts as they were) and show on the Costs page what each would have saved. It runs in the background on your PowerEngine and changes nothing."
+  ],
+  [
+   "tariff_simulator",
+   "Tariff simulator",
+   "Each night at 01:30, compare your recorded days on current Octopus and EDF tariffs (fetched from their public tariff lists) and notify you if one would save noticeably. Reads only; changes nothing."
+  ]
+ ],
+ "TOPICS": [
+  {
+   "key": "battery",
+   "title": "Battery",
+   "note": null
+  },
+  {
+   "key": "grid",
+   "title": "Grid and house",
+   "note": null
+  },
+  {
+   "key": "solar",
+   "title": "Solar",
+   "note": null
+  },
+  {
+   "key": "tariff",
+   "title": "Tariff and planning",
+   "note": null
+  },
+  {
+   "key": "car",
+   "title": "Car and smart charging",
+   "note": null
+  },
+  {
+   "key": "selling",
+   "title": "Selling (arbitrage and export)",
+   "note": null
+  },
+  {
+   "key": "axle",
+   "title": "Grid events",
+   "note": null
+  },
+  {
+   "key": "free",
+   "title": "Free-power sessions",
+   "note": null
+  },
+  {
+   "key": "cold",
+   "title": "Cold battery",
+   "note": null
+  },
+  {
+   "key": "control",
+   "title": "Inverter control (needed to go live)",
+   "note": "Written only when PowerEngine is live. Map them now so it can show what it would set (Health tab) and count your current setup's writes. Windows 2 and 3 are found from window 1's entities. RAM remote control uses the inverter integration's Battery control override entities, found by name (the timed windows are still mapped: they're closed when it takes over, and used if those entities go missing)."
+  },
+  {
+   "key": "extras",
+   "title": "Costs page extras",
+   "note": null
+  }
+ ],
+ "NOTIFY_EVENTS": [
+  [
+   "health",
+   "Health problems",
+   "When the Health tab finds a problem (checked after start-up and each night).",
+   true
+  ],
+  [
+   "inputs",
+   "Inputs not working",
+   "When a required input has been unavailable or stale for 15 minutes.",
+   true
+  ],
+  [
+   "axle",
+   "Grid events",
+   "When a grid event (Axle) is scheduled, with its time.",
+   true
+  ],
+  [
+   "free_power",
+   "Free-power sessions",
+   "When a free-electricity session is announced.",
+   true
+  ],
+  [
+   "daily",
+   "Daily summary",
+   "Each morning at 08:00: yesterday's cost and savings.",
+   false
+  ],
+  [
+   "alexa",
+   "Alexa announcements",
+   "Spoken reminders before a grid event, saying whether the battery looks ready. Choose the speakers and the allowed hours below.",
+   false
+  ],
+  [
+   "simulator",
+   "Tariff opportunities",
+   "When the overnight Simulator finds a tariff that would have cost noticeably less (at least £5 and 5% a month), or new tariffs appear.",
+   true
+  ]
+ ],
+ "SCREEN": "On the inverter screen watch the battery reading (power or current, and whether it is charging or discharging) and the grid reading. If the screen is slow to update, the Solis app's live view or the readings below show the same thing."
+}
