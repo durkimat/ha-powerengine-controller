@@ -268,6 +268,8 @@ def test_prepare_brings_the_integration_up_to_date_with_the_new_version(repos):
     (work / "apps/powerengine/pe_core/protocol.py").write_text("PROTOCOL = 1\n")
     (work / "apps/powerengine/pe_core/host_server.py").write_text("SERVER = 1\n")
     (work / "apps/powerengine/powerengine.py").write_text("ENGINE = 1\n")
+    (work / "card").mkdir()
+    (work / "card/ha-powerengine-card.js").write_text('const CARD_VERSION = "0.0.1";\n')
     integration = work / "custom_components/powerengine"
     integration.mkdir(parents=True)
     (integration / "manifest.json").write_text('{"domain": "powerengine", "version": "0.0.0"}\n')
@@ -280,7 +282,10 @@ def test_prepare_brings_the_integration_up_to_date_with_the_new_version(repos):
     assert r.returncode == 0, r.stderr
     assert '"version": "0.9.51"' in (integration / "manifest.json").read_text()
     assert '"0.9.51"' in (integration / "engine/pe_core/__init__.py").read_text()
+    card = (integration / "frontend/ha-powerengine-card.js").read_text()
+    assert 'CARD_VERSION = "0.9.51"' in card                                 # the card matches the engine
     changed = sh(work, "git", "show", "--name-only", "--format=", "HEAD").stdout.split()
     assert "custom_components/powerengine/manifest.json" in changed
     assert "custom_components/powerengine/engine/pe_core/__init__.py" in changed
+    assert "custom_components/powerengine/frontend/ha-powerengine-card.js" in changed
     assert sh(work, "python3", "tools/build_integration.py", "--check").returncode == 0

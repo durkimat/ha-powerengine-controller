@@ -491,13 +491,11 @@ class Engine:
         tags = self.__dict__.setdefault("_release_etags", {})
         texts = self.__dict__.setdefault("_release_texts", {})
         try:
-            for repo in (releases.APP_REPO, releases.CARD_REPO):
-                url = releases.raw_url(repo)
-                text, tags[url] = releases.fetch_text(url, tags.get(url) if texts.get(url) else None)
-                if text is not None:
-                    texts[url] = text
-            s = releases.summary(__version__, texts.get(releases.raw_url(releases.APP_REPO), ""),
-                                 texts.get(releases.raw_url(releases.CARD_REPO), ""))
+            url = releases.raw_url(releases.APP_REPO)
+            text, tags[url] = releases.fetch_text(url, tags.get(url) if texts.get(url) else None)
+            if text is not None:
+                texts[url] = text
+            s = releases.summary(__version__, texts.get(url, ""))
             s["checked"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
             state = "available" if s["available"] else "up to date"
             if s["available"] and getattr(self, "_release_seen", None) != s["latest"]:

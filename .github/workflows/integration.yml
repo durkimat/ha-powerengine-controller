@@ -8,6 +8,7 @@ on:
     paths:
       - "integration/**"
       - "custom_components/**"
+      - "card/**"
       - "tools/build_integration.py"
       - "apps/powerengine/engine_main.py"
       - "apps/powerengine/pe_core/protocol.py"

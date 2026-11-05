@@ -40,6 +40,9 @@ from .const import (
     SHADOW_FOLDER,
     STATUS_NEEDS_RESTART,
 )
+from .frontend import async_refresh as refresh_card
+from .frontend import async_register as register_card
+from .frontend import async_unregister as unregister_card
 from .host_server import HostServer
 from .native import NativeEntities
 from .protocol import new_secret
@@ -147,6 +150,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def check(now: datetime | None = None) -> None:
         """Every minute: start the engine if it is not started; restart it when an update replaced its files."""
         await hass.async_add_executor_job(supervisor.refresh_installed)     # (a file read: not on the event loop)
+        await refresh_card(hass)                    # an update may have replaced the card: a new address for it
         if not supervisor.started:
             supervisor.start()
         elif supervisor.update_needed():
@@ -180,6 +184,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime.unsub.append(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, on_stop))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if not shadow:
+        await register_card(hass)                   # the card is part of PowerEngine: the integration serves it
     await check()
     return True
 
@@ -202,6 +208,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.async_add_executor_job(runtime.server.stop)
     for issue in (ISSUE_PROTOCOL, ISSUE_CRASHING, ISSUE_NO_SOURCE):
         ir.async_delete_issue(hass, DOMAIN, issue)
+    if not shadow_run(entry):
+        unregister_card(hass)
     if not hass.config_entries.async_loaded_entries(DOMAIN):
         for service in (SERVICE_RESTART_ENGINE, SERVICE_REFRESH_SHADOW):
             if hass.services.has_service(DOMAIN, service):
