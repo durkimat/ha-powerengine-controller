@@ -125,6 +125,7 @@ from pe_core.freeloads import FreeLoadState
 from pe_core.health import WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_plan, day_view
+from pe_core.hold import Hold
 from pe_core.host_appdaemon import AppDaemonHost
 from pe_core.journal import WriteJournal, day_summary, is_staged
 from pe_core.loadstore import LoadStore
@@ -674,7 +675,7 @@ class Engine:
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
                 readings = read(self.cfg, self._state_all, None,
-                                self._tariff(), self._events(), self._ev(), self._forecast())
+                                self._tariff(), self._events(), self._ev(), self._forecast(), self._hold())
                 self._record_load(readings)
                 self._grid_check(readings)
                 self._record_costs(readings)
@@ -895,6 +896,12 @@ class Engine:
             held = self._v2_cache[key] = (now, make())
         return held[1]
 
+    def _hold(self):
+        """What keeps the rate and smart-slot lists through a short outage of their sensors (pe_core/hold.py)."""
+        if getattr(self, "_hold_lists", None) is None:
+            self._hold_lists = Hold(self.log)
+        return self._hold_lists
+
     def _v2_input(self, r, send, method, preview=False):
         now = r.now
         facts = self._v2_facts(r)
@@ -932,7 +939,7 @@ class Engine:
         marks = {}                                 # seconds spent in each part, for the log when a tick is slow
         try:
             r = read(self.cfg, self._state_all, None,
-                     self._tariff(), self._events(), self._ev(), self._forecast())
+                     self._tariff(), self._events(), self._ev(), self._forecast(), self._hold())
             marks["read"] = monotonic() - started
             eng = self._engine_v2()
             method = self._control_method()
