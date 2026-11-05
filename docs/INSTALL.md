@@ -82,45 +82,19 @@ If the engine does not start, a Repair on the integration says why. The engine's
 
 ## Step 2: the PowerEngine dashboard
 
-PowerEngine ships its own dashboard and keeps it up to date: on every start it
-writes `/homeassistant/powerengine/dashboard.yaml`. You register it with HA once.
+PowerEngine ships its own dashboard and keeps it up to date: the integration adds *Power Engine* to the sidebar
+(address `/powerengine-dash`) and the engine writes the dashboard it shows to `/homeassistant/powerengine/dashboard.yaml`
+on every start. There is nothing to register.
 
 1. **Install two dashboard cards from HACS** (search each, then Download):
    - **Sunsynk Power Flow Card** (by slipx06): the energy flow picture (Monitoring tab)
    - **ApexCharts Card**: the plan chart (Plan tab) and the daily cost chart (Costs tab)
 
    Reload the browser afterwards.
-2. **Register the dashboard** in `configuration.yaml`. If your
-   `configuration.yaml` has **no** `lovelace:` section yet, paste this into the
-   HA terminal (it appends to the end of the file):
 
-   ```bash
-   cat >> /homeassistant/configuration.yaml <<'EOF'
-
-   # PowerEngine dashboard (managed by the PowerEngine app)
-   lovelace:
-     dashboards:
-       powerengine-dash:
-         mode: yaml
-         title: Power Engine
-         icon: mdi:lightning-bolt
-         show_in_sidebar: true
-         filename: powerengine/dashboard.yaml
-   EOF
-   ```
-
-   If you **already** have a `lovelace:` section, edit the file instead
-   (`nano /homeassistant/configuration.yaml`) and add just the
-   `powerengine-dash:` block under its `dashboards:`.
-
-   If you keep a local git copy of your config, pull it afterwards so your next
-   push doesn't overwrite this change.
-
-3. **Check and restart Home Assistant** (only needed the first time):
-
-   ```bash
-   ha core check && ha core restart
-   ```
+If an earlier version of this guide had you add a `powerengine-dash:` block under `lovelace: dashboards:` in
+`configuration.yaml`, it keeps working (an entry you made yourself is never replaced), but it is no longer needed:
+delete the block and restart Home Assistant once, and the integration provides the same dashboard.
 
 **Check:** *Power Engine* appears in the sidebar with five tabs: **Monitoring** (it says *UNCONFIGURED*
 until Step 3), **Plan**, **Costs**, **Health** and **Config** (the configuration card, with suggested entities
@@ -439,7 +413,7 @@ the same for the card if you need to.
 | Card warns that the app (or the card) is too old | One of them is older than the other's minimum version | Update the one named in the warning to its latest version, then reload the page |
 | `Unknown command: ha` | Commands run on your own computer | Use HA's terminal add-on |
 | `Config problem: ...` in the log | `config.yaml` has an error | The message names the problem; fix or restore the backup |
-| Dashboard missing from the sidebar | `lovelace:` entry not added, or HA not restarted | Step 2 |
+| Dashboard missing from the sidebar | The PowerEngine integration is not loaded (Settings → Devices & services), or in *shadow* mode (no dashboard) | Step 1; the integration's status |
 | Energy flow or plan chart says *Custom element doesn't exist* | Sunsynk Power Flow Card or ApexCharts Card not installed | Step 2.1, then reload the browser |
 | Plan says *house load learned from 0 days* | No history for the house-load input yet (new install, or recorder excludes it) | Wait a day; check the recorder keeps the house-load entity |
 | PowerEngine missing from HACS (repos disappeared) but still running | HACS lost its record of the custom repositories | Re-add both under *HACS → ⋮ → Custom repositories* (PowerEngine as **Integration**) and download the latest version; settings and dashboard are unaffected |

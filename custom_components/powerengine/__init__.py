@@ -40,6 +40,8 @@ from .const import (
     SHADOW_FOLDER,
     STATUS_NEEDS_RESTART,
 )
+from .dashboard import async_register as register_dashboard
+from .dashboard import async_unregister as unregister_dashboard
 from .frontend import async_refresh as refresh_card
 from .frontend import async_register as register_card
 from .frontend import async_unregister as unregister_card
@@ -151,6 +153,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Every minute: start the engine if it is not started; restart it when an update replaced its files."""
         await hass.async_add_executor_job(supervisor.refresh_installed)     # (a file read: not on the event loop)
         await refresh_card(hass)                    # an update may have replaced the card: a new address for it
+        if not shadow:
+            register_dashboard(hass, folder / "dashboard.yaml")      # (the dashboard that uses the card: added once)
         if not supervisor.started:
             supervisor.start()
         elif supervisor.update_needed():
@@ -210,6 +214,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ir.async_delete_issue(hass, DOMAIN, issue)
     if not shadow_run(entry):
         await unregister_card(hass)
+        unregister_dashboard(hass)
     if not hass.config_entries.async_loaded_entries(DOMAIN):
         for service in (SERVICE_RESTART_ENGINE, SERVICE_REFRESH_SHADOW):
             if hass.services.has_service(DOMAIN, service):
