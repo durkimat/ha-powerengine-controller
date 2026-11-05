@@ -1,9 +1,9 @@
 """Commands from Home Assistant in direct publishing mode (demo plan B2), as pure functions.
 
-With MQTT, HA's switches and selects publish to retained command topics and the app reacts to the entity's state
-changing. Direct mode has no integration behind the entities, so the app hears HA's `call_service` event instead (and
-the card's own `pe_command` event) and sets the entity's state itself. Either way the app's existing state
-listeners then run. Everything here only ever names PowerEngine's own entities; anything else is ignored.
+With native entities, HA's switches and selects are real and the app reacts to the entity's state changing. Direct
+mode has no integration behind the entities, so the app hears HA's `call_service` event instead (and the card's own
+`pe_command` event) and sets the entity's state itself. Either way the app's existing state listeners then run.
+Everything here only ever names PowerEngine's own entities; anything else is ignored.
 
 `call_service` event data (HA's bus): {"domain": "switch", "service": "turn_on",
 "service_data": {"entity_id": "switch.pe_ctl_pause" | [..] | "a,b", ...}}.

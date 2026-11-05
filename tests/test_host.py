@@ -11,7 +11,7 @@ from pe_core.host_local import LocalHost
 APP = pathlib.Path(__file__).resolve().parents[1] / "apps" / "powerengine" / "powerengine.py"
 
 # Everything the engine used to take from AppDaemon's Hass, by name. None of it may be used on `self` in the engine.
-HASS_NAMES = set(host.METHODS) | {"args", "set_state", "get_plugin_api", "AD", "namespace", "timer_running",
+HASS_NAMES = set(host.METHODS) | {"args", "set_state", "AD", "namespace", "timer_running",
                                   "entity_exists", "get_now", "listen_log", "run_at", "run_once", "run_hourly",
                                   "run_minutely", "cancel_listen_log", "get_app", "set_namespace", "get_ad_api"}
 

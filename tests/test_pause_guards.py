@@ -78,7 +78,7 @@ def test_this_build_goes_active_with_safe_guards():
 
 def test_pause_switch_entity():
     sw = [e for e in ENTITIES if e.entity_id == "switch.pe_ctl_pause"]
-    assert sw and sw[0].options["command_topic"] == sw[0].options["state_topic"] and sw[0].options["retain"]
+    assert sw and sw[0].component == "switch" and not any(k.endswith("_topic") for k in sw[0].options)
 
 
 # --- release ------------------------------------------------------------------------------

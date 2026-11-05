@@ -227,7 +227,6 @@ def test_the_demo_can_replace_a_call_and_put_it_back():
         assert h.method("get_state")("sensor.a") == "demo"
         h.clear_overrides()
         assert h.method("get_state")("sensor.a") == "real"
-        assert h.plugin_api("MQTT") is None
 
 
 # --- a lost connection

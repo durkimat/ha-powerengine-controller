@@ -28,7 +28,7 @@ def simulate(tmp_path, monkeypatch, hours, engine="v1", control_method=None, mod
     def copy(src, dst, **kw):
         if str(src).endswith("config.template"):
             text = open(src, encoding="utf-8").read()
-            text = text.replace("  publisher: direct\n", "  publisher: direct\n"
+            text = text.replace("  control_method: ram_remote\n", "  control_method: ram_remote\n"
                                 + (f"  engine: {engine}\n" if engine != "v1" else ""))
             if preview is not None:
                 text += f"\nengine_v2:\n  preview_when_v1: {'true' if preview else 'false'}\n"

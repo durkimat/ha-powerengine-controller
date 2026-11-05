@@ -2,9 +2,9 @@
 
 The engine says what each entity is (`define`: component, key, name, options as PowerEngine's catalogue has them) and
 writes its state and extra attributes as it goes (`update`). Here each becomes a real entity: in the entity registry
-with the unique id `powerengine_<key>` (the same as MQTT discovery gives it), the entity id `<component>.pe_<key>`,
-and on the PowerEngine device. Because the engine describes them, a new entity in an engine update needs nothing from
-this integration, so no Home Assistant restart.
+with the unique id `powerengine_<key>` (as the old AppDaemon app's MQTT entities had), the entity id
+`<component>.pe_<key>`, and on the PowerEngine device. Because the engine describes them, a new entity in an
+engine update needs nothing from this integration, so no Home Assistant restart.
 
 Only sensors, binary sensors and switches exist in the catalogue. A switch holds the state it was given (the pause
 switch), and the engine hears a change of it as it hears any other state, so no command path is needed.
@@ -230,7 +230,7 @@ class PowerEngineBinarySensor(PowerEngineEntity, BinarySensorEntity):
 
 class PowerEngineSwitch(PowerEngineEntity, SwitchEntity, RestoreEntity):
     """Holds the state it is given: by the engine (`preset`) or by whoever turns it on or off. The state is restored
-    when Home Assistant restarts, as the retained MQTT message did."""
+    when Home Assistant restarts."""
 
     component = "switch"
 

@@ -1,21 +1,21 @@
-"""How PowerEngine's own entities get into Home Assistant: over MQTT (today's way) or as plain states.
+"""How PowerEngine's own entities get into Home Assistant: as real entities made by the integration, or as plain states.
 
 The core and the app shell never know which. They call a `StatePublisher`:
 
-    discover(ent, version)   create an entity (MQTT discovery, or a state with its attributes)
+    discover(ent, version)   create an entity (a native entity, or a state with its attributes)
     publish(key, state, attrs)   a new state and, optionally, its JSON attributes
-    preset(key, value)       set a switch or select that HA also controls (the retained command/state topic)
+    preset(key, value)       set a switch or select that HA also controls
     retire(ent) / retire_all()   remove entities
     available(online)        PowerEngine up or down
 
-`MqttPublisher` is exactly the old behaviour (same topics, payloads, QoS 1, retained). `DirectPublisher` needs no MQTT
-broker: it writes HA states with `set_state`. Entity ids are the same either way, `ent.entity_id`
-(`sensor.pe_diag_version`), which is also the `default_entity_id` MQTT discovery asks HA for.
+`NativePublisher` is what runs inside Home Assistant (the integration's host makes the entities). `DirectPublisher`
+writes HA states with `set_state`: the demo, the tests and a host that makes no native entities use it. Entity ids are
+the same either way, `ent.entity_id` (`sensor.pe_diag_version`).
 
 Direct mode gaps: entities are not in HA's entity registry (no unique id, so no renaming or area in the UI, and they
 vanish when HA restarts until PowerEngine next publishes); they are rebuilt at every start; and commands from HA
-(switch toggles, select changes) don't reach PowerEngine: that is step B2. `available(False)` marks every entity
-`unavailable`; `retire` marks it `unavailable` with a note unless a `remove_state` callable is given.
+(switch toggles, select changes) reach PowerEngine as `call_service` events (commands.py). `available(False)` marks
+every entity `unavailable`; `retire` marks it `unavailable` with a note unless a `remove_state` callable is given.
 """
 
 from __future__ import annotations
@@ -24,21 +24,10 @@ import json
 from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
 
-from ..entities import (
-    AVAILABILITY_TOPIC,
-    BASE_TOPIC,
-    ENTITIES,
-    OFFLINE,
-    ONLINE,
-    EntityDef,
-    discovery_payload,
-    entity_removal_messages,
-    removal_messages,
-)
+from ..entities import ENTITIES, EntityDef
 
-CHOICES = ("auto", "mqtt", "direct")
 DEVICE_NAME = "PowerEngine"
-# What MQTT discovery would give HA as state attributes (the rest of the options are registry or MQTT-only settings).
+# What an entity's definition gives HA as state attributes when it is written as a plain state.
 STATE_ATTRIBUTE_OPTIONS = ("icon", "unit_of_measurement", "device_class", "state_class")
 _BY_KEY = {e.key: e for e in ENTITIES}
 
@@ -46,7 +35,7 @@ _BY_KEY = {e.key: e for e in ENTITIES}
 @runtime_checkable
 class StatePublisher(Protocol):
     name: str
-    retains: bool      # True when what is published outlives a restart (MQTT retained messages)
+    retains: bool      # True when what is published outlives a restart (native entities are in the registry)
 
     def discover(self, ent: EntityDef, version: str) -> None: ...
 
@@ -59,45 +48,6 @@ class StatePublisher(Protocol):
     def retire_all(self) -> None: ...
 
     def available(self, online: bool) -> None: ...
-
-
-class MqttPublisher:
-    """Publishes through the AppDaemon MQTT plugin's `mqtt_publish`, as PowerEngine always has."""
-
-    name = "MQTT"
-    retains = True
-
-    def __init__(self, api: Any):
-        self.api = api
-
-    def _send(self, topic: str, payload: Any) -> None:
-        if not isinstance(payload, str):
-            payload = json.dumps(payload, default=str)
-        self.api.mqtt_publish(topic, payload, qos=1, retain=True)
-
-    def discover(self, ent: EntityDef, version: str) -> None:
-        self._send(ent.discovery_topic, discovery_payload(ent, version))
-
-    def publish(self, key: str, state: Any, attrs: dict | str | None = None) -> None:
-        self._send(f"{BASE_TOPIC}/{key}/state", str(state))
-        if attrs is not None:
-            self._send(f"{BASE_TOPIC}/{key}/attributes", attrs)
-
-    def preset(self, key: str, value: str) -> None:
-        ent = _BY_KEY.get(key)
-        self._send(ent.options["command_topic"] if ent and "command_topic" in ent.options
-                   else f"{BASE_TOPIC}/{key}/set", value)
-
-    def retire(self, ent: EntityDef) -> None:
-        for topic, payload in entity_removal_messages(ent):
-            self._send(topic, payload)
-
-    def retire_all(self) -> None:
-        for topic, payload in removal_messages():
-            self._send(topic, payload)
-
-    def available(self, online: bool) -> None:
-        self._send(AVAILABILITY_TOPIC, ONLINE if online else OFFLINE)
 
 
 class DirectPublisher:
@@ -113,7 +63,7 @@ class DirectPublisher:
         self._state: dict[str, str] = {}
         self._json: dict[str, dict] = {}
 
-    # attributes MQTT discovery would have given the entity, plus the last JSON attributes published for it
+    # the attributes the definition gives the entity, plus the last JSON attributes published for it
     def attributes(self, ent: EntityDef) -> dict[str, Any]:
         attrs: dict[str, Any] = {"friendly_name": f"{DEVICE_NAME} {ent.name}"}
         attrs.update({k: ent.options[k] for k in STATE_ATTRIBUTE_OPTIONS if k in ent.options})
@@ -181,7 +131,7 @@ class DirectPublisher:
 class NativePublisher(DirectPublisher):
     """Real Home Assistant entities, made by the integration the engine runs under (host.native_entities): the engine
     says what each is (`discover`), writes its state and extra attributes as it goes, and says when it is up or down.
-    They are in the entity registry with a unique id (`powerengine_<key>`, as with MQTT) and belong to the PowerEngine
+    They are in the entity registry with a unique id (`powerengine_<key>`) and belong to the PowerEngine
     device, so they keep their place across restarts, can be renamed and given an area."""
 
     name = "native"
@@ -201,7 +151,7 @@ class NativePublisher(DirectPublisher):
     def discover(self, ent: EntityDef, version: str) -> None:
         self._ents[ent.key] = ent
         try:
-            self._native.define(ent.component, ent.key, ent.name, _definition_options(ent))
+            self._native.define(ent.component, ent.key, ent.name, dict(ent.options))
             self._plain.discard(ent.key)
         except Exception as err:                           # not connected, or the integration cannot make it
             self._plain.add(ent.key)
@@ -226,18 +176,12 @@ class NativePublisher(DirectPublisher):
                                         f"{err}", "WARNING")
 
 
-def _definition_options(ent: EntityDef) -> dict[str, Any]:
-    """What the integration needs to make the entity (what MQTT discovery would carry, minus the topics)."""
-    return {k: v for k, v in ent.options.items() if not k.endswith("_topic") and k not in ("optimistic", "retain")}
-
-
-def select_publisher(choice: str, mqtt_api: Any, set_state: Callable[..., Any] | None,
-                     remove_state: Callable[[str], Any] | None = None, native: Any = None,
-                     told_once: Callable[..., Any] | None = None) -> StatePublisher | None:
-    """`auto`: native entities where the host makes them (the integration), else MQTT when the AppDaemon MQTT plugin is
-    there, else direct. `mqtt` without the plugin: None."""
-    if native is not None and set_state is not None and choice in ("auto", "native"):
+def select_publisher(set_state: Callable[..., Any] | None, remove_state: Callable[[str], Any] | None = None,
+                     native: Any = None, told_once: Callable[..., Any] | None = None) -> StatePublisher | None:
+    """Native entities where the host makes them (the integration), else plain states with `set_state`; None when the
+    host can do neither."""
+    if set_state is None:
+        return None
+    if native is not None:
         return NativePublisher(native, set_state, told_once)
-    if choice == "direct" or (choice in ("auto", "native") and mqtt_api is None):
-        return DirectPublisher(set_state, remove_state) if set_state is not None else None
-    return MqttPublisher(mqtt_api) if mqtt_api is not None else None
+    return DirectPublisher(set_state, remove_state)

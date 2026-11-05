@@ -61,9 +61,6 @@ def load_app(monkeypatch):
 
         cancel_listen_state = cancel_listen_event
 
-        def get_plugin_api(self, name):
-            raise RuntimeError("no MQTT plugin")          # so entities are published directly
-
         def set_state(self, entity_id, state=None, attributes=None, **kw):
             self.real_sets.append(entity_id)
             self.set_fake(entity_id, state, attributes)

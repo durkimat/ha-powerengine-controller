@@ -430,9 +430,6 @@ class SocketHost:
     def state_writer(self, told_once: Callable, demo: bool = False) -> Callable | None:
         return self.method("set_state")
 
-    def plugin_api(self, name: str) -> Any:
-        return None                                                   # no AppDaemon plugins here
-
     def override(self, **calls: Callable) -> None:
         self.overrides.update(calls)
 

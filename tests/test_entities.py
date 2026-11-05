@@ -1,13 +1,6 @@
 import pytest
 
-from pe_core.entities import (
-    AVAILABILITY_TOPIC,
-    ENTITIES,
-    EntityDef,
-    discovery_payload,
-    removal_messages,
-    validate_definitions,
-)
+from pe_core.entities import ENTITIES, EntityDef, validate_definitions
 
 
 def test_definitions_follow_rules():
@@ -19,28 +12,14 @@ def test_entity_ids_use_prefix():
         assert ent.entity_id.split(".")[1].startswith("pe_")
 
 
-def test_discovery_payload_shape():
+def test_an_entitys_unique_id_and_id_follow_its_key():
     ent = ENTITIES[0]
-    p = discovery_payload(ent, "9.9.9")
-    assert p["unique_id"] == "powerengine_diag_version"
-    assert p["default_entity_id"] == "sensor.pe_diag_version"
-    assert p["device"]["identifiers"] == ["powerengine"] and p["device"]["sw_version"] == "9.9.9"
-    assert p["availability_topic"] == AVAILABILITY_TOPIC
-    assert ent.discovery_topic == "homeassistant/sensor/powerengine/diag_version/config"
+    assert ent.unique_id == "powerengine_diag_version" and ent.entity_id == "sensor.pe_diag_version"
 
 
-def test_binary_sensor_payloads():
-    ent = next(e for e in ENTITIES if e.component == "binary_sensor")
-    p = discovery_payload(ent, "1")
-    assert (p["payload_on"], p["payload_off"]) == ("ON", "OFF")
-
-
-def test_removal_clears_everything():
-    msgs = removal_messages()
-    assert all(payload == "" for _, payload in msgs)
-    topics = {t for t, _ in msgs}
+def test_no_definition_names_an_mqtt_topic():
     for ent in ENTITIES:
-        assert ent.discovery_topic in topics and ent.state_topic in topics
+        assert not any(k.endswith("_topic") for k in ent.options), ent.key
 
 
 @pytest.mark.parametrize(
@@ -56,8 +35,6 @@ def test_validation_catches_mistakes(bad):
         validate_definitions(bad)
 
 
-def test_ui_switch_is_a_real_toggle():
-    from pe_core.entities import ENTITIES, discovery_payload
+def test_ui_switch_is_a_plain_switch():
     ent = next(e for e in ENTITIES if e.key == "ui_right_align")
-    p = discovery_payload(ent, "x")
-    assert p["optimistic"] is False and p["state_topic"] == p["command_topic"] and p["retain"] is True
+    assert ent.component == "switch" and ent.options["entity_category"] == "config"

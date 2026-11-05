@@ -18,7 +18,7 @@ def load_demo_app(monkeypatch):
     class Hass(Base):
         def __init__(self):
             super().__init__()
-            self.real_calls, self.real_events, self.real_sets, self.real_mqtt = [], [], [], []
+            self.real_calls, self.real_events, self.real_sets = [], [], []
 
         def set_state(self, entity_id, state=None, attributes=None, **kw):
             self.real_sets.append(entity_id)
@@ -29,10 +29,6 @@ def load_demo_app(monkeypatch):
 
         def fire_event(self, event, **kw):
             self.real_events.append(event)
-
-        def get_plugin_api(self, name):
-            self.real_mqtt.append(name)
-            raise AssertionError("demo mode must not look for the MQTT plugin")
 
     sys.modules.pop("powerengine", None)
     import powerengine
@@ -87,9 +83,9 @@ def run(tmp_path_factory):
         sys.modules.pop("powerengine", None)
 
 
-def test_demo_mode_is_on_direct_and_never_looks_for_mqtt(run):
+def test_demo_mode_publishes_plain_states(run):
     app = run["app"]
-    assert app._demo == "car" and app._get_publisher().name == "direct" and app.real_mqtt == []
+    assert app._demo == "car" and app._get_publisher().name == "direct"
     assert app.mode.effective == "active" and app._demo_gate is not None
 
 

@@ -33,7 +33,7 @@ METHODS = (
     "run_in", "run_every", "run_daily", "cancel_timer",
 )
 # What a host provides beyond those (see the end of the Host class).
-EXTRAS = ("log", "method", "state_writer", "plugin_api", "start_tracking", "cancel_all", "override", "clear_overrides",
+EXTRAS = ("log", "method", "state_writer", "start_tracking", "cancel_all", "override", "clear_overrides",
           "background_writes", "native_entities")
 
 
@@ -111,9 +111,6 @@ class Host(Protocol):
     def state_writer(self, told_once: Callable, demo: bool = False) -> Callable | None:
         """A `set_state(entity_id, state=..., attributes=...)` that writes an entity exactly as given, for the direct
         publisher; None if the host cannot write states. `told_once(key, message, level)` reports a problem once."""
-
-    def plugin_api(self, name: str) -> Any:
-        """A plugin's API (the MQTT plugin), or None where the host has no such plugin."""
 
     def start_tracking(self) -> None:
         """Start recording the timers and listeners registered, for the demo's restart."""

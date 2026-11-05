@@ -1,32 +1,15 @@
-"""The publisher adapter (demo plan, step B1): MQTT exactly as before, or direct through AppDaemon."""
+"""The publisher adapter: native entities under the integration, or plain states."""
 import json
 import sys
-import types
 from unittest import mock
 
 import pytest
 
-from pe_core.adapters.publish import DirectPublisher, MqttPublisher, StatePublisher, select_publisher
+from pe_core.adapters.publish import DirectPublisher, StatePublisher, select_publisher
 from pe_core.config import ConfigError, parse_config, settings_catalogue
-from pe_core.entities import (
-    AVAILABILITY_TOPIC,
-    ENTITIES,
-    EntityDef,
-    discovery_payload,
-    entity_removal_messages,
-    removal_messages,
-    solar_plant_entity,
-)
+from pe_core.entities import ENTITIES, EntityDef, solar_plant_entity
 
 VERSION = "0.9.99"
-
-
-class FakeMqtt:
-    def __init__(self):
-        self.sent = []
-
-    def mqtt_publish(self, topic, payload, qos=None, retain=None):
-        self.sent.append((topic, payload, qos, retain))
 
 
 class FakeHA:
@@ -46,23 +29,23 @@ def ent(key):
 
 # --- entity ids -----------------------------------------------------------------------------
 
-def test_direct_entity_id_equals_the_one_mqtt_discovery_asks_for():
+def test_direct_entity_id_is_the_entitys_own():
     dynamic = [solar_plant_entity("main", "Main"), solar_plant_entity("shed_2", "Shed")]
     for e in list(ENTITIES) + dynamic:
         ha = FakeHA()
         DirectPublisher(ha.set_state).discover(e, VERSION)
-        assert ha.calls[0][0] == discovery_payload(e, VERSION)["default_entity_id"] == e.entity_id
-        assert e.entity_id == f"{e.component}.pe_{e.key}"
+        assert ha.calls[0][0] == e.entity_id == f"{e.component}.pe_{e.key}"
 
 
 def test_publishers_satisfy_the_protocol():
-    assert isinstance(MqttPublisher(FakeMqtt()), StatePublisher)
+    from pe_core.adapters.publish import NativePublisher
     assert isinstance(DirectPublisher(FakeHA().set_state), StatePublisher)
+    assert isinstance(NativePublisher(FakeNative(), FakeHA().set_state), StatePublisher)
 
 
 # --- direct -----------------------------------------------------------------------------------
 
-def test_direct_sensor_gets_discovery_attributes_and_json_attributes():
+def test_direct_sensor_gets_its_definitions_attributes_and_json_attributes():
     ha = FakeHA()
     d = DirectPublisher(ha.set_state)
     e = ent("diag_battery_temperature")
@@ -73,7 +56,7 @@ def test_direct_sensor_gets_discovery_attributes_and_json_attributes():
                      "device_class": "temperature", "state_class": "measurement"}
     d.publish("diag_battery_temperature", 12.5, json.dumps({"measured": True}))
     assert ha.last(e.entity_id)[1:] == ("12.5", {**attrs, "measured": True})
-    d.publish("diag_battery_temperature", 13)              # attributes stay until replaced, as on MQTT
+    d.publish("diag_battery_temperature", 13)              # attributes stay until replaced
     assert ha.last(e.entity_id)[2]["measured"] is True and ha.last(e.entity_id)[1] == "13"
 
 
@@ -96,8 +79,7 @@ def test_direct_switch_and_select():
     d.publish("diag_config_ok", "OFF")
     assert ha.last("binary_sensor.pe_diag_config_ok")[1] == "off"
     choice = EntityDef("select", "ui_test_choice", "Test choice",
-                       {"icon": "mdi:calendar-search", "options": ["Today", "Yesterday"],
-                        "command_topic": "powerengine/ui_test_choice/set"})
+                       {"icon": "mdi:calendar-search", "options": ["Today", "Yesterday"]})
     d.discover(choice, VERSION)
     d.preset("ui_test_choice", "Yesterday")
     eid, state, attrs = ha.last("select.pe_ui_test_choice")
@@ -137,79 +119,38 @@ def test_direct_retire_all_covers_every_entity():
     assert {c[0] for c in ha.calls} == {e.entity_id for e in ENTITIES}
 
 
-# --- mqtt: exactly what the app used to send -----------------------------------------------------
-
-def test_mqtt_discovery_state_attributes_and_retirement_match_the_old_functions():
-    api = FakeMqtt()
-    m = MqttPublisher(api)
-    e = ent("diag_version")
-    m.discover(e, VERSION)
-    m.publish("diag_version", VERSION)
-    m.publish("diag_version", 5, {"names": {"a": "£"}})
-    m.publish("diag_version", 6, '{"x": 1}')
-    m.retire(ent("ctl_pause"))
-    m.retire_all()
-    m.available(True)
-    m.available(False)
-    old = [(e.discovery_topic, json.dumps(discovery_payload(e, VERSION))),
-           ("powerengine/diag_version/state", VERSION),
-           ("powerengine/diag_version/state", "5"),
-           ("powerengine/diag_version/attributes", json.dumps({"names": {"a": "£"}}, default=str)),
-           ("powerengine/diag_version/state", "6"),
-           ("powerengine/diag_version/attributes", '{"x": 1}')]
-    old += entity_removal_messages(ent("ctl_pause")) + removal_messages()
-    old += [(AVAILABILITY_TOPIC, "online"), (AVAILABILITY_TOPIC, "offline")]
-    assert [(t, p) for t, p, *_ in api.sent] == old
-    assert all(q == 1 and r is True for *_, q, r in api.sent)
-
-
-def test_mqtt_presets_go_to_the_retained_command_topics():
-    api = FakeMqtt()
-    m = MqttPublisher(api)
-    m.preset("ctl_pause", "ON")
-    m.preset("ui_right_align", "ON")
-    m.preset("ui_test_choice", "Yesterday")
-    assert [(t, p) for t, p, *_ in api.sent] == [
-        ("powerengine/ctl_pause/set", "ON"), ("powerengine/ui_right_align/set", "ON"),
-        ("powerengine/ui_test_choice/set", "Yesterday")]
-
-
 # --- choosing one --------------------------------------------------------------------------------
 
-def test_auto_picks_mqtt_when_the_plugin_is_there_else_direct():
+def test_the_publisher_is_native_where_the_host_makes_entities_else_plain_states_else_none():
+    from pe_core.adapters.publish import NativePublisher
     ha = FakeHA()
-    assert isinstance(select_publisher("auto", FakeMqtt(), ha.set_state), MqttPublisher)
-    assert isinstance(select_publisher("auto", None, ha.set_state), DirectPublisher)
-    assert isinstance(select_publisher("direct", FakeMqtt(), ha.set_state), DirectPublisher)
-    assert isinstance(select_publisher("mqtt", FakeMqtt(), ha.set_state), MqttPublisher)
-    assert select_publisher("mqtt", None, ha.set_state) is None      # asked for MQTT, none there: nothing to publish to
+    assert isinstance(select_publisher(ha.set_state, native=FakeNative()), NativePublisher)
+    assert isinstance(select_publisher(ha.set_state), DirectPublisher)
+    assert select_publisher(None) is None and select_publisher(None, native=FakeNative()) is None
 
 
-def test_publisher_setting_parses_defaults_to_auto_and_rejects_others():
-    assert parse_config({}).system["publisher"] == "auto"
-    assert parse_config({"system": {"publisher": "direct"}}).system["publisher"] == "direct"
+def test_the_retired_publisher_setting_is_accepted_in_a_saved_config_and_ignored():
+    for value in ("auto", "mqtt", "direct", "carrier-pigeon"):
+        assert "publisher" not in parse_config({"system": {"publisher": value}}).system
+    assert "publisher" not in parse_config({}).system
+    assert not [s for s in settings_catalogue()["system"] if s["key"] == "publisher"]
     with pytest.raises(ConfigError):
-        parse_config({"system": {"publisher": "carrier-pigeon"}})
-    entry = next(s for s in settings_catalogue()["system"] if s["key"] == "publisher")
-    assert entry["label"] == "Entity publishing" and entry["default"] == "auto"
-    assert [o[0] for o in entry["options"]] == ["auto", "mqtt", "direct"]
+        parse_config({"system": {"no_such_setting": 1}})
 
 
-def test_the_app_builds_the_publisher_from_the_setting_and_the_plugin():
+def test_the_app_publishes_natively_under_the_integration_and_as_plain_states_otherwise():
+    from pe_core.adapters.publish import NativePublisher
     with mock.patch.dict(sys.modules):
         sys.modules.pop("powerengine", None)
         import powerengine
         e = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
+        e.cfg, e.set_state = None, FakeHA().set_state
+        assert isinstance(e._get_publisher(), DirectPublisher)
+        e = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
         e.cfg = None
-        e.mqtt = FakeMqtt()
-        assert isinstance(e._get_publisher(), MqttPublisher)
-        e = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
-        e.cfg, e.mqtt, e.set_state = None, None, FakeHA().set_state
-        assert isinstance(e._get_publisher(), DirectPublisher)
-        e = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
-        e.cfg, e.mqtt = types.SimpleNamespace(system={"publisher": "direct"}), FakeMqtt()
-        e.set_state = FakeHA().set_state
-        assert isinstance(e._get_publisher(), DirectPublisher)
+        e.__dict__["_host"] = type("H", (), {"native_entities": FakeNative(),
+                                             "state_writer": lambda self, told, demo=False: FakeHA().set_state})()
+        assert isinstance(e._get_publisher(), NativePublisher)
         sys.modules.pop("powerengine", None)
 
 
@@ -234,11 +175,10 @@ def test_the_native_publisher_defines_each_entity_then_writes_only_its_extra_att
     from pe_core.adapters.publish import NativePublisher, select_publisher
     from pe_core.entities import EntityDef
     native, writes = FakeNative(), []
-    pub = select_publisher("auto", None, lambda eid, **kw: writes.append((eid, kw)), native=native)
+    pub = select_publisher(lambda eid, **kw: writes.append((eid, kw)), native=native)
     assert isinstance(pub, NativePublisher) and pub.name == "native"
     ent = EntityDef("sensor", "state_battery_soc", "Battery", {"device_class": "battery", "unit_of_measurement": "%",
-                                                                "entity_category": "diagnostic",
-                                                                "command_topic": "x/set", "retain": True})
+                                                                "entity_category": "diagnostic"})
     pub.discover(ent, "1.0")
     assert native.defined == [("sensor", "state_battery_soc", "Battery", {
         "device_class": "battery", "unit_of_measurement": "%", "entity_category": "diagnostic"})]
@@ -255,18 +195,8 @@ def test_the_native_publisher_writes_plain_states_for_an_entity_the_integration_
     from pe_core.entities import EntityDef
     native, writes, told = FakeNative(), [], []
     native.fail = True
-    pub = select_publisher("auto", None, lambda eid, **kw: writes.append((eid, kw)), native=native,
+    pub = select_publisher(lambda eid, **kw: writes.append((eid, kw)), native=native,
                            told_once=lambda key, msg, level="INFO": told.append((key, level)))
     pub.discover(EntityDef("sensor", "x", "X", {"icon": "mdi:a"}), "1.0")
     assert told == [("native_define", "WARNING")]
     assert writes[-1][1]["attributes"]["friendly_name"] == "PowerEngine X"        # the whole plain entity this time
-
-
-def test_native_entities_are_chosen_only_where_the_host_makes_them_and_not_when_mqtt_is_asked_for():
-    from pe_core.adapters.publish import DirectPublisher, MqttPublisher, NativePublisher, select_publisher
-    api, native = object(), FakeNative()
-    assert isinstance(select_publisher("auto", None, print, native=native), NativePublisher)
-    assert isinstance(select_publisher("auto", None, print, native=None), DirectPublisher)
-    assert isinstance(select_publisher("auto", api, print, native=None), MqttPublisher)
-    assert isinstance(select_publisher("direct", None, print, native=native), DirectPublisher)
-    assert isinstance(select_publisher("mqtt", api, print, native=native), MqttPublisher)
