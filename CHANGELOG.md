@@ -2,6 +2,28 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.217 (beta)
+
+### Behaviour changes
+
+- **The Power Engine dashboard is registered by the integration.** It appears in the sidebar (address `/powerengine-dash`,
+  as before) with nothing added to `configuration.yaml`: the integration adds a Lovelace dashboard that reads the file the
+  engine already writes and keeps current (`powerengine/dashboard.yaml` in its settings folder). A shadow run adds no
+  dashboard.
+- **If you already have the `powerengine-dash:` entry under `lovelace: dashboards:` in `configuration.yaml`, nothing
+  changes:** an entry of that address that is already there is left alone and is never removed. To let the integration
+  provide it instead, delete that block and restart Home Assistant once.
+- The install guide's Step 2 is now just the two third-party cards (Sunsynk Power Flow and ApexCharts); the
+  `configuration.yaml` edit and the restart it needed are gone.
+
+### Behind the scenes
+
+- `custom_components/powerengine/dashboard.py` registers the panel and a `LovelaceYAML` dashboard the way Home
+  Assistant does for a YAML dashboard in `configuration.yaml`; it is added by the once-a-minute check (so it also appears
+  when Lovelace starts late) and removed when the integration unloads.
+- `integration/tests/test_dashboard.py` covers: in the sidebar and reading the engine's file, removed on unload and back
+  on load, an existing configuration entry left alone, no dashboard for a shadow run, and Lovelace arriving late.
+
 ## 0.9.216 (beta)
 
 ### Behaviour changes
