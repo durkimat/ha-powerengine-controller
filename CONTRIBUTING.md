@@ -5,7 +5,7 @@ changes are reviewed with that in mind. This page says what to expect.
 
 PowerEngine is two repositories that release together:
 
-- **the app** (this repo, `durkimat/ha-powerengine-controller`): the AppDaemon app, the planner and the inverter, tariff,
+- **the app** (this repo, `durkimat/ha-powerengine-controller`): the engine and its Home Assistant integration, the planner and the inverter, tariff,
   car-charger, forecast and grid-event adapters;
 - **the card** ([`durkimat/ha-powerengine-card`](https://github.com/durkimat/ha-powerengine-card)): the Lovelace card for the
   configuration page, the setup wizard and the tests, health and update pages.

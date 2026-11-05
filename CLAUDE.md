@@ -1,8 +1,9 @@
 # PowerEngine: notes for Claude
 
-PowerEngine is a Home Assistant energy manager, run as an AppDaemon app. It plans and controls a home battery
+PowerEngine is a Home Assistant energy manager, run as a Home Assistant integration that starts the engine as its own
+process (`custom_components/powerengine/`; the engine's source is `apps/powerengine/`). It plans and controls a home battery
 (Solis S5-EH1P6K-L hybrid inverter, 18 kWh battery) against EDF tariffs (smart slots ~6.99p, overnight ~7p, peak
-~30p, export 15p), a myenergi Zappi car charger and Solcast forecasts. It publishes its entities over MQTT, and a
+~30p, export 15p), a myenergi Zappi car charger and Solcast forecasts. It publishes its entities as native Home Assistant entities, and a
 companion Lovelace card (`../ha-powerengine-card`) provides the configuration, test, health, update and
 diagnostics UI. The owner is Matthew. This is live on his house: mistakes cost money or inverter wear.
 
@@ -27,7 +28,7 @@ owner approves each run on GitHub. It can't run `tools/release.sh` itself (it ne
 
 ## Layout
 
-- `apps/powerengine/powerengine.py`: the AppDaemon app (large; wiring, control, scheduling).
+- `apps/powerengine/powerengine.py`: the engine (large; wiring, control, scheduling). It still has an AppDaemon host, which is being retired.
 - `apps/powerengine/pe_core/`: pure logic, testable without Home Assistant. Planner, optimiser, decisions,
   readings, costs, learning, RAM control, damping, journal, releases, diagnostics and so on.
 - `apps/powerengine/dashboard/dashboard.lovelace`: the dashboard. The app writes it to HA on start, so edit it
@@ -36,10 +37,10 @@ owner approves each run on GitHub. It can't run `tools/release.sh` itself (it ne
 - `docs/logic/`: the plan and decision logic as flowcharts and tables (inputs, rules planner, optimiser, priorities, control, settings,
   decision log, review findings). Start at `docs/logic/README.md`. A PR that changes planning or `decide` updates the matching page.
 - `docs/INSTALL.md`: the install guide. Keep it current: any release that changes setup updates it in the same PR.
-- `docs/ha/powerengine_handover.yaml`: the HA package everyone needs (update script, AppDaemon restarts, watchdog); it names no
+- `docs/ha/powerengine_handover.yaml`: the HA package everyone needs (update script, watchdog); it names no
   other controller. `docs/ha/powerengine_predbat_handover.yaml`: the optional Predbat handover (input_select, two scripts, restart
   Predbat). **PowerEngine installs and updates them itself** (0.9.109): the shipped copies are `apps/powerengine/ha_packages/*.yml`
-  (`.yml`, not `.yaml`: AppDaemon loads every `.yaml` under apps/), `docs/ha/*.yaml` must stay identical (a test), each starts with the
+  (`.yml`, not `.yaml`), `docs/ha/*.yaml` must stay identical (a test), each starts with the
   `hapackage.MARKER` line, and `pe_core/hapackage.py` decides. Edit the docs file, then copy it over the shipped one. See "HA config" below.
 - `tools/release.sh`: the release (`docs/RELEASING.md`). `tools/diag_summary.py`: summarises a diagnostics export (`--help`).
   `tools/build_demo_pack.py`: rebuilds the demo pack. `tools/sim/`: the simulator (stored days through the real app with other code or

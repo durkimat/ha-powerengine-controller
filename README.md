@@ -1,7 +1,7 @@
 # PowerEngine
 
-A Home Assistant energy controller for a solar + battery + EV home, running as an
-[AppDaemon](https://appdaemon.readthedocs.io/) app. It decides when to charge,
+A Home Assistant energy controller for a solar + battery + EV home, running as a Home Assistant
+integration. It decides when to charge,
 hold, discharge or export the battery using tariff prices, solar forecasts, EV
 smart-charge slots and VPP events, and explains every decision in plain English.
 
@@ -10,16 +10,14 @@ smart-charge slots and VPP events, and explains every decision in plain English.
 
 ## Install
 
-**As a Home Assistant integration (recommended):** no AppDaemon, no MQTT, and updates restart only the engine, not Home
-Assistant. See **[docs/INTEGRATION.md](docs/INTEGRATION.md)**, which also covers moving from the AppDaemon app.
-
-**As an AppDaemon app (still supported):** follow the **[installation guide](docs/INSTALL.md)**. It covers the MQTT broker,
-AppDaemon setup, HACS, the PowerEngine dashboard, configuration, updating, rollback, uninstalling and
-troubleshooting, with a check at each step.
+Follow the **[installation guide](docs/INSTALL.md)**: HACS, the PowerEngine dashboard, configuration, updating,
+rollback, uninstalling and troubleshooting, with a check at each step. No AppDaemon and no MQTT broker are needed, and
+updating restarts only the engine, not Home Assistant. If you ran the old AppDaemon app (no longer released), see
+**[docs/INTEGRATION.md](docs/INTEGRATION.md)** for moving over.
 
 A fresh install runs in **Passive** mode: it monitors, plans and simulates, but
 never controls anything. Your settings live in
-`/homeassistant/powerengine/config.yaml`, outside the app folder, so updates
+`/config/powerengine/config.yaml`, outside the integration's folder, so updates
 never overwrite them.
 
 ## Development

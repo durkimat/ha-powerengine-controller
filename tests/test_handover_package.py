@@ -34,8 +34,7 @@ def test_main_package_holds_what_powerengine_itself_needs():
     d = _load(PKG)
     assert set(d) == {"script", "automation"}
     assert set(d["script"]) == {"powerengine_update"}
-    assert [a["id"] for a in d["automation"]] == ["powerengine_watchdog", "powerengine_restart_after_update",
-                                                  "powerengine_restart_if_stopped"]
+    assert [a["id"] for a in d["automation"]] == ["powerengine_watchdog"]
 
 
 def test_watchdog_depends_on_powerengine_not_on_a_selector():
@@ -98,15 +97,11 @@ def test_everything_is_named_powerengine():
 
 def test_ids_unchanged_and_automations_present():
     assert [a["id"] for a in _load()["automation"]] == ["battery_controller_selector", "powerengine_restart_predbat"]
-    assert {"powerengine_restart_after_update", "powerengine_restart_if_stopped"} <= {
-        a["id"] for a in _load(PKG)["automation"]}
+    assert {"powerengine_watchdog"} <= {a["id"] for a in _load(PKG)["automation"]}
 
 
-def test_update_script_installs_then_restarts_and_the_auto_restart_stands_aside():
-    pkg = _load(PKG)
-    seq = pkg["script"]["powerengine_update"]["sequence"]
-    text = str(seq)
-    assert "update.install" in text and "hassio.addon_restart" in text and "a0d7b954_appdaemon" in text
-    assert text.index("update.install") < text.index("hassio.addon_restart")
-    auto = next(a for a in pkg["automation"] if a["id"] == "powerengine_restart_after_update")
-    assert auto["conditions"][0]["entity_id"] == "script.powerengine_update"
+def test_update_script_installs_then_restarts_the_engine():
+    text = str(_load(PKG)["script"]["powerengine_update"]["sequence"])
+    assert "update.install" in text and "powerengine.restart_engine" in text
+    assert text.index("update.install") < text.index("powerengine.restart_engine")
+    assert "hassio" not in text and "appdaemon" not in text.lower()

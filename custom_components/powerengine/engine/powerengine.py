@@ -157,7 +157,7 @@ from pe_core.v2flows import real_flows
 from pe_core.v2history import KEEP_DAYS as V2_HISTORY_KEEP_DAYS
 from pe_core.v2history import V2History
 from pe_core.verification import active_refusal
-from pe_core.version import MIN_CARD_VERSION, installed_version
+from pe_core.version import MIN_CARD_VERSION
 from pe_core.weather import Weather
 from pe_core.wizard import wizard_info
 
@@ -433,7 +433,6 @@ class Engine:
         self.host.run_in(lambda kwargs: self._compare_publish(), 30)
         self.host.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
         self.host.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
-        self.host.run_every(self._check_update, "now+120", 60)        # a new version installed: ask HA to restart us
         if not self._demo:                                       # (the demo makes no calls to the internet)
             self.host.run_every(self._release_check, "now+60", 300)   # a new version released: straight from GitHub
         self.host.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
@@ -4627,20 +4626,6 @@ class Engine:
                                     "PowerEngine: inverter changed",
                                     "The inverter or its firmware was changed in the site settings. PowerEngine is "
                                     "Passive (nothing is controlled) until you run the supervised tests again."))
-
-    def _check_update(self, kwargs):
-        """HACS replaces the app's files but AppDaemon keeps the old modules loaded. When the version on disk differs
-        from the one running, fire pe_update_installed once; the handover package's automation restarts AppDaemon.
-        (PowerEngine can't restart AppDaemon itself: that needs admin rights it deliberately doesn't have.)"""
-        if self.host.native_entities is not None:          # as the integration's engine: it restarts us itself
-            return
-        installed = installed_version(os.path.join(os.path.dirname(os.path.abspath(__file__)), "pe_core",
-                                                   "__init__.py"))
-        if installed is None or installed == __version__ or getattr(self, "_update_seen", None) == installed:
-            return
-        self._update_seen = installed
-        self.log(f"Version {installed} installed (running {__version__}); asking Home Assistant to restart AppDaemon")
-        self.host.fire_event("pe_update_installed", running=__version__, installed=installed)
 
     def _listen_for_commands(self):
         """Direct mode only: HA has no integration behind our entities, so hear its service calls. (With MQTT the

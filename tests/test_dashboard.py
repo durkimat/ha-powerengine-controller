@@ -22,13 +22,11 @@ def test_sync_writes_once(tmp_path):
 
 
 def test_no_stray_yaml_in_app_folder():
-    """AppDaemon loads every .yaml under the app folder as app config; only the app definition may be YAML."""
+    """The engine's folder holds no .yaml (the files it ships are .yml); the definitions live in one folder."""
     import pathlib
     app = pathlib.Path(__file__).resolve().parents[1] / "apps" / "powerengine"
     yamls = sorted(p.relative_to(app).as_posix() for p in app.rglob("*.y*ml"))
-    # AppDaemon takes files ending ".yaml" (app_management: file[-5:] == ".yaml"); the inverter definitions are
-    # ".yml" so it leaves them alone, and they may only live in the definitions folder.
-    assert [y for y in yamls if y.endswith(".yaml")] == ["powerengine.yaml"], yamls
+    assert [y for y in yamls if y.endswith(".yaml")] == [], yamls
     assert [y for y in yamls if not y.endswith(".yaml")] == [
         "ha_packages/powerengine_handover.yml", "ha_packages/powerengine_predbat_handover.yml",
         "pe_core/adapters/devices/solis.yml"], yamls

@@ -1,6 +1,6 @@
 # PowerEngine dashboard: managed by the PowerEngine app.
 # This file is rewritten whenever PowerEngine is updated; local edits will be lost.
-# Needs: Sunsynk Power Flow Card and ApexCharts Card (HACS). See docs/INSTALL.md, Step 5.
+# Needs: Sunsynk Power Flow Card and ApexCharts Card (HACS). See docs/INSTALL.md, Step 2.
 title: Power Engine
 views:
   - title: Monitoring
