@@ -209,7 +209,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     for issue in (ISSUE_PROTOCOL, ISSUE_CRASHING, ISSUE_NO_SOURCE):
         ir.async_delete_issue(hass, DOMAIN, issue)
     if not shadow_run(entry):
-        unregister_card(hass)
+        await unregister_card(hass)
     if not hass.config_entries.async_loaded_entries(DOMAIN):
         for service in (SERVICE_RESTART_ENGINE, SERVICE_REFRESH_SHADOW):
             if hass.services.has_service(DOMAIN, service):

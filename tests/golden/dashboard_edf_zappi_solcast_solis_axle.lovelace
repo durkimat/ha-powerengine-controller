@@ -1465,7 +1465,7 @@ views:
               | Day | Time | What happened | EDF planned | Car drew | Charging |
               |---|---|---|---:|---:|---:|
               {%- for r in s.recent | reverse %}
-              | {{ r.day }} | {{ r.time }} | {{ {'planned': 'upcoming', 'done': 'ran' ~ (' (confirmed)' if r.confirmed else ''), 'cancelled': 'cancelled', 'cut_short': 'cut short'}[r.status] }} | {{ r.planned_kwh if r.planned_kwh is not none else '–' }} kWh | {{ r.car_kwh }} kWh | {{ r.charging_min | round(0) | int }} min |
+              | {{ r.day }} | {{ r.time }} | {{ {'planned': 'upcoming', 'done': 'ran' ~ (' (confirmed)' if r.confirmed else ''), 'cancelled': 'cancelled', 'superseded': 'replaced', 'cut_short': 'cut short'}.get(r.status, r.status) }} | {{ r.planned_kwh if r.planned_kwh is not none else '–' }} kWh | {{ r.car_kwh }} kWh | {{ r.charging_min | round(0) | int }} min |
               {%- endfor %}
 
               {%- set c = state_attr('sensor.pe_plan', 'certainty') %}{% if c %}
