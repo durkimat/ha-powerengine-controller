@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.212 (beta)
+
+### Behaviour changes
+
+- **PowerEngine now has an icon and a logo.** The engine symbol from the dashboard with a lightning bolt through it,
+  in the integration's `brand/` folder (light and dark, with `@2x` versions), so it shows in Settings, Devices &
+  services, on the device and in the entity pictures instead of the "icon not available" placeholder. Needs Home
+  Assistant 2026.3 or later; an older Home Assistant just keeps the placeholder.
+
+### Behind the scenes
+
+- The SVG sources and how to regenerate the PNGs are in `docs/brand/`; `tests/test_brand.py` checks the sizes.
+
 ## 0.9.211 (beta)
 
 ### Behaviour changes
