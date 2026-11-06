@@ -2,9 +2,9 @@
 
 The wizard (the card's `powerengine-wizard-card`) searches Home Assistant for what each adapter reads: which
 integration (the entity registry's `platform`) provides it, the device's manufacturer and model, and the entity ids
-it usually creates. This table holds that for the tariff, car charger, forecast and grid-event adapters. An inverter
-definition carries the same block as its own `detect:` section (`devices/<name>.yaml`), so a new inverter is found by
-adding a file.
+it usually creates. That lives in `integrations/*.yaml` for the tariff, car charger, forecast and grid-event adapters
+(integration_data.py reads it), and an inverter definition carries the same block as its own `detect:` section
+(`devices/<name>.yaml`), so a new part is found by adding a file. This module is the table the wizard reads.
 
 Every entry is {"integration": {"name", "url"?}, "domains": [...], "manufacturers": [...], "models": [...],
 "entities": [...]}. `domains` are Home Assistant integration domains, the others are regular expressions (case
@@ -16,38 +16,13 @@ Nothing here is read by the control code: it never changes what PowerEngine does
 
 from __future__ import annotations
 
-# The Octopus Energy integration (BottlecapDave's) also serves EDF, which is why both suppliers name it; see kraken.py.
-_KRAKEN = {"name": "Octopus Energy", "url": "https://github.com/BottlecapDave/HomeAssistant-OctopusEnergy"}
+from .integration_data import KEYS, LISTS, detect_table
 
-DETECT: dict[str, dict[str, dict]] = {
-    "tariff": {
-        "edf": {"integration": _KRAKEN, "domains": ["edf_energy", "octopus_energy"], "manufacturers": [], "models": [],
-                "entities": [r"^sensor\.edf_energy_electricity_"]},
-        "octopus": {"integration": _KRAKEN, "domains": ["octopus_energy"], "manufacturers": [r"octopus"], "models": [],
-                    "entities": [r"^sensor\.octopus_energy_electricity_"]},
-    },
-    "ev_charger": {
-        "zappi": {"integration": {"name": "myenergi"},
-                  "domains": ["myenergi"], "manufacturers": [r"myenergi"], "models": [r"zappi"],
-                  "entities": [r"^sensor\.myenergi_zappi_"]},
-    },
-    "forecast": {
-        "solcast": {"integration": {"name": "Solcast PV Forecast", "url": "https://github.com/BJReplay/ha-solcast-solar"},
-                    "domains": ["solcast_solar"], "manufacturers": [r"solcast"], "models": [],
-                    "entities": [r"^sensor\.solcast_pv_forecast_"]},
-    },
-    "events": {
-        "axle": {"integration": {"name": "Axle"}, "domains": ["axle", "axle_vpp"], "manufacturers": [r"axle"],
-                 "models": [], "entities": [r"^sensor\.axle_vpp_"]},
-    },
-}
-
-KEYS = ("integration", "domains", "manufacturers", "models", "entities")
-LISTS = ("domains", "manufacturers", "models", "entities")
+DETECT: dict[str, dict[str, dict]] = detect_table()
 
 
 def adapter_detect(part: str, name: str) -> dict | None:
-    """The detection entry for a part other than the inverter (by site key), or None if the table has none."""
+    """The detection entry for a part other than the inverter (by site key), or None if there is none."""
     return DETECT.get(part, {}).get(name)
 
 

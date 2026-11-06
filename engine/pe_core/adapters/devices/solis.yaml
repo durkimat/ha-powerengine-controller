@@ -128,6 +128,11 @@ clock:
   clock_role: inverter_clock
   sync_role: inverter_clock_sync
 
+# ---- Suggested entities for the first solar plant (the config card pre-fills these; regexes on the entity id) ----
+plant_suggest:
+  power: ['^sensor\.solis_pv_total_power$']
+  energy_today: ['^sensor\.solis_power_generation_today$']
+
 # ---- Suggested entities per role (the config card pre-fills these; each is a regex on the entity id) ---------
 roles:
   # Battery and inverter sensors

@@ -85,6 +85,8 @@ ENTITIES: tuple[EntityDef, ...] = (
                "entity_category": "diagnostic", "suggested_display_precision": 1}),
     EntityDef("sensor", "diag_overnight", "Overnight window in use",
               {"icon": "mdi:weather-night", "entity_category": "diagnostic"}),
+    EntityDef("sensor", "diag_control_entities", "Inverter control entities",
+              {"icon": "mdi:format-list-bulleted", "entity_category": "diagnostic"}),
     EntityDef("sensor", "diag_v2", "Engine v2 health",
               {"icon": "mdi:engine-outline", "entity_category": "diagnostic"}),
     EntityDef("sensor", "diag_v2_settings", "Engine v2 settings",

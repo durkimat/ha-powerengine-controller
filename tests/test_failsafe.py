@@ -136,3 +136,31 @@ def test_a_lost_connection_is_retried_quietly_and_a_demo_or_a_host_without_entit
         assert (ha / "packages" / "powerengine_handover.yaml").exists() and s.logs == []
         if native is not None:
             assert native.sent == []
+
+
+# --- the control entities the engine says it drives (for the Tests page and the diagnostics export) ---------
+
+def test_the_engine_publishes_which_control_entities_it_drives_so_the_card_guesses_none(monkeypatch, tmp_path):
+    pe, s, _ha = app(monkeypatch, tmp_path, Native())
+    rc = {"rc_mode": "select.inv_override", "rc_charge_power": "number.inv_charge", "rc_discharge_power": None}
+    s._rc_entities = lambda: rc
+    s._publish_if_changed = lambda key, state, attrs: s.logs.append(("PUBLISH", (key, state, attrs)))
+    pe.PowerEngine._publish_control_entities(s)
+    (key, state, attrs), = [m for lvl, m in s.logs if lvl == "PUBLISH"]
+    assert key == "diag_control_entities"
+    assert attrs["remote_control"] == {"rc_mode": "select.inv_override", "rc_charge_power": "number.inv_charge"}
+    inv, slots = inverter()
+    windows = sorted({e for e in inv.slot_keys(slots).values() if e})
+    assert attrs["windows"] == windows and SELECT in windows and ENTITY["timed_update_button"] in windows
+    assert state == str(2 + len(windows))
+
+
+def test_a_failure_listing_the_control_entities_is_a_warning_not_a_crash(monkeypatch, tmp_path):
+    pe, s, _ha = app(monkeypatch, tmp_path, Native())
+
+    def boom():
+        raise RuntimeError("no adapter")
+    s._rc_entities = boom
+    s._publish_if_changed = lambda *a: s.logs.append(("PUBLISH", a))
+    pe.PowerEngine._publish_control_entities(s)
+    assert [lvl for lvl, _m in s.logs] == ["WARNING"]

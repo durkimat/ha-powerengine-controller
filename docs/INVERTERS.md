@@ -8,6 +8,20 @@ the reference: copy it and change it.
 **Name the file `<name>.yaml`** (the definition loader reads every `devices/*.yaml`). The file ships with the engine (it sits inside `engine/`, which
 the integration carries a copy of). It is picked up by name: `registry.get("inverter", "<name>")`.
 
+## Other integrations: tariff, car charger, forecast, grid events
+
+How PowerEngine recognises the other integrations it can read from is data too, one file per integration in
+`engine/pe_core/adapters/integrations/<name>.yaml` (`edf`, `octopus`, `zappi`, `solcast`, `axle` today). A file says which
+site key it answers to (`part`), how the wizard finds it (`detect`: the Home Assistant integration domain, the device's
+manufacturer and model, and the entity-id patterns) and, per PowerEngine input (`roles`), which entities to suggest on the
+Config page (`suggest`) and which never to (`suggest_not`). The code names no integration and no entity: add a file and the
+Config page and the wizard know one more. A file is checked when it loads (`pe_core/adapters/integration_data.py`): an
+unknown part, a bad pattern or a role PowerEngine does not have stops the engine from starting, naming the file. Nothing
+in these files is read by the control code; they only decide what is suggested.
+
+The first solar plant's suggested entities come from the inverter's definition (`plant_suggest:` in `devices/<name>.yaml`)
+and are published with the role catalogue, so the card names no inverter either.
+
 ## What is data and what is code
 
 The file holds facts about the inverter. The few things that are algorithms stay in Python; the file chooses them by

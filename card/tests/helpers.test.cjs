@@ -59,12 +59,22 @@ test("suggestions respect exclusions", () => {
 
 test("first use pre-fills suggestions and a main plant", () => {
   const ids = ["sensor.solis_battery_soc", "sensor.solis_pv_total_power", "sensor.solis_power_generation_today"];
-  const { draft, fresh } = h.initialDraft({}, [soc, cap], ids);
+  // the first plant's suggestions are published with the catalogue (the inverter's definition), not built into the card
+  const plant = { power: ["^sensor\\.solis_pv_total_power$"], energy_today: ["^sensor\\.solis_power_generation_today$"] };
+  const { draft, fresh } = h.initialDraft({}, [soc, cap], ids, undefined, plant);
   assert.ok(fresh);
   assert.deepStrictEqual(draft.inputs.battery_soc, { entity: "sensor.solis_battery_soc" });
   assert.deepStrictEqual(draft.inputs.battery_capacity, { value: 18 });
   assert.strictEqual(draft.solar_plants[0].power.entity, "sensor.solis_pv_total_power");
+  assert.strictEqual(draft.solar_plants[0].energy_today.entity, "sensor.solis_power_generation_today");
   assert.strictEqual(draft.operation.mode, "passive");
+});
+
+test("without published plant suggestions the first plant is created empty, and the card names no inverter", () => {
+  const { draft } = h.initialDraft({}, [], ["sensor.solis_pv_total_power"]);
+  assert.strictEqual(draft.solar_plants[0].power.entity, "");
+  const text = require("node:fs").readFileSync(require.resolve("../ha-powerengine-card.js"), "utf8");
+  assert.ok(!/sensor\\\.solis_pv_total_power|solis_power_generation_today/.test(text));
 });
 
 test("saved config is not overwritten by suggestions", () => {
@@ -163,11 +173,22 @@ test("testSummary: RC verdict, grid and remote-control state", () => {
   assert.deepEqual(s.lines, ["20:00:30 reading: battery discharging 1500 W, grid export 800 W, RC Force discharge"]);
 });
 
-test("findRcEntities prefers the solis entities", () => {
-  const states = { "select.x_battery_control_override": {}, "select.solis_inverter_battery_control_override": {},
-    "number.solis_inverter_battery_control_override_charge_power": {} };
-  assert.deepEqual(h.findRcEntities(states), { rc_mode: "select.solis_inverter_battery_control_override",
-    rc_charge_power: "number.solis_inverter_battery_control_override_charge_power" });
+test("findRcEntities reads the entities the engine says it drives, and guesses none", () => {
+  const states = { "select.x_battery_control_override": {},
+    "sensor.pe_diag_control_entities": { state: "2", attributes: { remote_control: { rc_mode: "select.inv_rc_mode",
+      rc_charge_power: "number.inv_rc_charge" }, windows: ["number.inv_w1"] } } };
+  assert.deepEqual(h.findRcEntities(states), { rc_mode: "select.inv_rc_mode", rc_charge_power: "number.inv_rc_charge" });
+  assert.deepEqual(h.findRcEntities({ "select.x_battery_control_override": {} }), {});
+  assert.deepEqual(h.controlEntities({}), { remote: {}, windows: [] });
+});
+
+test("the diagnostics export includes the engine's control entities and no others by name", () => {
+  const states = { "sensor.pe_diag_control_entities": { state: "3", attributes: { remote_control: { rc_mode: "select.inv_rc_mode" },
+      windows: ["number.inv_w1"] } }, "number.inv_w1": { state: "0", attributes: {} }, "select.inv_rc_mode": { state: "Off", attributes: {} },
+    "number.solis_timed_charge_start_hours": { state: "1", attributes: {} } };
+  const ids = Object.keys(h.diagStates(states, new Set()));
+  assert.ok(ids.includes("number.inv_w1") && ids.includes("select.inv_rc_mode"));
+  assert.ok(!ids.includes("number.solis_timed_charge_start_hours"));
 });
 
 test("every test has instructions", () => {
@@ -179,9 +200,11 @@ test("diagnostics: config entities, states filter and private attributes, file n
   const cfg = { inputs: { battery_soc: { entity: "sensor.soc" }, x: { value: 3 } }, solar_plants: [{ inputs: { power: { entity: "sensor.pv" } } }] };
   assert.deepEqual([...h.configEntities(cfg)].sort(), ["sensor.pv", "sensor.soc"]);
   const st = { "sensor.pe_state_battery_soc": { state: "50", attributes: {} }, "sensor.soc": { state: "50", attributes: { account_number: "123", unit_of_measurement: "%" } },
-    "light.kitchen": { state: "on", attributes: {} }, "number.solis_timed_charge_current": { state: "50", attributes: {} } };
+    "light.kitchen": { state: "on", attributes: {} }, "number.inv_timed_charge_current": { state: "50", attributes: {} },
+    "sensor.pe_diag_control_entities": { state: "1", attributes: { remote_control: {}, windows: ["number.inv_timed_charge_current"] } } };
   const out = h.diagStates(st, h.configEntities(cfg));
-  assert.deepEqual(Object.keys(out).sort(), ["number.solis_timed_charge_current", "sensor.pe_state_battery_soc", "sensor.soc"]);
+  assert.deepEqual(Object.keys(out).sort(), ["number.inv_timed_charge_current", "sensor.pe_diag_control_entities",
+    "sensor.pe_state_battery_soc", "sensor.soc"]);
   assert.equal(out["sensor.soc"].attributes.account_number, "(removed)");
   assert.equal(out["sensor.soc"].attributes.unit_of_measurement, "%");
   assert.equal(h.diagFileName(new Date(2026, 8, 27, 19, 5)), "powerengine-diagnostics-20260927-1905.json");

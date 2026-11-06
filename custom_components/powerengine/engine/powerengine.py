@@ -666,6 +666,7 @@ class Engine:
             self._evaluate()
         self._release_if_still_missing()
         self._failsafe_sync()                              # what the integration does if this engine stops
+        self._publish_control_entities()                   # which entities the engine drives (Tests, diagnostics)
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
                 readings = read(self.cfg, self._state_all, None,
@@ -4515,6 +4516,26 @@ class Engine:
 
     def _ha_config_dir(self):
         return os.path.dirname(os.path.dirname(self._save_path()))        # e.g. /homeassistant
+
+    def _publish_control_entities(self):
+        """Which of the inverter's control entities the engine drives (remote-control entities by role, and every
+        window, current, update-button and mode entity), so the Tests page and the diagnostics export need no names."""
+        if self.cfg is None:
+            return
+        try:
+            inverter = self._inverter()
+            remote = {role: eid for role, eid in self._rc_entities().items() if eid}
+            slots = self._slot_map()
+            if slots:
+                windows = self._slot_keys(slots).values()
+            else:
+                windows = self._control_entities(inverter.release_rolling())[0].values()
+            windows = sorted({eid for eid in windows if eid})
+        except Exception as err:
+            self.log(f"Could not list the inverter's control entities: {err!r}", level="WARNING")
+            return
+        self._publish_if_changed("diag_control_entities", str(len(remote) + len(windows)),
+                                 {"remote_control": remote, "windows": windows})
 
     def _failsafe_calls(self):
         """The service calls that hand the inverter back to Self-Use (windows closed, remote control Off), built from

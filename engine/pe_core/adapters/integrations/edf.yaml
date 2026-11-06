@@ -1,0 +1,31 @@
+# EDF Energy's Home Assistant integration (the Kraken platform, via the Octopus Energy integration): the tariff, EDF's smart charging and its free-electricity sessions.
+#
+# Data about how PowerEngine recognises this integration's entities in Home Assistant, used only to pre-fill the Config
+# page and the wizard. Nothing here is read by the control code: it never changes what PowerEngine does, only what is
+# suggested. `part` is the site key this answers to; `detect` is what the wizard looks for (`domains` are Home Assistant
+# integration domains, the rest are regular expressions, case-insensitive for manufacturers and models); `roles` gives,
+# for a PowerEngine input, the entity-id patterns to suggest (`suggest`) and to refuse (`suggest_not`).
+# See docs/INVERTERS.md ("Other integrations").
+part: tariff
+name: edf
+detect:
+  integration: {name: 'Octopus Energy', url: 'https://github.com/BottlecapDave/HomeAssistant-OctopusEnergy'}
+  domains: ['edf_energy', 'octopus_energy']
+  manufacturers: []
+  models: []
+  entities: ['^sensor\.edf_energy_electricity_']
+roles:
+  export_rate: {suggest: ['^sensor\.edf_energy_electricity_.*_export_current_rate$']}
+  free_power_active: {suggest: ['^binary_sensor\.edf_energy_.*_free_electricity_now$']}
+  free_power_events: {suggest: ['^event\.edf_energy_.*_session_events$']}
+  free_power_next_end: {suggest: ['^sensor\.edf_energy_.*_next_free_electricity_session_end$']}
+  free_power_next_start: {suggest: ['^sensor\.edf_energy_.*_next_free_electricity_session_start$']}
+  import_rate_now: {suggest: ['^sensor\.edf_energy_electricity_.*_current_rate$'], suggest_not: ['export']}
+  import_rates_today: {suggest: ['^event\.edf_energy_electricity_.*_current_day_rates$'], suggest_not: ['export']}
+  import_rates_tomorrow: {suggest: ['^event\.edf_energy_electricity_.*_next_day_rates$'], suggest_not: ['export']}
+  offpeak_now: {suggest: ['^binary_sensor\.edf_energy_electricity_.*_off_peak$'], suggest_not: ['export']}
+  smart_dispatches: {suggest: ['^binary_sensor\.edf_energy_.*_intelligent_dispatching$']}
+  smart_state: {suggest: ['^sensor\.edf_energy_.*_intelligent_state$']}
+  smart_target_soc: {suggest: ['^number\.edf_energy_.*_intelligent_charge_target$']}
+  smart_target_time: {suggest: ['^select\.edf_energy_.*_intelligent_target_time$']}
+  standing_charge: {suggest: ['^sensor\.edf_energy_electricity_.*_current_standing_charge$'], suggest_not: ['export']}

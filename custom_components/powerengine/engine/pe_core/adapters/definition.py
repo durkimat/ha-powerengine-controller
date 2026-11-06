@@ -137,6 +137,7 @@ def validate(data, source: str = "<definition>") -> None:
     if "clock" in data:
         _validate_clock(data, source)
     _validate_roles(data, source)
+    _validate_plant_suggest(data, source)
     _validate_firmware(data, source)
     _validate_status(data, source)
     _validate_detect(data, source)
@@ -224,6 +225,18 @@ def _validate_roles(data, source: str) -> None:
         unknown = set(spec) - {"suggest", "suggest_not"}
         if unknown:
             raise DefinitionError(f"{source}: roles.{role} has unknown key(s) {sorted(unknown)}")
+
+
+def _validate_plant_suggest(data, source: str) -> None:
+    plant = data.get("plant_suggest", {})
+    if not isinstance(plant, dict) or set(plant) - {"power", "energy_today"}:
+        raise DefinitionError(f"{source}: 'plant_suggest' is {{power: [...], energy_today: [...]}}")
+    for key, patterns in plant.items():
+        for pattern in patterns if isinstance(patterns, list) else [None]:
+            try:
+                re.compile(pattern)
+            except (re.error, TypeError) as err:
+                raise DefinitionError(f"{source}: plant_suggest.{key} must be a list of patterns ({err})") from None
 
 
 def _validate_status(data, source: str) -> None:
@@ -332,6 +345,12 @@ def detect_info(name: str) -> dict | None:
     return load_definition(name).get("detect")
 
 
+def plant_suggestions(name: str, firmware: str | None = None) -> dict[str, list[str]]:
+    """{"power": [...], "energy_today": [...]}: what to suggest for the first solar plant, from the definition."""
+    plant = load_definition(name, firmware).get("plant_suggest") or {}
+    return {key: list(plant.get(key, ())) for key in ("power", "energy_today")}
+
+
 def role_suggestions(name: str, firmware: str | None = None) -> dict[str, dict[str, tuple[str, ...]]]:
     """{role: {"suggest": (...), "suggest_not": (...)}} from the inverter's definition."""
     out = {}
@@ -341,7 +360,7 @@ def role_suggestions(name: str, firmware: str | None = None) -> dict[str, dict[s
 
 
 __all__ = ["Definition", "DefinitionError", "load_definition", "parse_definition", "apply_firmware", "validate",
-           "available", "role_suggestions", "detect_info", "definition_path", "DEVICES_DIR"]
+           "available", "role_suggestions", "plant_suggestions", "detect_info", "definition_path", "DEVICES_DIR"]
 
 
 def device_capabilities(name: str, firmware: str | None = None) -> dict[str, bool]:

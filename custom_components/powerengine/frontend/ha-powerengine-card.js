@@ -92,10 +92,6 @@ function setNames(hass) {
 }
 function T(text) { return fillNames(text, currentNames); }
 
-const MAIN_PLANT_SUGGEST = {
-  power: [/^sensor\.solis_pv_total_power$/],
-  energy_today: [/^sensor\.solis_power_generation_today$/],
-};
 const FEATURES = [
   ["auto_cheap_threshold", "Automatic cheap threshold", "Work out what counts as cheap from the prices ahead (the bottom fifth of the range, and only if storing it pays), capped by the Cheap import threshold setting."],
   ["fill_when_cheap", "Top up when cheap", "Charge to the grid-charge target in every cheap slot, not just what the forecast needs. A buffer in case the forecast is wrong."],
@@ -625,7 +621,7 @@ function asBools(obj) {
   return out;
 }
 
-function initialDraft(saved, roles, entityIds, settings) {
+function initialDraft(saved, roles, entityIds, settings, plantSuggest) {
   const draft = JSON.parse(JSON.stringify(saved || {}));
   settings = settings || {};
   draft.inputs = draft.inputs || {};
@@ -651,11 +647,13 @@ function initialDraft(saved, roles, entityIds, settings) {
       }
     });
     if (!draft.solar_plants || !draft.solar_plants.length) {
-      const find = (pats) => entityIds.find((id) => pats.some((p) => p.test(id))) || "";
+      // the entities to suggest for the first plant are published with the catalogue (the inverter's definition)
+      const find = (pats) => entityIds.find((id) => (pats || []).some((p) => new RegExp(p).test(id))) || "";
+      const sug = plantSuggest || {};
       draft.solar_plants = [{
         id: "main", name: "Main", forecast: "solcast_site",
-        power: { entity: find(MAIN_PLANT_SUGGEST.power) },
-        energy_today: { entity: find(MAIN_PLANT_SUGGEST.energy_today) },
+        power: { entity: find(sug.power) },
+        energy_today: { entity: find(sug.energy_today) },
       }];
     }
   }
@@ -930,7 +928,7 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     // settings moved to their own sensor in app 0.5.3 (older apps sent them inside the catalogue)
     this._settings = this._catalogue.settings || catalogueAttrs(s, SETTINGS_SENSOR) || {};
     this._readOnly = !(this._hass.user && this._hass.user.is_admin);
-    const { draft, fresh } = initialDraft(this._saved, this._catalogue.roles, Object.keys(s).sort(), this._settings);
+    const { draft, fresh } = initialDraft(this._saved, this._catalogue.roles, Object.keys(s).sort(), this._settings, this._catalogue.plant_suggest);
     this._site = siteInfo(ver.attributes);
     this._siteSaved = this._site ? siteFromSelection(this._site.site) : null;
     if (this._site) draft.site = Object.assign({}, this._siteSaved); else delete draft.site;
@@ -2326,11 +2324,14 @@ function testsPauseHint() {
 // guards for another controller are safe and PowerEngine isn't in control.
 const TEST_EVENT = "pe_test_write";
 const TEST_ENTITY = "sensor.pe_diag_test_write";
-const RC_TAILS = {
-  rc_mode: ["select.", "battery_control_override"],
-  rc_charge_power: ["number.", "battery_control_override_charge_power"],
-  rc_discharge_power: ["number.", "battery_control_override_discharge_power"],
-};
+// The inverter's control entities, as the engine published which ones it drives (no entity names in the card):
+// {remote_control: {rc_mode, rc_charge_power, rc_discharge_power}, windows: [entity ids]}.
+const CONTROL_ENTITIES_SENSOR = "sensor.pe_diag_control_entities";
+function controlEntities(states) {
+  const a = ((states || {})[CONTROL_ENTITIES_SENSOR] || {}).attributes || {};
+  return { remote: a.remote_control && typeof a.remote_control === "object" ? a.remote_control : {},
+    windows: Array.isArray(a.windows) ? a.windows : [] };
+}
 const SCREEN = "On the inverter screen watch the battery reading (power or current, and whether it is charging or " +
   "discharging) and the grid reading. If the screen is slow to update, the <<inverter>> app's live view or the readings " +
   "below show the same thing.";
@@ -2388,14 +2389,7 @@ const TESTS = [
 const TEST_BY_KEY = Object.fromEntries(TESTS.map((t) => [t.key, t]));
 
 function findRcEntities(states) {
-  const ids = Object.keys(states || {}).sort();
-  const out = {};
-  for (const [role, [domain, tail]] of Object.entries(RC_TAILS)) {
-    const hits = ids.filter((e) => e.startsWith(domain) && e.endsWith(tail));
-    hits.sort((a, b) => (a.includes("solis") ? 0 : 1) - (b.includes("solis") ? 0 : 1) || a.localeCompare(b));
-    if (hits.length) out[role] = hits[0];
-  }
-  return out;
+  return Object.assign({}, controlEntities(states).remote);
 }
 
 function dampingNote(states) {
@@ -2589,7 +2583,7 @@ class PowerEngineTestCard extends (typeof HTMLElement !== "undefined" ? HTMLElem
     const need = t.group !== "rc" ? [] : ["rc_mode", t.key === "rc_discharge" ? "rc_discharge_power" : "rc_charge_power"];
     const gone = need.filter((r) => !rc[r]);
     q(".rc").textContent = t.group !== "rc" ? "" : gone.length
-      ? "Remote-control entities not found in HA: " + gone.join(", ") + ". The inverter integration needs to expose the 'Battery control override' entities."
+      ? "Remote-control entities not found in HA: " + gone.join(", ") + ". The inverter's remote-control entities need to exist and be mapped on the Config page."
       : "Remote-control entities: " + need.map((r) => `${rc[r]} (${(states[rc[r]] || {}).state})`).join(", ");
     q(".start").disabled = running || !q(".confirm").checked || gone.length > 0;
     q(".stop").disabled = !running;
@@ -4688,8 +4682,6 @@ function diagHistoryIds(cfg) {
   return [...ids];
 }
 
-const DIAG_CONTROL = /^(number|select|button|sensor)\.solis_.*(timed_|storage_control|battery_control_override|update_charge)/;
-
 function configEntities(cfg) {
   const out = new Set();
   const walk = (v) => {
@@ -4706,8 +4698,10 @@ const DIAG_PRIVATE = /account|mpan|mprn|serial|meter_point|email|token|password|
 
 function diagStates(states, extra) {
   const out = {};
+  const control = controlEntities(states);
+  const controlIds = new Set([...Object.values(control.remote), ...control.windows]);
   for (const [id, st] of Object.entries(states || {}).sort()) {
-    if (/^[a-z_]+\.pe_/.test(id) || (extra && extra.has(id)) || DIAG_CONTROL.test(id)) {
+    if (/^[a-z_]+\.pe_/.test(id) || (extra && extra.has(id)) || controlIds.has(id)) {
       const attributes = {};
       for (const [k, v] of Object.entries(st.attributes || {})) attributes[k] = DIAG_PRIVATE.test(k) ? "(removed)" : v;
       out[id] = { state: st.state, attributes, last_changed: st.last_changed };
@@ -9193,7 +9187,7 @@ class PowerEngineEventsCard extends PowerEngineV2Card {
 });
 
 if (typeof module !== "undefined") {
-  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerSupported, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, ROUTER_APP_VERSION, whatsappSupported, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, hasUpdateService, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, MIN_APP_VERSION, parseVersion, versionOlder, versionWarnings, logRows, logWhen, escHtml, findRcEntities, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, SETUP_REPOS, findHacsRepo, hacsInfoPayload, hacsListPayload, hacsAddPayload, hacsDownloadPayload, installStep, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, FREE_LOADS_APP_VERSION, freeLoadsSupported, freeLoadDraft, buildFreeLoads, DEVICES_APP_VERSION, DEVICE_INPUTS, devicesSupported, deviceDraft, deviceNewId, buildDevices, deviceReadout,
+  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerSupported, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, ROUTER_APP_VERSION, whatsappSupported, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, hasUpdateService, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, MIN_APP_VERSION, parseVersion, versionOlder, versionWarnings, logRows, logWhen, escHtml, findRcEntities, controlEntities, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, SETUP_REPOS, findHacsRepo, hacsInfoPayload, hacsListPayload, hacsAddPayload, hacsDownloadPayload, installStep, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, FREE_LOADS_APP_VERSION, freeLoadsSupported, freeLoadDraft, buildFreeLoads, DEVICES_APP_VERSION, DEVICE_INPUTS, devicesSupported, deviceDraft, deviceNewId, buildDevices, deviceReadout,
   wizardDeviceName, wizardInUse, wizardOthers, wizardUsedEntities, wizardPlantFromDevice, wizardPlantId, EXPORT_FORMAT, EXPORT_VERSION, EXPORT_STATE_MAX, wizardInfo, wizardFacts, wizardMatch, wizardCandidates, wizardRoles, wizardSuggest, wizardPlantGuess, wizardMissing, wizardWatts, wizardSignCheck, wizardBalance, scrubText, buildCandidateExport, candidateFileName, wizardEnergyDevices,
   SYSTEM_DRAFT_KEY, systemKinds, systemItems, systemMissingParts, opsSet, opsRemove, opsUndoRemove, opsTag, opsSummary, applyOps, featuresLeftOut, buildApplyConfig, equipmentOf, systemFingerprint, overlayEquipment, systemImpact, systemDraftLoad, systemDraftSave,
   OVERRIDE_MODES, OVERRIDE_PERIODS, OVERRIDE_MAX_SLOTS, inverterWords, overrideEndOptions, overridePayload, overrideView, overrideSummary,
