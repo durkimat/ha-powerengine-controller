@@ -56,6 +56,6 @@ test("setup checklist asks for the choice only when unset", () => {
   const base = { peVersion: "0.9.108", cardsLoaded: {}, components: [] };
   assert.ok(h.setupRows({ ...base, otherController: "unset" }).some((r) => r.key === "controller" && r.status === "missing"));
   for (const o of ["none", "other", null]) assert.ok(!h.setupRows({ ...base, otherController: o }).some((r) => r.key === "controller"));
-  const rows = (o) => h.setupSummary({ ...base, otherController: o, cardsLoaded: { "apexcharts-card": true, "mushroom-card": true } });
+  const rows = (o) => h.setupSummary({ ...base, otherController: o, cardsLoaded: { "mushroom-card": true } });
   assert.ok(rows("unset").allSet === false);
 });

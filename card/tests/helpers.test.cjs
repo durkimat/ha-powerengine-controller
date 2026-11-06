@@ -492,13 +492,12 @@ test("any label ending in ' tariff' is the waterfall's Tariff column, and the ev
 // Command shapes checked against hacs/integration (custom_components/hacs/websocket/__init__.py: hacs/info;
 // repositories.py: hacs/repositories/list and /add; repository.py: hacs/repository/download) and home-assistant/core
 // (components/hassio/websocket_api.py: supervisor/api; the frontend's fetchHassioAddonsInfo uses /addons, method get).
-const APEX = "RomRider/apexcharts-card";
 const FLOW = "slipx06/sunsynk-power-flow-card";
 const hrepo = (full, id, installed, extra) => ({ id, full_name: full, installed: !!installed, installed_version: installed ? "1.0" : null, ...extra });
 const allFacts = () => ({
   isAdmin: true, hacs: true,
-  repos: [hrepo(APEX, "12", true), hrepo(FLOW, "13", true)],
-  cardsLoaded: { "apexcharts-card": true, "sunsynk-power-flow-card": true }, components: ["hacs"], peVersion: "0.9.61",
+  repos: [hrepo(FLOW, "13", true)],
+  cardsLoaded: { "sunsynk-power-flow-card": true }, components: ["hacs"], peVersion: "0.9.61",
 });
 const emptyFacts = () => ({
   isAdmin: true, hacs: true,
@@ -509,19 +508,18 @@ const row = (rows, key) => rows.find((r) => r.key === key);
 test("setup payloads match HACS commands", () => {
   assert.deepStrictEqual(h.hacsInfoPayload(), { type: "hacs/info" });
   assert.deepStrictEqual(h.hacsListPayload(), { type: "hacs/repositories/list", categories: ["plugin"] });
-  assert.deepStrictEqual(h.hacsAddPayload(APEX, "plugin"), { type: "hacs/repositories/add", repository: APEX, category: "plugin" });
+  assert.deepStrictEqual(h.hacsAddPayload(FLOW, "plugin"), { type: "hacs/repositories/add", repository: FLOW, category: "plugin" });
   assert.deepStrictEqual(h.hacsDownloadPayload(12), { type: "hacs/repository/download", repository: "12" });   // id must be text
 });
 
 test("repository lookup ignores case and finds nothing in an empty list", () => {
-  const list = [hrepo("romrider/ApexCharts-Card", 7, true)];
-  assert.strictEqual(h.findHacsRepo(list, APEX).id, 7);
-  assert.strictEqual(h.findHacsRepo(list, FLOW), null);
-  assert.strictEqual(h.findHacsRepo(null, APEX), null);
+  const list = [hrepo("SlipX06/Sunsynk-Power-Flow-Card", 7, true)];
+  assert.strictEqual(h.findHacsRepo(list, FLOW).id, 7);
+  assert.strictEqual(h.findHacsRepo(list, "someone/else"), null);
+  assert.strictEqual(h.findHacsRepo(null, FLOW), null);
 });
 
 test("install step adds an unknown repository, then downloads it", () => {
-  assert.deepStrictEqual(h.installStep("apex", []), { type: "hacs/repositories/add", repository: APEX, category: "plugin" });
   assert.deepStrictEqual(h.installStep("flow", []), { type: "hacs/repositories/add", repository: FLOW, category: "plugin" });
   assert.deepStrictEqual(h.installStep("flow", [hrepo(FLOW, 99, false)]), { type: "hacs/repository/download", repository: "99" });
   assert.strictEqual(h.installStep("app", []), null);                     // PowerEngine is not installed from here
@@ -536,10 +534,9 @@ test("version sensor: unavailable is not running", () => {
 
 test("nothing installed, as an admin: every needed row is missing and offers its action", () => {
   const rows = h.setupRows(emptyFacts());
-  assert.deepStrictEqual(rows.map((r) => r.key), ["running", "apex", "flow"]);
+  assert.deepStrictEqual(rows.map((r) => r.key), ["running", "flow"]);
   assert.strictEqual(row(rows, "running").status, "missing");
   assert.match(row(rows, "running").detail, /Repairs/);
-  assert.strictEqual(row(rows, "apex").action.target, "apex");
   assert.strictEqual(row(rows, "flow").action.target, "flow");
   assert.strictEqual(h.setupSummary(emptyFacts()).allSet, false);
 });
@@ -548,17 +545,17 @@ test("HACS missing: no install buttons, link to how to install it", () => {
   const f = emptyFacts();
   f.hacs = false; f.repos = null; f.components = [];
   const rows = h.setupRows(f);
-  ["apex", "flow"].forEach((k) => {
+  ["flow"].forEach((k) => {
     assert.strictEqual(row(rows, k).status, "missing");
     assert.strictEqual(row(rows, k).action.kind, "link");
     assert.match(row(rows, k).action.href, /hacs\.xyz/);
   });
 });
 
-test("chart card installed in HACS but not loaded asks for a reload", () => {
+test("the energy-flow card installed in HACS but not loaded asks for a reload", () => {
   const f = allFacts();
-  f.cardsLoaded = { "apexcharts-card": false, "sunsynk-power-flow-card": true };
-  const r = row(h.setupRows(f), "apex");
+  f.cardsLoaded = { "sunsynk-power-flow-card": false };
+  const r = row(h.setupRows(f), "flow");
   assert.strictEqual(r.status, "missing");
   assert.match(r.detail, /Reload this page/);
   assert.strictEqual(r.action.kind, "reload");
@@ -577,7 +574,7 @@ test("non-admin sees the list but no install buttons, and an admin note on HACS-
   const f = emptyFacts();
   f.isAdmin = false; f.hacs = null; f.repos = null;
   const rows = h.setupRows(f);
-  ["apex", "flow"].forEach((k) => {
+  ["flow"].forEach((k) => {
     assert.strictEqual(row(rows, k).action, null, k);
     assert.strictEqual(row(rows, k).status, "unknown", k);
     assert.match(row(rows, k).detail, /admin/i, k);

@@ -2813,7 +2813,6 @@ if (typeof customElements !== "undefined" && !customElements.get("powerengine-up
 //                                 HACS's error signal), so the card lists again to see whether it worked
 //   hacs/repository/download     (hacs/websocket/repository.py) {repository: <id as text>}; a failure is a WS error
 const SETUP_REPOS = {
-  apex: { key: "apex", full_name: "RomRider/apexcharts-card", category: "plugin", label: "Chart card", element: "apexcharts-card" },
   flow: { key: "flow", full_name: "slipx06/sunsynk-power-flow-card", category: "plugin", label: "Energy-flow card", element: "sunsynk-power-flow-card" },
 };
 const SETUP_LINKS = {
@@ -2869,12 +2868,12 @@ function setupRows(facts) {
   rows.push({ key: "running", title: "PowerEngine running", why: "It publishes its version once its engine has started.", status: ver ? "ok" : "missing", needed: true,
     detail: ver ? `Version ${ver}.` : "Not running yet. Open Settings, Devices & services, PowerEngine: its Repairs say what is wrong, and its Restart engine button starts it again.", action: null });
 
-  // 2. Chart cards
-  ["apex", "flow"].forEach((k) => {
+  // 2. The energy-flow card
+  ["flow"].forEach((k) => {
     const def = SETUP_REPOS[k];
     const loaded = !!(f.cardsLoaded || {})[def.element];
     const repo = findHacsRepo(repos, def.full_name);
-    const base = { key: k, title: def.label, why: k === "apex" ? "Draws the dashboard's charts." : "Draws the live energy-flow picture.", needed: true };
+    const base = { key: k, title: def.label, why: "Draws the live energy-flow picture.", needed: true };
     if (loaded) rows.push({ ...base, status: "ok", detail: `Loaded (${def.full_name}).`, action: null });
     else if (repo && repo.installed) rows.push({ ...base, status: "missing", detail: "Installed. Reload this page to load it.", action: { kind: "reload", label: "Reload page" } });
     else rows.push(unknownFor({ ...base, status: hacsOk || f.hacs === false ? "missing" : "unknown",
@@ -2890,11 +2889,11 @@ function setupRows(facts) {
   return rows;
 }
 
-/** "All set" when PowerEngine is running and the chart cards are loaded. */
+/** "All set" when PowerEngine is running and the energy-flow card is loaded. */
 function setupSummary(facts) {
   const rows = setupRows(facts);
   const ok = (k) => (rows.find((r) => r.key === k) || {}).status === "ok";
-  const allSet = ok("running") && ok("apex") && ok("flow") && !rows.some((r) => r.key === "controller");
+  const allSet = ok("running") && ok("flow") && !rows.some((r) => r.key === "controller");
   return { allSet, line: allSet ? `All set. PowerEngine is running ${(facts || {}).peVersion}` : null,
     todo: rows.filter((r) => r.needed && r.status !== "ok").length };
 }
@@ -9171,11 +9170,385 @@ class PowerEngineEventsCard extends PowerEngineV2Card {
   }
 }
 
+// ---- native charts: the plan, history, load-and-solar and losses charts, drawn by this card ---------------------------------
+// They are drawn here, not by a chart card from another install. `type: custom:powerengine-chart-card` with
+// `chart: plan | history | load_solar | losses`. The data is read from the engine's own sensors; nothing here guesses an entity.
+const CHART_SLOT_MS = 1800000;
+const CHART_HOUR_MS = 3600000;
+const CHART_ACTIONS = ["Self-use", "Hold", "Grid charge", "Sell", "Force discharge"];
+const CHART_ACTION_CODE = { self_use: 0, hold: 1, grid_charge: 2, export: 3, force_discharge: 4 };
+const CHART_PLAN_SENSOR = "sensor.pe_plan";
+const CHART_HISTORY_SENSOR = "sensor.pe_plan_history";
+const CHART_LOSSES_SENSOR = "sensor.pe_diag_system_losses";
+const CHART_COMPACT_BELOW_PX = 600;
+
+/** [[ms, value]] from parallel arrays (times as ISO text or ms), a missing value dropping its point; `offset` shifts the time. Pure. */
+function chartPts(times, values, offset) {
+  const out = [];
+  (times || []).forEach((t, i) => {
+    const v = values ? values[i] : undefined;
+    if (v === null || v === undefined || v === "" || Number.isNaN(Number(v))) return;
+    const ms = typeof t === "number" ? t : Date.parse(t);
+    if (Number.isNaN(ms)) return;
+    out.push([ms, Number(v)]);
+  });
+  return out.map((p) => [p[0] + (offset || 0), p[1]]);
+}
+/** A stepped series falls to zero half an hour after its last point, so its last bar has an end. Pure. */
+function chartClose(pts) {
+  if (pts.length) pts.push([pts[pts.length - 1][0] + CHART_SLOT_MS, 0]);
+  return pts;
+}
+const planS = (a) => (a && a.series && typeof a.series === "object" ? a.series : {});
+const planPts = (a, key, offset, close) => { const s = planS(a); const p = chartPts(s.t, s[key], offset); return close ? chartClose(p) : p; };
+const histPts = (a, key, offset, close) => { const s = planS(a); const p = chartPts(s.x, s[key], offset); return close ? chartClose(p) : p; };
+
+const CHART_AXES = {
+  soc: { side: "left", min: 0, max: 100, decimals: 0, color: "#1565c0", title: "Battery %" },
+  price: { side: "right", min: 0, decimals: 0, color: "#fb8c00", title: "Import price p/kWh", compactHide: true },
+  kwh: { side: "right", min: 0, decimals: 1, color: "#757575", title: "kWh per half-hour", compactHide: true },
+  writes: { min: 0, max: 12, hidden: true },
+  act: { min: 0, max: 40, hidden: true },
+  energy: { side: "left", min: 0, decimals: 1, title: "kWh per half-hour" },
+  lkwh: { side: "left", min: 0, decimals: 1, color: "#ef6c00", title: "kWh" },
+  lpct: { side: "right", min: 0, decimals: 0, color: "#6a1b9a", title: "%", compactHide: true },
+};
+const CHART_DEFS = {
+  plan: {
+    sensor: CHART_PLAN_SENSOR, window: "ahead", spanH: 36, compactSpanH: 18, now: true, height: 380, compactHeight: 420,
+    title: "Next 36 hours", compactTitle: "Next 18 hours", axes: ["soc", "price", "kwh", "writes", "act"],
+    series: [
+      { key: "battery", name: "Battery", axis: "soc", unit: "%", type: "line", color: "#1565c0", width: 4, points: (a) => planPts(a, "soc", CHART_SLOT_MS) },
+      { key: "alt", name: "Alt plan", axis: "soc", unit: "%", type: "line", color: "#90caf9", width: 1, opacity: 0.6,
+        points: (a) => { const s = planS(a); const o = ((a && (a.alternative || a.optimiser)) || {}).soc || []; return chartPts(s.t, o, CHART_SLOT_MS); } },
+      { key: "price", name: "Price", axis: "price", unit: "p", type: "line", step: true, color: "#fb8c00", width: 2, points: (a) => planPts(a, "price_p", 0) },
+      { key: "solar", name: "Solar", axis: "kwh", unit: "kWh", type: "area", color: "#fdd835", opacity: 0.3, points: (a) => planPts(a, "solar_kwh", 0) },
+      { key: "load", name: "Load", axis: "kwh", unit: "kWh", type: "line", color: "#9e9e9e", width: 1, points: (a) => planPts(a, "load_kwh", 0) },
+      { key: "charge", name: "Charge", axis: "kwh", unit: "kWh", type: "area", step: true, color: "#43a047", opacity: 0.45, width: 1, points: (a) => planPts(a, "charge_kwh", 0, true) },
+      { key: "export", name: "Export", axis: "kwh", unit: "kWh", type: "area", step: true, color: "#e53935", opacity: 0.45, width: 1, points: (a) => planPts(a, "discharge_kwh", 0, true) },
+      { key: "solarexport", name: "Solar export", axis: "kwh", unit: "kWh", type: "area", step: true, color: "#f9a825", opacity: 0.9, width: 1,
+        points: (a) => { const s = planS(a); return chartClose(chartPts(s.t, (s.solar_export_kwh || s.t.map(() => 0)).map((v) => (v === null || v === undefined ? 0 : v)), 0)); } },
+      { key: "writes", name: "Planned writes", axis: "writes", unit: "writes", type: "column", color: "#8e24aa", opacity: 0.9,
+        points: (a) => Object.entries((a && a.writes_forecast) || {}).map(([t, n]) => [Date.parse(t) + 900000, Number(n)]).filter((p) => !Number.isNaN(p[0])) },
+      { key: "manual", name: "Manual override", axis: "soc", unit: "", type: "area", step: true, color: "#ec407a", opacity: 0.16, width: 0,
+        points: (a) => { const s = planS(a); return chartClose(chartPts(s.t, (s.manual || s.t.map(() => 0)).map((v) => (v === null || v === undefined ? 0 : v)), 0)); } },
+      { key: "action", name: "Action", axis: "act", unit: "", type: "hidden", step: true, color: "#8e24aa",
+        points: (a) => { const s = planS(a); return (s.t || []).map((t, i) => [Date.parse(t) + 900000, CHART_ACTION_CODE[(s.action || [])[i]] ?? 0]).filter((p) => !Number.isNaN(p[0])); } },
+    ],
+  },
+  history: {
+    sensor: CHART_HISTORY_SENSOR, window: "day", height: 380, compactHeight: 420, now: false,
+    title: "Battery, prices and grid use (plan dashed, actual solid)", axes: ["soc", "price", "kwh"],
+    series: [
+      { key: "battery", name: "Battery", axis: "soc", unit: "%", type: "line", color: "#1565c0", width: 4, points: (a) => histPts(a, "actual_soc", CHART_SLOT_MS) },
+      { key: "batteryplan", name: "Battery plan", axis: "soc", unit: "%", type: "line", color: "#90caf9", width: 2, dash: 5, points: (a) => histPts(a, "plan_soc", CHART_SLOT_MS) },
+      { key: "price", name: "Price", axis: "price", unit: "p", type: "line", step: true, color: "#fb8c00", width: 2, points: (a) => histPts(a, "price_p", 0) },
+      { key: "charge", name: "Charge", axis: "kwh", unit: "kWh", type: "area", step: true, color: "#43a047", opacity: 0.45, width: 1, points: (a) => histPts(a, "actual_charge", 0, true) },
+      { key: "chargeplan", name: "Charge plan", axis: "kwh", unit: "kWh", type: "line", step: true, color: "#2e7d32", width: 2, dash: 5, points: (a) => histPts(a, "plan_charge", 0, true) },
+      { key: "export", name: "Export", axis: "kwh", unit: "kWh", type: "area", step: true, color: "#e53935", opacity: 0.45, width: 1, points: (a) => histPts(a, "actual_bat_export", 0, true) },
+      { key: "solarexport", name: "Solar export", axis: "kwh", unit: "kWh", type: "area", step: true, color: "#f9a825", opacity: 0.9, width: 1, points: (a) => histPts(a, "actual_solar_export", 0, true) },
+    ],
+  },
+  load_solar: {
+    sensor: CHART_HISTORY_SENSOR, window: "day", height: 240, compactHeight: 240, now: false,
+    title: "House load and solar (forecast dashed, actual solid)", axes: ["energy"],
+    series: [
+      { key: "house", name: "House (actual)", axis: "energy", unit: "kWh", type: "line", color: "#616161", width: 2, points: (a) => histPts(a, "actual_load", 0) },
+      { key: "houseplan", name: "House (forecast)", axis: "energy", unit: "kWh", type: "line", color: "#9e9e9e", width: 2, dash: 5, points: (a) => histPts(a, "plan_load", 0) },
+      { key: "solar", name: "Solar (actual)", axis: "energy", unit: "kWh", type: "area", color: "#fdd835", opacity: 0.3, points: (a) => histPts(a, "actual_solar", 0) },
+      { key: "solarplan", name: "Solar (forecast)", axis: "energy", unit: "kWh", type: "line", color: "#f9a825", width: 2, dash: 5, points: (a) => histPts(a, "plan_solar", 0) },
+    ],
+  },
+  losses: {
+    sensor: CHART_LOSSES_SENSOR, window: "days", spanD: 30, compactSpanD: 14, height: 240, compactHeight: 240, now: false,
+    title: "System losses by day", axes: ["lkwh", "lpct"],
+    series: [
+      { key: "kwh", name: "Losses kWh", axis: "lkwh", unit: "kWh", type: "column", color: "#ef6c00",
+        points: (a) => ((a && a.by_day) || []).map((d) => [Date.parse(`${d[0]}T12:00:00`), Number(d[1])]).filter((p) => !Number.isNaN(p[0]) && !Number.isNaN(p[1])) },
+      { key: "pct", name: "Losses %", axis: "lpct", unit: "%", type: "line", color: "#6a1b9a", width: 2, labels: true,
+        points: (a) => ((a && a.by_day) || []).filter((d) => d[2] !== null && d[2] !== undefined)
+          .map((d) => [Date.parse(`${d[0]}T12:00:00`), Number(d[2])]).filter((p) => !Number.isNaN(p[0]) && !Number.isNaN(p[1])) },
+    ],
+  },
+};
+
+/** The time window a chart shows: "ahead" runs from this minute, "day" is today's local day, "days" ends with today. Pure. */
+function chartWindow(def, nowMs, compact) {
+  const d = new Date(nowMs);
+  if (def.window === "ahead") {
+    const from = Math.floor(nowMs / 60000) * 60000;
+    return { from, to: from + (compact ? def.compactSpanH : def.spanH) * CHART_HOUR_MS };
+  }
+  if (def.window === "day") {
+    const from = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    return { from, to: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() };
+  }
+  const days = compact ? def.compactSpanD : def.spanD;
+  return { from: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1 - days).getTime(), to: new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() };
+}
+const chart2 = (n) => String(n).padStart(2, "0");
+const CHART_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const CHART_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const chartHm = (ms) => { const d = new Date(ms); return `${chart2(d.getHours())}:${chart2(d.getMinutes())}`; };
+const chartDm = (ms) => { const d = new Date(ms); return `${d.getDate()} ${CHART_MONTHS[d.getMonth()]}`; };
+
+/** Ticks on the time axis: whole local hours for a window of a day or two, whole days for a longer one. [{ms, label}]. Pure. */
+function chartTimeTicks(from, to, compact) {
+  const out = [];
+  if (to - from <= 2 * 24 * CHART_HOUR_MS + CHART_HOUR_MS) {
+    const hours = (to - from) / CHART_HOUR_MS;
+    const step = hours > 24 ? (compact ? 6 : 3) : (compact ? 4 : 2);
+    const d = new Date(from);
+    d.setMinutes(0, 0, 0);
+    while (d.getTime() < from || d.getHours() % step !== 0) d.setHours(d.getHours() + 1);
+    for (; d.getTime() <= to; d.setHours(d.getHours() + step)) out.push({ ms: d.getTime(), label: chartHm(d.getTime()) });
+    return out;
+  }
+  const step = compact ? 2 : 5;
+  const d = new Date(from);
+  d.setHours(12, 0, 0, 0);
+  for (let i = 0; d.getTime() <= to; d.setDate(d.getDate() + 1), i += 1) if (d.getTime() >= from && i % step === 0) out.push({ ms: d.getTime(), label: chartDm(d.getTime()) });
+  return out;
+}
+/** Round figures from min up to at least max, about `count` of them. Pure. */
+function chartNiceTicks(min, max, count) {
+  const span = Math.max(max - min, 1e-9);
+  const raw = span / Math.max(count, 1);
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  const out = [];
+  for (let v = Math.ceil(min / step - 1e-9) * step; v <= max + step * 1e-9; v += step) out.push(Number((Math.round(v / step) * step).toFixed(10)) || 0);          // (no -0, no 0.30000000000000004)
+  return out;
+}
+/** The axis's range: its own min and max where it has them, else from the data on it (the top rounded up to a tick). Pure. */
+function chartAxisRange(axis, values) {
+  const min = axis.min !== undefined ? axis.min : Math.min(0, ...values);
+  if (axis.max !== undefined) return { min, max: axis.max };
+  const top = values.length ? Math.max(...values) : 1;
+  const ticks = chartNiceTicks(min, Math.max(top * 1.05, min + 1), 5);
+  return { min, max: Math.max(ticks[ticks.length - 1], top) };
+}
+/** A smooth line through the points (monotone cubic: it never overshoots a point), as an SVG path. Pure. */
+function chartSmoothPath(p) {
+  if (p.length < 3) return p.map((q, i) => `${i ? "L" : "M"}${q[0].toFixed(1)},${q[1].toFixed(1)}`).join("");
+  const n = p.length;
+  const dx = [], slope = [];
+  for (let i = 0; i < n - 1; i += 1) { dx.push(p[i + 1][0] - p[i][0]); slope.push(dx[i] ? (p[i + 1][1] - p[i][1]) / dx[i] : 0); }
+  const m = [slope[0]];
+  for (let i = 1; i < n - 1; i += 1) m.push(slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2);
+  m.push(slope[n - 2]);
+  for (let i = 0; i < n - 1; i += 1) {
+    if (slope[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+    const a = m[i] / slope[i], b = m[i + 1] / slope[i], h = Math.hypot(a, b);
+    if (h > 3) { m[i] = (3 * a / h) * slope[i]; m[i + 1] = (3 * b / h) * slope[i]; }
+  }
+  let d = `M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i += 1) {
+    const c = dx[i] / 3;
+    d += `C${(p[i][0] + c).toFixed(1)},${(p[i][1] + m[i] * c).toFixed(1)} ${(p[i + 1][0] - c).toFixed(1)},${(p[i + 1][1] - m[i + 1] * c).toFixed(1)} ${p[i + 1][0].toFixed(1)},${p[i + 1][1].toFixed(1)}`;
+  }
+  return d;
+}
+/** A stepped line: each value holds until the next point. Pure. */
+function chartStepPath(p) {
+  return p.map((q, i) => (i === 0 ? `M${q[0].toFixed(1)},${q[1].toFixed(1)}` : `H${q[0].toFixed(1)}V${q[1].toFixed(1)}`)).join("");
+}
+/** What the chart shows at time `ms`, for the pointer: [{key, name, color, text}] for each visible series that has a point near `ms`. Pure. */
+function chartReadout(model, ms, attrs) {
+  const rows = [];
+  model.series.forEach((s) => {
+    if (s.hiddenByUser || !s.pts.length) return;
+    let best = null;
+    if (s.step) { for (const q of s.pts) if (q[0] <= ms) best = q; if (best && ms - best[0] > 2 * CHART_SLOT_MS) best = null; }
+    else { let gap = Infinity; for (const q of s.pts) if (Math.abs(q[0] - ms) < gap) { gap = Math.abs(q[0] - ms); best = q; } if (best && gap > model.reach) best = null; }
+    if (!best) return;
+    const v = best[1];
+    let text;
+    if (s.key === "action" && model.id === "plan") {
+      text = CHART_ACTIONS[Math.round(v)] || String(v);
+      const win = ((attrs && attrs.windows) || []).find((w) => Date.parse(w.start) <= ms && ms < Date.parse(w.end));
+      if (win && win.reason) text += `: ${win.reason}`;
+    } else if (s.key === "manual") text = v ? "on" : "–";
+    else if (s.unit === "%") text = `${Math.round(v)}%`;
+    else if (s.unit === "p") text = `${Math.round(v * 100) / 100}p`;
+    else if (s.unit === "writes") text = `${Math.round(v)} writes`;
+    else text = `${Math.round(v * 100) / 100} ${s.unit}`;
+    if (s.key === "manual" && !v) return;
+    rows.push({ key: s.key, name: s.name, color: s.color, text });
+  });
+  return rows;
+}
+/** Everything needed to draw a chart, with no DOM: the plot box, the axes with their ticks, each series' path, and the window. Pure.
+ *  opts: {width, height?, nowMs, hidden: Set of series keys the person switched off, compact?: boolean}. */
+function chartModel(chartId, attrs, opts) {
+  const def = CHART_DEFS[chartId];
+  if (!def) return null;
+  const o = Object.assign({ width: 800, nowMs: Date.now(), hidden: new Set() }, opts || {});
+  const compact = o.compact !== undefined ? o.compact : o.width < CHART_COMPACT_BELOW_PX;
+  const win = chartWindow(def, o.nowMs, compact);
+  const H = o.height || (compact ? def.compactHeight : def.height);
+  const axes = def.axes.map((id) => Object.assign({ id }, CHART_AXES[id])).map((a) => Object.assign(a, { shown: !a.hidden && !(compact && a.compactHide) }));
+  const leftShown = axes.filter((a) => a.shown && a.side === "left").length;
+  const rightShown = axes.filter((a) => a.shown && a.side === "right").length;
+  const x0 = leftShown ? 52 : 10;
+  const x1 = o.width - (rightShown ? 52 * rightShown : 10);
+  const y0 = 12, y1 = H - 28;
+  const xOf = (ms) => x0 + ((ms - win.from) / (win.to - win.from)) * (x1 - x0);
+  const series = def.series.map((spec) => {
+    const raw = spec.points(attrs).filter((p) => p[0] >= win.from - 2 * CHART_SLOT_MS && p[0] <= win.to + 2 * CHART_SLOT_MS);
+    return Object.assign({}, spec, { pts: raw, hiddenByUser: o.hidden.has(spec.key) });
+  });
+  axes.forEach((a) => {
+    const vals = [];
+    series.forEach((s) => { if (s.axis === a.id && !s.hiddenByUser) s.pts.forEach((p) => vals.push(p[1])); });
+    const r = chartAxisRange(a, vals);
+    a.range = r;
+    a.y = (v) => y1 - ((v - r.min) / (r.max - r.min || 1)) * (y1 - y0);
+    a.ticks = a.shown ? chartNiceTicks(r.min, r.max, a.id === "soc" ? 5 : 4).map((v) => ({ v, y: a.y(v), label: a.decimals ? v.toFixed(a.decimals) : String(Math.round(v)) })) : [];
+  });
+  const axisOf = (id) => axes.find((a) => a.id === id);
+  series.forEach((s) => {
+    const a = axisOf(s.axis);
+    const px = s.pts.map((p) => [xOf(p[0]), a.y(p[1])]);
+    s.px = px;
+    s.d = ""; s.fill = ""; s.bars = [];
+    if (s.hiddenByUser || !px.length || s.type === "hidden") return;
+    if (s.type === "column") {
+      const gap = s.pts.length > 1 ? Math.min(...s.pts.slice(1).map((p, i) => p[0] - s.pts[i][0])) : CHART_SLOT_MS;
+      const w = Math.max(2, Math.min(40, ((gap / (win.to - win.from)) * (x1 - x0)) * 0.7));
+      s.bars = px.map((q) => ({ x: q[0] - w / 2, y: Math.min(q[1], a.y(a.range.min)), w, h: Math.abs(a.y(a.range.min) - q[1]) }));
+      return;
+    }
+    s.d = s.step ? chartStepPath(px) : chartSmoothPath(px);
+    if (s.type === "area") s.fill = `${s.d}L${px[px.length - 1][0].toFixed(1)},${a.y(a.range.min).toFixed(1)}L${px[0][0].toFixed(1)},${a.y(a.range.min).toFixed(1)}Z`;
+  });
+  return {
+    id: chartId, def, compact, width: o.width, height: H, plot: { x0, x1, y0, y1 }, window: win, xOf,
+    xticks: chartTimeTicks(win.from, win.to, compact).map((t) => Object.assign(t, { x: xOf(t.ms) })), axes, series,
+    nowX: def.now && o.nowMs >= win.from && o.nowMs <= win.to ? xOf(o.nowMs) : null,
+    reach: chartId === "losses" ? 13 * CHART_HOUR_MS : 40 * 60000,
+    title: compact && def.compactTitle ? def.compactTitle : def.title,
+  };
+}
+
+class PowerEngineChartCard extends PowerEngineV2Card {
+  setConfig(config) {
+    super.setConfig(Object.assign({}, config || {}));
+    if (this.style) this.style.display = "block";                   // so it has a width to measure before its first draw
+    const id = (config && config.chart) || "";
+    this._def = CHART_DEFS[id] ? id : "";
+  }
+  getCardSize() { return 6; }
+  _ids() { return this._def ? [CHART_DEFS[this._def].sensor] : []; }
+  connectedCallback() {
+    if (!this._timer && typeof setInterval !== "undefined") this._timer = setInterval(() => { if (this._def && CHART_DEFS[this._def].now) this._draw(); }, 60000);
+    if (!this._resize && typeof ResizeObserver !== "undefined") {
+      this._resize = new ResizeObserver(() => {
+        const w = Math.round(this.clientWidth || 0);
+        if (!w || Math.abs(w - (this._drawnWidth || 0)) < 3) return;
+        clearTimeout(this._resizeTimer);
+        this._resizeTimer = setTimeout(() => this._draw(), 150);
+      });
+      this._resize.observe(this);
+    }
+  }
+  disconnectedCallback() {
+    if (this._timer) { clearInterval(this._timer); this._timer = null; }
+    clearTimeout(this._resizeTimer);
+    if (this._resize) { this._resize.disconnect(); this._resize = null; }
+  }
+  _render(states) {
+    if (!this._def) { this._message("Chart", "This card needs `chart:` set to plan, history, load_solar or losses."); return; }
+    const def = CHART_DEFS[this._def];
+    const st = states[def.sensor];
+    const attrs = (st && st.attributes) || null;
+    const title = this._config.title || null;
+    if (!attrs || st.state === "unavailable") { this._message(title || def.title, "No data yet: the engine publishes it once it is running."); return; }
+    const width = Math.round(this.clientWidth || 0);
+    if (!width && typeof ResizeObserver !== "undefined") return;       // not laid out yet: the observer draws it once it has a width
+    this._drawnWidth = width || 800;
+    const hidden = this._hidden(this._def);
+    const model = chartModel(this._def, attrs, { width: this._drawnWidth, hidden, height: this._config.height, compact: this._config.compact });
+    const keys = model.series.filter((s) => s.type !== "hidden");
+    this.shadowRoot.innerHTML = `<style>${V2_CSS}
+      .cwrap { position: relative; touch-action: pan-y; }
+      .cwrap svg { width: 100%; min-width: 0; }
+      .tip { position: absolute; pointer-events: none; background: var(--card-background-color, #fff); color: var(--primary-text-color); border: 1px solid var(--divider-color);
+        border-radius: 8px; padding: 6px 10px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 260px; z-index: 2; display: none; }
+      .tip b { display: block; margin-bottom: 3px; }
+      .tip div { display: flex; gap: 6px; align-items: baseline; white-space: nowrap; }
+      .tip i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; flex: none; }
+    </style>
+    <ha-card><div class="head"><span class="title">${escHtml(title || model.title)}</span>
+      <span class="key" role="group" aria-label="Lines to show">${keys.map((s) => `<label><input type="checkbox" data-key="${s.key}" ${hidden.has(s.key) ? "" : "checked"}><i class="sw" style="background:${s.color};opacity:${Math.max(0.5, s.opacity || 1)}"></i>${escHtml(s.name)}</label>`).join("")}</span></div>
+      <div class="cwrap" id="cwrap"><svg id="csvg" role="img" aria-label="${escHtml(title || model.title)}" viewBox="0 0 ${model.width} ${model.height}" height="${model.height}"></svg><div class="tip" id="tip"></div></div></ha-card>`;
+    this._wireKey(this._def);
+    const svg = this.shadowRoot.getElementById("csvg");
+    const P = model.plot;
+    const clip = svgEl("clipPath", { id: "cclip" }, svgEl("defs", {}, svg));
+    svgEl("rect", { x: P.x0, y: P.y0 - 2, width: P.x1 - P.x0, height: P.y1 - P.y0 + 4 }, clip);
+    const muted = "var(--secondary-text-color)";
+    model.axes.filter((a) => a.shown).forEach((a) => {
+      const left = a.side === "left";
+      a.ticks.forEach((t) => {
+        if (left && a === model.axes.find((x) => x.shown && x.side === "left")) svgEl("line", { x1: P.x0, x2: P.x1, y1: t.y, y2: t.y, stroke: "var(--divider-color)", "stroke-width": 1 }, svg);
+        svgEl("text", { x: left ? P.x0 - 6 : P.x1 + 6 + (model.axes.filter((x) => x.shown && x.side === "right").indexOf(a)) * 52, y: t.y + 4, "text-anchor": left ? "end" : "start", "font-size": 11, fill: a.color || muted }, svg, t.label);
+      });
+      if (a.title && !model.compact) {
+        const tx = left ? 12 : P.x1 + 46 + model.axes.filter((x) => x.shown && x.side === "right").indexOf(a) * 52;
+        svgEl("text", { x: tx, y: (P.y0 + P.y1) / 2, "text-anchor": "middle", "font-size": 11, fill: a.color || muted, transform: `rotate(-90 ${tx} ${(P.y0 + P.y1) / 2})` }, svg, a.title);
+      }
+    });
+    model.xticks.forEach((t) => {
+      if (t.x < P.x0 - 1 || t.x > P.x1 + 1) return;
+      svgEl("line", { x1: t.x, x2: t.x, y1: P.y1, y2: P.y1 + 4, stroke: "var(--divider-color)" }, svg);
+      svgEl("text", { x: t.x, y: P.y1 + 18, "text-anchor": "middle", "font-size": 11, fill: muted }, svg, t.label);
+    });
+    const plot = svgEl("g", { "clip-path": "url(#cclip)" }, svg);
+    model.series.forEach((s) => {
+      if (s.hiddenByUser || s.type === "hidden") return;
+      if (s.type === "column") { s.bars.forEach((b) => svgEl("rect", { x: b.x, y: b.y, width: b.w, height: b.h, fill: s.color, "fill-opacity": s.opacity === undefined ? 0.9 : s.opacity, rx: 1 }, plot)); return; }
+      if (s.type === "area") svgEl("path", { d: s.fill, fill: s.color, "fill-opacity": s.opacity === undefined ? 0.3 : s.opacity, stroke: "none" }, plot);
+      if (s.type === "line" || s.width) {
+        if (s.width !== 0) svgEl("path", { d: s.d, fill: "none", stroke: s.color, "stroke-width": s.width || 2, "stroke-opacity": s.type === "area" ? 1 : (s.opacity || 1), "stroke-dasharray": s.dash ? String(s.dash) : "none", "stroke-linejoin": "round" }, plot);
+      }
+      if (s.labels) s.px.forEach((q, i) => svgEl("text", { x: q[0], y: q[1] - 6, "text-anchor": "middle", "font-size": 10, fill: s.color }, plot, `${Math.round(s.pts[i][1])}%`));
+    });
+    if (model.nowX !== null) {
+      svgEl("line", { x1: model.nowX, x2: model.nowX, y1: P.y0, y2: P.y1, stroke: "var(--primary-text-color)", "stroke-width": 1, "stroke-dasharray": "4 3", "stroke-opacity": 0.6 }, svg);
+      svgEl("text", { x: model.nowX + 4, y: P.y0 + 10, "font-size": 10.5, fill: muted }, svg, "Now");
+    }
+    const cursor = svgEl("line", { x1: 0, x2: 0, y1: P.y0, y2: P.y1, stroke: "var(--primary-text-color)", "stroke-width": 1, "stroke-opacity": 0.5, visibility: "hidden" }, svg);
+    const cover = svgEl("rect", { x: P.x0, y: P.y0, width: P.x1 - P.x0, height: P.y1 - P.y0, fill: "transparent" }, svg);
+    const tip = this.shadowRoot.getElementById("tip");
+    const wrap = this.shadowRoot.getElementById("cwrap");
+    const show = (ev) => {
+      const box = svg.getBoundingClientRect();
+      const px = ((ev.clientX - box.left) / (box.width || 1)) * model.width;
+      const ms = model.window.from + ((Math.min(Math.max(px, P.x0), P.x1) - P.x0) / (P.x1 - P.x0)) * (model.window.to - model.window.from);
+      const rows = chartReadout(model, ms, attrs);
+      if (!rows.length) { tip.style.display = "none"; cursor.setAttribute("visibility", "hidden"); return; }
+      const when = model.id === "losses" ? `${CHART_DAYS[new Date(ms).getDay()]} ${chartDm(ms)}` : chartHm(ms);
+      tip.innerHTML = `<b>${escHtml(when)}</b>${rows.map((r) => `<div><i style="background:${r.color}"></i><span>${escHtml(r.name)}</span> <span class="num">${escHtml(r.text)}</span></div>`).join("")}`;
+      tip.style.display = "block";
+      const left = ev.clientX - wrap.getBoundingClientRect().left;
+      tip.style.left = `${left > wrap.clientWidth / 2 ? Math.max(0, left - tip.offsetWidth - 12) : left + 12}px`;
+      tip.style.top = "8px";
+      cursor.setAttribute("x1", Math.min(Math.max(px, P.x0), P.x1)); cursor.setAttribute("x2", Math.min(Math.max(px, P.x0), P.x1)); cursor.setAttribute("visibility", "visible");
+    };
+    const hide = () => { tip.style.display = "none"; cursor.setAttribute("visibility", "hidden"); };
+    cover.addEventListener("pointermove", show); cover.addEventListener("pointerdown", show);
+    cover.addEventListener("pointerleave", hide); cover.addEventListener("pointercancel", hide);
+  }
+}
+
 [["powerengine-engine-card", PowerEngineEngineCard, "PowerEngine engine v2", "Engine v2's mode, why, the value of a stored kWh against the buy and sell lines, and what ends the mode."],
   ["powerengine-v2-plan-card", PowerEngineV2PlanCard, "PowerEngine engine v2 plan", "Engine v2's expected timeline and the value map."],
   ["powerengine-v2-health-card", PowerEngineV2HealthCard, "PowerEngine engine v2 health", "Engine v2's recalculations, flip-flops, everyday range and learned weights."],
   ["powerengine-engine-badge-card", PowerEngineEngineBadgeCard, "PowerEngine engine badge", "Active, Paused or Passive for one engine, with what that means (engine: v1 or v2)."],
   ["powerengine-v2-history-card", PowerEngineV2HistoryCard, "PowerEngine engine v2 history", "A day of engine v2: level as it ran against the expected level, the modes, prices and value, with a day picker."],
+  ["powerengine-chart-card", PowerEngineChartCard, "PowerEngine chart", "The plan, history, load and solar, and losses charts of the engine's sensors (chart: plan | history | load_solar | losses)."],
   ["powerengine-events-card", PowerEngineEventsCard, "PowerEngine events by month", "Grid-event and free-power totals by month; select a month for its days."],
   ["powerengine-engine-compare-card", PowerEngineEngineCompareCard, "PowerEngine engines compared", "What engine v1, engine v2 and the best possible would have saved on each of the last days."],
 ].forEach(([tag, cls, name, description]) => {
@@ -9187,7 +9560,7 @@ class PowerEngineEventsCard extends PowerEngineV2Card {
 });
 
 if (typeof module !== "undefined") {
-  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerSupported, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, ROUTER_APP_VERSION, whatsappSupported, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, hasUpdateService, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, MIN_APP_VERSION, parseVersion, versionOlder, versionWarnings, logRows, logWhen, escHtml, findRcEntities, controlEntities, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, SETUP_REPOS, findHacsRepo, hacsInfoPayload, hacsListPayload, hacsAddPayload, hacsDownloadPayload, installStep, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, FREE_LOADS_APP_VERSION, freeLoadsSupported, freeLoadDraft, buildFreeLoads, DEVICES_APP_VERSION, DEVICE_INPUTS, devicesSupported, deviceDraft, deviceNewId, buildDevices, deviceReadout,
+  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerSupported, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, ROUTER_APP_VERSION, whatsappSupported, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, hasUpdateService, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, MIN_APP_VERSION, parseVersion, versionOlder, versionWarnings, logRows, logWhen, escHtml, findRcEntities, controlEntities, chartPts, chartClose, chartWindow, chartTimeTicks, chartNiceTicks, chartAxisRange, chartSmoothPath, chartStepPath, chartReadout, chartModel, CHART_DEFS, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, SETUP_REPOS, findHacsRepo, hacsInfoPayload, hacsListPayload, hacsAddPayload, hacsDownloadPayload, installStep, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, FREE_LOADS_APP_VERSION, freeLoadsSupported, freeLoadDraft, buildFreeLoads, DEVICES_APP_VERSION, DEVICE_INPUTS, devicesSupported, deviceDraft, deviceNewId, buildDevices, deviceReadout,
   wizardDeviceName, wizardInUse, wizardOthers, wizardUsedEntities, wizardPlantFromDevice, wizardPlantId, EXPORT_FORMAT, EXPORT_VERSION, EXPORT_STATE_MAX, wizardInfo, wizardFacts, wizardMatch, wizardCandidates, wizardRoles, wizardSuggest, wizardPlantGuess, wizardMissing, wizardWatts, wizardSignCheck, wizardBalance, scrubText, buildCandidateExport, candidateFileName, wizardEnergyDevices,
   SYSTEM_DRAFT_KEY, systemKinds, systemItems, systemMissingParts, opsSet, opsRemove, opsUndoRemove, opsTag, opsSummary, applyOps, featuresLeftOut, buildApplyConfig, equipmentOf, systemFingerprint, overlayEquipment, systemImpact, systemDraftLoad, systemDraftSave,
   OVERRIDE_MODES, OVERRIDE_PERIODS, OVERRIDE_MAX_SLOTS, inverterWords, overrideEndOptions, overridePayload, overrideView, overrideSummary,
