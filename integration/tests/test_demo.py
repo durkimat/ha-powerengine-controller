@@ -1,4 +1,4 @@
-"""The demo, started from the dashboard on a PowerEngine that isn't set up, with the real engine as the integration's process."""
+"""The demo, started from the dashboard on a PowerEngine that is not set up, run by the real engine."""
 
 import os
 
