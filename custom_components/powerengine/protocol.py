@@ -22,6 +22,8 @@ Requests (engine -> integration) carry an "id" and are answered by {"t": "reply"
     entity   {"component", "key", "name", "options"}   define one of the engine's own entities (see below)
     retire   {"entity_id"}                  remove one of them
     online   {"online"}                     the engine is up (true) or down (false): its entities are available or not
+    failsafe {"calls": [...], "armed"}      what to do to the inverter if the engine goes quiet while it is in control
+                                            (see below); sent again whenever it changes
     on       {"event"} / off {"event"}      start or stop being sent this event
 
 The engine's own entities (`sensor.pe_state_status`, ...) are defined by the engine, so a new one needs no new
@@ -34,6 +36,12 @@ writes plain states instead. A request this side does not know is answered with 
 Pushes (integration -> engine, no id): {"t": "changed", "entity_id", "new"} for a watched entity, {"t": "event",
 "event", "data", "context"?} for an event the engine asked for ("context" is {"user_id", "id"}: who caused it),
 {"t": "stop"} to ask the engine to shut down.
+
+The failsafe is data, not code: "calls" is a list of {"service": "domain/name", "data": {...}} (to be made in order,
+skipping a number or select already at the value asked) and {"wait_s": n} (a pause, before the update buttons); "armed"
+says whether the engine is in control of the inverter now. The integration keeps the last one it was given (it must
+outlive the engine), and if the engine's heartbeat stops for 15 minutes while it is armed, makes the calls and says so.
+An integration that does not know the request answers with an error, and the engine keeps its other arrangements.
 
 A full state is {"entity_id", "state", "attributes", "last_changed", "last_updated"} as Home Assistant keeps it.
 
@@ -57,7 +65,8 @@ from typing import Any
 VERSION = 1
 MAX_LINE = 32 * 1024 * 1024        # a day's history can be large, but nothing is bigger than this
 
-REQUESTS = ("watch", "states", "history", "template", "call", "fire", "set", "entity", "retire", "online", "on", "off")
+REQUESTS = ("watch", "states", "history", "template", "call", "fire", "set", "entity", "retire", "online", "failsafe",
+            "on", "off")
 PUSHES = ("changed", "event", "stop")
 HANDSHAKE = ("challenge", "hello", "welcome", "refuse")
 

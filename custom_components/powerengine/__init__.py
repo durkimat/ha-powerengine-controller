@@ -37,6 +37,7 @@ from .const import (
     PLATFORMS,
     SERVICE_REFRESH_SHADOW,
     SERVICE_RESTART_ENGINE,
+    SERVICE_UPDATE,
     SHADOW_FOLDER,
     STATUS_NEEDS_RESTART,
 )
@@ -50,6 +51,8 @@ from .native import NativeEntities
 from .protocol import new_secret
 from .shadow import Ledger, clear, seed
 from .supervisor import EngineSupervisor
+from .updater import async_update
+from .watchdog import Watchdog
 
 _LOGGER = logging.getLogger(__name__)
 ENGINE_DIR = Path(__file__).parent / "engine"
@@ -64,6 +67,7 @@ class Runtime:
     supervisor: EngineSupervisor
     unsub: list
     check: Callable[[], Awaitable[None]] | None = None
+    watchdog: Watchdog | None = None
 
 
 def signal(entry: ConfigEntry) -> str:
@@ -123,7 +127,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ledger = Ledger(folder / "shadow_ledger.jsonl", notify=lambda: hass.loop.call_soon_threadsafe(changed)) \
         if shadow else None
     native = NativeEntities(hass, entry)
-    home = HassHome(hass, native, ledger)
+    watchdog = None if shadow else Watchdog(hass, "sensor.pe_diag_heartbeat")
+    if watchdog is not None:
+        await watchdog.async_load()
+    home = HassHome(hass, native, ledger, watchdog)
     secret = new_secret()
     server = HostServer(home, secret, on_watch=home.watch, on_listen=home.listen,
                         on_engine=lambda info: hass.loop.call_soon_threadsafe(engine_moved, info))
@@ -145,7 +152,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         running_version=lambda: (server.engine or {}).get("engine"), ask_stop=server.ask_to_stop,
         on_change=lambda: (changed(), _protocol_issue(hass, supervisor)), on_crashing=crashing,
         extra_args=("--shadow",) if shadow else ())
-    runtime = Runtime(native, home, server, supervisor, [])
+    runtime = Runtime(native, home, server, supervisor, [], watchdog=watchdog)
     entry.runtime_data = runtime
     await hass.async_add_executor_job(supervisor.refresh_installed)
 
@@ -155,6 +162,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await refresh_card(hass)                    # an update may have replaced the card: a new address for it
         if not shadow:
             register_dashboard(hass, folder / "dashboard.yaml")      # (the dashboard that uses the card: added once)
+            await watchdog.check()                  # the inverter back to Self-Use if the engine has gone quiet
         if not supervisor.started:
             supervisor.start()
         elif supervisor.update_needed():
@@ -168,6 +176,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def restart_engine(call: ServiceCall) -> None:
         await supervisor.restart()
 
+    async def update(call: ServiceCall) -> None:
+        await async_update(hass, runtime)
+
     async def refresh_shadow(call: ServiceCall) -> None:
         """Copy the live folder afresh (the shadow starts again from what the live PowerEngine has now)."""
         if not shadow:
@@ -179,6 +190,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not hass.services.has_service(DOMAIN, SERVICE_RESTART_ENGINE):
         hass.services.async_register(DOMAIN, SERVICE_RESTART_ENGINE, restart_engine, schema=vol.Schema({}))
+    if not shadow and not hass.services.has_service(DOMAIN, SERVICE_UPDATE):
+        hass.services.async_register(DOMAIN, SERVICE_UPDATE, update, schema=vol.Schema({}))
     if shadow and not hass.services.has_service(DOMAIN, SERVICE_REFRESH_SHADOW):
         hass.services.async_register(DOMAIN, SERVICE_REFRESH_SHADOW, refresh_shadow, schema=vol.Schema({}))
     entry.async_on_unload(entry.add_update_listener(_reload))
@@ -216,7 +229,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await unregister_card(hass)
         unregister_dashboard(hass)
     if not hass.config_entries.async_loaded_entries(DOMAIN):
-        for service in (SERVICE_RESTART_ENGINE, SERVICE_REFRESH_SHADOW):
+        for service in (SERVICE_RESTART_ENGINE, SERVICE_UPDATE, SERVICE_REFRESH_SHADOW):
             if hass.services.has_service(DOMAIN, service):
                 hass.services.async_remove(DOMAIN, service)
     return ok

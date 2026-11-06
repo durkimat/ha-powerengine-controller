@@ -99,8 +99,8 @@ class Host(Protocol):
     @property
     def native_entities(self) -> Any:
         """Where the engine's own entities can be made as real Home Assistant entities (unique id, device, registry):
-        an object with `define(component, key, name, options)`, `retire(entity_id)` and `online(bool)`, or None where
-        the host can only write states (AppDaemon)."""
+        an object with `define(component, key, name, options)`, `retire(entity_id)`, `online(bool)` and
+        `failsafe(calls, armed)`, or None where the host can only write states (the tests, the demo)."""
 
     def log(self, msg: str, *args: Any, **kwargs: Any) -> Any:
         """The host's own log (level="INFO" by default). The engine's `log` adds its diagnostics ring and calls this."""

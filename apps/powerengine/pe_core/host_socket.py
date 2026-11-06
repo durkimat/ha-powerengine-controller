@@ -50,6 +50,7 @@ class NativeEntities:
         self._host = host
         self.defined: dict[str, tuple] = {}              # key -> (component, name, options)
         self.is_online: bool | None = None
+        self.failsafe_sent: tuple | None = None          # (calls, armed) the integration last accepted
 
     def define(self, component: str, key: str, name: str, options: dict) -> None:
         self.defined[key] = (component, name, dict(options))
@@ -64,12 +65,20 @@ class NativeEntities:
         self.is_online = online
         self._host.request("online", online=online)
 
+    def failsafe(self, calls: list, armed: bool) -> None:
+        """Tell the integration what to do to the inverter if this engine stops (raises HostError where the integration
+        does not know the request)."""
+        self._host.request("failsafe", calls=calls, armed=armed)
+        self.failsafe_sent = (calls, armed)
+
     def replay(self) -> None:
         """After a reconnection: define everything again, then say whether the engine is up."""
         for key, (component, name, options) in list(self.defined.items()):
             self._host.request("entity", component=component, key=key, name=name, options=options)
         if self.is_online is not None:
             self._host.request("online", online=self.is_online)
+        if self.failsafe_sent is not None:
+            self._host.request("failsafe", calls=self.failsafe_sent[0], armed=self.failsafe_sent[1])
 
 
 class SocketHost:

@@ -46,6 +46,8 @@ class Home(Protocol):
 
     def entities_online(self, online: bool) -> None: ...
 
+    def set_failsafe(self, calls: list, armed: bool) -> None: ...
+
 
 def _describe(err: Exception) -> str:
     """The error as text for the engine. Some of Home Assistant's exceptions build their message from a translation,
@@ -236,6 +238,9 @@ class HostServer:
             return None
         if kind == "online":
             home.entities_online(bool(m.get("online")))
+            return None
+        if kind == "failsafe":
+            home.set_failsafe(list(m.get("calls") or []), bool(m.get("armed")))
             return None
         if kind == "on":
             with self._lock:

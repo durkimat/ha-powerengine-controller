@@ -81,7 +81,7 @@ async def test_a_shadow_run_publishes_its_own_entities_and_leaves_the_live_ones_
     assert hass.states.get("sensor.pe_state_status").attributes == {"live": True}
     registry = er.async_get(hass)
     mine = [e for e in registry.entities.values() if e.platform == DOMAIN and "pe_shadow_" in e.entity_id]
-    assert len(mine) == 84
+    assert len(mine) == 83
     assert registry.async_get("sensor.pe_shadow_diag_version").unique_id == "powerengine_shadow_diag_version"
     assert registry.async_get("sensor.pe_diag_version") is None
     device = dr.async_get(hass).async_get(registry.async_get("sensor.pe_shadow_diag_version").device_id)

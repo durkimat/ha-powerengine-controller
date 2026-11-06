@@ -28,6 +28,7 @@ from pe_core import (
     damping,
     diagnostics,
     earlytarget,
+    failsafe,
     fcsnap,
     forecastlog,
     gridcheck,
@@ -122,10 +123,11 @@ from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_plan, day_view
 from pe_core.hold import Hold
 from pe_core.host_local import LocalHost
+from pe_core.host_socket import HostError, HostUnavailable
 from pe_core.journal import WriteJournal, day_summary, is_staged
 from pe_core.loadstore import LoadStore
 from pe_core.lowwrite import Study as LowWriteStudy
-from pe_core.modes import GUARDS, UNVERIFIED, effective_mode, guard_problems, guard_status
+from pe_core.modes import ACTIVE, GUARDS, PAUSED, UNVERIFIED, effective_mode, guard_problems, guard_status
 from pe_core.names import build_names, default_names, fill, neutral_names, set_current
 from pe_core.notify import Notifier, axle_message, daily_message, free_message, health_message, input_message
 from pe_core.optimiser import compare, optimise
@@ -390,7 +392,7 @@ class Engine:
                 self.log(f"Could not set up the forecast snapshots or engine v2 history: {err!r}", level="WARNING")
         self._publish_v2_settings()
         self._evaluate()                                   # also publishes mode + config status
-        self._package_sync("start")
+        self._failsafe_sync(force=True)
         self._cycle({})
         self._sync_dashboard()
 
@@ -663,7 +665,7 @@ class Engine:
             # control resumes within a cycle of them coming back, not up to 5 minutes
             self._evaluate()
         self._release_if_still_missing()
-        self._publish_package()                            # whether Home Assistant has loaded the package files
+        self._failsafe_sync()                              # what the integration does if this engine stops
         if self.cfg is not None and self.mode.effective != "unconfigured":
             try:
                 readings = read(self.cfg, self._state_all, None,
@@ -4509,52 +4511,85 @@ class Engine:
             except OSError as err:
                 self.log(f"Could not write the dashboard file {target}: {err}", level="WARNING")
 
-    # --- PowerEngine's own Home Assistant package files -----------------------------------
+    # --- the failsafe the integration holds for when this engine stops --------------------------------
 
     def _ha_config_dir(self):
         return os.path.dirname(os.path.dirname(self._save_path()))        # e.g. /homeassistant
 
-    def _package_sync(self, why="start"):
-        """Keep the package file in <ha config>/packages in step with this version. Never in a demo or a shadow
-        run, never creates the folder, never raises: a problem is a warning and the sensor."""
-        if self._demo or getattr(self, "_shadow", False) or self.cfg is None:
+    def _failsafe_calls(self):
+        """The service calls that hand the inverter back to Self-Use (windows closed, remote control Off), built from
+        the adapter and the entities in use; None when there is nothing the engine could say."""
+        inverter = self._inverter()
+        calls = []
+        slots = self._slot_map()
+        if slots:
+            entities = self._slot_keys(slots)
+            calls += failsafe.calls_for(inverter.release_slots(entities, {}), entities, inverter)
+        else:
+            want = inverter.release_rolling()
+            entities, missing = self._control_entities(want)
+            if not missing:
+                calls += failsafe.calls_for(writes_needed(want, {}, inverter.button_role), entities, inverter)
+        rc = self._rc_entities()
+        if rc.get("rc_mode"):
+            calls += failsafe.calls_for([inverter.ram_off_command().writes()[0]], rc, inverter)
+        return calls or None
+
+    def _failsafe_sync(self, force=False):
+        """Tell the integration what to do to the inverter if this engine goes quiet while in control, whenever that
+        changes (and again, every two minutes, until the integration has taken it: an integration not yet restarted
+        after an update does not know how). Once it has, the YAML package earlier versions wrote is retired. Never in
+        a demo or a shadow run; never raises."""
+        native = self.host.native_entities
+        if self._demo or getattr(self, "_shadow", False) or self.cfg is None or native is None:
+            return
+        now = datetime.now(timezone.utc)
+        if not force and now < getattr(self, "_failsafe_retry_at", now):
             return
         try:
-            result = hapackage.sync(self._ha_config_dir(), hapackage.shipped_texts(),
-                                    datetime.now().strftime("%Y%m%d-%H%M%S"))
-            self._pkg_result = result
-            for a in hapackage.changes(result):
-                self.log(f"Home Assistant package: {hapackage.describe_change(a)}")
-            for _name, err in result["errors"]:
-                self.log(f"Home Assistant package could not be written: {err}", level="WARNING")
-            if not result["dir_exists"] and why == "start":
-                self.log("Home Assistant package: there is no packages folder, so PowerEngine does not write its "
-                         "package (see the install guide)")
-            changed = hapackage.changes(result)
-            if changed:
-                key = "package:" + ",".join(f"{a.name}:{a.action}" for a in changed) + ":" + datetime.now(
-                    timezone.utc).strftime("%Y%m%d")
-                self._notify("health", (key, "PowerEngine updated its Home Assistant package",
-                                        "PowerEngine updated its Home Assistant package: press \"Load PowerEngine's "
-                                        "Home Assistant changes\" on the Config page so Home Assistant "
-                                        "uses the change."))
+            calls = self._failsafe_calls() or []
+            armed = bool(calls) and self.mode.effective in (ACTIVE, PAUSED)
+            if getattr(native, "failsafe_sent", None) != (calls, armed):
+                native.failsafe(calls, armed)
+                n = len([c for c in calls if "service" in c])
+                self.log(f"The inverter's failsafe is held by the integration ({n} calls, "
+                         f"{'armed' if armed else 'not armed: PowerEngine is not in control'})")
+            self._failsafe_retry_at = now
+            self._retire_package()
+        except HostUnavailable:
+            self._failsafe_retry_at = now + timedelta(minutes=1)          # not connected: the reconnection resends it
+        except HostError as err:
+            self._failsafe_retry_at = now + timedelta(minutes=2)
+            if not getattr(self, "_failsafe_told", False):
+                self._failsafe_told = True
+                self.log(f"The integration cannot hold the inverter's failsafe yet ({err}); an older watchdog "
+                         "stays in charge until Home Assistant is restarted with the new integration")
         except Exception as err:
-            self._pkg_result = {"dir_exists": True, "actions": [], "errors": [("", f"{err!r}")]}
-            self.log(f"Home Assistant package sync failed: {err!r}", level="WARNING")
-        self._publish_package()
+            self._failsafe_retry_at = now + timedelta(minutes=2)
+            self.log(f"Could not hand the inverter's failsafe to the integration: {err!r}", level="WARNING")
 
-    def _entity_present(self, entity_id):
-        try:
-            return self.host.get_state(entity_id) is not None
-        except Exception:
-            return True                                   # can't tell: don't claim a reload is needed
-
-    def _publish_package(self):
-        result = self.__dict__.get("_pkg_result")
-        if result is None or self._demo:
+    def _retire_package(self):
+        """The package file earlier versions kept in <ha config>/packages (a one-button update script and a watchdog)
+        is replaced by the integration's own update service and watchdog: remove it, keeping a backup, and have Home
+        Assistant drop the script and automation it defined. Once per run."""
+        if getattr(self, "_package_retired", False):
             return
-        state, attrs = hapackage.report(result, self._entity_present)
-        self._publish_if_changed("diag_package", state, attrs)
+        self._package_retired = True
+        result = hapackage.retire(self._ha_config_dir(), datetime.now().strftime("%Y%m%d-%H%M%S"))
+        for name in result["removed"]:
+            self.log(f"Home Assistant package {name} removed: the integration provides its update and watchdog now "
+                     "(a backup is beside it)")
+        for name, err in result["errors"]:
+            self.log(f"Could not remove the Home Assistant package {name}: {err}", level="WARNING")
+        for name in result["unmanaged"]:
+            self.log(f"The package file {name} is not PowerEngine's to remove; PowerEngine no longer needs it "
+                     "(its update service and watchdog are in the integration)", level="WARNING")
+        if result["removed"]:
+            for service in ("script/reload", "automation/reload"):
+                try:
+                    self.host.call_service(service)
+                except Exception as err:
+                    self.log(f"Could not reload {service.split('/')[0]}s: {err!r}", level="WARNING")
 
     # --- saving from the config card -------------------------------------------------
 
@@ -4574,7 +4609,6 @@ class Engine:
             if not isinstance(new, dict):
                 raise ConfigError("no configuration received")
             new = coerce_flags(new)          # true/false that arrived as text or 0/1 (the demo's settings save)
-            controller_before = other_controller(self.cfg)
             old_devices = self.cfg.raw.get("devices") if self.cfg else None
             if old_devices is not None and "devices" not in new:     # a card that doesn't know devices keeps them
                 new = {**new, "devices": old_devices}
@@ -4603,8 +4637,7 @@ class Engine:
                         + (" The inverter changed, so PowerEngine is Passive until the tests are re-run."
                            if switched else ""))
         self._reload()
-        if other_controller(self.cfg) != controller_before:
-            self._package_sync("save")
+        self._failsafe_sync(force=True)                    # the inverter or its control entities may have changed
         if switched:
             self._notify("health", (f"site:{new['site'].get('inverter')}:{new['site'].get('inverter_firmware')}",
                                     "PowerEngine: inverter changed",

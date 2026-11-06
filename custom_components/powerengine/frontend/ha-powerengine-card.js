@@ -7,7 +7,7 @@
  * an HA event; the app validates, writes config.yaml (with a backup) and
  * reports the result.
  */
-const CARD_VERSION = "0.9.217";
+const CARD_VERSION = "0.9.218";
 const VERSION_SENSOR = "sensor.pe_diag_version";
 // The oldest app this card works with (0.9.69 added the demo_days attribute the welcome card reads). Raise it only when
 // the card starts to need something a newer app publishes. The app publishes its own minimum as min_card_version.
@@ -894,106 +894,6 @@ function el(tag, attrs, ...children) {
   return node;
 }
 
-// --- PowerEngine's Home Assistant package (app 0.9.109+) --------------------------------------------------------
-// The app writes its package files into <config>/packages/ and publishes sensor.pe_diag_package: state ok |
-// reload_needed | no_packages_dir | unmanaged | error; attributes {files, reload_needed, message}. Older apps publish
-// nothing, so the card shows nothing about it.
-const PACKAGE_SENSOR = "sensor.pe_diag_package";
-const PACKAGE_BANNER_TEXT = "PowerEngine has updated its Home Assistant package.";
-const PACKAGE_BUTTON = "Load PowerEngine's Home Assistant changes";
-const PACKAGE_ASK_ADMIN = "Ask an administrator to load PowerEngine's Home Assistant changes.";
-const PACKAGE_PROBLEMS = ["no_packages_dir", "unmanaged", "error"];
-const INSTALL_GUIDE_URL = "https://github.com/durkimat/ha-powerengine-controller/blob/main/docs/INSTALL.md";
-
-/** What the app publishes, or null when there is no sensor (older app). */
-function packageInfo(states) {
-  const st = (states || {})[PACKAGE_SENSOR];
-  if (!st || st.state === "unavailable" || st.state === "unknown") return null;
-  const a = st.attributes || {};
-  return { state: String(st.state), reloadNeeded: a.reload_needed === true || st.state === "reload_needed",
-    message: typeof a.message === "string" ? a.message : "", files: Array.isArray(a.files) ? a.files : [] };
-}
-
-/** The service call the button makes: a reload of everything, no restart. */
-function packageReloadPayload() { return { domain: "homeassistant", service: "reload_all", data: {} }; }
-
-/** Should the card prompt for a reload straight after a save? Only when the app publishes the sensor and the
- *  other controller was changed (the value sent differs from the one the app was using). */
-function packagePromptAfterSave(info, sentValue, usedValue) {
-  if (!info) return false;
-  if (typeof sentValue !== "string" || !sentValue) return false;
-  return sentValue !== usedValue;
-}
-
-/** The banner: {show, text, button (label or null), busy, error}. ctx: {info, isAdmin, forced, status, error}.
- *  status: "" | "loading" | "loaded" | "error". It leaves by itself when the app reports ok. */
-function packageBannerView(ctx) {
-  const c = ctx || {};
-  const info = c.info || null;
-  const off = { show: false, text: "", button: null, busy: false, error: "" };
-  if (!info) return off;
-  const wanted = info.reloadNeeded || (!!c.forced && !PACKAGE_PROBLEMS.includes(info.state));
-  if (!wanted) return off;
-  if (info.state === "ok" && c.status === "loaded") return off;
-  if (!c.isAdmin) return { show: true, text: `${PACKAGE_BANNER_TEXT} ${PACKAGE_ASK_ADMIN}`, button: null, busy: false, error: "" };
-  if (c.status === "loading") return { show: true, text: PACKAGE_BANNER_TEXT, button: "Loading…", busy: true, error: "" };
-  if (c.status === "loaded") return { show: true, text: PACKAGE_BANNER_TEXT, button: "Loaded", busy: true, error: "" };
-  return { show: true, text: PACKAGE_BANNER_TEXT, button: PACKAGE_BUTTON, busy: false, error: c.status === "error" ? (c.error || "Could not load.") : "" };
-}
-
-/** A line for the states the app can't fix itself: {text, href, label}, or null for ok / reload_needed / no sensor. */
-function packageProblemLine(info) {
-  if (!info || !PACKAGE_PROBLEMS.includes(info.state)) return null;
-  const fallback = { no_packages_dir: "Home Assistant has no packages folder for PowerEngine to write to.",
-    unmanaged: "PowerEngine's Home Assistant package was set up by hand, so PowerEngine leaves it alone.",
-    error: "PowerEngine couldn't write its Home Assistant package." }[info.state];
-  return { text: info.message || fallback, href: INSTALL_GUIDE_URL, label: "Install guide" };
-}
-
-/** The banner as a DOM node with an update(hass, forced) method; one per card. */
-function makePackageBox() {
-  const box = document.createElement("div");
-  box.style.cssText = "display:none;margin:8px 0;padding:8px 12px;border-radius:6px;background:rgba(249,168,37,.15);align-items:center;gap:10px;flex-wrap:wrap";
-  const text = document.createElement("span");
-  text.style.cssText = "flex:1 1 220px";
-  const err = document.createElement("div");
-  err.style.cssText = "flex:1 1 100%;color:var(--error-color,#db4437);font-size:.9em";
-  const btn = document.createElement("button");
-  btn.style.cssText = "font:inherit;padding:6px 14px;border-radius:6px;border:none;background:var(--primary-color,#03a9f4);color:var(--text-primary-color,#fff);cursor:pointer";
-  box.append(text, btn, err);
-  const st = { status: "", error: "", hass: null, forced: false };
-  const draw = () => {
-    const hass = st.hass;
-    const v = packageBannerView({ info: packageInfo(hass && hass.states), isAdmin: !!(hass && hass.user && hass.user.is_admin),
-      forced: st.forced, status: st.status, error: st.error });
-    box.style.display = v.show ? "flex" : "none";
-    text.textContent = v.text;
-    btn.style.display = v.button ? "" : "none";
-    btn.textContent = v.button || "";
-    btn.disabled = v.busy;
-    err.textContent = v.error;
-    err.style.display = v.error ? "" : "none";
-  };
-  btn.addEventListener("click", async () => {
-    if (st.status === "loading" || !st.hass) return;
-    st.status = "loading"; st.error = ""; draw();
-    try {
-      const p = packageReloadPayload();
-      await st.hass.callService(p.domain, p.service, p.data);
-      st.status = "loaded";
-    } catch (e) { st.status = "error"; st.error = "Could not load: " + ((e && e.message) || e); }
-    draw();
-  });
-  box.update = (hass, forced) => {
-    st.hass = hass;
-    if (forced !== undefined) st.forced = !!forced;
-    const info = packageInfo(hass && hass.states);
-    if (st.status === "loaded" && info && info.state === "ok") { st.status = ""; st.forced = false; }
-    draw();
-  };
-  return box;
-}
-
 class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLElement : class {}) {
   setConfig(config) {
     this._config = config || {};
@@ -1067,8 +967,6 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
       this._unsub = await this._hass.connection.subscribeEvents((ev) => {
         const d = ev.data || {};
         this._saving = false;
-        if (d.ok && this._pkgPending) { this._pkgForced = true; if (this._pkgBox) this._pkgBox.update(this._hass, true); }
-        this._pkgPending = false;
         this._setBanner(d.ok ? "ok" : "error", d.ok ? `Saved. PowerEngine is reloading. ${d.message || ""}` : `Not saved: ${d.message}`);
         this._refresh();
       }, RESULT_EVENT);
@@ -1450,13 +1348,7 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     this._pickers = [];
     const content = el("div", { class: "content" });
     this._banner = el("div", { class: "banner info" });
-    this._pkgBox = makePackageBox();
-    content.append(this._pkgBox);
     content.append(this._banner);
-    this._pkgBox.update(this._hass, this._pkgForced);
-    const pkgProblem = packageProblemLine(packageInfo(this._hass && this._hass.states));
-    if (pkgProblem) content.append(el("div", { class: "warning" }, pkgProblem.text + " ",
-      el("a", { href: pkgProblem.href, target: "_blank", rel: "noopener noreferrer" }, pkgProblem.label)));
     this._setBanner("info", this._readOnly
       ? "View only: log in as an admin to change PowerEngine's configuration."
       : this._prefilled
@@ -2156,7 +2048,6 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
   _refresh() {
     if (!this._built && !this._rows.length) return;
     const states = this._hass.states;
-    if (this._pkgBox) this._pkgBox.update(this._hass, this._pkgForced);
     this._updateNotifyLog();
     const mapping = states[MAPPING_SENSOR];
     const checks = ((mapping && mapping.attributes) || {}).checks || {};
@@ -2300,8 +2191,6 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     const problem = this._draft.notifications && this._draft.notifications.channels ? routerProblem(this._draft.notifications) : "";
     if (problem) { this._setBanner("error", `Not saved: ${problem}`); return; }
     this._saving = true;
-    this._pkgPending = packagePromptAfterSave(packageInfo(this._hass.states), (this._draft.system || {}).other_controller,
-      otherControllerValue(this._hass.states) || ((this._saved.system || {}).other_controller));
     this._refresh();
     try {
       await this._hass.callWS({ type: "fire_event", event_type: SAVE_EVENT, event_data: { config: buildConfig(this._draft) } });
@@ -2719,9 +2608,14 @@ if (typeof customElements !== "undefined" && !customElements.get("powerengine-te
 
 // --- Update (Configuration page) ---------------------------------------------------------------------------
 // One button: ask HACS to check GitHub now for PowerEngine (otherwise HACS may not notice a new release for
-// hours), then run the handover package's script.powerengine_update, which installs what's new and restarts the
-// engine. Admins only (HACS's refresh needs admin).
+// hours), then call the integration's powerengine.update service, which installs what's new and restarts the
+// engine. Admins only (HACS's refresh needs admin). Until Home Assistant has restarted onto an integration that has
+// the service, the script an earlier version wrote is used if it is there.
 const UPDATE_SCRIPT = "script.powerengine_update";
+
+function hasUpdateService(hass) {
+  return !!(hass && hass.services && hass.services.powerengine && hass.services.powerengine.update);
+}
 
 function peRepos(list) {
   return (list || []).filter((r) => r && r.installed && /powerengine/i.test(String(r.full_name || r.name || "")));
@@ -2756,7 +2650,6 @@ class PowerEngineUpdateCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
 
   set hass(hass) {
     this._hass = hass;
-    if (this._pkgBox) this._pkgBox.update(hass);
     const running = ((hass.states || {})["sensor.pe_diag_version"] || {}).state;
     if (this._busy && this._from && running && running !== this._from && running !== "unavailable") {
       this._busy = false;
@@ -2807,13 +2700,25 @@ class PowerEngineUpdateCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
         this._status("Asking HACS to check GitHub for new releases…");
         await this._refresh();
       }
-      if (!hass.states[UPDATE_SCRIPT]) {
+      const native = hasUpdateService(hass);
+      if (!native && !hass.states[UPDATE_SCRIPT]) {
         this._busy = false;
-        this._status("The update script isn't installed: PowerEngine writes it to /config/packages/ itself once " +
-          "`homeassistant: packages: !include_dir_named packages` is in configuration.yaml; then reload scripts.");
+        this._status("The update service isn't available yet: restart Home Assistant once so it loads the current " +
+          "PowerEngine integration.");
         return;
       }
-      this._status("Installing what's new and restarting the engine (about a minute)…");
+      this._status("Installing what's new and restarting the engine (a minute or two)…");
+      if (native) {
+        await hass.callService("powerengine", "update", {});
+        this._busy = false;
+        const done = ((this._hass.states || {})["sensor.pe_diag_version"] || {}).state;
+        this._status(done === this._from
+          ? `Still ${done}: nothing new to install (see the notification).`
+          : `PowerEngine ${done} is running. Reload the page to load the matching cards.`);
+        this._reload = done !== this._from;
+        this._render();
+        return;
+      }
       await hass.callService("script", "turn_on", { entity_id: UPDATE_SCRIPT });
       setTimeout(() => {
         if (this._busy) {
@@ -2854,7 +2759,6 @@ class PowerEngineUpdateCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
           button.go:disabled { background: none; color: var(--disabled-text-color, var(--secondary-text-color)); }
         </style>
         <ha-card>
-          <div class="pkg" style="flex:1 1 100%"></div>
           <div class="text"><div class="line"></div><div class="msg"></div></div>
           <button class="reload second">Reload page</button>
           <button class="chk second">Check for updates</button>
@@ -2865,13 +2769,10 @@ class PowerEngineUpdateCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
         if (confirm("Install the latest PowerEngine and restart its engine? Control pauses for " +
             "about a minute while it restarts.")) this._update();
       });
-      this._pkgBox = makePackageBox();
-      this.shadowRoot.querySelector(".pkg").append(this._pkgBox);
       this.shadowRoot.querySelector(".chk").addEventListener("click", () => this._checkNow());
       this.shadowRoot.querySelector(".reload").addEventListener("click", () => location.reload());
       this._built = true;
     }
-    this._pkgBox.update(this._hass);
     const { running, parts, released, known, notes } = versionLine(this._hass.states);
     const q = (s) => this.shadowRoot.querySelector(s);
     q(".line").innerHTML = `<b>PowerEngine ${running}</b> running` + (parts.length
@@ -3098,7 +2999,7 @@ class PowerEngineSetupCard extends (typeof HTMLElement !== "undefined" ? HTMLEle
   _render() {
     if (!this.shadowRoot || !this._hass) return;
     const facts = this._facts();
-    const sig = JSON.stringify([facts, (this._hass.states || {})[PACKAGE_SENSOR] || null, this._busy, this._checking, this._notes, this._progressNote]);
+    const sig = JSON.stringify([facts, this._busy, this._checking, this._notes, this._progressNote]);
     if (sig === this._sig) return;      // hass updates come often; only redraw when something we show changed
     this._sig = sig;
     const rows = setupRows(facts);
@@ -3141,14 +3042,6 @@ class PowerEngineSetupCard extends (typeof HTMLElement !== "undefined" ? HTMLEle
       sub.textContent = "You're not an admin. An admin needs to run the installs; you can see what's missing here.";
     } else {
       sub.textContent = sum.todo ? `${sum.todo} thing${sum.todo === 1 ? "" : "s"} still to do.` : "";
-    }
-    const pkgLine = packageProblemLine(packageInfo(this._hass.states));
-    if (pkgLine) {
-      const note = mk("div", "detail note", pkgLine.text + " ");
-      const l = mk("a", "", pkgLine.label);
-      l.href = pkgLine.href; l.target = "_blank"; l.rel = "noopener noreferrer";
-      note.append(l);
-      sub.after(note);
     }
     if (showDemoLink(facts)) {
       const tryIt = mk("button", "second", "Try the demo");
@@ -9303,7 +9196,7 @@ class PowerEngineEventsCard extends PowerEngineV2Card {
 });
 
 if (typeof module !== "undefined") {
-  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerSupported, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, ROUTER_APP_VERSION, whatsappSupported, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, PACKAGE_SENSOR, PACKAGE_BANNER_TEXT, PACKAGE_BUTTON, PACKAGE_ASK_ADMIN, INSTALL_GUIDE_URL, packageInfo, packageReloadPayload, packagePromptAfterSave, packageBannerView, packageProblemLine, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, MIN_APP_VERSION, parseVersion, versionOlder, versionWarnings, logRows, logWhen, escHtml, findRcEntities, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, SETUP_REPOS, findHacsRepo, hacsInfoPayload, hacsListPayload, hacsAddPayload, hacsDownloadPayload, installStep, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, FREE_LOADS_APP_VERSION, freeLoadsSupported, freeLoadDraft, buildFreeLoads, DEVICES_APP_VERSION, DEVICE_INPUTS, devicesSupported, deviceDraft, deviceNewId, buildDevices, deviceReadout,
+  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerSupported, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, ROUTER_APP_VERSION, whatsappSupported, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, hasUpdateService, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, MIN_APP_VERSION, parseVersion, versionOlder, versionWarnings, logRows, logWhen, escHtml, findRcEntities, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, SETUP_REPOS, findHacsRepo, hacsInfoPayload, hacsListPayload, hacsAddPayload, hacsDownloadPayload, installStep, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, FREE_LOADS_APP_VERSION, freeLoadsSupported, freeLoadDraft, buildFreeLoads, DEVICES_APP_VERSION, DEVICE_INPUTS, devicesSupported, deviceDraft, deviceNewId, buildDevices, deviceReadout,
   wizardDeviceName, wizardInUse, wizardOthers, wizardUsedEntities, wizardPlantFromDevice, wizardPlantId, EXPORT_FORMAT, EXPORT_VERSION, EXPORT_STATE_MAX, wizardInfo, wizardFacts, wizardMatch, wizardCandidates, wizardRoles, wizardSuggest, wizardPlantGuess, wizardMissing, wizardWatts, wizardSignCheck, wizardBalance, scrubText, buildCandidateExport, candidateFileName, wizardEnergyDevices,
   SYSTEM_DRAFT_KEY, systemKinds, systemItems, systemMissingParts, opsSet, opsRemove, opsUndoRemove, opsTag, opsSummary, applyOps, featuresLeftOut, buildApplyConfig, equipmentOf, systemFingerprint, overlayEquipment, systemImpact, systemDraftLoad, systemDraftSave,
   OVERRIDE_MODES, OVERRIDE_PERIODS, OVERRIDE_MAX_SLOTS, inverterWords, overrideEndOptions, overridePayload, overrideView, overrideSummary,

@@ -38,10 +38,10 @@ owner approves each run on GitHub. It can't run `tools/release.sh` itself (it ne
 - `docs/logic/`: the plan and decision logic as flowcharts and tables (inputs, rules planner, optimiser, priorities, control, settings,
   decision log, review findings). Start at `docs/logic/README.md`. A PR that changes planning or `decide` updates the matching page.
 - `docs/INSTALL.md`: the install guide. Keep it current: any release that changes setup updates it in the same PR.
-- `docs/ha/powerengine_handover.yaml`: the HA package everyone needs (update script, watchdog); it names no
-  other controller. **PowerEngine installs and updates it itself** (0.9.109): the shipped copy is `apps/powerengine/ha_packages/*.yml`
-  (`.yml`, not `.yaml`), `docs/ha/*.yaml` must stay identical (a test), it starts with the
-  `hapackage.MARKER` line, and `pe_core/hapackage.py` decides. Edit the docs file, then copy it over the shipped one. See "HA config" below.
+- The one-button update and the watchdog are the integration's (0.9.218): `powerengine.update` (`updater.py`) and
+  `watchdog.py`, which holds the failsafe the engine hands it as data (`pe_core/failsafe.py`, protocol request
+  `failsafe`: service calls built from the inverter adapter, so nothing there names an inverter). There is no package
+  file any more; `pe_core/hapackage.py` only retires the one earlier versions wrote.
 - `tools/release.sh`: the release (`docs/RELEASING.md`). `tools/diag_summary.py`: summarises a diagnostics export (`--help`).
   `tools/build_demo_pack.py`: rebuilds the demo pack. `tools/sim/`: the simulator (stored days through the real app with other code or
   settings, and a GUI; `tools/sim/README.md`).
@@ -107,7 +107,7 @@ uses the full flow. In short (the steps below describe the full flow):
   enforces this too.
 - **Don't hammer EDF's API**, or any external API.
 - **No admin HA token for PowerEngine.** Things that need admin rights (restarting add-ons, HACS actions) go
-  through the handover package's scripts or the card (an admin's browser).
+  through the integration's own services (`powerengine.update`) or the card (an admin's browser).
 - **Leave Active / Passive / Pause to the owner.** Don't change them on his behalf.
 - **Inverter writes are precious** (EEPROM wear). The default for this install is RAM remote control (43135 mode,
   43136 charge W, 43129 discharge W, capped at 5000 W; failsafe about 5 min). Any change to control must keep the
@@ -141,7 +141,6 @@ Read the named file before touching that area (they are one-liners here; the det
 - **Names** (`docs/history/phase0-generic.md`, step 6): never hard-code a supplier or device name in user text; use `N(term)` or `<<term>>`.
 - **New adapter or definition** (Phase 0 step 8, Phase 1 wizard): needs a detect entry (`adapters/detect.py` or the definition's `detect:`).
 - **Dashboard templates** (`docs/history/backlog-and-recent-fixes.md`): never read a key a window may lack (`w.get('manual')`).
-- **HA package files** (same file, 0.9.109): a change to either package file is shipped by editing both copies; the owner's HA config git copy must be pulled before he pushes.
 - **Card contract** (`docs/history/engine-v2-and-comparison.md`, `phase1-generic-core.md`): sensors and attributes the card reads (`sensor.pe_diag_version` `wizard`, `site_options`, `demo`; the v2 sensors; `sensor.pe_state_engine` `choice` and `sensor.pe_diag_v2_settings` `engines`, which show engine 2.1 beta) must not change shape without the card and a `MIN_*_VERSION` bump.
 
 ## Where the history is

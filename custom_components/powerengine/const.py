@@ -28,6 +28,7 @@ ISSUE_FILES = "engine_files_missing"
 ISSUE_NO_SOURCE = "shadow_no_source"
 
 SERVICE_RESTART_ENGINE = "restart_engine"
+SERVICE_UPDATE = "update"
 SERVICE_REFRESH_SHADOW = "refresh_shadow"
 
 # the engine's exit statuses (apps/powerengine/engine_main.py)
