@@ -1,4 +1,4 @@
-"""The app's three-slot control path, with the stub AppDaemon from test_pause_guards."""
+"""The app's three-slot control path, with the stub host from test_pause_guards."""
 from datetime import datetime, timezone
 
 from test_pause_guards import GUARDED, app  # noqa: F401  (fixture)

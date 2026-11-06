@@ -1,4 +1,4 @@
-"""The app's overnight Simulator plumbing, with a stub AppDaemon (see test_pause_guards)."""
+"""The app's overnight Simulator plumbing, with a stub host (see test_pause_guards)."""
 import json
 import os
 
@@ -18,7 +18,7 @@ def test_overnight_run_publishes_and_notifies(app, tmp_path, monkeypatch):  # no
     app.costbook = CostBook(str(folder), app.tz)
     app._save_path = lambda: str(tmp_path / "config.yaml")
     app._params = lambda readings=None: __import__("pe_core.planner", fromlist=["Params"]).Params(capacity_kwh=10.0)
-    app.run_in = lambda cb, delay, **kw: app.timers.append((cb, kw))
+    app.call_later = lambda cb, delay, **kw: app.timers.append((cb, kw))
     notes = []
     app._notify = lambda event, msg: notes.append((event, msg))
     from datetime import date

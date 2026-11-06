@@ -66,7 +66,7 @@ async def test_a_change_in_home_assistant_reaches_the_engines_copy_and_its_liste
     hass.states.async_set("switch.pause", "off")
     assert await ask(client.get_state, "switch.pause") == "off"
     heard = Calls()
-    await ask(client.listen_state, heard, "switch.pause")
+    await ask(client.on_state, heard, "switch.pause")
     await hass.async_block_till_done()
     hass.states.async_set("switch.pause", "on")
     assert await ask(heard.arrived.wait, 10)
@@ -81,7 +81,7 @@ async def test_a_change_in_home_assistant_reaches_the_engines_copy_and_its_liste
 async def test_an_event_reaches_the_engine_with_who_caused_it(hass, engine_client):
     ask, client = engine_client, engine_client.client
     heard = Calls()
-    await ask(client.listen_event, heard, "pe_config_save")
+    await ask(client.on_event, heard, "pe_config_save")
     await hass.async_block_till_done()
     hass.bus.async_fire("pe_other", {"x": 1})
     hass.bus.async_fire("pe_config_save", {"settings": {"a": [1, 2]}}, context=Context(user_id="user-1"))

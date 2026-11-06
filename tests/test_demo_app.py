@@ -12,7 +12,7 @@ HOURS = 6
 
 
 def load_demo_app(monkeypatch):
-    """powerengine against a fake AppDaemon that records anything that reaches the 'real' Home Assistant."""
+    """powerengine against a fake host that records anything that reaches the 'real' Home Assistant."""
     Base = fake_home()
 
     class Hass(Base):

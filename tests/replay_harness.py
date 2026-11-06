@@ -64,7 +64,7 @@ class Replay:
         self.events = sorted(((datetime.fromisoformat(iso), action) for iso, action in (events or [])),
                              key=lambda x: x[0])
         self.overrides: dict[str, object] = {}     # entity id -> state, set by a "set" event, from then on
-        self.clock_step = clock_step               # call _clock_step at its real run_every interval (this
+        self.clock_step = clock_step               # call _clock_step at its real call_every interval (this
         self._next_clock_step = self.start + timedelta(seconds=45) if clock_step else None    # scenario only)
         self._applied_static = False
         self.record: list[dict] = []
@@ -150,7 +150,7 @@ class Replay:
             self.record.append({"t": t, "warning": a.warnings[last.get("warn", 0)][26:]})
             last["warn"] = last.get("warn", 0) + 1
 
-    # --- scenario events: pause/resume, an AppDaemon restart, a rejected write
+    # --- scenario events: pause/resume, an engine restart, a rejected write
     def _process_events(self):
         while self.events and self.events[0][0] <= Clock.now:
             _, action = self.events.pop(0)
@@ -172,7 +172,7 @@ class Replay:
             self.record.append({"t": Clock.now.isoformat(), "event": list(action)})
 
     def _restart(self):
-        """Simulate an AppDaemon restart: a new PowerEngine instance over the same folder, sharing the same fake
+        """Simulate an engine restart: a new PowerEngine instance over the same folder, sharing the same fake
         Home Assistant (so the inverter's actual state carries over, as it would through a real restart)."""
         old = self.app
         old.terminate()
@@ -206,7 +206,7 @@ class Replay:
             self.app._cycle({})
             if self.clock_step and self._next_clock_step is not None and t >= self._next_clock_step:
                 self.app._clock_step({})
-                self._next_clock_step += timedelta(seconds=600)     # matches run_every(_clock_step, "now+45", 600)
+                self._next_clock_step += timedelta(seconds=600)     # matches call_every(_clock_step, "now+45", 600)
             if self.app.pending_pause is not None:          # the app paused itself (daily write limit)
                 on = self.app.pending_pause.upper() == "ON"
                 self.app.pending_pause = None

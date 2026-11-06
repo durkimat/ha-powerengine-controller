@@ -129,7 +129,7 @@ def test_test_window_ends_after_test_and_before_midnight():
     assert testwrite.end_time(datetime(2026, 9, 25, 10, 0), 5) == datetime(2026, 9, 25, 10, 7)
 
 
-# --- the adapter, with a stub AppDaemon ---------------------------------------------------
+# --- the adapter, with a stub host ---------------------------------------------------
 
 @pytest.fixture
 def app(monkeypatch):
@@ -158,9 +158,9 @@ def app(monkeypatch):
     a.get_state = lambda eid, attribute=None: a.states.get(eid)
     a.call_service = call_service
     a.log = lambda *args, **kw: None
-    a.run_in = lambda cb, delay, **kw: a.timers.append((cb, kw)) or len(a.timers)
-    a.run_every = lambda cb, start, every, **kw: "every"
-    a.cancel_timer = lambda h: None
+    a.call_later = lambda cb, delay, **kw: a.timers.append((cb, kw)) or len(a.timers)
+    a.call_every = lambda cb, start, every, **kw: "every"
+    a.cancel_call = lambda h: None
     a.fire_event = lambda ev, **kw: a.fired.append(kw)
     a._publish_state = lambda key, state, attrs=None: a.published.append((key, state, attrs))
     a._notify = lambda event, msg: None
@@ -401,7 +401,7 @@ def test_unconfigured_rechecks_every_cycle(app):
     assert calls == [1]
 
 
-def test_guard_missing_from_appdaemon_is_checked_with_ha(app):
+def test_guard_missing_from_the_engines_states_is_checked_with_ha(app):
     app.states.pop("switch.other_controller_read_only")
     app.render_template = lambda t: "on"
     assert app._guard_state("switch.other_controller_read_only") == "on" and app._guard_live

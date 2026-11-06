@@ -159,7 +159,7 @@ async def test_a_shadow_engine_reads_the_live_house_but_its_own_entities_from_th
         assert everything["sensor.solis_inverter_battery_soc"]["state"] == "84"
         assert not any(k.startswith("sensor.pe_shadow_") for k in everything)               # it never sees the prefix
         heard = []
-        await ask(client.listen_state, lambda *a: heard.append(a), "sensor.pe_state_status")
+        await ask(client.on_state, lambda *a: heard.append(a), "sensor.pe_state_status")
         await hass.async_block_till_done()
         hass.states.async_set("sensor.pe_state_status", "LIVE AGAIN")             # the live one moves: not heard
         await ask(client.set_state, "sensor.pe_state_status", state="SHADOW 2", attributes={})

@@ -176,11 +176,11 @@ def test_the_command_line_entry_point_exits_2_for_a_refused_day(tmp_path):
 
 
 def test_the_runner_never_calls_home_assistant():
-    """The replayed app runs against the fake AppDaemon: its Hass records every call it makes, and the runner treats any
-    as a failure. Nothing in the comparison package may reach for the network or the real AppDaemon."""
+    """The replayed app runs against the fake host: its Hass records every call it makes, and the runner treats any
+    as a failure. Nothing in the comparison package may reach for the network or a real host."""
     import pathlib
     for path in pathlib.Path(APP, "pe_core", "compare").glob("*.py"):
         text = path.read_text()
-        for bad in ("import requests", "urllib", "import socket", "import appdaemon", "http.client"):
+        for bad in ("import requests", "urllib", "import socket", "http.client"):
             assert bad not in text, (path.name, bad)
     assert results.VERSION == 1 and SnapshotFeed and Snapshot and datetime and timedelta and snapshot_from_pack

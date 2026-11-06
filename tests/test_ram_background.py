@@ -1,4 +1,4 @@
-"""Remote-control commands are sent from a worker thread under AppDaemon (pe_core/background.py), so the thread that
+"""Remote-control commands are sent from a worker thread (pe_core/background.py), so the thread that
 runs the engine's callbacks doesn't wait 2 to 4 seconds for each call to the inverter. Order, one at a time, and what
 follows a send running back on the callback thread are what these check, against an inverter that is slow to answer."""
 
@@ -49,7 +49,7 @@ class FakeHost:
     def get_state(self, eid, *a, **k):
         return "before"
 
-    def run_in(self, callback, delay, **kw):
+    def call_later(self, callback, delay, **kw):
         self.later.append((callback, delay, kw))        # run by `settle`, on the test's own (callback) thread
         return f"timer-{len(self.later)}"
 
@@ -88,7 +88,7 @@ def make(delay=0.05):
 
 
 def settle(engine, timeout=WAIT):
-    """Wait for the worker, then run what it handed back to the callback thread (as AppDaemon would)."""
+    """Wait for the worker, then run what it handed back to the callback thread (as the host would)."""
     host = engine.host
     while True:
         assert engine._ram_worker().idle(timeout)

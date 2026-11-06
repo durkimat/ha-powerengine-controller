@@ -1,17 +1,17 @@
-"""Start-up smoke test: PowerEngine.initialize() runs against a do-nothing AppDaemon (0.9.12 failed to start)."""
+"""Start-up smoke test: PowerEngine.initialize() runs against a do-nothing host (0.9.12 failed to start)."""
 import shutil
 import sys
 
 import pytest
 
-AD_METHODS = ("listen_state", "listen_event", "run_every", "run_in", "run_daily", "run_at", "run_minutely",
-              "run_hourly", "run_once", "call_service", "fire_event", "set_state", "cancel_timer",
-              "cancel_listen_state", "cancel_listen_event", "get_app", "get_plugin_api", "get_ad_api",
+AD_METHODS = ("on_state", "on_event", "call_every", "call_later", "call_daily", "run_at", "run_minutely",
+              "run_hourly", "run_once", "call_service", "fire_event", "set_state", "cancel_call",
+              "off_state", "off_event", "get_app", "get_plugin_api", "get_ad_api",
               "mqtt_publish", "mqtt_subscribe", "get_timezone", "get_entity", "entity_exists")
 
 
 class _Stub:
-    """The AppDaemon calls PowerEngine makes, each returning a harmless value."""
+    """The host calls PowerEngine makes, each returning a harmless value."""
 
     def __getattr__(self, name):
         if name in AD_METHODS:

@@ -7,10 +7,10 @@ its own; the tests, the demo and the nightly comparison use `LocalHost` (host_lo
 
 The methods have the names, arguments and meanings the engine is written against:
 
-  * Callbacks are plain functions called on a worker thread; a state or event callback takes the arguments
-    below, a timer callback takes (kwargs).
-  * `run_in`, `run_every` and `run_daily` return a handle that `cancel_timer` takes; `listen_state` and `listen_event`
-    return one for `cancel_listen_state` and `cancel_listen_event`.
+  * Callbacks are plain functions called on a worker thread: a state callback takes (entity, attribute, old, new,
+    kwargs), an event callback (event, data, kwargs) and a timer callback (kwargs).
+  * `call_later`, `call_every` and `call_daily` return a handle that `cancel_call` takes; `on_state` and `on_event`
+    return one for `off_state` and `off_event`.
   * `get_state` is synchronous and cheap (a host may answer from a local copy of Home Assistant's states).
 
 `LocalHost` looks each method up on the app at the moment of the call, not when it is built,
@@ -29,8 +29,8 @@ from typing import Any, Protocol, runtime_checkable
 METHODS = (
     "get_state", "get_history", "render_template", "get_timezone",
     "call_service", "fire_event",
-    "listen_state", "listen_event", "cancel_listen_state", "cancel_listen_event",
-    "run_in", "run_every", "run_daily", "cancel_timer",
+    "on_state", "on_event", "off_state", "off_event",
+    "call_later", "call_every", "call_daily", "cancel_call",
 )
 # What a host provides beyond those (see the end of the Host class).
 EXTRAS = ("log", "method", "state_writer", "start_tracking", "cancel_all", "override", "clear_overrides",
@@ -68,27 +68,27 @@ class Host(Protocol):
         """Fire an event on Home Assistant's bus."""
 
     # --- listening
-    def listen_state(self, callback: Callable, entity_id: str | None = None, **kwargs: Any) -> Any:
-        """Call back when the entity changes. Returns a handle for cancel_listen_state."""
+    def on_state(self, callback: Callable, entity_id: str | None = None, **kwargs: Any) -> Any:
+        """Call back when the entity changes. Returns a handle for off_state."""
 
-    def listen_event(self, callback: Callable, event: str | None = None, **kwargs: Any) -> Any:
-        """Call back when the event is fired. Returns a handle for cancel_listen_event."""
+    def on_event(self, callback: Callable, event: str | None = None, **kwargs: Any) -> Any:
+        """Call back when the event is fired. Returns a handle for off_event."""
 
-    def cancel_listen_state(self, handle: Any, **kwargs: Any) -> Any: ...
+    def off_state(self, handle: Any, **kwargs: Any) -> Any: ...
 
-    def cancel_listen_event(self, handle: Any, **kwargs: Any) -> Any: ...
+    def off_event(self, handle: Any, **kwargs: Any) -> Any: ...
 
     # --- timers
-    def run_in(self, callback: Callable, delay: float, **kwargs: Any) -> Any:
-        """Call back once, `delay` seconds from now. Returns a handle for cancel_timer."""
+    def call_later(self, callback: Callable, delay: float, **kwargs: Any) -> Any:
+        """Call back once, `delay` seconds from now. Returns a handle for cancel_call."""
 
-    def run_every(self, callback: Callable, start: Any, interval: float, **kwargs: Any) -> Any:
+    def call_every(self, callback: Callable, start: Any, interval: float, **kwargs: Any) -> Any:
         """Call back from `start`, then every `interval` seconds."""
 
-    def run_daily(self, callback: Callable, start: Any, **kwargs: Any) -> Any:
+    def call_daily(self, callback: Callable, start: Any, **kwargs: Any) -> Any:
         """Call back every day at the time of day `start`."""
 
-    def cancel_timer(self, handle: Any, **kwargs: Any) -> Any: ...
+    def cancel_call(self, handle: Any, **kwargs: Any) -> Any: ...
 
     # --- beyond the calls above
     @property

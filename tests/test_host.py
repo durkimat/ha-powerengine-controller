@@ -10,10 +10,8 @@ from pe_core.host_local import LocalHost
 
 APP = pathlib.Path(__file__).resolve().parents[1] / "engine" / "powerengine.py"
 
-# Everything the engine used to take from AppDaemon's Hass, by name. None of it may be used on `self` in the engine.
-HASS_NAMES = set(host.METHODS) | {"args", "set_state", "AD", "namespace", "timer_running",
-                                  "entity_exists", "get_now", "listen_log", "run_at", "run_once", "run_hourly",
-                                  "run_minutely", "cancel_listen_log", "get_app", "set_namespace", "get_ad_api"}
+# The host's calls, by name. None of them may be used on `self` in the engine: it reaches them through `self.host`.
+HASS_NAMES = set(host.METHODS) | {"args", "set_state"}
 
 
 def _engine_class():
@@ -21,7 +19,7 @@ def _engine_class():
     return next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Engine")
 
 
-def test_the_protocol_the_appdaemon_host_and_thefake_home_have_the_same_methods():
+def test_the_protocol_the_local_host_and_the_fake_home_have_the_same_methods():
     protocol = {n for n, v in vars(host.Host).items()
                 if not n.startswith("_") and (callable(v) or isinstance(v, property))}
     assert protocol == set(host.METHODS) | set(host.EXTRAS) | {"args"}
@@ -44,7 +42,7 @@ def test_the_local_host_calls_the_apps_method_as_it_is_at_that_moment():
     assert h.get_state("sensor.a") == "swapped"
     app.args = {"settings_file": "x"}
     assert h.args == {"settings_file": "x"}
-    assert h.run_in(lambda kw: None, 5)                # a handle comes back through the host
+    assert h.call_later(lambda kw: None, 5)                # a handle comes back through the host
     assert h.get_timezone() == "Europe/London"
 
 
@@ -58,11 +56,11 @@ def test_an_override_replaces_a_call_until_it_is_cleared():
     assert h.get_state("sensor.a") == "1"
 
 
-def test_the_engine_does_not_inherit_from_appdaemon():
+def test_the_engine_does_not_inherit_from_a_client_library():
     cls = _engine_class()
     assert cls.bases == []
     names = {n.id for n in ast.walk(cls) if isinstance(n, ast.Name)}
-    assert "hass" not in names, "the engine must not use AppDaemon's module"
+    assert "hass" not in names, "the engine must not use a client library's base class"
     assert _only_setattr(cls)
 
 
@@ -77,8 +75,8 @@ def _only_setattr(cls):
     return True
 
 
-def test_the_engine_uses_appdaemons_methods_only_through_the_host():
-    """No `self.get_state(...)`, `self.run_in(...)`, `self.AD` and the like in the engine."""
+def test_the_engine_uses_the_hosts_methods_only_through_the_host():
+    """No `self.get_state(...)`, `self.call_later(...)` and the like in the engine."""
     cls = _engine_class()
     own = {n.name for n in cls.body if isinstance(n, ast.FunctionDef)}
     leaks = []
@@ -100,7 +98,7 @@ def test_powerengine_is_the_engine_and_nothing_else_from_the_apps_point_of_view(
     assert [ast.unparse(b) for b in shell[0].bases] == ["Engine"]
 
 
-def test_the_engine_hands_itself_to_nothing_that_could_call_appdaemon_through_it():
+def test_the_engine_hands_itself_to_nothing_that_could_call_the_host_through_it():
     """Adapters were once given the app and called `ha.get_state()` on it, which the demo's replacement of the app's
     methods reached; now they get the host. `self` may go only to getattr/setattr/hasattr and the host itself."""
     allowed = {"getattr", "setattr", "hasattr", "LocalHost", "isinstance"}

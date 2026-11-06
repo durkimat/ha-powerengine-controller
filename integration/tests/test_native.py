@@ -1,5 +1,5 @@
 """The engine's own entities as real Home Assistant entities (native.py): in the registry with the unique ids the old
-AppDaemon app's MQTT entities had, on one device, with values Home Assistant accepts, and a pause switch that
+the first versions' entities had, on one device, with values Home Assistant accepts, and a pause switch that
 holds what it is given."""
 
 import logging
@@ -45,7 +45,7 @@ async def test_the_pause_switch_holds_what_it_is_given_and_the_engine_hears_it(h
     assert hass.states.get("switch.pe_ctl_pause").state == "unknown"
     await ask(client.set_state, "switch.pe_ctl_pause", state="unknown", attributes={})      # "new": it stays unknown
     heard = []
-    await ask(client.listen_state, lambda *a: heard.append(a), "switch.pe_ctl_pause")
+    await ask(client.on_state, lambda *a: heard.append(a), "switch.pe_ctl_pause")
     await hass.async_block_till_done()
     await hass.services.async_call("switch", "turn_on", {"entity_id": "switch.pe_ctl_pause"}, blocking=True)
     await hass.async_block_till_done()

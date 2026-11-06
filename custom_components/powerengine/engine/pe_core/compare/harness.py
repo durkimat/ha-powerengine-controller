@@ -24,7 +24,7 @@ LOGGED_INFO = ("PowerEngine ", "Leaving Active", "RAM remote control", "Inputs b
                "Controller switch", "Car charger inputs")
 
 REAL_DATETIME = datetime
-HANDLES = itertools.count(1)          # run_in handles, unique across restarts (cancel_timer removes by handle)
+HANDLES = itertools.count(1)          # call_later handles, unique across restarts (cancel_call removes by handle)
 
 
 class Clock:
@@ -101,29 +101,29 @@ def fake_home():
         def fire_event(self, event, **kw):
             self.fired.append((Clock.now.isoformat(), event))
 
-        # --- scheduling: run_in callbacks are run by the replay when due; the rest the replay drives itself
-        def run_in(self, cb, delay, **kw):
+        # --- scheduling: call_later callbacks are run by the replay when due; the rest the replay drives itself
+        def call_later(self, cb, delay, **kw):
             handle = next(HANDLES)
             self.timers.append((Clock.now + timedelta(seconds=float(delay)), cb, kw, handle))
             return handle
 
-        def run_every(self, *a, **k):
+        def call_every(self, *a, **k):
             return None
 
-        run_daily = run_at = run_minutely = run_hourly = run_once = run_every
+        call_daily = run_at = run_minutely = run_hourly = run_once = call_every
 
-        def cancel_timer(self, handle, **kw):
+        def cancel_call(self, handle, **kw):
             self.timers = [x for x in self.timers if x[3] != handle]
 
-        def listen_state(self, *a, **k):
+        def on_state(self, *a, **k):
             return None
 
-        listen_event = listen_state
+        on_event = on_state
 
-        def cancel_listen_state(self, *a, **k):
+        def off_state(self, *a, **k):
             return None
 
-        cancel_listen_event = cancel_listen_state
+        off_event = off_state
 
         def get_history(self, *a, **k):
             return []
@@ -150,7 +150,7 @@ def fake_home():
 
 
 def recording_hass_class():
-    """The fake Hass, also recording what the app registers with run_every and anything that would reach Home
+    """The fake Hass, also recording what the app registers with call_every and anything that would reach Home
     Assistant (in demo mode nothing should: the gate keeps it all inside the app)."""
     Base = fake_home()
 
@@ -159,7 +159,7 @@ def recording_hass_class():
             super().__init__()
             self.every, self.real_calls, self.real_events, self.real_sets = [], [], [], []
 
-        def run_every(self, callback, start=None, interval=None, **kw):
+        def call_every(self, callback, start=None, interval=None, **kw):
             self.every.append((callback, float(interval)))
             return f"every-{len(self.every)}"
 
