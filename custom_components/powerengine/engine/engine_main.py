@@ -23,8 +23,6 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="PowerEngine, in its own process")
     parser.add_argument("--address", required=True, help="the integration's address: unix:/path or tcp:127.0.0.1:port")
     parser.add_argument("--settings", help="the settings file (default: the places PowerEngine looks)")
-    parser.add_argument("--shadow", action="store_true",
-                        help="a shadow run: plan as the live engine does, control nothing, keep to its own folder")
     parser.add_argument("--wait", type=float, default=60.0, help="seconds to wait for the integration at the start")
     options = parser.parse_args(argv)
     from pe_core import protocol
@@ -60,7 +58,6 @@ def main(argv: list[str] | None = None) -> int:
 
     engine = powerengine.Engine()
     engine.__dict__["_host"] = host
-    engine.__dict__["_shadow"] = bool(options.shadow)
     try:
         engine.initialize()
         host.stop_requested.wait()

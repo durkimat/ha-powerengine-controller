@@ -34,15 +34,3 @@ def test_active_needs_safe_guards_even_in_this_build():
 def test_missing_required_inputs_keep_it_unconfigured():
     m = effective_mode(parse_config({}), missing_required=["battery_soc", "grid_power"])
     assert m.effective == "unconfigured" and "2 required" in m.reason
-
-
-def test_a_shadow_run_is_passive_whatever_the_settings_say_and_says_why():
-    from pe_core.config import parse_config
-    from pe_core.modes import ACTIVE, PASSIVE, effective_mode
-    cfg = parse_config({"inputs": {}, "operation": {"mode": "active"}})
-    live = effective_mode(cfg)
-    shadow = effective_mode(cfg, shadow=True)
-    assert live.configured == ACTIVE and shadow.configured == ACTIVE        # the settings are untouched
-    assert shadow.effective == PASSIVE and shadow.reason.startswith("Shadow run")
-    assert effective_mode(cfg, shadow=True, paused=True).effective == PASSIVE
-    assert effective_mode(cfg, config_error="bad", shadow=True).effective != PASSIVE        # a real problem still shows

@@ -218,8 +218,6 @@ def _real(writes) -> int:
 
 class Engine:
     _demo = None                     # the demo day when `demo: <day>` is set in the app's settings (see _demo_setup)
-    _shadow = False                  # a shadow run (engine_main --shadow): plans, controls and sends nothing, and
-    #                                  stays inside its own data folder (the integration also blocks its calls)
 
     @property
     def host(self):
@@ -265,9 +263,6 @@ class Engine:
         else:
             self._wipe()
         self.log(f"PowerEngine {__version__} starting")
-        if self._shadow:
-            self.log("SHADOW RUN: this engine plans as the live one does and sends nothing; its entities are "
-                     "separate and its data folder is its own")
         self._started_at = datetime.now(timezone.utc)
         self.damper = damping.Damper()
         self._damp_restart(self._started_at)
@@ -412,12 +407,11 @@ class Engine:
         self.host.call_daily(self._learn_load, "00:10:00")
         self.host.call_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
         self.host.call_daily(self._daily_summary, "08:00:00")
-        if not self._shadow:                                     # (heavy overnight jobs: the live engine does them)
-            self.host.call_daily(self._sim_start, SIM_START)              # tariff Simulator: heavy work, overnight only
-            self.host.call_daily(self._lowwrite_start, LOWWRITE_START)     # low-write study: shadow only
+        self.host.call_daily(self._sim_start, SIM_START)                  # tariff Simulator: heavy work, overnight only
+        self.host.call_daily(self._lowwrite_start, LOWWRITE_START)         # low-write study: shadow accounting only
         self.host.call_later(lambda kwargs: self._sim_publish(), 20)
         self.host.call_later(lambda kwargs: self._lowwrite_publish(), 25)
-        if not self._demo and not self._shadow:                  # engine comparison: yesterday, replayed apart
+        if not self._demo:                                       # engine comparison: yesterday, replayed apart
             self.host.call_daily(self._compare_start, COMPARE_START)
             self.host.call_every(self._compare_poll, f"now+{COMPARE_POLL_S}", COMPARE_POLL_S)
         self.host.call_later(lambda kwargs: self._compare_publish(), 30)
@@ -570,6 +564,8 @@ class Engine:
         return st
 
     def _evaluate(self):
+        if "_last_checks" not in self.__dict__:       # a listener fired between a demo's wipe and its start again
+            return
         checks, required = {}, []
         if self.cfg is not None:
             required = required_roles(self.cfg)
@@ -608,7 +604,7 @@ class Engine:
         self._note_absent_guards(absent)
         paused = self.host.get_state(PAUSE_ENTITY) == "on"
         mode = effective_mode(self.cfg, self.cfg_error, missing_required=missing, guards=guards, paused=paused,
-                              unverified=self._unverified() or self._v2_refusal(), shadow=self._shadow)
+                              unverified=self._unverified() or self._v2_refusal())
         self._leave_active(getattr(self, "mode", None), mode, guards)
         prev = getattr(self, "mode", None)
         if mode.effective == "active" and (prev is None or prev.effective != "active"):
@@ -4560,9 +4556,9 @@ class Engine:
         """Tell the integration what to do to the inverter if this engine goes quiet while in control, whenever that
         changes (and again, every two minutes, until the integration has taken it: an integration not yet restarted
         after an update does not know how). Once it has, the YAML package earlier versions wrote is retired. Never in
-        a demo or a shadow run; never raises."""
+        a demo; never raises."""
         native = self.host.native_entities
-        if self._demo or getattr(self, "_shadow", False) or self.cfg is None or native is None:
+        if self._demo or self.cfg is None or native is None:
             return
         now = datetime.now(timezone.utc)
         if not force and now < getattr(self, "_failsafe_retry_at", now):
@@ -4949,10 +4945,18 @@ class Engine:
     def _demo_file(self):
         return os.path.join(self._real_dir(), "demo.json")
 
+    def _demo_off_file(self):
+        return os.path.join(self._real_dir(), "demo_off")
+
     def _saved_demo_day(self):
-        """The day a dashboard start chose (demo.json), honoured only while there is no real config."""
+        """The day a dashboard start chose (demo.json), honoured only while there is no real config. Under Home
+        Assistant, with no config and no choice yet, the first thing a new install shows is the demo (the first day
+        in the pack) until the owner leaves it (`demo_off`) or sets PowerEngine up."""
         path = self._demo_file()
         if not os.path.isfile(path):
+            if (self.host.native_entities is not None and not self._real_config_exists()
+                    and not os.path.exists(self._demo_off_file())):
+                return next(iter(load_demo_pack()["days"]))
             return None
         if self._real_config_exists():
             self.log(f"Ignoring {path}: a real config exists, so no demo starts by itself", level="WARNING")
@@ -4992,6 +4996,8 @@ class Engine:
                                                "to pick another day.")
             try:
                 os.makedirs(self._real_dir(), exist_ok=True)
+                if os.path.exists(self._demo_off_file()):
+                    os.remove(self._demo_off_file())                 # asking for it again: no longer left
                 tmp = self._demo_file() + ".tmp"
                 with open(tmp, "w", encoding="utf-8") as fh:
                     json.dump({"day": day}, fh)
@@ -5006,6 +5012,8 @@ class Engine:
                                                f"{self.host.args['demo']}); remove that line and restart the engine "
                                                "to leave it.")
             try:
+                with open(self._demo_off_file(), "w", encoding="utf-8") as fh:      # left: it doesn't start by itself
+                    fh.write("The demo was left from the dashboard; start it again there.\n")
                 os.remove(self._demo_file())
             except FileNotFoundError:
                 pass
@@ -5037,11 +5045,11 @@ class Engine:
 
     def _get_publisher(self):
         """The one door for every entity the app publishes (native or plain states; the core never knows which). The
-        demo always writes plain states."""
+        demo publishes the same way as a real run: under the integration they are its entities, not plain states."""
         pub = self.__dict__.get("_publisher_obj")
         if pub is None:
             pub = select_publisher(self.host.state_writer(self._told_once, demo=bool(self._demo)),
-                                   native=None if self._demo else self.host.native_entities,
+                                   native=self.host.native_entities,
                                    told_once=self._told_once)
             self._publisher_obj = pub
         return pub

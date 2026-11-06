@@ -38,7 +38,3 @@ Home Assistant.
 
 The integration starts one engine and watches it. If the engine goes quiet for 15 minutes while it is in control of the
 inverter, the integration's watchdog hands the inverter back to Self-Use (`custom_components/powerengine/watchdog.py`).
-
-In **Shadow** mode it runs beside the live one on a copy of its data, under separate entities, and refuses every call
-and event the engine asks for; see [docs/plans/shadow-run.md](../docs/plans/shadow-run.md). `tools/shadow_compare.py`
-compares the two from Home Assistant's history.

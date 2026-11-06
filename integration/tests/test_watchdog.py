@@ -126,16 +126,11 @@ async def test_what_the_engine_said_survives_a_restart_of_home_assistant(hass):
     assert again.last_alive >= wd.last_alive - timedelta(seconds=5)     # a start counts as alive: 15 minutes' grace
 
 
-async def test_the_engines_failsafe_reaches_the_watchdog_and_a_shadow_run_has_none(hass, tmp_path, monkeypatch):
+async def test_the_engines_failsafe_reaches_the_watchdog(hass, tmp_path, monkeypatch):
     entry = await setup(hass, tmp_path, monkeypatch)
     await hass.async_add_executor_job(entry.runtime_data.home.set_failsafe, CALLS, True)
     assert entry.runtime_data.watchdog.calls == CALLS and entry.runtime_data.watchdog.armed is True
     await hass.config_entries.async_unload(entry.entry_id)
-    shadow = await setup(hass, tmp_path / "s", monkeypatch, **{const.CONF_MODE: const.MODE_SHADOW})
-    assert shadow.runtime_data.watchdog is None
-    with pytest.raises(ValueError):
-        await hass.async_add_executor_job(shadow.runtime_data.home.set_failsafe, CALLS, True)
-    await hass.config_entries.async_unload(shadow.entry_id)
 
 
 async def _no_sleep(_seconds):
@@ -188,10 +183,4 @@ async def test_without_a_hacs_update_entity_the_service_says_so(hass, tmp_path, 
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(DOMAIN, "update", {}, blocking=True)
     assert any("No HACS update entity" in n["message"] for n in hass.data["persistent_notification"].values())
-    await hass.config_entries.async_unload(entry.entry_id)
-
-
-async def test_a_shadow_run_has_no_update_service(hass, tmp_path, monkeypatch):
-    entry = await setup(hass, tmp_path, monkeypatch, **{const.CONF_MODE: const.MODE_SHADOW})
-    assert not hass.services.has_service(DOMAIN, "update")
     await hass.config_entries.async_unload(entry.entry_id)

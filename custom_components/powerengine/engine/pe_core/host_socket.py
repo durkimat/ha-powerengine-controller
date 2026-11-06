@@ -434,7 +434,8 @@ class SocketHost:
         return self._native
 
     def method(self, name: str) -> Callable | None:
-        return self.overrides.get(name) or getattr(self, name, None)
+        """The call as it is now: the demo's replacement if there is one, else this host's own."""
+        return self.overrides.get(name) or getattr(type(self), name, None) and _raw(type(self), name).__get__(self)
 
     def state_writer(self, told_once: Callable, demo: bool = False) -> Callable | None:
         return self.method("set_state")
@@ -480,3 +481,26 @@ def _zone(name: str):
         return ZoneInfo(name)
     except ZoneInfoNotFoundError:
         return ZoneInfo("UTC")
+
+
+# The demo replaces the calls that reach Home Assistant (`override`): a call made on the host goes to the replacement
+# when there is one. `method()` hands back the host's own, which is what the replacement itself calls through to.
+def _raw(cls, name: str) -> Callable:
+    func = getattr(cls, name)
+    return getattr(func, "raw", func)
+
+
+def _overridable(name: str) -> Callable:
+    raw = getattr(SocketHost, name)
+
+    def call(self, *args: Any, **kwargs: Any) -> Any:
+        replacement = self.overrides.get(name)
+        return replacement(*args, **kwargs) if replacement else raw(self, *args, **kwargs)
+    call.raw = raw
+    call.__name__, call.__doc__ = name, raw.__doc__
+    return call
+
+
+for _name in ("get_state", "get_history", "call_service", "fire_event", "set_state"):
+    setattr(SocketHost, _name, _overridable(_name))
+del _name

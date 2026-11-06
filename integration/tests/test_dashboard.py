@@ -64,12 +64,6 @@ async def test_an_entry_in_configuration_yaml_comes_first_and_stays(hass, tmp_pa
     assert hass.data[LOVELACE_DATA].dashboards[dashboard.URL_PATH] is existing and dashboard.URL_PATH in panels(hass)
 
 
-async def test_a_shadow_run_adds_no_dashboard(hass, tmp_path, monkeypatch):
-    entry = await setup(hass, tmp_path, monkeypatch, **{const.CONF_MODE: const.MODE_SHADOW})
-    assert dashboard.URL_PATH not in hass.data[LOVELACE_DATA].dashboards and dashboard.URL_PATH not in panels(hass)
-    await hass.config_entries.async_unload(entry.entry_id)
-
-
 async def test_without_lovelace_nothing_breaks_and_it_is_added_when_lovelace_arrives(hass, tmp_path, monkeypatch):
     monkeypatch.setattr(EngineSupervisor, "start", lambda self: None)
     hass.data[DATA_EXTRA_MODULE_URL] = set()

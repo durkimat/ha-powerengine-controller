@@ -30,8 +30,8 @@ async def wait_for(hass, condition, timeout=40.0, what="condition"):
 
 
 def engine(hass):
-    """The engine's status sensor (a shadow run's device is named for it, so its id is different)."""
-    return hass.states.get("sensor.powerengine_engine") or hass.states.get("sensor.powerengine_shadow_engine")
+    """The engine's status sensor."""
+    return hass.states.get("sensor.powerengine_engine")
 
 
 async def start(hass, tmp_path, **options):

@@ -15,6 +15,7 @@ from custom_components.powerengine.const import DOMAIN
 async def test_the_real_engines_entities_are_in_the_registry_with_the_ids_they_always_had_on_one_device(hass, tmp_path,
                                                                                                     caplog):
     caplog.set_level(logging.WARNING)
+    (tmp_path / "demo_off").write_text("")                       # not set up, and not showing the demo
     entry = await start(hass, tmp_path)
     await running(hass)
     await hass.async_block_till_done()

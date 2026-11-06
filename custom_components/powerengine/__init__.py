@@ -18,27 +18,22 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import ConfigEntryError, ServiceValidationError
+from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 
 from .bridge import HassHome
 from .const import (
-    CONF_MODE,
     CONF_SETTINGS_DIR,
     DEFAULT_SETTINGS_FOLDER,
     DOMAIN,
     ISSUE_CRASHING,
     ISSUE_FILES,
-    ISSUE_NO_SOURCE,
     ISSUE_PROTOCOL,
-    MODE_SHADOW,
     PLATFORMS,
-    SERVICE_REFRESH_SHADOW,
     SERVICE_RESTART_ENGINE,
     SERVICE_UPDATE,
-    SHADOW_FOLDER,
     STATUS_NEEDS_RESTART,
 )
 from .dashboard import async_register as register_dashboard
@@ -49,7 +44,6 @@ from .frontend import async_unregister as unregister_card
 from .host_server import HostServer
 from .native import NativeEntities
 from .protocol import new_secret
-from .shadow import Ledger, clear, seed
 from .supervisor import EngineSupervisor
 from .updater import async_update
 from .watchdog import Watchdog
@@ -74,23 +68,14 @@ def signal(entry: ConfigEntry) -> str:
     return f"{DOMAIN}_{entry.entry_id}_status"
 
 
-def shadow_run(entry: ConfigEntry) -> bool:
-    return entry.options.get(CONF_MODE) == MODE_SHADOW
-
-
 def settings_dir(hass: HomeAssistant, entry: ConfigEntry) -> Path:
-    """Where the engine keeps its settings and data: the live folder, or the shadow's own copy of it."""
+    """Where the engine keeps its settings and data."""
     folder = entry.options.get(CONF_SETTINGS_DIR) or entry.data.get(CONF_SETTINGS_DIR)
-    return Path(folder or hass.config.path(SHADOW_FOLDER if shadow_run(entry) else DEFAULT_SETTINGS_FOLDER))
+    return Path(folder or hass.config.path(DEFAULT_SETTINGS_FOLDER))
 
 
 def settings_path(hass: HomeAssistant, entry: ConfigEntry) -> str:
     return str(settings_dir(hass, entry) / "config.yaml")
-
-
-def live_dir(hass: HomeAssistant) -> Path:
-    """The live PowerEngine's folder, which a shadow run copies."""
-    return Path(hass.config.path(DEFAULT_SETTINGS_FOLDER))
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -110,27 +95,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             supervisor.connected()
         changed()
 
-    shadow = shadow_run(entry)
     folder = settings_dir(hass, entry)
-    if shadow:
-        if folder == live_dir(hass):
-            raise ConfigEntryError("A shadow run needs a folder of its own, not the live one")
-        copied = await hass.async_add_executor_job(seed, live_dir(hass), folder)
-        _LOGGER.info("Shadow run: %s", f"copied {copied} files from {live_dir(hass)} to {folder}" if copied
-                     else f"using {folder}")
-        if await hass.async_add_executor_job((folder / "config.yaml").is_file):
-            ir.async_delete_issue(hass, DOMAIN, ISSUE_NO_SOURCE)
-        else:
-            ir.async_create_issue(hass, DOMAIN, ISSUE_NO_SOURCE, is_fixable=False,
-                                  severity=ir.IssueSeverity.WARNING, translation_key=ISSUE_NO_SOURCE,
-                                  translation_placeholders={"live": str(live_dir(hass))})
-    ledger = Ledger(folder / "shadow_ledger.jsonl", notify=lambda: hass.loop.call_soon_threadsafe(changed)) \
-        if shadow else None
     native = NativeEntities(hass, entry)
-    watchdog = None if shadow else Watchdog(hass, "sensor.pe_diag_heartbeat")
-    if watchdog is not None:
-        await watchdog.async_load()
-    home = HassHome(hass, native, ledger, watchdog)
+    watchdog = Watchdog(hass, "sensor.pe_diag_heartbeat")
+    await watchdog.async_load()
+    home = HassHome(hass, native, watchdog)
     secret = new_secret()
     server = HostServer(home, secret, on_watch=home.watch, on_listen=home.listen,
                         on_engine=lambda info: hass.loop.call_soon_threadsafe(engine_moved, info))
@@ -150,8 +119,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     supervisor = EngineSupervisor(
         ENGINE_DIR, settings_path(hass, entry), lambda: address, secret,
         running_version=lambda: (server.engine or {}).get("engine"), ask_stop=server.ask_to_stop,
-        on_change=lambda: (changed(), _protocol_issue(hass, supervisor)), on_crashing=crashing,
-        extra_args=("--shadow",) if shadow else ())
+        on_change=lambda: (changed(), _protocol_issue(hass, supervisor)), on_crashing=crashing)
     runtime = Runtime(native, home, server, supervisor, [], watchdog=watchdog)
     entry.runtime_data = runtime
     await hass.async_add_executor_job(supervisor.refresh_installed)
@@ -160,9 +128,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Every minute: start the engine if it is not started; restart it when an update replaced its files."""
         await hass.async_add_executor_job(supervisor.refresh_installed)     # (a file read: not on the event loop)
         await refresh_card(hass)                    # an update may have replaced the card: a new address for it
-        if not shadow:
-            register_dashboard(hass, folder / "dashboard.yaml")      # (the dashboard that uses the card: added once)
-            await watchdog.check()                  # the inverter back to Self-Use if the engine has gone quiet
+        register_dashboard(hass, folder / "dashboard.yaml")          # (the dashboard that uses the card: added once)
+        await watchdog.check()                      # the inverter back to Self-Use if the engine has gone quiet
         if not supervisor.started:
             supervisor.start()
         elif supervisor.update_needed():
@@ -179,21 +146,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def update(call: ServiceCall) -> None:
         await async_update(hass, runtime)
 
-    async def refresh_shadow(call: ServiceCall) -> None:
-        """Copy the live folder afresh (the shadow starts again from what the live PowerEngine has now)."""
-        if not shadow:
-            raise ServiceValidationError("Only a shadow run has a copy to refresh")
-        await supervisor.stop()
-        await hass.async_add_executor_job(clear, folder)
-        await hass.async_add_executor_job(seed, live_dir(hass), folder)
-        supervisor.start()
-
     if not hass.services.has_service(DOMAIN, SERVICE_RESTART_ENGINE):
         hass.services.async_register(DOMAIN, SERVICE_RESTART_ENGINE, restart_engine, schema=vol.Schema({}))
-    if not shadow and not hass.services.has_service(DOMAIN, SERVICE_UPDATE):
+    if not hass.services.has_service(DOMAIN, SERVICE_UPDATE):
         hass.services.async_register(DOMAIN, SERVICE_UPDATE, update, schema=vol.Schema({}))
-    if shadow and not hass.services.has_service(DOMAIN, SERVICE_REFRESH_SHADOW):
-        hass.services.async_register(DOMAIN, SERVICE_REFRESH_SHADOW, refresh_shadow, schema=vol.Schema({}))
     entry.async_on_unload(entry.add_update_listener(_reload))
 
     async def on_stop(event: Event) -> None:
@@ -201,8 +157,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     runtime.unsub.append(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, on_stop))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    if not shadow:
-        await register_card(hass)                   # the card is part of PowerEngine: the integration serves it
+    await register_card(hass)                       # the card is part of PowerEngine: the integration serves it
     await check()
     return True
 
@@ -223,18 +178,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await runtime.supervisor.stop()
     runtime.home.close()
     await hass.async_add_executor_job(runtime.server.stop)
-    for issue in (ISSUE_PROTOCOL, ISSUE_CRASHING, ISSUE_NO_SOURCE):
+    for issue in (ISSUE_PROTOCOL, ISSUE_CRASHING):
         ir.async_delete_issue(hass, DOMAIN, issue)
-    if not shadow_run(entry):
-        await unregister_card(hass)
-        unregister_dashboard(hass)
+    await unregister_card(hass)
+    unregister_dashboard(hass)
     if not hass.config_entries.async_loaded_entries(DOMAIN):
-        for service in (SERVICE_RESTART_ENGINE, SERVICE_UPDATE, SERVICE_REFRESH_SHADOW):
+        for service in (SERVICE_RESTART_ENGINE, SERVICE_UPDATE):
             if hass.services.has_service(DOMAIN, service):
                 hass.services.async_remove(DOMAIN, service)
     return ok
 
 
 async def _reload(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """The settings changed (the mode, the folder): start again with them."""
+    """The settings changed (the folder): start again with them."""
     await hass.config_entries.async_reload(entry.entry_id)
