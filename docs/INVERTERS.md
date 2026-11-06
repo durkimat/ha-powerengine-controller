@@ -2,11 +2,11 @@
 
 PowerEngine describes each inverter in a small YAML file and drives it with one generic driver. Support for another
 inverter should mostly be a new file, not new Python. Today the Solis S5-EH1P6K-L (through the SolaX Modbus
-integration, firmware 420044) is the only one; its file is `apps/powerengine/pe_core/adapters/devices/solis.yml` and is
+integration, firmware 420044) is the only one; its file is `engine/pe_core/adapters/devices/solis.yaml` and is
 the reference: copy it and change it.
 
-**Name the file `<name>.yml`** (the definition loader looks for that extension). The file ships with the app (it sits inside `apps/powerengine`, which is what
-HACS installs). It is picked up by name: `registry.get("inverter", "<name>")`.
+**Name the file `<name>.yaml`** (the definition loader reads every `devices/*.yaml`). The file ships with the engine (it sits inside `engine/`, which
+the integration carries a copy of). It is picked up by name: `registry.get("inverter", "<name>")`.
 
 ## What is data and what is code
 
@@ -92,7 +92,7 @@ and values are replaced. The merged result is validated again, so an override ca
 
 ## Checking a new file
 
-`load_definition("<name>")` validates the file and names anything missing (`solis.yml: missing 'ram.failsafe_min'`).
+`load_definition("<name>")` validates the file and names anything missing (`solis.yaml: missing 'ram.failsafe_min'`).
 If you have an export from the card rather than the hardware, start from `tools/candidates_summary.py` (docs/WIZARD.md).
 Then copy `tests/test_solis_definition.py`: its parity test pins every output of the inverter for a spread of inputs, and
 its "another inverter is only a YAML file" test shows the shape of a second definition. Test on the real inverter with

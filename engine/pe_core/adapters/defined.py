@@ -1,4 +1,4 @@
-"""A generic inverter driver, configured by a definition file (`devices/<name>.yml`).
+"""A generic inverter driver, configured by a definition file (`devices/<name>.yaml`).
 
 `DefinedInverter` implements the `InverterAdapter` protocol (and the wider surface the app uses: slot map, reads,
 RAM remote control, supervised tests, the clock) from a `Definition`. What is data lives in the file: entity

@@ -1,7 +1,7 @@
 # Engine v2: how it is built, what runs where, and where each setting applies
 
 10 Oct 2026 · the reference the ablation write-ups ([1](engine-v2-ablation-1.md), [2](engine-v2-ablation-2.md),
-[3](engine-v2-ablation-3.md)) rest on. Written from the code (`apps/powerengine/pe_core/engine_v2/`), not from the design plan, so it
+[3](engine-v2-ablation-3.md)) rest on. Written from the code (`engine/pe_core/engine_v2/`), not from the design plan, so it
 says what the engine does now. `engine-v2.md` is the design; where they differ, this page and the code are right.
 
 ## The one idea

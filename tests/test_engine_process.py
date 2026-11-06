@@ -1,4 +1,4 @@
-"""The engine as its own process (apps/powerengine/engine_main.py): started for real, it connects to the integration's
+"""The engine as its own process (engine/engine_main.py): started for real, it connects to the integration's
 end of the protocol, runs the engine on it, and stops when asked."""
 
 import os
@@ -12,7 +12,7 @@ from host_support import FakeHome, wait_for
 from pe_core import protocol
 from pe_core.host_server import HostServer
 
-APP = pathlib.Path(__file__).resolve().parents[1] / "apps" / "powerengine"
+APP = pathlib.Path(__file__).resolve().parents[1] / "engine"
 
 
 def start(address, secret, tmp_path, wait="10"):

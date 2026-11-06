@@ -1,6 +1,6 @@
 """A tiny lookup from (kind, name) to an adapter factory. Adapters register themselves when their module is imported.
 
-Inverters can also be plain data: every definition file in `devices/` (`<name>.yml`, see docs/INVERTERS.md) is
+Inverters can also be plain data: every definition file in `devices/` (`<name>.yaml`, see docs/INVERTERS.md) is
 registered under ("inverter", <name>) as a `DefinedInverter` factory, the first time an inverter is asked for. A
 hand-written class registered under the same name (`SolisInverter`, the Solis definition with its usual
 constructor) takes its place."""

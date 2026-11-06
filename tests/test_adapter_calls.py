@@ -2,7 +2,7 @@
 import ast
 import pathlib
 
-SRC = pathlib.Path(__file__).resolve().parents[1] / "apps" / "powerengine" / "powerengine.py"
+SRC = pathlib.Path(__file__).resolve().parents[1] / "engine" / "powerengine.py"
 RESERVED = {"domain", "service", "namespace", "entity_id"}
 
 

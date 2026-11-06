@@ -21,13 +21,12 @@ def test_sync_writes_once(tmp_path):
     assert sync_dashboard(str(target)) is True
 
 
-def test_no_stray_yaml_in_app_folder():
-    """The engine's folder holds no .yaml (the files it ships are .yml); the definitions live in one folder."""
+def test_the_yaml_the_engine_ships_is_the_dashboard_and_the_inverter_definitions():
+    """No stray YAML in the engine's folder: the dashboard, and the definitions in one folder."""
     import pathlib
-    app = pathlib.Path(__file__).resolve().parents[1] / "apps" / "powerengine"
+    app = pathlib.Path(__file__).resolve().parents[1] / "engine"
     yamls = sorted(p.relative_to(app).as_posix() for p in app.rglob("*.y*ml"))
-    assert [y for y in yamls if y.endswith(".yaml")] == [], yamls
-    assert [y for y in yamls if not y.endswith(".yaml")] == ["pe_core/adapters/devices/solis.yml"], yamls
+    assert yamls == ["dashboard/dashboard.yaml", "pe_core/adapters/devices/solis.yaml"], yamls
 
 
 def test_dashboard_templates_parse():
@@ -103,7 +102,7 @@ def _plant(id, name, enabled=True):
 
 
 def test_energy_flow_card_matches_shipped_default():
-    """One plant, 18000 Wh, 12% reserve, an EV, solis: byte-identical to the card shipped in dashboard.lovelace."""
+    """One plant, 18000 Wh, 12% reserve, an EV, solis: byte-identical to the card shipped in dashboard.yaml."""
     from pe_core.dashboard import SOURCE, energy_flow_card
     text = open(SOURCE).read()
     lines = text.split("\n")

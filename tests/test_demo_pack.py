@@ -246,7 +246,7 @@ def test_slots_merge_across_the_repeated_hour():
 
 def test_the_committed_pack_has_four_days_of_48_rows():
     pack = dp.load_pack()
-    assert dp.DEFAULT_PATH.exists() and dp.DEFAULT_PATH.parent.parent == ROOT / "apps" / "powerengine"
+    assert dp.DEFAULT_PATH.exists() and dp.DEFAULT_PATH.parent.parent == ROOT / "engine"
     assert dp.days(pack) == ["sunny", "dull", "axle", "car"]
     assert pack["source"] == "recorded, scrubbed" and "derived" in pack["forecast"]
     for name in dp.days(pack):

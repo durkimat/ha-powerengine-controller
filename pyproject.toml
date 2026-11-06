@@ -14,5 +14,5 @@ markers = ["slow: whole-app tests (replays, engine comparisons); skip with -m \"
 
 [tool.ruff.lint.per-file-ignores]
 # the role catalogue is a data table; one role per line pair reads better unwrapped
-"apps/powerengine/pe_core/roles.py" = ["E501"]
+"engine/pe_core/roles.py" = ["E501"]
 "custom_components/powerengine/engine/pe_core/roles.py" = ["E501"]     # a generated copy of the one above

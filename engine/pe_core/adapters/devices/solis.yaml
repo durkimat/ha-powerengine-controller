@@ -4,7 +4,7 @@
 # remote-control command per decision, the clock-drift maths) stay in Python as named behaviours, chosen by the
 # `behaviour:` keys below. See docs/INVERTERS.md for the format.
 #
-# Inverter definitions use the .yml extension (the definition loader looks for it).
+# An inverter definition: the loader reads every devices/<name>.yaml.
 
 definition: 1
 name: solis

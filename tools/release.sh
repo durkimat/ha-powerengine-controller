@@ -308,7 +308,7 @@ cleanup() {
 verify_prepared() {
   local dir="$1" branch="$2" now behind
   step "Prepared branch: verify the bump (nothing is re-tested here; CI on the branch head is what is waited for)"
-  now="$(current_version app "$dir/apps/powerengine/pe_core/__init__.py")"
+  now="$(current_version app "$dir/engine/pe_core/__init__.py")"
   [ "$now" = "$VERSION" ] || die "the branch's __version__ is '$now', not $VERSION"
   grep -q "^## $VERSION (beta)\$" "$dir/CHANGELOG.md" || die "CHANGELOG.md has no '## $VERSION (beta)' section on the branch"
   grep -q "$VERSION" "$dir/docs/INSTALL.md" || die "docs/INSTALL.md does not mention $VERSION on the branch"
@@ -334,7 +334,7 @@ resolve_app() {
   APP_DIR="${APP_DIR:-$(git -C "$script_dir" rev-parse --show-toplevel)}"
   [ -d "$APP_DIR" ] || die "app directory not found: $APP_DIR"
   APP_DIR="$(cd "$APP_DIR" && pwd)"
-  [ -f "$APP_DIR/apps/powerengine/pe_core/__init__.py" ] || die "$APP_DIR is not the PowerEngine app repo"
+  [ -f "$APP_DIR/engine/pe_core/__init__.py" ] || die "$APP_DIR is not the PowerEngine app repo"
   APP_MAIN="$(main_checkout "$APP_DIR")"; APP_WT=0
   here="$(current_branch "$APP_DIR")"
   if [ -n "$APP_BRANCH" ]; then
@@ -387,8 +387,8 @@ main() {
   WORK="$APP_WORK"
   local app_now
   if [ "$APP_NEEDS_CHECKOUT" = 1 ]; then
-    app_now="$(git -C "$APP_WORK" show "$APP_BR:apps/powerengine/pe_core/__init__.py" | sed -n 's/^__version__ *= *"\([^"]*\)".*/\1/p')"
-  else app_now="$(current_version app "$APP_WORK/apps/powerengine/pe_core/__init__.py")"; fi
+    app_now="$(git -C "$APP_WORK" show "$APP_BR:engine/pe_core/__init__.py" | sed -n 's/^__version__ *= *"\([^"]*\)".*/\1/p')"
+  else app_now="$(current_version app "$APP_WORK/engine/pe_core/__init__.py")"; fi
   [ -n "$app_now" ] || die "could not read the app's current __version__"
   if [ "$PREPARED" = 1 ]; then
     [ "$app_now" = "$VERSION" ] || die "--prepared: the branch has version $app_now, not $VERSION (run tools/prepare_release.sh first)"
@@ -409,7 +409,7 @@ main() {
   WORK="$APP_WORK"
   if [ "$PREPARED" = 0 ]; then
     step "App: version and changelog"
-    change_file app_version "$APP_WORK/apps/powerengine/pe_core/__init__.py" "$VERSION"
+    change_file app_version "$APP_WORK/engine/pe_core/__init__.py" "$VERSION"
     change_file install "$APP_WORK/docs/INSTALL.md" "$VERSION"
     change_file app_changelog "$APP_WORK/CHANGELOG.md" "$VERSION" "$APP_NOTES"
     # the Home Assistant integration carries a copy of the engine and its version (tools/build_integration.py)
@@ -422,7 +422,7 @@ main() {
   local title app_title
   title="${TITLE:-$(first_line "$APP_NOTES")}"
   app_title="$VERSION${title:+: $title}"
-  app_files=(apps/powerengine/pe_core/__init__.py docs/INSTALL.md CHANGELOG.md)
+  app_files=(engine/pe_core/__init__.py docs/INSTALL.md CHANGELOG.md)
   [ ! -d "$APP_WORK/custom_components/powerengine" ] || app_files+=(custom_components)
   release_repo "App" "$APP_REPO_SLUG" "$APP_WORK" "$APP_BR" "$VERSION" "$APP_NOTES" "$app_title" "${app_files[@]}"
   SUMMARY+=("PR $REL_PR  release $REL_URL  merge $REL_SHA")

@@ -32,19 +32,20 @@ done
 grep -q '^### Behaviour changes' "$NOTES" || die "notes must start with '### Behaviour changes' (write 'None.' if none)"
 
 ROOT="$(git rev-parse --show-toplevel)"; cd "$ROOT"
-[ -f apps/powerengine/pe_core/__init__.py ] || die "run this inside the PowerEngine app repo"
+[ -f engine/pe_core/__init__.py ] || die "run this inside the PowerEngine app repo"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 [ "$BRANCH" != "main" ] && [ "$BRANCH" != "HEAD" ] || die "run it on the change's branch, not on '$BRANCH'"
 clean_tree "$ROOT" || die "the working tree has uncommitted changes: commit them first"
 git fetch -q origin main
 behind="$(git rev-list --count HEAD..origin/main)"
 [ "$behind" = 0 ] || die "the branch is $behind commit(s) behind main: merge origin/main first, then run this again"
-main_now="$(git show origin/main:apps/powerengine/pe_core/__init__.py | sed -n 's/^__version__ *= *"\([^"]*\)".*/\1/p')"
+# (transitional, 0.9.221: main still has the engine at apps/powerengine until this change is merged)
+main_now="$( { git show origin/main:engine/pe_core/__init__.py 2>/dev/null || git show origin/main:apps/powerengine/pe_core/__init__.py; } | sed -n 's/^__version__ *= *"\([^"]*\)".*/\1/p')"
 newer_than "$VERSION" "$main_now" || die "version $VERSION is not newer than main's $main_now"
-[ "$(current_version app apps/powerengine/pe_core/__init__.py)" = "$main_now" ] || die "the branch already changed __version__: nothing to prepare, or a half-done run"
+[ "$(current_version app engine/pe_core/__init__.py)" = "$main_now" ] || die "the branch already changed __version__: nothing to prepare, or a half-done run"
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT; DRY=0; WORK="$ROOT"
-change_file app_version "$ROOT/apps/powerengine/pe_core/__init__.py" "$VERSION"
+change_file app_version "$ROOT/engine/pe_core/__init__.py" "$VERSION"
 change_file install "$ROOT/docs/INSTALL.md" "$VERSION"
 change_file app_changelog "$ROOT/CHANGELOG.md" "$VERSION" "$NOTES"
 # the Home Assistant integration carries a copy of the engine and its version (tools/build_integration.py)
@@ -55,7 +56,7 @@ fi
 TITLE="${TITLE:-$(first_line "$NOTES")}"
 [ -n "$SESSION" ] && SESSION_URL="$SESSION"
 msg="$(commit_message "$VERSION${TITLE:+: $TITLE}")"
-ADD=(apps/powerengine/pe_core/__init__.py docs/INSTALL.md CHANGELOG.md)
+ADD=(engine/pe_core/__init__.py docs/INSTALL.md CHANGELOG.md)
 [ ! -d custom_components/powerengine ] || ADD+=(custom_components)
 git add -- "${ADD[@]}"
 git commit -q -F "$msg"

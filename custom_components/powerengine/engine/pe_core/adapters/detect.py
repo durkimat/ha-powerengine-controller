@@ -3,7 +3,7 @@
 The wizard (the card's `powerengine-wizard-card`) searches Home Assistant for what each adapter reads: which
 integration (the entity registry's `platform`) provides it, the device's manufacturer and model, and the entity ids
 it usually creates. This table holds that for the tariff, car charger, forecast and grid-event adapters. An inverter
-definition carries the same block as its own `detect:` section (`devices/<name>.yml`), so a new inverter is found by
+definition carries the same block as its own `detect:` section (`devices/<name>.yaml`), so a new inverter is found by
 adding a file.
 
 Every entry is {"integration": {"name", "url"?}, "domains": [...], "manufacturers": [...], "models": [...],

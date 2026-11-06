@@ -21,8 +21,9 @@ from pathlib import Path
 
 RUNNER_VERSION = 2  # bump when a change makes cached results wrong (2: Hold sells spare sun, as the inverter does)
 REPO = Path(__file__).resolve().parents[2]
-APP_DIR = Path("apps") / "powerengine"
-CODE_SUFFIXES = {".py", ".yml", ".yaml", ".lovelace", ".template", ".json"}
+APP_DIR = Path("engine")
+OLD_APP_DIR = Path("apps") / "powerengine"        # the engine's folder before 0.9.221
+CODE_SUFFIXES = {".py", ".yaml", ".template", ".json"}
 
 
 def default_data() -> Path:
@@ -111,13 +112,19 @@ def resolve_code(spec: str | None, work: Path) -> tuple[Path, str]:
     if not (dest / APP_DIR / "pe_core").is_dir():
         tmp = Path(tempfile.mkdtemp(dir=_ensure(Path(work) / "code"), prefix="export-"))
         try:
-            tar = subprocess.run(
-                ["git", "archive", full, str(APP_DIR)], cwd=REPO, check=True, capture_output=True
-            ).stdout
+            for folder in (APP_DIR, OLD_APP_DIR):             # a ref from before the rename has the old folder
+                made = subprocess.run(["git", "archive", full, str(folder)], cwd=REPO, capture_output=True)
+                if made.returncode == 0:
+                    break
+            else:
+                raise SystemExit(f"{spec!r} has neither {APP_DIR} nor {OLD_APP_DIR}")
             tmp_tar = tmp / "x.tar"
-            tmp_tar.write_bytes(tar)
+            tmp_tar.write_bytes(made.stdout)
             with tarfile.open(tmp_tar) as tf:
                 tf.extractall(tmp / "tree", filter="data")
+            if folder != APP_DIR:                              # present it under the name the tools use
+                (tmp / "tree" / APP_DIR).parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(tmp / "tree" / folder), str(tmp / "tree" / APP_DIR))
             dest.parent.mkdir(parents=True, exist_ok=True)
             os.replace(tmp / "tree", dest)
         finally:

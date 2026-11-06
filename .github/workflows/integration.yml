@@ -10,12 +10,12 @@ on:
       - "custom_components/**"
       - "card/**"
       - "tools/build_integration.py"
-      - "apps/powerengine/engine_main.py"
-      - "apps/powerengine/pe_core/protocol.py"
-      - "apps/powerengine/pe_core/host_server.py"
-      - "apps/powerengine/pe_core/host_socket.py"
-      - "apps/powerengine/pe_core/host_scheduler.py"
-      - "apps/powerengine/pe_core/adapters/publish.py"
+      - "engine/engine_main.py"
+      - "engine/pe_core/protocol.py"
+      - "engine/pe_core/host_server.py"
+      - "engine/pe_core/host_socket.py"
+      - "engine/pe_core/host_scheduler.py"
+      - "engine/pe_core/adapters/publish.py"
       - ".github/workflows/integration.yml"
   workflow_dispatch:
 

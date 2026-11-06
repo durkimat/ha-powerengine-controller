@@ -1,7 +1,7 @@
 # PowerEngine: notes for Claude
 
 PowerEngine is a Home Assistant energy manager, run as a Home Assistant integration that starts the engine as its own
-process (`custom_components/powerengine/`; the engine's source is `apps/powerengine/`). It plans and controls a home battery
+process (`custom_components/powerengine/`; the engine's source is `engine/`). It plans and controls a home battery
 (Solis S5-EH1P6K-L hybrid inverter, 18 kWh battery) against EDF tariffs (smart slots ~6.99p, overnight ~7p, peak
 ~30p, export 15p), a myenergi Zappi car charger and Solcast forecasts. It publishes its entities as native Home Assistant entities, and a
 Lovelace card (`card/`, bundled in the integration and served by it) provides the configuration, test, health, update and
@@ -21,19 +21,19 @@ released with it: `tools/build_integration.py` copies it, with its `CARD_VERSION
 - `MIN_APP_VERSION` (card) and `MIN_CARD_VERSION` (app, `pe_core/version.py`): raise one in the PR that makes the other
   side need something new, and release both (see Releases).
 - A changed state text or attribute on a published sensor (`pe_core/status.py`) can break the card or the dashboard
-  (`dashboard.lovelace`, and its frozen render in `tests/golden/`): search both repos for the old text.
+  (`dashboard.yaml`, and its frozen render in `tests/golden/`): search both repos for the old text.
 
 A cloud session can write code, tests and PRs and start a release through the **Release workflow** (see Releases): the
 owner approves each run on GitHub. It can't run `tools/release.sh` itself (it needs the owner's `gh` login).
 
 ## Layout
 
-- `apps/powerengine/powerengine.py`: the engine (large; wiring, control, scheduling).
-- `apps/powerengine/pe_core/`: pure logic, testable without Home Assistant. Planner, optimiser, decisions,
+- `engine/powerengine.py`: the engine (large; wiring, control, scheduling).
+- `engine/pe_core/`: pure logic, testable without Home Assistant. Planner, optimiser, decisions,
   readings, costs, learning, RAM control, damping, journal, releases, diagnostics and so on.
-- `apps/powerengine/dashboard/dashboard.lovelace`: the dashboard. The app writes it to HA on start, so edit it
+- `engine/dashboard/dashboard.yaml`: the dashboard. The app writes it to HA on start, so edit it
   here, never in HA.
-- `docs/INVERTERS.md`: how to add an inverter as a definition file (`pe_core/adapters/devices/<name>.yml`).
+- `docs/INVERTERS.md`: how to add an inverter as a definition file (`pe_core/adapters/devices/<name>.yaml`).
 - `docs/logic/`: the plan and decision logic as flowcharts and tables (inputs, rules planner, optimiser, priorities, control, settings,
   decision log, review findings). Start at `docs/logic/README.md`. A PR that changes planning or `decide` updates the matching page.
 - `docs/INSTALL.md`: the install guide. Keep it current: any release that changes setup updates it in the same PR.
@@ -148,6 +148,6 @@ Don't read these unless the task needs them; grep rather than read whole.
 - `docs/history/phase0-generic.md` and `phase1-generic-core.md`: the adapter refactor, site, wizard, Your system, override, devices.
 - `docs/history/demo-mode.md`: demo world, pack, gate, direct publishing, commands.
 - `docs/plans/` (index `README.md`): designs. `engine-v2.md` is 75 KB: read its status box and the section you need only.
-- **Never read whole:** `CHANGELOG.md` (160 KB), `apps/powerengine/powerengine.py` (4,300 lines), the card's one JS file (7,000 lines).
+- **Never read whole:** `CHANGELOG.md` (160 KB), `engine/powerengine.py` (4,300 lines), the card's one JS file (7,000 lines).
   Start with `tools/outline.sh` (app) or `tools/outline.sh card` (card): each labelled section with its line range (`--defs` adds the classes and
   methods inside), then read just that range, or Grep. Run checks with `tools/check.sh` (one line on success).

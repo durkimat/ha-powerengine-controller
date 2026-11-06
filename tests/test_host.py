@@ -8,7 +8,7 @@ from pe_core import host
 from pe_core.compare.harness import fake_home
 from pe_core.host_local import LocalHost
 
-APP = pathlib.Path(__file__).resolve().parents[1] / "apps" / "powerengine" / "powerengine.py"
+APP = pathlib.Path(__file__).resolve().parents[1] / "engine" / "powerengine.py"
 
 # Everything the engine used to take from AppDaemon's Hass, by name. None of it may be used on `self` in the engine.
 HASS_NAMES = set(host.METHODS) | {"args", "set_state", "AD", "namespace", "timer_running",

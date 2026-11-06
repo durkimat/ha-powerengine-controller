@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 target="app"; defs=0
 for a in "$@"; do case "$a" in --defs) defs=1 ;; -h|--help) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; *) target="$a" ;; esac; done
 case "$target" in
-  app) file="apps/powerengine/powerengine.py"; kind=py ;;
+  app) file="engine/powerengine.py"; kind=py ;;
   card) file="card/ha-powerengine-card.js"; kind=js ;;
   *) file="$target"; [ -f "$file" ] || { echo "no such file: $file"; exit 1; }
      case "$file" in *.js) kind=js ;; *) kind=py ;; esac ;;

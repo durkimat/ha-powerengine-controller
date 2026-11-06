@@ -30,7 +30,7 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-for _p in (ROOT / "apps" / "powerengine", ROOT / "tests"):
+for _p in (ROOT / "engine", ROOT / "tests"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 

@@ -1,6 +1,6 @@
-"""Build apps/powerengine/demo/pack.json from PowerEngine's half-hourly cost records.
+"""Build engine/demo/pack.json from PowerEngine's half-hourly cost records.
 
-    python tools/build_demo_pack.py COSTS_DIR [--out apps/powerengine/demo/pack.json] [--glob "2026-09-*.json"]
+    python tools/build_demo_pack.py COSTS_DIR [--out engine/demo/pack.json] [--glob "2026-09-*.json"]
 
 COSTS_DIR holds one JSON list per local day (<config>/powerengine/costs/YYYY-MM-DD.json). Four days are picked by
 rule and the choice is printed; days are taken in this order and a day that already won an earlier rule is skipped,
@@ -28,7 +28,7 @@ import sys
 from datetime import datetime, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "apps", "powerengine"))
+sys.path.insert(0, os.path.join(ROOT, "engine"))
 
 from pe_core.demo.pack import TZ, day_complete, day_from_records, day_stats, forecast  # noqa: E402,F401
 
@@ -146,7 +146,7 @@ def main(argv=None) -> int:
     ap.add_argument("costs_dir")
     ap.add_argument("--glob", default="20*-*-*.json")
     here = os.path.dirname(os.path.abspath(__file__))
-    default_out = os.path.join(here, "..", "apps", "powerengine", "demo", "pack.json")
+    default_out = os.path.join(here, "..", "engine", "demo", "pack.json")
     ap.add_argument("--out", default=os.path.normpath(default_out))
     a = ap.parse_args(argv)
     day_file = re.compile(r"\d{4}-\d\d-\d\d\.json")

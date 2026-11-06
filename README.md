@@ -27,7 +27,7 @@ pip install -r requirements-dev.txt
 ruff check . && pytest -q
 ```
 
-Decision logic lives in `apps/powerengine/pe_core/` and has no Home Assistant
+Decision logic lives in `engine/pe_core/` and has no Home Assistant
 dependency; `powerengine.py` wires it to Home Assistant through the host.
 
 ## Contributing

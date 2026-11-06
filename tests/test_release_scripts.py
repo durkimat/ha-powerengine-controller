@@ -19,8 +19,8 @@ def sh(cwd, *cmd, check=True, env=None):
 
 
 def seed(repo, version="0.9.50"):
-    (repo / "apps/powerengine/pe_core").mkdir(parents=True)
-    (repo / "apps/powerengine/pe_core/__init__.py").write_text(f'__version__ = "{version}"\n')
+    (repo / "engine/pe_core").mkdir(parents=True)
+    (repo / "engine/pe_core/__init__.py").write_text(f'__version__ = "{version}"\n')
     (repo / "docs").mkdir()
     (repo / "docs/INSTALL.md").write_text(
         f"**Version this guide matches:** {version}\n\nlog: PowerEngine {version} starting\n")
@@ -57,7 +57,7 @@ def test_prepare_bumps_commits_and_pushes(repos):
     work, notes = repos
     r = prepare(work, notes, "0.9.51", "--title", "A thing")
     assert r.returncode == 0, r.stderr
-    assert '__version__ = "0.9.51"' in (work / "apps/powerengine/pe_core/__init__.py").read_text()
+    assert '__version__ = "0.9.51"' in (work / "engine/pe_core/__init__.py").read_text()
     assert "0.9.51" in (work / "docs/INSTALL.md").read_text()
     log = (work / "CHANGELOG.md").read_text()
     assert log.index("## 0.9.51 (beta)") < log.index("## 0.9.50")
@@ -79,7 +79,7 @@ def test_prepare_refuses_a_branch_behind_main(repos, tmp_path):
     sh(other, "git", "push", "-q", "origin", "main")
     r = prepare(work, notes)
     assert r.returncode != 0 and "behind main" in r.stderr
-    assert '__version__ = "0.9.50"' in (work / "apps/powerengine/pe_core/__init__.py").read_text()
+    assert '__version__ = "0.9.50"' in (work / "engine/pe_core/__init__.py").read_text()
 
 
 @pytest.mark.parametrize(
@@ -152,7 +152,7 @@ def test_ci_skips_slow_steps_only_when_every_changed_file_is_notes_or_plans(repo
                         "docs/RELEASING.md"])
     assert changes(work, base) == "code=false"
     # a code file, a logic doc (tests read it), a workflow or the install guide each force the full run
-    for name in ("apps/powerengine/pe_core/x.py", "docs/logic/01.md", "docs/INSTALL.md", ".github/workflows/ci.yml",
+    for name in ("engine/pe_core/x.py", "docs/logic/01.md", "docs/INSTALL.md", ".github/workflows/ci.yml",
                  "tools/release.sh", "tests/test_x.py", "README.md"):
         commit_files(work, ["docs/plans/a.md", name])
         assert changes(work, base) == "code=true", name
@@ -183,9 +183,9 @@ def test_prepare_brings_the_integration_up_to_date_with_the_new_version(repos):
     release commit must hold them in step, or the installed integration would start an older engine than the tested
     one."""
     work, notes = repos
-    (work / "apps/powerengine/pe_core/protocol.py").write_text("PROTOCOL = 1\n")
-    (work / "apps/powerengine/pe_core/host_server.py").write_text("SERVER = 1\n")
-    (work / "apps/powerengine/powerengine.py").write_text("ENGINE = 1\n")
+    (work / "engine/pe_core/protocol.py").write_text("PROTOCOL = 1\n")
+    (work / "engine/pe_core/host_server.py").write_text("SERVER = 1\n")
+    (work / "engine/powerengine.py").write_text("ENGINE = 1\n")
     (work / "card").mkdir()
     (work / "card/ha-powerengine-card.js").write_text('const CARD_VERSION = "0.0.1";\n')
     integration = work / "custom_components/powerengine"

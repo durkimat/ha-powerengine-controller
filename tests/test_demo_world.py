@@ -17,7 +17,7 @@ from pe_core.rctest import find_entities
 from pe_core.readings import read
 
 TZ = ZoneInfo("Europe/London")
-APP = pathlib.Path(__file__).resolve().parents[1] / "apps" / "powerengine"
+APP = pathlib.Path(__file__).resolve().parents[1] / "engine"
 PACK = load_pack()
 
 

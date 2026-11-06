@@ -18,7 +18,7 @@ from pe_core.demo import pack as packmod
 
 PACK = packmod.load_pack()
 LONDON = ZoneInfo("Europe/London")
-APP = os.path.join(os.path.dirname(__file__), "..", "apps", "powerengine")
+APP = os.path.join(os.path.dirname(__file__), "..", "engine")
 
 
 def tree(folder):

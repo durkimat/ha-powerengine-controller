@@ -17,7 +17,7 @@ from pe_core.config import settings_catalogue
 from pe_core.dashboard import SOURCE, energy_flow_card, render
 from pe_core.roles import ROLE_BY_KEY, catalogue
 
-GOLDEN = pathlib.Path(__file__).parent / "golden" / "dashboard_edf_zappi_solcast_solis_axle.lovelace"
+GOLDEN = pathlib.Path(__file__).parent / "golden" / "dashboard_edf_zappi_solcast_solis_axle.yaml"
 HIS = {"supplier": "EDF", "tariff": "EDF tariff", "dispatch": "EDF smart slot", "dispatch_short": "EDF slot",
        "smart_charge": "EDF smart charge", "ev_charger": "Zappi", "forecast": "Solcast", "inverter": "Solis",
        "event": "Axle"}

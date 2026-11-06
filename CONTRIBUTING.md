@@ -30,7 +30,7 @@ and refuses one that still has something it shouldn't.
 
 ## Adding an inverter (a definition file)
 
-An inverter is a YAML file in `apps/powerengine/pe_core/adapters/devices/<name>.yml`: its entities, its remote-control and
+An inverter is a YAML file in `engine/pe_core/adapters/devices/<name>.yml`: its entities, its remote-control and
 timed-window options, its limits and firmware variants. Follow [docs/INVERTERS.md](docs/INVERTERS.md) and start from
 `tools/candidates_summary.py` on the candidate file. Then:
 

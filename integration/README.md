@@ -14,7 +14,7 @@ Assistant. The plan and the phases are in
 | `sensor.py`, `binary_sensor.py`, `switch.py`, `button.py` | The platforms (the engine status sensor and "Restart engine" button are the integration's own). |
 | `config_flow.py`, `diagnostics.py`, `strings.json` | Setup (one entry, the settings folder), download diagnostics, Repairs text. |
 
-`engine/` (the whole app, `apps/powerengine/`), `protocol.py` and `host_server.py` (from `apps/powerengine/pe_core/`) and
+`engine/` (the whole app, `engine/`), `protocol.py` and `host_server.py` (from `engine/pe_core/`) and
 the manifest's `version` are **generated** by `tools/build_integration.py` and committed, because HACS installs a
 repository's `custom_components` folder as it stands. The release tools run `--sync` after they bump the version, and CI
 (`tests/test_integration_sync.py`) fails a change that leaves them out of date: after changing the app, run

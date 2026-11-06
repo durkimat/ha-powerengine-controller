@@ -19,7 +19,7 @@ def test_the_manifest_has_the_engines_version_and_what_hacs_needs():
     import json
     import re
     manifest = json.loads((ROOT / "custom_components" / "powerengine" / "manifest.json").read_text())
-    version = re.search(r'__version__\s*=\s*"([^"]+)"', (ROOT / "apps" / "powerengine" / "pe_core" / "__init__.py")
+    version = re.search(r'__version__\s*=\s*"([^"]+)"', (ROOT / "engine" / "pe_core" / "__init__.py")
                         .read_text()).group(1)
     assert manifest["version"] == version
     for key in ("domain", "name", "codeowners", "documentation", "issue_tracker", "config_flow", "version"):

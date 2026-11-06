@@ -1,4 +1,4 @@
-"""The Solis inverter adapter: a `DefinedInverter` driven by `devices/solis.yml`.
+"""The Solis inverter adapter: a `DefinedInverter` driven by `devices/solis.yaml`.
 
 Everything Solis-specific (the SolaX Modbus entity names, the three timed slots, the RAM remote-control registers,
 the clock, the display names, the capabilities, firmware variants and the suggested entities) is data in that file;
@@ -18,7 +18,7 @@ _DEFINITION = load_definition("solis")
 
 
 class SolisInverter(DefinedInverter):
-    """Translates decisions into Solis settings. See the module docstring and `devices/solis.yml`."""
+    """Translates decisions into Solis settings. See the module docstring and `devices/solis.yaml`."""
 
     name = _DEFINITION["name"]
     DISPLAY_NAMES = dict(_DEFINITION["display_names"])      # the class-level copy the names map starts from
