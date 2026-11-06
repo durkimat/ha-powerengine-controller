@@ -71,9 +71,9 @@ IDS = {
     "ev_charger_status": "sensor.demo_zappi_status",
     "ev_charge_power": "sensor.demo_zappi_power_charging",
     "ev_energy_today": "sensor.demo_zappi_energy_used_today",
-    "axle_event_active": "sensor.demo_axle_event_in_progress",
-    "axle_event_start": "sensor.demo_axle_start_time",
-    "axle_event_end": "sensor.demo_axle_end_time",
+    "grid_event_active": "sensor.demo_axle_event_in_progress",
+    "grid_event_start": "sensor.demo_axle_start_time",
+    "grid_event_end": "sensor.demo_axle_end_time",
     "rc_mode": "select.demo_inverter_battery_control_override",
     "rc_charge_power": "number.demo_inverter_battery_control_override_charge_power",
     "rc_discharge_power": "number.demo_inverter_battery_control_override_discharge_power",
@@ -337,9 +337,9 @@ class DemoWorld:
         if role in ("free_power_next_start", "free_power_next_end"):
             windows = self._upcoming(lambda rows: packmod._windows(rows, "free"), now)
             return self._window_state(windows, now, 0 if role.endswith("start") else 1), {}
-        if role == "axle_event_active":
+        if role == "grid_event_active":
             return ("on" if row["axle"] else "off"), {}
-        if role in ("axle_event_start", "axle_event_end"):
+        if role in ("grid_event_start", "grid_event_end"):
             windows = self._upcoming(packmod.axle_events, now)
             return self._window_state(windows, now, 0 if role.endswith("start") else 1), {}
         if role == "ev_plug_status":
@@ -446,7 +446,7 @@ class DemoWorld:
             return row["exp"]
         if role == "standing_charge":
             return row["standing"]
-        if role == "axle_event_active":
+        if role == "grid_event_active":
             return "on" if row["axle"] else "off"
         if role == "free_power_active":
             return "on" if row["free"] else "off"

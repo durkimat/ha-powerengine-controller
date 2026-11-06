@@ -36,7 +36,7 @@ class Role:
     label: str
     description: str
     kind: str
-    required: str = "yes"          # "yes" | "no" | feature name ("axle", "free_power")
+    required: str = "yes"          # "yes" | "no" | feature name ("grid_events", "free_power")
     domains: tuple[str, ...] = ("sensor",)
     signed: bool = False
     sign_note: str = ""            # what + and - mean to PowerEngine
@@ -67,7 +67,7 @@ GROUPS = (
     ("tariff", "Tariff"),
     ("ev", "EV charger"),
     ("smart", "<<smart_charge>>"),
-    ("axle", "Grid events"),
+    ("grid_events", "Grid events"),
     ("free", "Free-power sessions"),
     ("controls", "Control outputs (Active mode only)"),
     ("handover", "Handover guards (Active mode only)"),
@@ -79,7 +79,7 @@ _BASE_ROLES: tuple[Role, ...] = (
     # --- battery ---
     Role("battery_soc", "battery", "Battery state of charge", "How full the battery is.",
          "percent"),
-    Role("battery_power", "battery", "Battery power", "Live charge/discharge power (if no pair below).",
+    Role("battery_power", "battery", "Battery power", "Live charge/discharge power (if no pair).",
          "power", signed=True, sign_note="+ discharging, - charging"),
     Role("battery_charge_power", "battery", "Battery charging power", "If Battery power has no sign: power in.",
          "power", required="no"),
@@ -95,7 +95,7 @@ _BASE_ROLES: tuple[Role, ...] = (
          "static", static_ok=True, static_unit="W", suggest_static=4800, measurable=True),
     Role("battery_charge_today", "battery", "Battery charged today", "Energy into the battery today, for losses.",
          "energy"),
-    Role("battery_discharge_today", "battery", "Battery discharged today", "Energy out of the battery today, for losses.",
+    Role("battery_discharge_today", "battery", "Battery discharged today", "Battery output today, for losses.",
          "energy"),
     Role("battery_soh", "battery", "Battery health", "State of health, shown on the Health view.",
          "percent", required="no"),
@@ -116,15 +116,15 @@ _BASE_ROLES: tuple[Role, ...] = (
          "power", signed=True, sign_note="+ importing, - exporting"),
     Role("grid_power_reference", "grid", "Check meter", "A second grid meter (e.g. <<ev_charger>> CT).", "power",
          required="no", signed=True, sign_note="+ in, - out"),
-    Role("grid_import_today", "grid", "Grid import today", "Energy imported today, for costs and losses.",
+    Role("grid_import_today", "grid", "Grid import today", "Imported today, for costs and losses.",
          "energy"),
-    Role("grid_export_today", "grid", "Grid export today", "Energy exported today, for costs and losses.",
+    Role("grid_export_today", "grid", "Grid export today", "Exported today, for costs and losses.",
          "energy"),
     Role("grid_import_today_check", "grid", "Check meter import today", "Preferred over the inverter's figure.",
          "energy", required="no"),
     Role("grid_export_today_check", "grid", "Check meter export today", "Preferred over the inverter's figure.",
          "energy", required="no"),
-    Role("house_load_power", "grid", "House load", "Household consumption (car subtracted if in it).",
+    Role("house_load_power", "grid", "House load", "House consumption (car taken off if in it).",
          "power"),
     Role("house_load_today", "grid", "House load today", "Household energy used today, for costs.",
          "energy"),
@@ -138,7 +138,7 @@ _BASE_ROLES: tuple[Role, ...] = (
     # --- tariff ---
     Role("import_rate_now", "tariff", "Import rate now", "The rate you're paying right now.",
          "rate"),
-    Role("import_rates_today", "tariff", "Import rates today", "Today's half-hourly import rates (slots included).",
+    Role("import_rates_today", "tariff", "Import rates today", "Today's half-hour import rates (with slots).",
          "list", domains=("event", "sensor"), attribute="rates"),
     Role("import_rates_tomorrow", "tariff", "Import rates tomorrow", "Tomorrow's half-hourly import rates.",
          "list", domains=("event", "sensor"), attribute="rates"),
@@ -167,15 +167,15 @@ _BASE_ROLES: tuple[Role, ...] = (
     Role("smart_state", "smart", "Smart-charge state", "<<supplier>>'s smart-charging state.",
          "text", required="no"),
     # --- grid events (run by <<event>>) ---
-    Role("axle_event_active", "axle", "Grid event active", "On during a grid event run by <<event>>.",
-         "binary", required="axle", domains=("sensor", "binary_sensor")),
-    Role("axle_event_start", "axle", "Grid event start", "Start of the next grid event.",
-         "timestamp", required="axle"),
-    Role("axle_event_end", "axle", "Grid event end", "End of the next grid event.",
-         "timestamp", required="axle"),
-    Role("axle_direction", "axle", "Grid event direction", "Import or export (only export is acted on).",
+    Role("grid_event_active", "grid_events", "Grid event active", "On during a grid event run by <<event>>.",
+         "binary", required="grid_events", domains=("sensor", "binary_sensor")),
+    Role("grid_event_start", "grid_events", "Grid event start", "Start of the next grid event.",
+         "timestamp", required="grid_events"),
+    Role("grid_event_end", "grid_events", "Grid event end", "End of the next grid event.",
+         "timestamp", required="grid_events"),
+    Role("grid_event_direction", "grid_events", "Grid event direction", "Import or export (only export is used).",
          "text", required="no", unknown_ok=True),
-    Role("heating_setback", "axle", "Heating set-back", "Switch that turns the heating down.",
+    Role("heating_setback", "grid_events", "Heating set-back", "Switch that turns the heating down.",
          "control", required="no", domains=("switch", "input_boolean")),
     # --- free power ---
     Role("free_power_active", "free", "Free power now", "On during a free-electricity session.",

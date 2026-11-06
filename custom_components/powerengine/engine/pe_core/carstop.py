@@ -12,7 +12,7 @@ None). The app does the reading, the writing and the saving. It remembers what i
   charger changed it since, that choice stands);
 * if something sets the mode back during the event it stops it again, not more often than every couple of minutes,
   for as long as the event runs (27 Oct 2026: the Zappi went back to Eco+ within seconds of each stop and the old
-  cap of three retries gave up six minutes in). To keep a mode of your own through an event, turn `axle_stop_car` off.
+  cap of three retries gave up six minutes in). To keep a mode of your own, turn `grid_event_stop_car` off.
 """
 
 from __future__ import annotations

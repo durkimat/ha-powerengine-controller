@@ -132,8 +132,8 @@ SECTIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
 # the v1 settings engine v2 followed until 0.9.168 (v2 key -> (v1 part, v1 key)); used once, by `split_block`
 SPLIT_FROM = {
     "arbitrage": ("features", "arbitrage"),
-    "events": ("features", "axle"),
-    "event_plus_export": ("features", "axle_plus_export"),
+    "events": ("features", "grid_events"),
+    "event_plus_export": ("features", "grid_event_plus_export"),
     "free_power": ("features", "free_power_days"),
     "reserve_soc": ("safety", "min_reserve_soc"),
 }

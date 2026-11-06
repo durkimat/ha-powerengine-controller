@@ -15,7 +15,7 @@ detect:
   models: []
   entities: ['^sensor\.axle_vpp_']
 roles:
-  axle_direction: {suggest: ['^sensor\.axle_vpp_axle_import_export$']}
-  axle_event_active: {suggest: ['^sensor\.axle_vpp_axle_event_in_progress$']}
-  axle_event_end: {suggest: ['^sensor\.axle_vpp_axle_end_time_friendly$']}
-  axle_event_start: {suggest: ['^sensor\.axle_vpp_axle_start_time_friendly$']}
+  grid_event_direction: {suggest: ['^sensor\.axle_vpp_axle_import_export$']}
+  grid_event_active: {suggest: ['^sensor\.axle_vpp_axle_event_in_progress$']}
+  grid_event_end: {suggest: ['^sensor\.axle_vpp_axle_end_time_friendly$']}
+  grid_event_start: {suggest: ['^sensor\.axle_vpp_axle_start_time_friendly$']}

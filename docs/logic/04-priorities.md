@@ -192,7 +192,7 @@ flowchart TD
 **Need for an event** (`pre_axle_reserve`): `reserve + (event power x event hours / capacity x 100) + event margin`, capped
 at 100%.
 
-The settings `pre_axle_lookahead_h` (look-ahead), `axle_margin_soc` (margin) and `charge_hysteresis_soc` (restart margin)
+The settings `pre_grid_event_lookahead_h` (look-ahead), `grid_event_margin_soc` (margin) and `charge_hysteresis_soc` (restart margin)
 are read **only** by this fallback. With a plan they have no effect ([09, F1b](09-review-findings.md#f1b)).
 
 ## 4.7 Conflict cheat-sheet

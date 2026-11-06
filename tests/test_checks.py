@@ -32,7 +32,7 @@ def test_wrong_unit_and_domain():
 
 def test_unavailable_but_timestamps_may_be_unknown():
     assert check(R["battery_soc"], {"entity": "sensor.x"}, st("unavailable", "%"), NOW)[0] == "unavailable"
-    assert check(R["axle_event_start"], {"entity": "sensor.x"}, st("unknown"), NOW)[0] == "ok"
+    assert check(R["grid_event_start"], {"entity": "sensor.x"}, st("unknown"), NOW)[0] == "ok"
 
 
 def test_stale_power():
@@ -68,8 +68,8 @@ def test_summary():
 
 
 def test_axle_direction_unknown_between_events_is_ok():
-    assert check(R["axle_direction"], {"entity": "sensor.a"}, st("unknown", None), NOW)[0] == "ok"
-    assert check(R["axle_direction"], {"entity": "sensor.a"}, st("unavailable", None), NOW)[0] == "unavailable"
+    assert check(R["grid_event_direction"], {"entity": "sensor.a"}, st("unknown", None), NOW)[0] == "ok"
+    assert check(R["grid_event_direction"], {"entity": "sensor.a"}, st("unavailable", None), NOW)[0] == "unavailable"
 
 
 def test_slow_settings_are_never_stale():
@@ -100,9 +100,9 @@ def test_car_inputs_unavailable_do_not_block_control():
 
 def test_the_grid_event_sensors_are_degradable_so_an_axle_outage_does_not_stop_control():
     from pe_core.checks import UNAVAILABLE, UNMAPPED, blocking, degraded
-    req = ["axle_event_active", "axle_event_start", "axle_event_end", "battery_soc"]
-    results = {"axle_event_active": (UNAVAILABLE, "x"), "axle_event_start": (UNAVAILABLE, "x"),
-               "axle_event_end": (UNAVAILABLE, "x"), "battery_soc": ("ok", "ok")}
+    req = ["grid_event_active", "grid_event_start", "grid_event_end", "battery_soc"]
+    results = {"grid_event_active": (UNAVAILABLE, "x"), "grid_event_start": (UNAVAILABLE, "x"),
+               "grid_event_end": (UNAVAILABLE, "x"), "battery_soc": ("ok", "ok")}
     assert blocking(results, req) == [] and degraded(results, req) == req[:3]
-    results["axle_event_end"] = (UNMAPPED, "")
-    assert blocking(results, req) == ["axle_event_end"]                  # unmapped still blocks
+    results["grid_event_end"] = (UNMAPPED, "")
+    assert blocking(results, req) == ["grid_event_end"]                  # unmapped still blocks

@@ -13,8 +13,8 @@ from pe_core.adapters import names as adapter_names
 from pe_core.adapters.axle import AxleEvents
 from pe_core.readings import read
 
-ROLE_ENTITY = {"axle_event_active": "sensor.axle_active", "axle_event_start": "sensor.axle_start",
-               "axle_event_end": "sensor.axle_end"}
+ROLE_ENTITY = {"grid_event_active": "sensor.axle_active", "grid_event_start": "sensor.axle_start",
+               "grid_event_end": "sensor.axle_end"}
 
 
 def roles(states):

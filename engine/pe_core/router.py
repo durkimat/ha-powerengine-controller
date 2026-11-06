@@ -22,13 +22,14 @@ KEEP_LOG = 60            # the last deliveries kept for the Config page
 KINDS: dict[str, tuple[str, float]] = {
     "health": ("Health problems", 24),
     "inputs": ("Inputs not working", 12),
-    "axle": ("Grid event scheduled", 12),
+    "grid_event": ("Grid event scheduled", 12),
     "free_power": ("Free-power sessions", 12),
     "daily": ("Daily summary", 12),
     "simulator": ("Tariff opportunities", 24),
     "grid_reminder": ("Grid event reminders", 2),
     "grid_summary": ("Grid event summary", 14),
 }
+RENAMED_KINDS = {"axle": "grid_event"}      # the name this kind had in what an older version kept on disk
 SOURCE = "powerengine"
 DEFAULT_HOLD_H = 12      # a held message from elsewhere (the family dashboard, an automation) that sets no limit
 
@@ -132,9 +133,10 @@ class Outbox:
             try:
                 with open(path, encoding="utf-8") as fh:
                     raw = json.load(fh)
-                self.held = [h for h in raw.get("held", []) if isinstance(h, dict)]
-                self.seen = dict(raw.get("seen", {}))
-                self.log = [e for e in raw.get("log", []) if isinstance(e, dict)][-KEEP_LOG:]
+                rename = lambda e: dict(e, kind=RENAMED_KINDS.get(e.get("kind"), e.get("kind")))      # noqa: E731
+                self.held = [rename(h) for h in raw.get("held", []) if isinstance(h, dict)]
+                self.seen = {RENAMED_KINDS.get(k, k): v for k, v in dict(raw.get("seen", {})).items()}
+                self.log = [rename(e) for e in raw.get("log", []) if isinstance(e, dict)][-KEEP_LOG:]
             except (OSError, ValueError):
                 pass
 

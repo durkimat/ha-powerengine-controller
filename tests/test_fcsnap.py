@@ -181,7 +181,7 @@ def test_a_day_with_realistic_payloads_and_24_forecast_updates_stays_inside_the_
              "import_rates_tomorrow": "event.rates_tomorrow", "import_rate_now": "sensor.rate_now",
              "export_rate": "sensor.export", "standing_charge": "sensor.standing",
              "smart_dispatches": "binary.dispatch",
-             "free_power_next_start": "sensor.free_start", "axle_event_start": "sensor.axle_start"}
+             "free_power_next_start": "sensor.free_start", "grid_event_start": "sensor.axle_start"}
     prof = LoadProfile({(we, hh): 300.0 + hh * 7.5 for we in (False, True) for hh in range(48)}, 21.0)
     wrote, cur = 0, {}
     for step in range(24 * 12 + 1):                                   # every 5 minutes, all day

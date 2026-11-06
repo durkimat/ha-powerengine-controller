@@ -127,7 +127,11 @@ def make(
 
     # ---- the snapshot: forecasts, rates and dispatches as they would have been on the new day
     midnight = datetime.fromisoformat(snap["entries"][0]["at"]).replace(hour=0, minute=0, second=8) + shift
-    roles = snap["roles"]
+    # a snapshot written before the grid-event inputs were renamed has the old names
+    old_names = {"axle_event_active": "grid_event_active", "axle_event_start": "grid_event_start",
+                 "axle_event_end": "grid_event_end", "axle_direction": "grid_event_direction"}
+    roles = {old_names.get(k, k): v for k, v in snap["roles"].items()}
+    snap["roles"] = roles
     first = copy.deepcopy(snap["entries"][0])
     states = first["states"]
 
@@ -338,7 +342,7 @@ def make(
             s_[roles["smart_dispatches"]] = {"state": st, "attributes": at}
         entries.append({"at": _iso(wd_dt + timedelta(seconds=1)), "states": s_})
     # a grid event: announced at `announce_h` (its start and end appear), running between them (on, then off)
-    ev_active, ev_start, ev_end = (roles.get(k) for k in ("axle_event_active", "axle_event_start", "axle_event_end"))
+    ev_active, ev_start, ev_end = (roles.get(k) for k in ("grid_event_active", "grid_event_start", "grid_event_end"))
     if events and ev_active in states and ev_start in states and ev_end in states:
         at0 = midnight.replace(second=0)
 

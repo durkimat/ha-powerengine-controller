@@ -188,7 +188,7 @@ the car is full).
   offered as several back-to-back sessions is one free window. Without it, or with an empty list, the sensors are used.
 * A **scheduled** event (not yet active) sets `axle_state() == "scheduled"`; **active** sets `"active"`.
 * Event value: **£1.00 per kWh** (`Params.axle_value`, a code constant; it is *not* a setting), plus the supplier's export
-  rate on top when `axle_plus_export` is on (EDF: £1 + 15p). Event power: the battery's maximum discharge, since the
+  rate on top when `grid_event_plus_export` is on (EDF: £1 + 15p). Event power: the battery's maximum discharge, since the
   event pays per kWh (0.9.55; before that 4 kW, which left about 1 kWh an hour unsold on 28 Sep 2026).
 
 ## 1.7 Battery limits: configured, measured, learned

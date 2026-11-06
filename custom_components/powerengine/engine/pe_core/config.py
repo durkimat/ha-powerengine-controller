@@ -60,21 +60,21 @@ KNOWN_KEYS = frozenset(
 MODES = ("passive", "active")
 FORECAST_SOURCES = ("none", "service", "scaled")
 RENAMED_FORECAST_SOURCES = {"solcast_site": "service"}          # an older saved settings file: read under the new name
-FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
+FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "grid_events",
             "free_power_days", "tariff_simulator", "optimised_plan", "learn_taper", "learn_reserve", "learn_export",
             "learn_car", "cold_caution", "cold_learning", "damp_restart", "damp_bursts", "deep_overnight",
-            "use_check_meter", "axle_plus_export", "learn_conversion", "slots_whole_house", "smart_skip_full_car",
-            "learn_car_min", "engine_compare", "axle_stop_car", "axle_heating_setback")
+            "use_check_meter", "grid_event_plus_export", "learn_conversion", "slots_whole_house", "smart_skip_full_car",
+            "learn_car_min", "engine_compare", "grid_event_stop_car", "grid_event_heating_setback")
 LEGACY_FEATURES = ("use_learned",)          # 0.8.0's single switch, replaced by one per figure: ignored if saved
 FEATURE_DEFAULTS = {"auto_cheap_threshold": True, "fill_when_cheap": True, "smart_charge_optimisation": True,
-                    "arbitrage": False, "axle": True,
+                    "arbitrage": False, "grid_events": True,
                     "free_power_days": True, "tariff_simulator": True, "optimised_plan": True,
                     "learn_taper": True, "learn_reserve": True, "learn_export": True, "learn_car": True,
                     "cold_caution": True, "cold_learning": True, "damp_restart": True, "damp_bursts": False,
                     "deep_overnight": True, "use_check_meter": True,
-                    "axle_plus_export": True, "learn_conversion": True, "slots_whole_house": True,
+                    "grid_event_plus_export": True, "learn_conversion": True, "slots_whole_house": True,
                     "smart_skip_full_car": False, "learn_car_min": True,
-                    "engine_compare": True, "axle_stop_car": True, "axle_heating_setback": False}
+                    "engine_compare": True, "grid_event_stop_car": True, "grid_event_heating_setback": False}
 # name: (default, min, max) -- numeric safety settings, all validated
 INT_SAFETY = ("smart_max_requests_per_day",)     # whole numbers: a fractional value is rounded
 # Safety settings that became engine v2 settings: a saved value starts the v2 setting (`parse_v2` `legacy`); no error.
@@ -92,8 +92,8 @@ SAFETY = {
     "cheap_threshold_p": (10.0, 0, 100),      # import at or below this is "cheap" (pence/kWh)
     "grid_charge_target_soc": (100, 10, 100), # charge to this in cheap periods (%)
     "charge_hysteresis_soc": (3, 0, 20),      # resume charging only below target minus this (%)
-    "pre_axle_lookahead_h": (6.0, 0, 48),     # start protecting charge this long before an event (h)
-    "axle_margin_soc": (5, 0, 50),            # extra above the event's needs (%)
+    "pre_grid_event_lookahead_h": (6.0, 0, 48),     # start protecting charge this long before an event (h)
+    "grid_event_margin_soc": (5, 0, 50),            # extra above the event's needs (%)
     "heating_pump_overrun_min": (15, 0, 120), # heating turned down this long before a grid event (pump overrun)
     "main_fuse_a": (60, 20, 200),             # supply fuse; import is planned to stay under 90% of it (A)
     "ev_charger_kw": (7.4, 0, 22),            # car charger power, assumed during planned smart slots (kW)
@@ -143,7 +143,7 @@ LOCATION_LAG_H = {"garage": 24.0, "outside": 6.0, "indoors": 72.0}
 NOTIFY_EVENTS = {
     "health": (True, "Health problems", "When the Health tab finds a problem (checked after start-up and each night)."),
     "inputs": (True, "Inputs not working", "When a required input has been unavailable or stale for 15 minutes."),
-    "axle": (True, "Grid events", "When a grid event (<<event>>) is scheduled, with its time."),
+    "grid_event": (True, "Grid events", "When a grid event (<<event>>) is scheduled, with its time."),
     "free_power": (True, "Free-power sessions", "When a free-electricity session is announced."),
     "daily": (False, "Daily summary", "Each morning: yesterday's cost and savings."),
     "alexa": (False, "Alexa announcements", "Spoken reminders before a grid event, saying whether the battery looks "
@@ -201,9 +201,9 @@ SETTING_TEXT = {
                           "most it can be; the day's prices can set it lower."),
     "grid_charge_target_soc": ("Grid-charge target", "%", "How full to charge from the grid when import is cheap."),
     "charge_hysteresis_soc": ("Charge restart margin", "%", "Once full, restart only below target minus this."),
-    "pre_axle_lookahead_h": ("Grid-event look-ahead", "h",
+    "pre_grid_event_lookahead_h": ("Grid-event look-ahead", "h",
                              "How long before a grid event to start protecting charge."),
-    "axle_margin_soc": ("Grid-event safety margin", "%",
+    "grid_event_margin_soc": ("Grid-event safety margin", "%",
                         "Extra charge kept above what a grid event needs."),
     "heating_pump_overrun_min": ("Heating pump overrun", "min", "Heating is turned down this long before an event."),
     "main_fuse_a": ("Main supply fuse", "A",
@@ -313,7 +313,7 @@ SETTING_SECTIONS = (
                                          "grid_charge_target_soc", "charge_hysteresis_soc")),
     ("tariff", "Overnight window", ("overnight_start_h", "overnight_end_h")),
     ("limits", "Supply limits", ("main_fuse_a", "ev_charger_kw", "export_limit_kw")),
-    ("axle", "Grid events", ("pre_axle_lookahead_h", "axle_margin_soc", "heating_pump_overrun_min")),
+    ("grid_events", "Grid events", ("pre_grid_event_lookahead_h", "grid_event_margin_soc", "heating_pump_overrun_min")),
     ("smart", "Smart-charge requests", ("smart_max_requests_per_day", "smart_min_gap_min", "smart_lookahead_h",
                                                   "car_min_charge_min")),
     ("arbitrage", "Arbitrage", ("battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc",
@@ -540,7 +540,7 @@ _CHANNEL_NAME = re.compile(r"^[a-z0-9_]{1,30}$")
 _KIND = re.compile(r"^[a-z0-9_]{1,40}$")
 _NEW_NOTIFICATION_KEYS = {"channels", "rules", "reminder_hours"}
 _OLD_NOTIFICATION_KEYS = {"service", "events", "alexa"}
-_LEGACY_KINDS = ("health", "inputs", "axle", "free_power", "daily", "simulator")
+_LEGACY_KINDS = ("health", "inputs", "grid_event", "free_power", "daily", "simulator")
 
 
 def _parse_notifications(raw: Any) -> dict[str, Any]:
@@ -753,12 +753,52 @@ def _parse_alexa(raw: Any) -> dict[str, Any]:
             "latest": _clock_minutes("latest", cfg["latest"])}
 
 
+# Names the grid-event settings had in a settings file saved by an older version (they were named after the integration
+# that reports grid events): read under the current names. Nothing is written back; the next save does that.
+RENAMED_FEATURES = {"axle": "grid_events", "axle_plus_export": "grid_event_plus_export",
+                    "axle_stop_car": "grid_event_stop_car", "axle_heating_setback": "grid_event_heating_setback"}
+RENAMED_SAFETY = {"pre_axle_lookahead_h": "pre_grid_event_lookahead_h", "axle_margin_soc": "grid_event_margin_soc"}
+RENAMED_INPUTS = {"axle_event_active": "grid_event_active", "axle_event_start": "grid_event_start",
+                  "axle_event_end": "grid_event_end", "axle_direction": "grid_event_direction"}
+RENAMED_KINDS = {"axle": "grid_event"}
+
+
+def _renamed(mapping: Any, names: dict[str, str]) -> Any:
+    """`mapping` with the old names of `names` under the new ones (a new name there wins); else as is."""
+    if not isinstance(mapping, dict) or not set(mapping) & set(names):
+        return mapping
+    out = {k: v for k, v in mapping.items() if k not in names}
+    for old, new in names.items():
+        if old in mapping:
+            out.setdefault(new, mapping[old])
+    return out
+
+
+def migrate_names(data: dict) -> dict:
+    """A settings document saved under the old grid-event names, under the current ones (a copy)."""
+    out = dict(data)
+    for key, names in (("features", RENAMED_FEATURES), ("safety", RENAMED_SAFETY), ("inputs", RENAMED_INPUTS)):
+        if key in out:
+            out[key] = _renamed(out[key], names)
+    n = data.get("notifications")
+    if isinstance(n, dict):
+        n = dict(n)
+        if "events" in n:
+            n["events"] = _renamed(n["events"], RENAMED_KINDS)
+        if isinstance(n.get("rules"), list):
+            n["rules"] = [dict(r, events=[RENAMED_KINDS.get(k, k) for k in r["events"]])
+                          if isinstance(r, dict) and isinstance(r.get("events"), list) else r for r in n["rules"]]
+        out["notifications"] = n
+    return out
+
+
 def parse_config(data: Any) -> Config:
     """Validate an already-loaded YAML document and return a Config."""
     if data is None:
         data = {}
     if not isinstance(data, dict):
         raise ConfigError("top level of config.yaml must be a mapping")
+    data = migrate_names(data)
 
     unknown = sorted(set(data) - KNOWN_KEYS)
     if unknown:
@@ -986,7 +1026,7 @@ def use_measured(cfg: Config | None, role_key: str) -> bool:
 # The role groups a part of the site brings with it. When the site leaves the part out ("none"), these roles are not
 # needed, so a home with no car charger, no forecast or no grid-event provider is not held at "inputs missing".
 # (A car charger takes the smart-charge group with it: smart-charge slots are for the car.)
-SKIPPED_PART_GROUPS = {"ev_charger": ("ev", "smart"), "forecast": ("solar",), "events": ("axle",)}
+SKIPPED_PART_GROUPS = {"ev_charger": ("ev", "smart"), "forecast": ("solar",), "events": ("grid_events",)}
 
 
 def left_out_roles(site: Site) -> set[str]:
@@ -1016,7 +1056,7 @@ def other_controller(cfg: Config | None) -> str:
 
 def required_roles(cfg: Config) -> list[str]:
     """Role keys that must be mapped, given which features are switched on and which parts the site leaves out."""
-    feature_for = {"axle": "axle", "free_power": "free_power_days"}
+    feature_for = {"grid_events": "grid_events", "free_power": "free_power_days"}
     pair = uses_battery_pair(cfg)
     left_out = left_out_roles(cfg.site)
     keys = []

@@ -5,12 +5,12 @@ from test_site import PLAIN, lines, make, saved  # noqa: F401  (make: the fixtur
 from pe_core.config import parse_config
 from pe_core.engine_v2.settings import V2Settings, parse_v2, profile_values, split_block
 
-V1 = {"features": {"arbitrage": True, "axle": False, "axle_plus_export": True, "free_power_days": False},
+V1 = {"features": {"arbitrage": True, "grid_events": False, "grid_event_plus_export": True, "free_power_days": False},
       "safety": {"min_reserve_soc": 15}}
 
 
 def test_v1_settings_no_longer_move_engine_v2():
-    cfg = parse_config({"features": {"arbitrage": True, "axle": False}, "safety": {"min_reserve_soc": 20}})
+    cfg = parse_config({"features": {"arbitrage": True, "grid_events": False}, "safety": {"min_reserve_soc": 20}})
     assert cfg.engine_v2 == V2Settings()
 
 
@@ -22,7 +22,7 @@ def test_the_split_writes_what_v2_was_following_when_it_differs():
 def test_the_split_leaves_a_saved_value_a_profile_value_and_equal_values_alone():
     block = split_block({"arbitrage": False}, V1["features"], V1["safety"], {"events": True})
     assert block == {"arbitrage": False, "free_power": False, "reserve_soc": 15}      # events: the profile's
-    same = split_block({}, {"arbitrage": False, "axle": True}, {"min_reserve_soc": 12})
+    same = split_block({}, {"arbitrage": False, "grid_events": True}, {"min_reserve_soc": 12})
     assert same == {}
 
 
@@ -33,7 +33,7 @@ def test_after_the_split_engine_v2_uses_exactly_what_it_followed_before():
 
 
 def test_an_old_config_is_migrated_once_with_a_backup(make):  # noqa: F811
-    text = PLAIN + "features: {arbitrage: true, axle: false}\nsafety: {min_reserve_soc: 15}\n"
+    text = PLAIN + "features: {arbitrage: true, grid_events: false}\nsafety: {min_reserve_soc: 15}\n"
     app = make(text)
     data = saved(make)
     assert data["v2_split"] is True and data["engine_v2"] == {"arbitrage": True, "events": False, "reserve_soc": 15}

@@ -36,7 +36,7 @@ PARTS = (
 # part (the check meter is the charger's; the smart-charge request entities are the tariff's). Handover guards belong
 # to no part: they are left to the config page.
 GROUP_PART = {"battery": "inverter", "grid": "inverter", "controls": "inverter", "solar": "forecast",
-              "tariff": "tariff", "smart": "tariff", "free": "tariff", "ev": "ev_charger", "axle": "events"}
+              "tariff": "tariff", "smart": "tariff", "free": "tariff", "ev": "ev_charger", "grid_events": "events"}
 ROLE_PART = {"smart_target_soc": "tariff", "smart_target_time": "tariff", "grid_power_reference": "ev_charger",
              "grid_import_today_check": "ev_charger", "grid_export_today_check": "ev_charger"}
 

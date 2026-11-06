@@ -42,7 +42,7 @@ ROLE_KEYS = (
     "import_rate_now", "import_rates_today", "import_rates_tomorrow", "export_rate", "standing_charge",
     "smart_dispatches",
     "free_power_active", "free_power_next_start", "free_power_next_end",
-    "axle_event_active", "axle_event_start", "axle_event_end", "axle_direction",
+    "grid_event_active", "grid_event_start", "grid_event_end", "grid_event_direction",
 )
 
 

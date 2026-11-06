@@ -52,7 +52,7 @@ function `compare()` and the "optimiser" figure on the Plan tab are used only wh
 <a id="f1b"></a>
 ## F1b. Settings that act nowhere while a plan exists
 
-**Where:** `pre_axle_lookahead_h` ("Grid-event look-ahead"), `axle_margin_soc` ("Grid-event safety margin") and
+**Where:** `pre_grid_event_lookahead_h` ("Grid-event look-ahead"), `grid_event_margin_soc` ("Grid-event safety margin") and
 `charge_hysteresis_soc` ("Charge restart margin"). Searching the code for each key finds them only in `decide.py`, inside
 the reactive rule stack that runs when **there is no plan**.
 
@@ -62,10 +62,10 @@ page lists two settings that sound like the way to make PowerEngine more cautiou
 does nothing in normal running. The charge target is also reached by the optimiser, not by hysteresis.
 
 **Why it matters:** the owner is offered a lever that is not connected. If an event ever leaves the battery short, tuning
-`axle_margin_soc` will not help.
+`grid_event_margin_soc` will not help.
 
 **What I would do:** either (a) remove them from the config page and keep them only for the fallback, or (b) connect them:
-for example, have the planner require the event's reserve plus `axle_margin_soc`. (b) is a behaviour change.
+for example, have the planner require the event's reserve plus `grid_event_margin_soc`. (b) is a behaviour change.
 
 <a id="f2"></a>
 ## F2. "Grid-charge target" is not a ceiling for the optimiser

@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 
 from .types import BatteryFacts, Forecast, Segment
 
-EVENT_MARGIN_PTS = 5.0            # extra level over the event's needs, points (as the v1 `axle_margin_soc`)
+EVENT_MARGIN_PTS = 5.0            # extra level over the event's needs, points (as the v1 `grid_event_margin_soc`)
 LEAD_MARGIN_MIN = 30              # the window opens this long before the latest safe start
 CHARGE_RATE_SHARE = 0.85          # of the charger's full power, to allow for the house load, the taper and the BMS
 STEP_MIN = 15

@@ -32,9 +32,9 @@ class AxleEvents:
 
     def read_event(self, state: StateFn) -> tuple[bool, datetime | None, datetime | None]:
         """(event active now, next event start, next event end)."""
-        return (_is_on(state("axle_event_active")),
-                parse_time((state("axle_event_start") or {}).get("state")),
-                parse_time((state("axle_event_end") or {}).get("state")))
+        return (_is_on(state("grid_event_active")),
+                parse_time((state("grid_event_start") or {}).get("state")),
+                parse_time((state("grid_event_end") or {}).get("state")))
 
     def grid_events(self, ha: HomeAssistant, now: datetime) -> list[GridEvent]:
         """The current or next event as an export `GridEvent` (its payment isn't known here, so no value); empty

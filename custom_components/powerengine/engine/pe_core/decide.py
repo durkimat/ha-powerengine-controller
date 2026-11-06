@@ -102,7 +102,7 @@ def pre_axle_reserve(r: Readings, cfg: Config) -> float | None:
         return None
     need = power / 1000 * hours / capacity * 100
     s = cfg.safety
-    return min(100.0, s["min_reserve_soc"] + need + s["axle_margin_soc"])
+    return min(100.0, s["min_reserve_soc"] + need + s["grid_event_margin_soc"])
 
 
 def decide(r: Readings | None, cfg: Config, previous: Decision | None = None, tz: tzinfo | None = None,
@@ -128,8 +128,8 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
     price = f"{price_p:.2f}".rstrip("0").rstrip(".") + "p"
 
     # 1. Axle event in progress
-    if f.get("axle") and r.axle_state() == "active":
-        extra = (f" + {r.export_rate * 100:g}p export" if f.get("axle_plus_export", True) and r.export_rate
+    if f.get("grid_events") and r.axle_state() == "active":
+        extra = (f" + {r.export_rate * 100:g}p export" if f.get("grid_event_plus_export", True) and r.export_rate
                  else "")
         return Decision(FORCE_DISCHARGE, "axle_active",
                         f"{N('event')} event in progress (paid £1{extra} per kWh exported)",
@@ -145,8 +145,8 @@ def _decide(r: Readings | None, cfg: Config, previous: Decision | None = None, t
         return _with_plan(r, cfg, plan, soc, price, cheap, target, previous)
 
     # 2. Keep enough charge for an upcoming Axle event
-    soon = r.axle_state() == "scheduled" and r.axle_start - r.now <= timedelta(hours=s["pre_axle_lookahead_h"])
-    if f.get("axle") and soon:
+    soon = r.axle_state() == "scheduled" and r.axle_start - r.now <= timedelta(hours=s["pre_grid_event_lookahead_h"])
+    if f.get("grid_events") and soon:
         need = pre_axle_reserve(r, cfg)
         if need is not None and soc < need:
             when = (r.axle_start.astimezone(tz) if tz else r.axle_start).strftime("%H:%M")

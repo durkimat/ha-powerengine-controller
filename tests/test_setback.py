@@ -19,7 +19,7 @@ def test_the_window_starts_the_pump_overrun_before_the_event():
 
 
 def test_defaults_are_off_and_fifteen_minutes():
-    assert FEATURE_DEFAULTS["axle_heating_setback"] is False
+    assert FEATURE_DEFAULTS["grid_event_heating_setback"] is False
     assert SAFETY["heating_pump_overrun_min"] == (15, 0, 120)
     assert parse_config({}).safety["heating_pump_overrun_min"] == 15
     assert parse_config({"safety": {"heating_pump_overrun_min": 20}}).safety["heating_pump_overrun_min"] == 20
@@ -63,7 +63,7 @@ def _app(monkeypatch, tmp_path, features=None, mode="active", entity="input_bool
     import powerengine
     a = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
     a.cfg = parse_config({"inputs": {"heating_setback": {"entity": entity}} if entity else {},
-                          "features": {"axle_heating_setback": True, **(features or {})}, "safety": safety or {}})
+                          "features": {"grid_event_heating_setback": True, **(features or {})}, "safety": safety or {}})
     a._demo = None
     a.mode = types.SimpleNamespace(effective=mode)
     a._save_path = lambda: str(tmp_path / "config.yaml")
@@ -94,7 +94,7 @@ def test_app_switches_on_fifteen_minutes_before_and_off_after_and_survives_a_res
 
 
 def test_app_does_nothing_when_off_passive_or_unset(monkeypatch, tmp_path):
-    for kw in ({"features": {"axle_heating_setback": False}}, {"features": {"axle": False}}, {"mode": "passive"},
+    for kw in ({"features": {"grid_event_heating_setback": False}}, {"features": {"axle": False}}, {"mode": "passive"},
                {"entity": None}):
         a = _app(monkeypatch, tmp_path, **kw)
         a._heating_setback_step(_r(-10))

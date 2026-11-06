@@ -174,7 +174,7 @@ BATTERY_VOLTS = 52.0              # nominal, for converting power to the inverte
 CYCLE_SECONDS = 30
 RAM_SEND_PATIENCE_S = 60          # a remote-control command not landed by then is given up on (_ram_sending)
 SLOW_TICK_S = 5.0                 # a tick this slow is logged with where the time went (_note_slow_tick)
-EVENT_ROLES = ("axle_event_active", "axle_event_start", "axle_event_end", "axle_direction")
+EVENT_ROLES = ("grid_event_active", "grid_event_start", "grid_event_end", "grid_event_direction")
 FINISH_KEEP_H = 14          # a grid event's summary not yet spoken (quiet hours) is dropped after this long
 EVENT_HOLD_S = 900          # the grid-event sensors may be unavailable this long before their last reading is dropped
 STICK_WARMUP = timedelta(minutes=5)   # after a start, no mid-slot stickiness while the plan's inputs load
@@ -1028,7 +1028,7 @@ class Engine:
         ov = self._active_override()
         if ov is None:
             return slots
-        axle = bool(self.cfg.features.get("axle"))
+        axle = bool(self.cfg.features.get("grid_events"))
         return [dataclasses.replace(s, manual=ov.mode)
                 if s.end > now and (ov.until is None or s.start < ov.until) and not (axle and s.axle) else s
                 for s in slots]
@@ -1447,7 +1447,7 @@ class Engine:
         p = self._params(conversion=False)
         return {"capacity": p.capacity_kwh, "eff": p.efficiency, "floor_soc": p.min_reserve_soc,
                 "max_kw": p.max_discharge_kw, "includes_ev": p.hold_for_car, "axle_value": p.axle_value,
-                "axle_plus_export": p.axle_plus_export}
+                "grid_event_plus_export": p.grid_event_plus_export}
 
     def _scenario_params(self):
         """The subset of _cost_params() that pe_core.costs.day_scenarios() (via day_summary) understands."""
@@ -2270,7 +2270,7 @@ class Engine:
 
     def _watch_events(self, r):
         if r.axle_start and r.axle_start > r.now:
-            self._notify("axle", axle_message(r.axle_start, r.axle_end, r.now, self.tz))
+            self._notify("grid_event", axle_message(r.axle_start, r.axle_end, r.now, self.tz))
         if r.free_start and r.free_start > r.now:
             self._notify("free_power", free_message(r.free_start, r.free_end, r.now, self.tz))
 
@@ -2383,7 +2383,7 @@ class Engine:
         stop = self._car_stop_state()
         eid = self._role_entity("ev_charge_mode")
         feats = self.cfg.features
-        want = bool(feats.get("axle") and feats.get("axle_stop_car", True) and r.axle_active
+        want = bool(feats.get("grid_events") and feats.get("grid_event_stop_car", True) and r.axle_active
                     and self.mode.effective == "active" and not self._test_running()
                     and eid and eid.startswith("select."))
         if not (want or stop.held) or not eid or not eid.startswith("select."):
@@ -2438,7 +2438,7 @@ class Engine:
             return
         lead = float(self.cfg.safety.get("heating_pump_overrun_min", 15))
         win = setback_window(r.axle_start, r.axle_end, lead)
-        want = bool(feats.get("axle") and feats.get("axle_heating_setback", False) and win is not None
+        want = bool(feats.get("grid_events") and feats.get("grid_event_heating_setback", False) and win is not None
                     and win[0] <= r.now < win[1] and self.mode.effective == "active" and not self._test_running())
         if not (want or sb.held):
             return

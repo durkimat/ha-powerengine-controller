@@ -56,7 +56,7 @@ def test_each_role_is_in_one_part_and_guards_are_in_none():
         else:
             assert role.key in seen, f"{role.key} belongs to no part"
     assert seen["smart_target_soc"] == "tariff" and seen["grid_power_reference"] == "ev_charger"
-    assert seen["solar_forecast_today"] == "forecast" and seen["axle_event_start"] == "events"
+    assert seen["solar_forecast_today"] == "forecast" and seen["grid_event_start"] == "events"
 
 
 def test_the_published_wizard_is_small():
@@ -97,14 +97,14 @@ def test_a_definition_with_no_detect_block_is_still_valid_and_has_no_search_data
 
 def test_leaving_a_part_out_drops_its_roles_from_the_required_list():
     full = set(required_roles(parse_config({})))
-    assert {"ev_plug_status", "smart_dispatches", "solar_forecast_today", "axle_event_active"} <= full
+    assert {"ev_plug_status", "smart_dispatches", "solar_forecast_today", "grid_event_active"} <= full
     no_car = set(required_roles(_site(ev_charger="none")))
     assert not {"ev_plug_status", "ev_charge_power", "smart_dispatches"} & no_car
-    assert {"solar_forecast_today", "axle_event_active", "battery_soc", "import_rate_now"} <= no_car
+    assert {"solar_forecast_today", "grid_event_active", "battery_soc", "import_rate_now"} <= no_car
     no_forecast = set(required_roles(_site(forecast="none")))
     assert not {"solar_forecast_today", "solar_forecast_tomorrow"} & no_forecast
     no_events = set(required_roles(_site(events="none")))
-    assert "axle_event_active" not in no_events and "ev_plug_status" in no_events
+    assert "grid_event_active" not in no_events and "ev_plug_status" in no_events
 
 
 def test_the_inverter_and_tariff_roles_are_always_required():

@@ -72,10 +72,10 @@ const FEATURES = [
     "Check your export tariff terms first: some only pay for exported solar, not energy bought from the grid."],
   ["deep_overnight", "Deeper selling overnight", "Inside the fixed overnight window, where the cheap refill is guaranteed, arbitrage may sell below the band's bottom (down to the reserve plus 10%): one deeper sale and one refill instead of many shallow cycles, for the same money. Off: the band's bottom holds overnight too."],
   ["use_check_meter", "Use the check meter", "When a check meter is set and reporting, use it for grid power instead of the inverter's meter, and correct the inverter's house load by the difference (also in the learned usage history). If it stops reporting for 3 minutes, the inverter's meter is used again. Off: the check meter is only compared."],
-  ["axle", "Take part in grid events", "Force-discharge during grid events (run by <<event>>) and hold charge beforehand, so the battery is full when one starts."],
-  ["axle_plus_export", "Grid events also earn the export rate", "Your supplier pays its normal export rate on grid-event exports as well as the event payment (<<event>>: £1/kWh; <<supplier>>: £1 + 15p). Planning and the event figures count both. Off: the event payment only."],
-  ["axle_stop_car", "Stop the car charger during grid events", "While a grid event (<<event>>) runs, set the car charger (<<ev_charger>>) to Stopped, so the battery's export isn't charged into the car, and put its mode back when the event ends. Without this, a smart-charge slot or a manual charge can take the whole event's energy and the event earns almost nothing. Needs the Charger mode entity (a select) mapped. Applies in Active mode only."],
-  ["axle_heating_setback", "Turn the heating down before grid events", "Turn your heating's set-back switch on shortly before a grid event (<<event>>) starts and off when it ends, so the boiler's pump isn't drawing power while the battery is exporting. Choose the switch below (for example input_boolean.heating_off) and how long before the event to start: the pump's overrun. A switch that is already on is left alone, and one you turn off during the set-back stays off. Applies in Active mode only."],
+  ["grid_events", "Take part in grid events", "Force-discharge during grid events (run by <<event>>) and hold charge beforehand, so the battery is full when one starts."],
+  ["grid_event_plus_export", "Grid events also earn the export rate", "Your supplier pays its normal export rate on grid-event exports as well as the event payment (<<event>>: £1/kWh; <<supplier>>: £1 + 15p). Planning and the event figures count both. Off: the event payment only."],
+  ["grid_event_stop_car", "Stop the car charger during grid events", "While a grid event (<<event>>) runs, set the car charger (<<ev_charger>>) to Stopped, so the battery's export isn't charged into the car, and put its mode back when the event ends. Without this, a smart-charge slot or a manual charge can take the whole event's energy and the event earns almost nothing. Needs the Charger mode entity (a select) mapped. Applies in Active mode only."],
+  ["grid_event_heating_setback", "Turn the heating down before grid events", "Turn your heating's set-back switch on shortly before a grid event (<<event>>) starts and off when it ends, so the boiler's pump isn't drawing power while the battery is exporting. Choose the switch below (for example input_boolean.heating_off) and how long before the event to start: the pump's overrun. A switch that is already on is left alone, and one you turn off during the set-back stays off. Applies in Active mode only."],
   ["free_power_days", "Free-power sessions", "Make full use of <<supplier>> free-electricity sessions."],
   ["optimised_plan", "Optimised planning", "The optimiser chooses each half-hour's action for the lowest cost (arbitrage band and safety rules included), with plain-English reasons. Off: the simpler rule-based planner."],
   ["learn_taper", "Learn: charge and discharge slow-down", "Plan with how much charging slows from 90% and 95%, and how much discharging slows below 40%, 30% and 20%, as seen: the overnight charge starts early enough to finish, and deep sales are planned at the speed they really run. Health tab, Learned from use, shows each learned figure and how many half-hours it's based on."],
@@ -93,7 +93,7 @@ const FEATURES = [
 const NOTIFY_EVENTS = [
   ["health", "Health problems", "When the Health tab finds a problem (checked after start-up and each night).", true],
   ["inputs", "Inputs not working", "When a required input has been unavailable or stale for 15 minutes.", true],
-  ["axle", "Grid events", "When a grid event (<<event>>) is scheduled, with its time.", true],
+  ["grid_event", "Grid events", "When a grid event (<<event>>) is scheduled, with its time.", true],
   ["free_power", "Free-power sessions", "When a free-electricity session is announced.", true],
   ["daily", "Daily summary", "Each morning at 08:00: yesterday's cost and savings.", false],
   ["alexa", "Alexa announcements", "Spoken reminders before a grid event, saying whether the battery looks ready. Choose the speakers and the allowed hours below.", false],
@@ -140,14 +140,14 @@ const CHANNEL_TYPES = [["bell", "Home Assistant notifications"], ["notify", "Pho
 const NOTIFY_KINDS = [
   ["health", "Health problems", "When the Health tab finds a problem (checked after start-up and each night)."],
   ["inputs", "Inputs not working", "When a required input has been unavailable or stale for 15 minutes."],
-  ["axle", "Grid event scheduled", "When a grid event (<<event>>) is scheduled, with its time."],
+  ["grid_event", "Grid event scheduled", "When a grid event (<<event>>) is scheduled, with its time."],
   ["free_power", "Free-power sessions", "When a free-electricity session is announced."],
   ["daily", "Daily summary", "Each morning at 08:00: yesterday's cost and savings."],
   ["simulator", "Tariff opportunities", "When the overnight Simulator finds a tariff that would have cost noticeably less, or new tariffs appear."],
   ["grid_reminder", "Grid event reminders", "Hours before a grid event, saying whether the battery looks ready (times below)."],
   ["grid_summary", "Grid event summary", "When a grid event ends: what the house used, what was exported and what it should pay."],
 ];
-const ROUTER_LEGACY_KINDS = ["health", "inputs", "axle", "free_power", "daily", "simulator"];
+const ROUTER_LEGACY_KINDS = ["health", "inputs", "grid_event", "free_power", "daily", "simulator"];
 const REMINDER_DEFAULT = [8, 5, 2, 1, 0];
 function routerChannel(type, name, raw) {
   const r = raw && typeof raw === "object" ? raw : {};
@@ -280,10 +280,10 @@ function alexaSpeakerKinds(names, devices) {
   });
   return { speakers: names.filter((n) => !groups.has(n)), groups: names.filter((n) => groups.has(n)) };
 }
-const FEATURE_DEFAULTS = { auto_cheap_threshold: true, fill_when_cheap: true, smart_charge_optimisation: true, arbitrage: false, axle: true, free_power_days: true, tariff_simulator: true, engine_compare: true, optimised_plan: true,
+const FEATURE_DEFAULTS = { auto_cheap_threshold: true, fill_when_cheap: true, smart_charge_optimisation: true, arbitrage: false, grid_events: true, free_power_days: true, tariff_simulator: true, engine_compare: true, optimised_plan: true,
   learn_taper: true, learn_conversion: true, learn_reserve: true, learn_export: true, learn_car: true, learn_car_min: true, cold_caution: true, cold_learning: true,
   damp_restart: true, damp_bursts: false, deep_overnight: true,
-  use_check_meter: true, axle_plus_export: true, axle_stop_car: true, axle_heating_setback: false, slots_whole_house: true, smart_skip_full_car: false };
+  use_check_meter: true, grid_event_plus_export: true, grid_event_stop_car: true, grid_event_heating_setback: false, slots_whole_house: true, smart_skip_full_car: false };
 
 /* ------------------------------------------------------------------ helpers
  * Pure functions (no DOM), exported for tests at the bottom of the file.
@@ -438,9 +438,9 @@ const TOPICS = [
     settings: ["export_limit_kw", "battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc", "arbitrage_max_soc",
       "arbitrage_band_penalty_p", "overnight_switch_cost_p"],
     roles: ["inverter_export_limit"], learning: ["learn_export"] },
-  { key: "axle", title: "Grid events", main: "axle", features: ["axle", "axle_plus_export", "axle_stop_car", "axle_heating_setback"],
-    roles: ["axle_event_active", "axle_event_start", "axle_event_end", "axle_direction", "heating_setback"],
-    settings: ["pre_axle_lookahead_h", "axle_margin_soc", "heating_pump_overrun_min"] },
+  { key: "grid_events", title: "Grid events", main: "grid_events", features: ["grid_events", "grid_event_plus_export", "grid_event_stop_car", "grid_event_heating_setback"],
+    roles: ["grid_event_active", "grid_event_start", "grid_event_end", "grid_event_direction", "heating_setback"],
+    settings: ["pre_grid_event_lookahead_h", "grid_event_margin_soc", "heating_pump_overrun_min"] },
   { key: "free", title: "Free-power sessions", main: "free_power_days", features: ["free_power_days"],
     roles: ["free_power_active", "free_power_next_start", "free_power_next_end", "free_power_events"] },
   { key: "cold", title: "Cold battery", main: "cold_caution", features: ["cold_caution"], learning: ["cold_learning"],
@@ -461,13 +461,13 @@ const TOPICS = [
 ];
 // which group of the Config page each topic sits in (anything unlisted, such as "Other", is with the equipment)
 const TOPIC_GROUP = { battery: "equipment", grid: "equipment", solar: "equipment", car: "equipment", cold: "equipment",
-  control: "equipment", tariff: "tariff", selling: "tariff", axle: "tariff", free: "tariff", extras: "tools" };
+  control: "equipment", tariff: "tariff", selling: "tariff", grid_events: "tariff", free: "tariff", extras: "tools" };
 const HOUSE_GROUPS = [["equipment", "Your equipment"], ["tariff", "Tariff and events"], ["tools", "Tools and messages"]];
 // needed before PowerEngine can go live (the rest of the control group is optional)
 const GO_LIVE = ["timed_charge_start_hour", "timed_charge_start_minute", "timed_charge_end_hour", "timed_charge_end_minute",
   "timed_charge_current", "timed_discharge_start_hour", "timed_discharge_start_minute", "timed_discharge_end_hour",
   "timed_discharge_end_minute", "timed_discharge_current", "timed_update_button", "storage_mode", "guard_read_only"];
-const NEEDED_FOR = { axle: "axle", free_power: "free_power_days" };
+const NEEDED_FOR = { grid_events: "grid_events", free_power: "free_power_days" };
 const ROLE_FEATURE = { smart_target_soc: "smart_charge_optimisation", smart_target_time: "smart_charge_optimisation" };
 
 /** The lines under the "Overnight window" choice: what the plan is using now, and what PowerEngine has learned from the
@@ -1898,7 +1898,7 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
   _badge(role) {
     if (role.required === "yes") return el("span", { class: "badge req" }, "Required");
     if (role.required === "no") return el("span", { class: "badge" }, "Optional");
-    const f = { axle: "axle", free_power: "free_power_days" }[role.required];
+    const f = { grid_events: "grid_events", free_power: "free_power_days" }[role.required];
     const label = T((FEATURES.find((x) => x[0] === f) || [0, role.required])[1]);
     return el("span", { class: "badge" }, `Needed for ${label}`);
   }
@@ -5275,7 +5275,7 @@ function wizardEnergyDevices(facts, states) {
 const SYSTEM_DRAFT_KEY = "powerengine.system.draft";
 const SYSTEM_GROUPS = ["inverter", "plant", "device", "ev_charger", "tariff", "forecast", "events"];
 // features that only make sense with a part: removing the part switches them off (adding one never switches anything on)
-const SYSTEM_LEFT_OUT_FEATURES = { ev_charger: ["smart_charge_optimisation", "smart_skip_full_car", "learn_car", "learn_car_min"], events: ["axle", "axle_plus_export", "axle_stop_car", "axle_heating_setback"] };
+const SYSTEM_LEFT_OUT_FEATURES = { ev_charger: ["smart_charge_optimisation", "smart_skip_full_car", "learn_car", "learn_car_min"], events: ["grid_events", "grid_event_plus_export", "grid_event_stop_car", "grid_event_heating_setback"] };
 const SYSTEM_PLANT_NOTE = "Read only: PowerEngine counts its solar in the totals, but never controls it.";
 
 /** What can be added, in the order shown: the app's parts (title and reason come from the app) plus the card's own two. */
@@ -7202,7 +7202,7 @@ const V1_SECTIONS = [
     settings: ["window_switch_cost_p", "overnight_switch_cost_p", "ram_switch_cost_p", "charge_hysteresis_soc"] },
   { key: "v1_selling", title: "Selling (arbitrage band)", features: ["arbitrage", "deep_overnight"],
     settings: ["battery_wear_p", "arbitrage_min_margin_p", "arbitrage_min_soc", "arbitrage_max_soc", "arbitrage_band_penalty_p"] },
-  { key: "v1_events", title: "Grid events and reserve", features: [], settings: ["min_reserve_soc", "pre_axle_lookahead_h", "axle_margin_soc"] },
+  { key: "v1_events", title: "Grid events and reserve", features: [], settings: ["min_reserve_soc", "pre_grid_event_lookahead_h", "grid_event_margin_soc"] },
 ];
 /** Which topics and keys go to which group. With `v2On` false nothing moves (house = the old topic plan). */
 function engineGrouping(roleKeys, settingKeys, featureKeys, systemKeys, v2On) {
