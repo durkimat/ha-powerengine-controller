@@ -52,7 +52,7 @@ look for, as the `wizard` attribute of `sensor.pe_diag_version` (about 3.5 KB; `
   Handover guards belong to no part: they stay on the config page.
 - The app does not read the `wizard` attribute back. It changes nothing about control.
 
-An app that publishes no `wizard` makes the card hide itself, so the card needs no `MIN_APP_VERSION` bump.
+An app that publishes no `wizard` makes the card hide itself.
 
 ### Skipped parts are not required
 

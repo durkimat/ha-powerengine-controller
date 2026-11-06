@@ -58,7 +58,8 @@ KNOWN_KEYS = frozenset(
 )
 
 MODES = ("passive", "active")
-FORECAST_SOURCES = ("none", "solcast_site", "scaled")
+FORECAST_SOURCES = ("none", "service", "scaled")
+RENAMED_FORECAST_SOURCES = {"solcast_site": "service"}          # an older saved settings file: read under the new name
 FEATURES = ("auto_cheap_threshold", "fill_when_cheap", "smart_charge_optimisation", "arbitrage", "axle",
             "free_power_days", "tariff_simulator", "optimised_plan", "learn_taper", "learn_reserve", "learn_export",
             "learn_car", "cold_caution", "cold_learning", "damp_restart", "damp_bursts", "deep_overnight",
@@ -515,6 +516,7 @@ def _parse_plants(data: Any) -> tuple[SolarPlant, ...]:
         for key in ("power", "energy_today"):
             _check_input_spec(f"solar plant '{pid}' {key}", item.get(key))
         forecast = item.get("forecast", "none")
+        forecast = RENAMED_FORECAST_SOURCES.get(forecast, forecast)
         if forecast not in FORECAST_SOURCES:
             raise ConfigError(f"solar plant '{pid}': forecast must be one of {', '.join(FORECAST_SOURCES)}")
         enabled = item.get("enabled", True)

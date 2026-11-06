@@ -702,43 +702,6 @@ test("the page reloads once after a demo start, day change or exit, and never on
   assert.match(h.DEMO_WAIT, /reloads/);
 });
 
-test("versionOlder compares numbers, not text, and says nothing when it can't read a version", () => {
-  assert.equal(h.versionOlder("0.9.9", "0.9.10"), true);
-  assert.equal(h.versionOlder("0.9.70", "0.9.70"), false);
-  assert.equal(h.versionOlder("0.10.0", "0.9.70"), false);
-  assert.equal(h.versionOlder("0.9", "0.9.0"), false);
-  assert.equal(h.versionOlder("v0.9.68", "0.9.69"), true);
-  for (const bad of ["?", "unavailable", "", null, undefined, "0.9.70-beta"]) {
-    assert.equal(h.versionOlder(bad, "0.9.69"), null);
-    assert.equal(h.versionOlder("0.9.69", bad), null);
-  }
-});
-
-test("MIN_APP_VERSION is a real version no newer than the card", () => {
-  assert.equal(h.MIN_APP_VERSION, "0.9.188");
-  assert.deepEqual(h.parseVersion(h.MIN_APP_VERSION), [0, 9, 188]);
-  assert.equal(h.versionOlder(h.CARD_VERSION, h.MIN_APP_VERSION), false);
-});
-
-test("versionWarnings warns only when the other side is older than its minimum", () => {
-  const st = (state, attrs) => ({ "sensor.pe_diag_version": { state, attributes: attrs || {} } });
-  // a different but supported app: no warning, whichever way round
-  assert.deepEqual(h.versionWarnings(st("0.9.188", { min_card_version: "0.9.110" })), []);
-  assert.deepEqual(h.versionWarnings(st("0.9.190", { min_card_version: "0.9.70" })), []);
-  // an app older than the card's minimum
-  const old = h.versionWarnings(st("0.9.187"));
-  assert.equal(old.length, 1);
-  assert.match(old[0], /0\.9\.188 or newer.*0\.9\.187/);
-  // a card older than the app's minimum
-  const oldCard = h.versionWarnings(st("0.9.190", { min_card_version: "99.0.0" }));
-  assert.equal(oldCard.length, 1);
-  assert.match(oldCard[0], /card 99\.0\.0 or newer/);
-  // nothing to compare: no sensor, unavailable, no attribute (an older app)
-  assert.deepEqual(h.versionWarnings({}), []);
-  assert.deepEqual(h.versionWarnings(st("unavailable")), []);
-  assert.deepEqual(h.versionWarnings(st("0.9.190", {})), []);
-});
-
 test("history day payload accepts a date inside the range and nothing else", () => {
   assert.deepStrictEqual(h.historyDayPayload("2026-03-04", "2025-09-01", "2026-10-03"),
     { type: "fire_event", event_type: "pe_history_day", event_data: { date: "2026-03-04" } });

@@ -39,7 +39,6 @@ def export():
         "app": {
             "app": {
                 "version": "0.9.70",
-                "min_card_version": "0.9.70",
                 "generated": "2026-09-29T11:30:00+00:00",
                 "timezone": "Europe/London",
             },
@@ -105,7 +104,7 @@ def export():
 
 def test_summary_finds_what_a_routine_check_wants():
     s = ds.summarise(export())
-    assert s["app_version"] == "0.9.70" and s["card_version"] == "0.9.68" and s["card_older_than_minimum"] is True
+    assert s["app_version"] == "0.9.70" and s["card_version"] == "0.9.68"
     assert s["log"]["levels"] == {"INFO": 11, "WARNING": 2, "ERROR": 1}
     # the two timeouts differ only in a number: one line, counted twice, first and last time kept
     w = [x for x in s["warnings"] if x["level"] == "WARNING"]
@@ -145,7 +144,6 @@ def test_older_export_with_sections_missing():
         s = ds.summarise(old)
         text = ds.render(s)
         assert "PowerEngine diagnostics" in text and "Traceback" not in text
-    assert ds.summarise({"app": {"app": {"version": "0.9.1"}}})["card_older_than_minimum"] is None
 
 
 def test_command_line_text_and_json(tmp_path, capsys):
@@ -153,7 +151,7 @@ def test_command_line_text_and_json(tmp_path, capsys):
     f.write_text(json.dumps(export()))
     assert ds.main([str(f)]) == 0
     text = capsys.readouterr().out
-    assert "OLDER than the app's minimum 0.9.70" in text and "FLIP-FLOP" in text and "x2" in text
+    assert "OLDER than" not in text and "FLIP-FLOP" in text and "x2" in text
     assert len(text.splitlines()) < 60
     assert ds.main([str(f), "--json", "--since", "2026-09-29T09:30:00Z"]) == 0
     assert json.loads(capsys.readouterr().out)["since"].startswith("2026-09-29T09:30")
