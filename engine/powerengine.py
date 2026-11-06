@@ -5037,11 +5037,11 @@ class Engine:
 
     def _get_publisher(self):
         """The one door for every entity the app publishes (native or plain states; the core never knows which). The
-        demo always writes plain states."""
+        demo publishes the same way as a real run: under the integration they are its entities, not plain states."""
         pub = self.__dict__.get("_publisher_obj")
         if pub is None:
             pub = select_publisher(self.host.state_writer(self._told_once, demo=bool(self._demo)),
-                                   native=None if self._demo else self.host.native_entities,
+                                   native=self.host.native_entities,
                                    told_once=self._told_once)
             self._publisher_obj = pub
         return pub
