@@ -11,7 +11,7 @@ name: Release
 #     reuses the open PR, waits for CI, squash-merges and creates the GitHub release);
 #   - the release notes as a Markdown file in the branch, starting with "### Behaviour changes"
 #     (e.g. release-notes/0.9.87.md);
-#   - for a card release: the card's branch pushed in the card repo, and card notes in a file on the app branch.
+#   (the dashboard card is in this repository, in card/, so it is released with the integration).
 #
 # tools/release.sh is always taken from main, so a stale branch can't release with an old script.
 
@@ -34,21 +34,13 @@ on:
         description: "Release notes file on that branch, e.g. release-notes/0.9.87.md"
         required: true
         type: string
-      card_branch:
-        description: "Card release only: the branch in ha-powerengine-card (empty: release/<version> from main)"
-        required: false
-        type: string
-      card_notes:
-        description: "Card release only: card notes file on the app branch. Empty: the card is not released"
-        required: false
-        type: string
       dry_run:
         description: "Dry run: show every step and file change, push nothing"
         required: true
         type: boolean
         default: true
       prepared:
-        description: "Single-CI release (default): the branch already has the version bump (tools/prepare_release.sh) and green CI; nothing is re-tested or re-pushed, the workflow checks the bump, merges after your Approve and releases. A card release is prepared too when card_branch is given (its branch holds the bump and has a green PR); with card_notes and no card_branch it falls back to the full flow. Untick for the full flow (checks, bump and push here)."
+        description: "Single-CI release (default): the branch already has the version bump (tools/prepare_release.sh) and green CI; nothing is re-tested or re-pushed, the workflow checks the bump, merges after your Approve and releases. Untick for the full flow (checks, bump and push here)."
         required: true
         type: boolean
         default: true
@@ -89,22 +81,13 @@ jobs:
           VERSION: ${{ inputs.version }}
           APP_BRANCH: ${{ inputs.app_branch }}
           APP_NOTES: ${{ inputs.app_notes }}
-          CARD_NOTES: ${{ inputs.card_notes }}
-          CARD_BRANCH: ${{ inputs.card_branch }}
           PREPARED: ${{ inputs.prepared }}
           WAIT_MAIN_CI: ${{ inputs.wait_main_ci }}
         run: |
-          if [ "$PREPARED" = "true" ] && [ -n "$CARD_NOTES" ] && [ -z "$CARD_BRANCH" ]; then
-            echo "::notice::card release without card_branch: this run uses the full flow (a prepared card release needs card_branch)"
-            PREPARED=false
-          fi
-          [ "$PREPARED" = "true" ] || [ "$WAIT_MAIN_CI" != "true" ] || { echo "wait_main_ci needs a prepared release (untick it, or give card_branch for a card release)"; exit 1; }
+          [ "$PREPARED" = "true" ] || [ "$WAIT_MAIN_CI" != "true" ] || { echo "wait_main_ci needs a prepared release"; exit 1; }
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version must look like 0.9.87, got: $VERSION"; exit 1; }
           [ "$APP_BRANCH" != "main" ] || { echo "won't release main itself; give the branch that carries the change"; exit 1; }
           [ -n "$APP_NOTES" ] || { echo "app_notes is required"; exit 1; }
-          if [ -z "$CARD_NOTES" ] && [ -n "$CARD_BRANCH" ]; then
-            echo "card_branch given without card_notes: the card is only released when you give card notes"; exit 1
-          fi
           [ -n "$GH_TOKEN" ] || { echo "RELEASE_TOKEN is not available: is this job using the 'release' environment?"; exit 1; }
 
       - name: Release script (from main)
@@ -119,16 +102,6 @@ jobs:
         with:
           ref: ${{ inputs.app_branch }}
           path: app
-          fetch-depth: 0
-          token: ${{ secrets.RELEASE_TOKEN }}
-
-      - name: Card repo
-        if: inputs.card_notes != ''
-        uses: actions/checkout@v4
-        with:
-          repository: durkimat/ha-powerengine-card
-          ref: ${{ inputs.card_branch || 'main' }}
-          path: card
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
 
@@ -150,8 +123,6 @@ jobs:
           TITLE: ${{ inputs.title }}
           APP_BRANCH: ${{ inputs.app_branch }}
           APP_NOTES: ${{ inputs.app_notes }}
-          CARD_BRANCH: ${{ inputs.card_branch }}
-          CARD_NOTES: ${{ inputs.card_notes }}
           DRY_RUN: ${{ inputs.dry_run }}
           SKIP_REPLAY: ${{ inputs.skip_replay }}
           PREPARED: ${{ inputs.prepared }}
@@ -163,13 +134,9 @@ jobs:
           args=("$VERSION" --title "$TITLE"
                 --app-dir "$GITHUB_WORKSPACE/app" --app-branch "$APP_BRANCH"
                 --app-notes "$GITHUB_WORKSPACE/app/$APP_NOTES")
-          if [ -n "$CARD_NOTES" ]; then
-            args+=(--card-dir "$GITHUB_WORKSPACE/card" --card-notes "$GITHUB_WORKSPACE/app/$CARD_NOTES")
-            [ -z "$CARD_BRANCH" ] || args+=(--card-branch "$CARD_BRANCH")
-          fi
           [ "$DRY_RUN" != "true" ] || args+=(--dry-run)
           [ "$SKIP_REPLAY" != "true" ] || args+=(--skip-replay)
-          if [ "$PREPARED" = "true" ] && { [ -z "$CARD_NOTES" ] || [ -n "$CARD_BRANCH" ]; }; then
+          if [ "$PREPARED" = "true" ]; then
             args+=(--prepared)
             [ "$WAIT_MAIN_CI" != "true" ] || args+=(--wait-main-ci)
           fi

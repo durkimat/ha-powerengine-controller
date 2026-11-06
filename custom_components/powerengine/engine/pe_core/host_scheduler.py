@@ -1,14 +1,14 @@
-"""Timers for a host that has no AppDaemon: `run_in`, `run_every`, `run_daily` and `cancel_timer`, with AppDaemon's
-meanings, and the one thread the callbacks run on.
+"""Timers for the engine's host: `run_in`, `run_every`, `run_daily` and `cancel_timer`, and the one thread the callbacks
+run on.
 
-AppDaemon pins every callback of an app (timers, listeners) to a single thread, so they never overlap, and the engine is
+Every callback of the engine (timers, listeners) runs on a single thread, so they never overlap, and the engine is
 written for that: a long job hands the thread back by scheduling its next slice with `run_in`. `Dispatcher` is that
 thread; `Scheduler` decides when a callback is due and hands it over. A callback that raises is logged and the
-scheduler carries on, as AppDaemon does.
+scheduler carries on.
 
-What a start time can be (the forms the engine and AppDaemon's documentation use): "now", "now+30" (seconds from now),
-"HH:MM:SS" or "HH:MM" (the next time the clock reads that, in the configured time zone), a `datetime` or a `time`. A
-timer whose first run is already in the past starts at the next interval counted from it, as AppDaemon does.
+What a start time can be: "now", "now+30" (seconds from now), "HH:MM:SS" or "HH:MM" (the next time the clock reads that,
+in the configured time zone), a `datetime` or a `time`. A timer whose first run is already in the past starts at the
+next interval counted from it.
 """
 
 from __future__ import annotations

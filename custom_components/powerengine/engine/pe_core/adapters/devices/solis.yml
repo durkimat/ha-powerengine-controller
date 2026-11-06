@@ -4,7 +4,7 @@
 # remote-control command per decision, the clock-drift maths) stay in Python as named behaviours, chosen by the
 # `behaviour:` keys below. See docs/INVERTERS.md for the format.
 #
-# This file is not named .yaml on purpose: AppDaemon loads every .yaml under the apps folder as app config.
+# Inverter definitions use the .yml extension (the definition loader looks for it).
 
 definition: 1
 name: solis

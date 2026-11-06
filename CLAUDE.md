@@ -11,9 +11,8 @@ diagnostics UI. The owner is Matthew. This is live on his house: mistakes cost m
 
 The card (`card/ha-powerengine-card.js`, with its tests in `card/tests/`) lives in this repository since 0.9.215 and is
 released with it: `tools/build_integration.py` copies it, with its `CARD_VERSION` set to the engine's, into
-`custom_components/powerengine/frontend/`, which the integration serves (`frontend.py`). The old
-`durkimat/ha-powerengine-card` repository is retired; the `--card-notes` options in the release tools are no longer
-used. Pairs that must move together:
+`custom_components/powerengine/frontend/`, which the integration serves and registers as a Lovelace resource
+(`frontend.py`). The old `durkimat/ha-powerengine-card` repository is archived. Pairs that must move together:
 
 - A new setting in `pe_core/config.py` (`SAFETY`, `SETTING_SECTIONS`) needs adding to the card's section lists in
   `ha-powerengine-card.js` (search for a neighbouring key, e.g. `ram_max_power_w`), or it never shows on the config page.
@@ -29,7 +28,7 @@ owner approves each run on GitHub. It can't run `tools/release.sh` itself (it ne
 
 ## Layout
 
-- `apps/powerengine/powerengine.py`: the engine (large; wiring, control, scheduling). It still has an AppDaemon host, which is being retired.
+- `apps/powerengine/powerengine.py`: the engine (large; wiring, control, scheduling).
 - `apps/powerengine/pe_core/`: pure logic, testable without Home Assistant. Planner, optimiser, decisions,
   readings, costs, learning, RAM control, damping, journal, releases, diagnostics and so on.
 - `apps/powerengine/dashboard/dashboard.lovelace`: the dashboard. The app writes it to HA on start, so edit it
@@ -79,15 +78,12 @@ timed windows, and compares every plan, decision, service call and warning with 
 
 Full procedure: `docs/RELEASING.md` (read it when you release). **The single-CI release is the default** (used for 0.9.116): `tools/prepare_release.sh
 <version> --notes <file>` puts the version bump on the branch, CI passes on that commit, then `release.yml` (`prepared` on by default; optional
-`wait_main_ci`) merges after the owner's Approve and releases, in about a minute plus the wait. A card release is prepared too
-(`prepare_release.sh --card-notes`, workflow `card_branch` + `card_notes`; not yet used for real, dry-run first); `card_notes` without `card_branch`
-uses the full flow. In short (the steps below describe the full flow):
+`wait_main_ci`) merges after the owner's Approve and releases, in about a minute plus the wait. The card is part of this
+repository, so it is released with the integration. In short (the steps below describe the full flow):
 
 1. Branch from `main`, change with tests, run the checks, re-record the replay only if the change is meant to alter behaviour.
-2. Commit the notes as `release-notes/<version>.md` (starts `### Behaviour changes`, plain words; card notes in a second file if the
-   card is released). Push the branch; no PR is needed (the script opens or reuses one).
-3. `git fetch`, pick the next version after `main`'s `__version__`, tell the owner version, title, notes and whether the card is
-   included, and **wait for his yes in chat.**
+2. Commit the notes as `release-notes/<version>.md` (starts `### Behaviour changes`, plain words). Push the branch; no PR is needed (the script opens or reuses one).
+3. `git fetch`, pick the next version after `main`'s `__version__`, tell the owner version, title and notes, and **wait for his yes in chat.**
 4. Start `release.yml` (ref `main`) with `actions_run_trigger`; the owner presses **Approve and deploy**. Don't merge or create
    the release by hand. Tests-only or docs-only changes can merge without a release.
 5. A cloud session can't run `tools/release.sh` itself (no `gh` login there).
@@ -136,7 +132,7 @@ Read the named file before touching that area (they are one-liners here; the det
 
 - **Publishing** (`docs/history/demo-mode.md`, B1): all entity output goes through `self._get_publisher()` (native entities under the integration, plain states in the demo and tests); never write an entity's state any other way.
 - **Demo gate** (C2): in demo mode always call `self.call_service` / `self.fire_event` in `powerengine.py`, never on anything else; a test fails on a new call elsewhere.
-- **Re-initialise** (C3): keep `initialize()` and what it sets in `self`; don't set attributes from AppDaemon threads outside it.
+- **Re-initialise** (C3): keep `initialize()` and what it sets in `self`; don't set attributes from the host's threads outside it.
 - **Demo pack** (C1): numbers, times and flags only; never commit a pack from an unscrubbed source, never put private day files in tests.
 - **Names** (`docs/history/phase0-generic.md`, step 6): never hard-code a supplier or device name in user text; use `N(term)` or `<<term>>`.
 - **New adapter or definition** (Phase 0 step 8, Phase 1 wizard): needs a detect entry (`adapters/detect.py` or the definition's `detect:`).

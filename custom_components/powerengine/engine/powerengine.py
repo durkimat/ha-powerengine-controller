@@ -169,7 +169,7 @@ COMPARE_START = "03:20:00"         # after the low-write study: the same-day eng
 COMPARE_POLL_S = 300              # how often the app looks at that process
 LOWWRITE_SLICE = 3                # new days planned per pass (about a second each); more passes follow a minute apart
 SIM_START = "01:30:00"            # after the midnight jobs (00:05-00:20), well before the morning
-SIM_SLICE_SECONDS = 2.0           # work per callback, then hand AppDaemon back for a second
+SIM_SLICE_SECONDS = 2.0           # work per callback, then hand the thread back for a second
 CONTROL_STRATEGY = "rolling"      # "rolling" | "block": decided by #44 (EEPROM writes) before Active ships
 BATTERY_VOLTS = 52.0              # nominal, for converting power to the inverter's current settings
 CYCLE_SECONDS = 30
@@ -232,7 +232,7 @@ class Engine:
         return host
 
     # --- starting again inside the running app (the demo's start, day and exit) -------------------------------
-    # AppDaemon keeps every timer and listener until they are cancelled, and an app object keeps its attributes. To
+    # The host keeps every timer and listener until they are cancelled, and the engine object keeps its attributes. To
     # run initialize() again without doubling anything up, the app records which attributes initialize() and the
     # callbacks set (`_touched`) and which timers and listeners it registered (`_handles`), and _wipe() undoes both.
 
@@ -274,7 +274,7 @@ class Engine:
         self._damp_restart(self._started_at)
         validate_definitions()
 
-        # Optional override. Not "config_path": AppDaemon sets that arg itself.
+        # Optional override of where the settings are (the integration always gives it).
         custom = self.host.args.get("settings_file")
         self.paths = [custom] if custom else list(DEFAULT_PATHS)
         self._real_paths = list(self.paths)
@@ -582,7 +582,7 @@ class Engine:
                 state = None
                 if spec and "entity" in spec:
                     state = self._state_all(spec["entity"])
-                    if state is None and role.group == "handover":       # AppDaemon lost track: ask HA
+                    if state is None and role.group == "handover":       # not in the engine's copy: ask HA
                         live = self._guard_state(spec["entity"])
                         if live not in (UNVERIFIED, "unknown", "unavailable", "None"):
                             state = {"state": live, "attributes": {}}
@@ -661,7 +661,7 @@ class Engine:
         if self.cfg is not None and not self.cfg_error and (self.mode.effective == "unconfigured"
                                                             or getattr(self, "_guard_live", False)):
             self._guard_live = False
-            # inputs missing (e.g. just after an HA restart) or a guard AppDaemon can't see: recheck every cycle, so
+            # inputs missing (e.g. just after an HA restart) or a guard the engine can't see: recheck every cycle, so
             # control resumes within a cycle of them coming back, not up to 5 minutes
             self._evaluate()
         self._release_if_still_missing()
@@ -968,7 +968,7 @@ class Engine:
             self._note_slow_tick(started, marks)
 
     def _note_slow_tick(self, started, marks):
-        """AppDaemon runs every callback of the app on one thread, so a long tick holds up the rest. Say where the time
+        """The engine runs every callback on one thread, so a long tick holds up the rest. Say where the time
         went (each part's own time) once a tick has taken SLOW_TICK_S or more."""
         total = monotonic() - started
         if total < SLOW_TICK_S:
@@ -1541,8 +1541,7 @@ class Engine:
     def _logbook(self, message):
         """Write to the HA logbook.
 
-        Only name + message: AppDaemon moves `entity_id` into a service target (logbook.log rejects it) and
-        reserves `domain` as its own argument name.
+        Only name + message: no entity (logbook.log rejects an entity_id in its data).
         """
         try:
             self.host.call_service("logbook/log", name="PowerEngine", message=message)
@@ -1589,7 +1588,7 @@ class Engine:
         try:
             return self.host.get_history(entity_id=eid, start_time=start, end_time=end,
                                     minimal_response=True, no_attributes=True)
-        except TypeError:                              # older AppDaemon without those options
+        except TypeError:                              # a host without those options (the tests' fakes)
             return self.host.get_history(entity_id=eid, start_time=start, end_time=end)
 
     def _learn_load_day(self, kwargs):
@@ -2223,7 +2222,7 @@ class Engine:
             self.log(f"Notified ({msg.source}): {msg.title}")
 
     def _guard_state(self, eid):
-        """A guard's state. AppDaemon's copy of HA's states can miss an entity that was re-created after it started
+        """A guard's state. The engine's copy of HA's states can miss an entity that was re-created after it started
         (the other controller restarting does this), so when it has nothing, ask Home Assistant directly. If that
         can't be checked either, the guard is "unverified", which never counts as safe."""
         state = self.host.get_state(eid)
@@ -2234,7 +2233,7 @@ class Engine:
         except Exception as err:
             self.log(f"Couldn't check {eid} with Home Assistant: {err!r}", level="WARNING")
             return UNVERIFIED
-        self._guard_live = True                       # AppDaemon can't tell us when it changes: keep rechecking
+        self._guard_live = True                       # not watched, so no word when it changes: keep rechecking
         return live or UNVERIFIED
 
     def _note_absent_guards(self, absent):
@@ -2634,7 +2633,7 @@ class Engine:
 
     def _listen_state(self, callback, entity_id):
         """listen_state, except for the demo world's entities: they live inside the app, not in Home Assistant, so
-        AppDaemon would warn that they don't exist, and nothing could ever change them from outside anyway."""
+        the host would ask Home Assistant for them, and nothing could ever change them from outside anyway."""
         if self._demo and self._demo_world().is_demo(entity_id):
             return None
         return self.host.listen_state(callback, entity_id)
@@ -3201,8 +3200,9 @@ class Engine:
 
     # --- remote-control writes off the callback thread
     # Every call to the inverter waits for the Modbus integration to reach it (2 to 4 seconds each on a slow day, three
-    # calls to a command). AppDaemon runs the app's callbacks on one thread, so sending in the tick held up everything
-    # else for up to 15 seconds. Under AppDaemon (not the demo, not the tests' fake) the calls go to a worker thread,
+    # calls to a command). The engine's callbacks run on one thread, so sending in the tick held up everything
+    # else for up to 15 seconds. Under Home Assistant (not the demo, not the tests' fake) the calls go to a worker
+    # thread,
     # in order, and what follows a send (the books, the log) runs back on the callback thread. One send at a time:
     # while one is on its way the tick asks for nothing more, and anything else that writes to remote control (the
     # relatch, Off) joins the same line, so nothing overtakes it.
@@ -3530,7 +3530,7 @@ class Engine:
             self._write_why = "read-back retry"
             self._execute([Write(w["role"], w["value"], w["kind"]) for w in bad], kwargs["entities"], attempt=2)
             return
-        self._halted = True                              # no more writes until AppDaemon restarts
+        self._halted = True                              # no more writes until the engine restarts
         self._publish_status()
         self.log("Inverter writes could not be confirmed; control stopped until restart", level="WARNING")
         self._notify("health", ("control:verify", "PowerEngine: inverter writes not confirmed",
@@ -4049,7 +4049,7 @@ class Engine:
 
     def _smart_settled(self, now, ready_by_state):
         """True once PowerEngine has run for SETTLE and EDF's dispatch and ready-by entities have been available
-        for SETTLE: right after a restart of AppDaemon, HA or the EDF integration, an empty slot list may only
+        for SETTLE: right after a restart of the engine, HA or the EDF integration, an empty slot list may only
         mean it hasn't loaded, so no requests are made until things have settled."""
         from pe_core.smartcharge import SETTLE
         disp = self._role_entity("smart_dispatches")
@@ -5000,7 +5000,7 @@ class Engine:
         if world is None:
             pack = load_demo_pack()
             # The recorded days are UK wall-clock days (offsets from local midnight in the pack's time zone), so the
-            # demo always runs on that zone, not on whatever AppDaemon's `time_zone` happens to be: a fresh install
+            # demo always runs on that zone, not on whatever Home Assistant's time zone happens to be: a fresh install
             # is often set to UTC, which shifted the whole day (the sunny day's solar, the events, the forecast) by
             # an hour against the clock the owner sees.
             world = self._world = DemoWorld(pack, self._demo, ZoneInfo(pack["tz"]), lambda: datetime.now(timezone.utc))
@@ -5074,7 +5074,7 @@ class Engine:
         if mode is None:
             return
         if getattr(self, "_halted", False):
-            word, why = "Stopped", "Inverter writes couldn't be confirmed; control stopped until AppDaemon restarts."
+            word, why = "Stopped", "Inverter writes couldn't be confirmed; control stopped until the engine restarts."
         elif mode.effective == "active":
             word, why = "Active", mode.reason
         elif mode.effective == "paused":

@@ -1,6 +1,6 @@
 """The demo data pack: four recorded (scrubbed) days that demo mode replays on any date.
 
-Pure module, no AppDaemon. The pack is built by tools/build_demo_pack.py (see CLAUDE.md, "Demo mode plan"). Per day
+Pure module, no Home Assistant. The pack is built by tools/build_demo_pack.py (see CLAUDE.md, "Demo mode plan"). Per day
 it holds 48 half-hours, column by column: house, car and solar kWh, the derived solar forecast, the rates (act, std,
 ovn, exp in GBP/kWh, standing in GBP/day), the recorded SoC at the start, and the smart-slot, axle and free flags.
 

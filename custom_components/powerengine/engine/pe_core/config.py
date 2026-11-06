@@ -29,8 +29,8 @@ from .roles import RETIRED_ROLES, ROLE_BY_KEY, is_forbidden_control
 
 SCHEMA_VERSION = 1
 
-# Where the AppDaemon add-on sees HA's config folder differs between add-on
-# versions, so try both (first match wins).
+# Where the engine looks for its settings when it is not told (the integration always tells it: settings_file). Home
+# Assistant's config folder is /homeassistant or /config depending on how it is installed (first match wins).
 DEFAULT_PATHS = (
     "/homeassistant/powerengine/config.yaml",
     "/config/powerengine/config.yaml",
@@ -54,7 +54,7 @@ KNOWN_KEYS = frozenset(
         "v2_profile",
         "v2_profiles",
         "v2_split",
-        "remove_entities",           # retired (the AppDaemon app's uninstall switch): accepted and ignored
+        "remove_entities",           # retired (an old uninstall switch): accepted and ignored
     }
 )
 
@@ -832,8 +832,6 @@ def parse_config(data: Any) -> Config:
             continue                              # a setting that no longer exists: accepted and ignored
         if key not in SYSTEM_DEFAULTS:
             raise ConfigError(f"unknown system setting '{key}'")
-        if key == "other_controller" and value == "predbat":
-            value = "other"                       # Predbat is no longer a choice of its own: its guards are the others'
         if key in SYSTEM_CHOICES:
             if value not in [v for v, _ in SYSTEM_CHOICES[key][1]] + ([""] if key == "other_controller" else [])\
                     + (list(ENGINE_ALIAS) if key == "engine" else []):

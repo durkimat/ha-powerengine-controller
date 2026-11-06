@@ -141,7 +141,7 @@ class WriteLog:
 
     def base(self, day: date) -> int:
         """Own writes already made today when control was last resumed (the daily limit counts from there).
-        Kept in the file so an AppDaemon restart doesn't re-trip a limit the user already resumed past."""
+        Kept in the file so a restart of the engine doesn't re-trip a limit the user already resumed past."""
         b = self.data.get("limit_base") or {}
         return int(b.get("n", 0)) if b.get("day") == day.isoformat() else 0
 

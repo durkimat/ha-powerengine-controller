@@ -1,6 +1,5 @@
 # The demo's configuration: every input is a demo entity (pe_core/demo/world.py), remote control drives the simulated
-# battery, and nothing here can reach a real system. It is not .yaml because AppDaemon would load that as app config;
-# each demo start copies it fresh as config.yaml into <config>/powerengine/demo/.
+# battery, and nothing here can reach a real system. Each demo start copies it fresh as config.yaml into <config>/powerengine/demo/.
 # Off in the demo: smart-charge requests (no supplier to ask), the tariff simulator, and cold-battery weather
 # (the last two fetch from the internet).
 schema_version: 1

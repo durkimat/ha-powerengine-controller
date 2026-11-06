@@ -43,8 +43,8 @@ batteries, Solcast, myenergi Zappi, EDF (edf_energy) tariff, Axle VPP.
 ## Step 1: install PowerEngine
 
 PowerEngine is a Home Assistant integration. The integration is thin and rarely changes; the engine that plans and
-controls is a separate process it starts and watches. No AppDaemon, no MQTT broker and no `apps.yaml` are needed, and
-PowerEngine's entities are ordinary Home Assistant entities (`sensor.pe_...`).
+controls is a separate process it starts and watches. PowerEngine's entities are ordinary Home Assistant entities
+(`sensor.pe_...`).
 
 1. **HACS → ⋮ → Custom repositories**, add `https://github.com/durkimat/ha-powerengine-controller`, category
    **Integration**. That is the whole install: the dashboard card is part of PowerEngine and the integration serves it,

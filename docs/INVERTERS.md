@@ -5,8 +5,7 @@ inverter should mostly be a new file, not new Python. Today the Solis S5-EH1P6K-
 integration, firmware 420044) is the only one; its file is `apps/powerengine/pe_core/adapters/devices/solis.yml` and is
 the reference: copy it and change it.
 
-**Name the file `<name>.yml`, not `.yaml`.** AppDaemon loads every `.yaml` under the apps folder as an app
-configuration; `.yml` it leaves alone. The file ships with the app (it sits inside `apps/powerengine`, which is what
+**Name the file `<name>.yml`** (the definition loader looks for that extension). The file ships with the app (it sits inside `apps/powerengine`, which is what
 HACS installs). It is picked up by name: `registry.get("inverter", "<name>")`.
 
 ## What is data and what is code

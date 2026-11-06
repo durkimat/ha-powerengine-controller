@@ -5,10 +5,10 @@ The app reads and changes Home Assistant, sets timers and listens for events. Ev
 Home Assistant the host is the integration's (`SocketHost`, host_socket.py), which talks to the engine as a process of
 its own; the tests, the demo and the nightly comparison use `LocalHost` (host_local.py).
 
-The methods keep the names, arguments and meanings the app grew up with (AppDaemon's):
+The methods have the names, arguments and meanings the engine is written against:
 
-  * Callbacks are plain functions called on a worker thread; a state or event callback takes the arguments AppDaemon
-    gives it, a timer callback takes (kwargs).
+  * Callbacks are plain functions called on a worker thread; a state or event callback takes the arguments
+    below, a timer callback takes (kwargs).
   * `run_in`, `run_every` and `run_daily` return a handle that `cancel_timer` takes; `listen_state` and `listen_event`
     return one for `cancel_listen_state` and `cancel_listen_event`.
   * `get_state` is synchronous and cheap (a host may answer from a local copy of Home Assistant's states).
@@ -43,7 +43,7 @@ class Host(Protocol):
 
     @property
     def args(self) -> dict:
-        """The app's own settings from apps.yaml (settings_file, demo, ...)."""
+        """The engine's own settings given at its start (settings_file, demo, ...)."""
 
     # --- Home Assistant: reading
     def get_state(self, entity_id: str | None = None, attribute: str | None = None, default: Any = None,

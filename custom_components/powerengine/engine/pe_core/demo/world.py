@@ -1,8 +1,9 @@
 """The demo world: a simulated home, tariff and battery that stand in for Home Assistant (demo plan, step C2).
 
-Pure module, no AppDaemon. `DemoWorld` answers `get_state` / `get_history` / `call_service` for a set of demo entities
-whose ids satisfy the same patterns the real adapters look for (Solis remote control, Kraken rates, Zappi, Solcast,
-Axle), so those adapters run unmodified. The house, car, solar, rates and events are one of the pack's recorded days,
+Pure module, no Home Assistant. `DemoWorld` answers `get_state` / `get_history` / `call_service` for a set of demo
+entities whose ids satisfy the same patterns the real adapters look for (Solis remote control, Kraken rates, Zappi,
+Solcast, Axle), so those adapters run unmodified. The house, car, solar, rates and events are one of the pack's
+recorded days,
 moved onto today (`pack.day_at`); the battery is simulated and follows the remote-control command PowerEngine sends,
 so the demo is closed-loop.
 
@@ -360,7 +361,7 @@ class DemoWorld:
         raise KeyError(role)
 
     def get_state(self, entity_id=None, attribute=None, default=None, **kw):
-        """AppDaemon's get_state for the demo entities. Other entities are not the world's: None (or `default`).
+        """The host's get_state for the demo entities. Other entities are not the world's: None (or `default`).
         No entity id: every demo entity, by id (how the remote-control entities are found)."""
         if entity_id is None:
             return {eid: self._full(eid, *self._state(eid)) for eid in sorted(self._entity_ids())}
@@ -479,7 +480,7 @@ class DemoWorld:
         return out
 
     def get_history(self, entity_id=None, start_time=None, end_time=None, **kw) -> list:
-        """AppDaemon's get_history shape: a list holding one list of rows."""
+        """The host's get_history shape: a list holding one list of rows."""
         now = self.now_fn()
         end = end_time or now
         start = start_time or end - timedelta(days=1)

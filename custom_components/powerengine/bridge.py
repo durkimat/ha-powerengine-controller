@@ -29,7 +29,7 @@ CALL_TIMEOUT_S = 120.0          # a service call waits for the device (a slow in
 
 
 def dump(state: State | None, as_id: str | None = None) -> dict | None:
-    """A state as the engine reads it: what AppDaemon's `get_state(attribute="all")` gives."""
+    """A state as the engine reads it: what the engine's `get_state(attribute="all")` gives."""
     if state is None:
         return None
     return {"entity_id": as_id or state.entity_id, "state": state.state, "attributes": dict(state.attributes),

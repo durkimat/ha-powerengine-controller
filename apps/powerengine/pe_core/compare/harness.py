@@ -3,7 +3,7 @@
 Used by tests/replay_harness.py (the replay safety net), tools/engine_compare.py and the nightly engine comparison
 (`pe_core.compare.run`, which the app starts as a separate process). Nothing in here reaches the real Home Assistant:
 `Hass` keeps its states, service calls and events in memory, and is the engine's other base class (with the
-AppDaemon-style names the host forwards to).
+the host-style names the host forwards to).
 """
 
 from __future__ import annotations

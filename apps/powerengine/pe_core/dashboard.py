@@ -12,7 +12,7 @@ import os
 
 from .names import fill
 
-# Shipped as .lovelace, not .yaml: AppDaemon would try to load a .yaml here as app config.
+# The shipped dashboard (a template: the engine fills it in and writes it to the settings folder as dashboard.yaml).
 SOURCE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dashboard", "dashboard.lovelace")
 
 BEGIN_MARKER = "# BEGIN energy-flow (generated from your configuration; edits here are replaced)"

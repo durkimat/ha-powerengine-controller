@@ -16,12 +16,11 @@ import shutil
 
 _MARKER_PREFIX = "# Managed by PowerEngine:"
 MAIN = "powerengine_handover.yaml"
-# Every name PowerEngine has shipped a package under (the Predbat one until 0.9.211).
-RETIRED = (MAIN, "powerengine_predbat_handover.yaml")
+RETIRED = (MAIN,)
 KEEP_BACKUPS = 3
 
 # The first line of every earlier shipped version (before the marker existed).
-_OLD_HEADERS = ("# PowerEngine package:", "# PowerEngine and Predbat handover (OPTIONAL", "# PowerEngine handover:")
+_OLD_HEADERS = ("# PowerEngine package:", "# PowerEngine handover:")
 _COMBINED_SIGNATURE = "battery_handover_to_powerengine"
 
 
@@ -35,9 +34,9 @@ def recognised(text: str) -> bool:
     if any(line.startswith(_MARKER_PREFIX) for line in head):
         return True
     first = head[0] if head else ""
-    if first.startswith(_OLD_HEADERS[:2]):
+    if first.startswith(_OLD_HEADERS[0]):
         return True
-    return first.startswith(_OLD_HEADERS[2]) and _COMBINED_SIGNATURE in text
+    return first.startswith(_OLD_HEADERS[1]) and _COMBINED_SIGNATURE in text
 
 
 def _backup_path(path: str, stamp: str) -> str:

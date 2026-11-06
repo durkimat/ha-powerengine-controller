@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 # One command for a PowerEngine release: checks, version bump, changelog, PR, CI, squash-merge, GitHub release,
-# clean-up. The app is always released; the card only when you give --card-notes (it is released only when it changes).
+# clean-up. The dashboard card is part of this repository (card/), so it is released with the integration.
 #
-#   tools/release.sh <version> --app-notes <file> [--card-notes <file>]
-#                    [--app-branch <branch>] [--card-branch <branch>]
-#                    [--app-dir <dir>] [--card-dir <dir>] [--title <text>]
+#   tools/release.sh <version> --app-notes <file> [--app-branch <branch>] [--app-dir <dir>] [--title <text>]
 #                    [--skip-checks] [--skip-replay] [--dry-run] [--prepared [--wait-main-ci]]
 #
 # --prepared: the branch already carries the version bump, the changelog and green CI (tools/prepare_release.sh made the
 #   commit, the PR's CI ran on it). Nothing is re-checked or re-pushed: the script verifies the bump, waits for the PR's CI
-#   on the branch head, squash-merges (pinned to that commit) and creates the release. With --card-notes the card works the
-#   same way (its branch, given with --card-branch, already holds the bump from prepare_release.sh --card-notes and has an open
-#   PR); both are verified and the card's CI is awaited BEFORE anything is merged, so a failing card cannot leave a released app.
+#   on the branch head, squash-merges (pinned to that commit) and creates the release.
 # --wait-main-ci: with --prepared, after the merge wait for CI on the merge commit before creating the release (if it fails,
 #   main stays merged and no release is made). No CI run on the merge commit (docs-only paths) is not waited for.
 #
@@ -24,7 +20,6 @@
 set -euo pipefail
 
 APP_REPO_SLUG="${PE_APP_REPO:-durkimat/ha-powerengine-controller}"
-CARD_REPO_SLUG="${PE_CARD_REPO:-durkimat/ha-powerengine-card}"
 SESSION_URL="${CLAUDE_SESSION_URL:-https://claude.ai/code/session_01LkznDwr2XBgEZmAma9wpfW}"
 POLL_SECONDS="${PE_POLL_SECONDS:-20}"
 POLL_MAX_SECONDS="${PE_POLL_MAX_SECONDS:-720}"
@@ -33,7 +28,7 @@ die() { printf 'release.sh: error: %s\n' "$*" >&2; exit 1; }
 step() { printf '\n==> %s\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
 dry() { printf '    [dry-run] would: %s\n' "$*"; }
-usage() { sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 # git with network access (push, fetch, pull): credentials come from git's own helper (gh auth setup-git).
 gitn() { git "$@"; }
@@ -52,7 +47,7 @@ api() {
 }
 
 # --- arguments ---------------------------------------------------------------------------------------------------
-VERSION="" APP_NOTES="" CARD_NOTES="" APP_BRANCH="" CARD_BRANCH="" APP_DIR="" CARD_DIR="" TITLE=""
+VERSION="" APP_NOTES="" APP_BRANCH="" APP_DIR="" TITLE=""
 SKIP_CHECKS=0 SKIP_REPLAY=0 DRY=0 PREPARED=0 WAIT_MAIN_CI=0
 
 parse_args() {
@@ -61,11 +56,8 @@ parse_args() {
     case "$1" in
       -h|--help) usage; exit 0 ;;
       --app-notes) APP_NOTES="${2:?--app-notes needs a file}"; shift 2 ;;
-      --card-notes) CARD_NOTES="${2:?--card-notes needs a file}"; shift 2 ;;
       --app-branch) APP_BRANCH="${2:?--app-branch needs a branch}"; shift 2 ;;
-      --card-branch) CARD_BRANCH="${2:?--card-branch needs a branch}"; shift 2 ;;
       --app-dir) APP_DIR="${2:?--app-dir needs a directory}"; shift 2 ;;
-      --card-dir) CARD_DIR="${2:?--card-dir needs a directory}"; shift 2 ;;
       --title) TITLE="${2:?--title needs text}"; shift 2 ;;
       --skip-checks) SKIP_CHECKS=1; shift ;;
       --skip-replay) SKIP_REPLAY=1; shift ;;
@@ -81,14 +73,8 @@ parse_args() {
   [ -n "$APP_NOTES" ] || die "--app-notes <file> is required"
   [ -s "$APP_NOTES" ] || die "app notes file is missing or empty: $APP_NOTES"
   grep -q '^### Behaviour changes' "$APP_NOTES" || die "app notes must start with '### Behaviour changes' (write 'None.' if none): $APP_NOTES"
-  if [ -n "$CARD_NOTES" ]; then [ -s "$CARD_NOTES" ] || die "card notes file is missing or empty: $CARD_NOTES"; fi
-  if [ -z "$CARD_NOTES" ] && { [ -n "$CARD_BRANCH" ] || [ -n "$CARD_DIR" ]; }; then
-    die "--card-branch/--card-dir given without --card-notes: the card is only released when you give card notes"
-  fi
   [ "$PREPARED" = 0 ] && [ "$WAIT_MAIN_CI" = 1 ] && die "--wait-main-ci only goes with --prepared"
-  [ "$PREPARED" = 1 ] && [ -n "$CARD_NOTES" ] && [ -z "$CARD_BRANCH" ] && die "--prepared with --card-notes needs --card-branch (the branch that already holds the card's bump)"
   APP_NOTES="$(cd "$(dirname "$APP_NOTES")" && pwd)/$(basename "$APP_NOTES")"
-  if [ -n "$CARD_NOTES" ]; then CARD_NOTES="$(cd "$(dirname "$CARD_NOTES")" && pwd)/$(basename "$CARD_NOTES")"; fi
 }
 
 # --- git helpers -------------------------------------------------------------------------------------------------
@@ -129,16 +115,14 @@ if kind == "app_version":
 elif kind == "install":
     text = sub(r'(\*\*Version this guide matches:\*\*\s*)\d+(?:\.\d+)*', lambda m: m.group(1) + version, what='"Version this guide matches"')
     text = sub(r'(PowerEngine\s+)\d+(?:\.\d+)*(\s+starting)', lambda m: m.group(1) + version + m.group(2), what='"PowerEngine x.y.z starting"')
-elif kind in ("app_changelog", "card_changelog"):
-    head = f"## {version} (beta)" if kind == "app_changelog" else f"## {version}"
+elif kind == "app_changelog":
+    head = f"## {version} (beta)"
     if re.search(rf"^## {re.escape(version)}\b", text, re.M):
         sys.exit(f"{path} already has a section for {version}")
     m = re.search(r"^## ", text, re.M)
     if not m:
         sys.exit(f"no '## ' section in {path} to insert above")
     text = text[:m.start()] + head + "\n\n" + notes + "\n\n" + text[m.start():]
-elif kind == "card_version":
-    text = sub(r'^(const CARD_VERSION = ")[^"]+(";)', lambda m: m.group(1) + version + m.group(2), re.M, what="CARD_VERSION")
 else:
     sys.exit("unknown edit " + kind)
 open(out, "w", encoding="utf-8").write(text)
@@ -161,7 +145,6 @@ change_file() {
 current_version() {      # current_version KIND FILE
   case "$1" in
     app) sed -n 's/^__version__ *= *"\([^"]*\)".*/\1/p' "$2" | head -n 1 ;;
-    card) sed -n 's/^const CARD_VERSION = "\([^"]*\)".*/\1/p' "$2" | head -n 1 ;;
   esac
 }
 newer_than() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$1" ]; }
@@ -178,19 +161,12 @@ run_app_checks() {
     local sel=(); [ "$SKIP_REPLAY" = 1 ] && sel=(--ignore=tests/test_replay.py)
     note "pytest, in parallel${sel:+ (replay skipped: --skip-replay)}"
     python3 -m pytest -q -n auto --dist loadscope "${sel[@]}" || die "tests failed; nothing was changed"
+    if command -v node >/dev/null; then           # the dashboard card is in this repository (card/)
+      note "node --check card/ha-powerengine-card.js"; node --check card/ha-powerengine-card.js || die "node --check failed; nothing was changed"
+      note "node --test card/tests/*.test.cjs"; node --test card/tests/*.test.cjs >/dev/null || { node --test card/tests/*.test.cjs 2>&1 | tail -n 30; die "card tests failed; nothing was changed"; }
+    fi
   )
 }
-run_card_checks() {
-  local dir="$1"
-  step "Card checks in $dir"
-  if [ "$SKIP_CHECKS" = 1 ]; then note "skipped (--skip-checks)"; return 0; fi
-  (
-    cd "$dir"
-    note "node --check ha-powerengine-card.js"; node --check ha-powerengine-card.js || die "node --check failed; nothing was changed"
-    note "node --test tests/*.test.cjs"; node --test tests/*.test.cjs >/dev/null || { node --test tests/*.test.cjs 2>&1 | tail -n 30; die "card tests failed; nothing was changed"; }
-  )
-}
-
 # --- commit, PR, CI, merge, release ------------------------------------------------------------------------------
 commit_message() {       # commit_message TITLE  -> file
   local f; f="$(mktemp "$TMP/msg.XXXXXX")"
@@ -351,40 +327,7 @@ verify_prepared() {
   note "version $VERSION, changelog section and INSTALL.md are in the branch"
 }
 
-# verify_prepared_card DIR: the card branch holds the bump (CARD_VERSION, its changelog section) and is not behind main.
-verify_prepared_card() {
-  local dir="$1" now behind
-  step "Prepared card branch: verify the bump"
-  now="$(current_version card "$dir/ha-powerengine-card.js")"
-  [ "$now" = "$VERSION" ] || die "the card branch's CARD_VERSION is '$now', not $VERSION"
-  grep -q "^## $VERSION\$" "$dir/CHANGELOG.md" || die "the card's CHANGELOG.md has no '## $VERSION' section on the branch"
-  if [ "$DRY" = 0 ]; then
-    gitn -C "$dir" fetch -q origin main
-    behind="$(git -C "$dir" rev-list --count HEAD..origin/main)"
-    [ "$behind" = 0 ] || die "the card branch is $behind commit(s) behind main: merge main, re-run prepare_release.sh --card-notes and let CI pass again"
-    note "card branch is up to date with main"
-  else
-    dry "check the card branch is not behind origin/main"
-  fi
-  note "card version $VERSION and its changelog section are in the branch"
-}
-
-# preflight_card_prepared SLUG DIR BRANCH: before anything is merged, the card's PR must exist and its CI be green on the
-# branch head, so that a card that cannot be released never follows a released app.
-preflight_card_prepared() {
-  local slug="$1" dir="$2" branch="$3" head num
-  step "Card: PR and CI must be green before the app is merged"
-  if [ "$DRY" = 1 ]; then
-    dry "find the open card PR on $branch (stop if none) and wait for its CI on the branch head (stop on a failure)"
-    return 0
-  fi
-  head="$(git -C "$dir" rev-parse HEAD)"
-  num="$(open_pr_for "$slug" "$branch")"
-  [ -n "$num" ] || die "no open PR on $slug for branch $branch: open the card's PR first so CI runs. Nothing was merged"
-  wait_for_ci "$slug" "$head" "https://github.com/$slug/pull/$num" 1500 "Nothing was merged (the card must be green before the app is released)"
-}
-
-# --- which directory and branch each repo releases ---------------------------------------------------------------------
+# --- which directory and branch is released ---------------------------------------------------------------------
 # resolve_app: sets APP_MAIN, APP_WORK, APP_BR, APP_WT (1 if APP_WORK is a worktree to remove afterwards)
 resolve_app() {
   local here script_dir; script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -409,27 +352,6 @@ resolve_app() {
   [ "$APP_WORK" != "$APP_MAIN" ] && APP_WT=1
   return 0
 }
-# resolve_card: sets CARD_MAIN, CARD_WORK, CARD_BR, CARD_WT, CARD_CREATE (1 to create release/<version> from main)
-resolve_card() {
-  CARD_DIR="${CARD_DIR:-$HOME/mnt/powerengine/ha-powerengine-card}"
-  [ -d "$CARD_DIR" ] || die "card directory not found: $CARD_DIR (use --card-dir)"
-  CARD_DIR="$(cd "$CARD_DIR" && pwd)"
-  [ -f "$CARD_DIR/ha-powerengine-card.js" ] || die "$CARD_DIR is not the PowerEngine card repo"
-  CARD_MAIN="$(main_checkout "$CARD_DIR")"; CARD_WT=0; CARD_CREATE=0
-  if [ -n "$CARD_BRANCH" ]; then
-    git -C "$CARD_MAIN" rev-parse --verify -q "refs/heads/$CARD_BRANCH" >/dev/null || die "card branch not found locally: $CARD_BRANCH"
-    CARD_BR="$CARD_BRANCH"
-    CARD_WORK="$(worktree_of_branch "$CARD_MAIN" "$CARD_BR")"
-    if [ -z "$CARD_WORK" ]; then CARD_WORK="$CARD_MAIN"; CARD_NEEDS_CHECKOUT=1; fi
-    [ "$CARD_WORK" != "$CARD_MAIN" ] && CARD_WT=1
-  else
-    CARD_BR="release/$VERSION"; CARD_WORK="$CARD_MAIN"; CARD_CREATE=1
-    if git -C "$CARD_MAIN" rev-parse --verify -q "refs/heads/$CARD_BR" >/dev/null; then die "card branch $CARD_BR already exists; pass --card-branch $CARD_BR"; fi
-  fi
-  [ "$CARD_BR" != "main" ] || die "won't release main itself; use a branch"
-  return 0
-}
-
 preflight_tree() {       # preflight_tree LABEL DIR: clean working tree, else stop before touching anything
   if ! clean_tree "$2"; then
     if [ "$DRY" = 1 ]; then note "warning: $1 working tree at $2 has uncommitted changes (a real run would stop)"
@@ -441,7 +363,7 @@ preflight_tree() {       # preflight_tree LABEL DIR: clean working tree, else st
 main() {
   parse_args "$@"
   TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-  APP_NEEDS_CHECKOUT=0; CARD_NEEDS_CHECKOUT=0
+  APP_NEEDS_CHECKOUT=0
   [ "$DRY" = 1 ] && printf 'DRY RUN: nothing is pushed, written to GitHub, or changed on disk.\n'
   for c in git gh jq python3; do command -v "$c" >/dev/null || die "$c is required"; done
 
@@ -449,13 +371,6 @@ main() {
   resolve_app
   note "app:  $APP_BR in $APP_WORK ($APP_REPO_SLUG)$([ "$APP_WT" = 1 ] && echo ', a worktree: removed at the end')"
   note "app notes: $APP_NOTES"
-  if [ -n "$CARD_NOTES" ]; then
-    resolve_card
-    note "card: $CARD_BR in $CARD_WORK ($CARD_REPO_SLUG)$([ "$CARD_CREATE" = 1 ] && echo ', new branch from main')$([ "$CARD_WT" = 1 ] && echo ', a worktree: removed at the end')"
-    note "card notes: $CARD_NOTES"
-  else
-    note "card: not released (no --card-notes; it is only released when it changes)"
-  fi
 
   if [ "$DRY" = 0 ]; then
     gh auth status >/dev/null 2>&1 || die "gh is not logged in (gh auth login)"
@@ -467,11 +382,10 @@ main() {
   fi
   preflight_tree "app" "$APP_WORK"
   [ "$APP_WORK" = "$APP_MAIN" ] || preflight_tree "app main checkout" "$APP_MAIN"
-  if [ -n "$CARD_NOTES" ]; then preflight_tree "card" "$CARD_WORK"; fi
 
-  # versions: each must move forward
+  # the version must move forward
   WORK="$APP_WORK"
-  local app_now card_now card_ref
+  local app_now
   if [ "$APP_NEEDS_CHECKOUT" = 1 ]; then
     app_now="$(git -C "$APP_WORK" show "$APP_BR:apps/powerengine/pe_core/__init__.py" | sed -n 's/^__version__ *= *"\([^"]*\)".*/\1/p')"
   else app_now="$(current_version app "$APP_WORK/apps/powerengine/pe_core/__init__.py")"; fi
@@ -483,36 +397,15 @@ main() {
     newer_than "$VERSION" "$app_now" || die "version $VERSION is not newer than the app's current $app_now"
     note "app version: $app_now -> $VERSION"
   fi
-  if [ -n "$CARD_NOTES" ]; then
-    card_ref="$CARD_BR"; [ "$CARD_CREATE" = 1 ] && card_ref="main"
-    card_now="$(git -C "$CARD_MAIN" show "$card_ref:ha-powerengine-card.js" 2>/dev/null | sed -n 's/^const CARD_VERSION = "\([^"]*\)".*/\1/p' | head -n 1)"
-    [ -n "$card_now" ] || die "could not read the card's current CARD_VERSION"
-    if [ "$PREPARED" = 1 ]; then
-      [ "$card_now" = "$VERSION" ] || die "--prepared: the card branch has version $card_now, not $VERSION (run tools/prepare_release.sh --card-notes first)"
-      note "card version: $VERSION (already in the branch)"
-    else
-      newer_than "$VERSION" "$card_now" || die "version $VERSION is not newer than the card's current $card_now"
-      note "card version: $card_now -> $VERSION (card versions may skip numbers)"
-    fi
-  fi
 
-  # 1. check everything before anything is pushed (a failing card must not leave a released app behind)
+  # 1. check everything before anything is pushed
   if [ "$APP_NEEDS_CHECKOUT" = 1 ]; then
     if [ "$DRY" = 1 ]; then dry "git -C $APP_MAIN checkout $APP_BR (it is not checked out anywhere)"
     else git -C "$APP_MAIN" checkout -q "$APP_BR"; fi
   fi
   if [ "$PREPARED" = 1 ]; then verify_prepared "$APP_WORK" "$APP_BR"; else run_app_checks "$APP_WORK"; fi
-  if [ -n "$CARD_NOTES" ]; then
-    if [ "$CARD_CREATE" = 1 ]; then
-      if [ "$DRY" = 1 ]; then dry "git -C $CARD_MAIN fetch origin main; git checkout -b $CARD_BR origin/main"
-      else gitn -C "$CARD_MAIN" fetch -q origin main; git -C "$CARD_MAIN" checkout -q -b "$CARD_BR" origin/main; fi
-    elif [ "$CARD_NEEDS_CHECKOUT" = 1 ]; then
-      if [ "$DRY" = 1 ]; then dry "git -C $CARD_MAIN checkout $CARD_BR"; else git -C "$CARD_MAIN" checkout -q "$CARD_BR"; fi
-    fi
-    if [ "$PREPARED" = 1 ]; then verify_prepared_card "$CARD_WORK"; else run_card_checks "$CARD_WORK"; fi
-  fi
 
-  # 2. bump versions and changelogs (files only; the commit comes with the PR)
+  # 2. bump the version and the changelog (files only; the commit comes with the PR)
   WORK="$APP_WORK"
   if [ "$PREPARED" = 0 ]; then
     step "App: version and changelog"
@@ -524,35 +417,18 @@ main() {
     elif [ "$DRY" = 1 ]; then dry "python3 tools/build_integration.py --sync  (custom_components/powerengine)"
     else python3 "$APP_WORK/tools/build_integration.py" --sync >/dev/null || die "could not bring custom_components/powerengine up to date"; fi
   fi
-  if [ -n "$CARD_NOTES" ] && [ "$PREPARED" = 0 ]; then
-    WORK="$CARD_WORK"
-    step "Card: version and changelog"
-    change_file card_version "$CARD_WORK/ha-powerengine-card.js" "$VERSION"
-    change_file card_changelog "$CARD_WORK/CHANGELOG.md" "$VERSION" "$CARD_NOTES"
-  fi
 
-  # 3. app: PR, CI, merge, release, then the card
-  if [ "$PREPARED" = 1 ] && [ -n "$CARD_NOTES" ]; then preflight_card_prepared "$CARD_REPO_SLUG" "$CARD_WORK" "$CARD_BR"; fi
-  local title app_title card_title
+  # 3. PR, CI, merge, release
+  local title app_title
   title="${TITLE:-$(first_line "$APP_NOTES")}"
   app_title="$VERSION${title:+: $title}"
   app_files=(apps/powerengine/pe_core/__init__.py docs/INSTALL.md CHANGELOG.md)
   [ ! -d "$APP_WORK/custom_components/powerengine" ] || app_files+=(custom_components)
   release_repo "App" "$APP_REPO_SLUG" "$APP_WORK" "$APP_BR" "$VERSION" "$APP_NOTES" "$app_title" "${app_files[@]}"
-  SUMMARY+=("app:  PR $REL_PR  release $REL_URL  merge $REL_SHA")
-  if [ -n "$CARD_NOTES" ]; then
-    card_title="$VERSION (card)${TITLE:+: $TITLE}"
-    [ -n "$TITLE" ] || { t="$(first_line "$CARD_NOTES")"; card_title="$VERSION (card)${t:+: $t}"; }
-    release_repo "Card" "$CARD_REPO_SLUG" "$CARD_WORK" "$CARD_BR" "$VERSION" "$CARD_NOTES" "$card_title" \
-      ha-powerengine-card.js CHANGELOG.md
-    SUMMARY+=("card: PR $REL_PR  release $REL_URL  merge $REL_SHA")
-  else
-    SUMMARY+=("card: not released (no --card-notes)")
-  fi
+  SUMMARY+=("PR $REL_PR  release $REL_URL  merge $REL_SHA")
 
   # 4. clean up
   cleanup "App" "$APP_WORK" "$APP_MAIN" "$APP_BR" "$APP_WT"
-  if [ -n "$CARD_NOTES" ]; then cleanup "Card" "$CARD_WORK" "$CARD_MAIN" "$CARD_BR" "$CARD_WT"; fi
 
   step "Summary$([ "$DRY" = 1 ] && echo ' (dry run)')"
   printf '    version %s\n' "$VERSION"

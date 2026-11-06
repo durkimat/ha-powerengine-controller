@@ -9,8 +9,6 @@ from pe_core import hapackage as hp
 MAIN = hp.MAIN
 OURS = hp.MARKER_PREFIX if hasattr(hp, "MARKER_PREFIX") else "# Managed by PowerEngine:"
 OURS_TEXT = OURS + " rewritten when PowerEngine updates.\nscript: {}\n"
-OLD_PREDBAT = "# PowerEngine and Predbat handover (OPTIONAL: x)\n"
-PREDBAT = hp.RETIRED[1]
 
 
 def make_ha(tmp_path, packages=True):
@@ -24,7 +22,6 @@ def make_ha(tmp_path, packages=True):
 def test_recognised_means_ours_by_marker_header_or_the_old_combined_file():
     assert hp.recognised(OURS_TEXT)
     assert hp.recognised("# PowerEngine package: the one-button update, the AppDaemon restarts and the watchdog.\n")
-    assert hp.recognised(OLD_PREDBAT)
     combined = "# PowerEngine handover: one switch for the controller\nbattery_handover_to_powerengine\n"
     assert hp.recognised(combined)
     assert not hp.recognised("# PowerEngine handover: my own notes\nscript: {}\n")
@@ -35,11 +32,10 @@ def test_retire_removes_ours_with_a_backup_and_leaves_the_rest(tmp_path):
     ha = make_ha(tmp_path)
     pk = ha / "packages"
     (pk / MAIN).write_text(OURS_TEXT)
-    (pk / PREDBAT).write_text(OLD_PREDBAT)
     (pk / "mine.yaml").write_text("# my own package\n")
     r = hp.retire(str(ha), "20261106-120000")
-    assert sorted(r["removed"]) == sorted([MAIN, PREDBAT]) and not r["unmanaged"] and not r["errors"]
-    assert sorted(os.listdir(pk)) == sorted(["mine.yaml", MAIN + ".bak-20261106", PREDBAT + ".bak-20261106"])
+    assert r["removed"] == [MAIN] and not r["unmanaged"] and not r["errors"]
+    assert sorted(os.listdir(pk)) == sorted(["mine.yaml", MAIN + ".bak-20261106"])
     assert (pk / (MAIN + ".bak-20261106")).read_text() == OURS_TEXT
     assert [n for n in os.listdir(pk) if n.endswith(".yaml")] == ["mine.yaml"]          # HA loads only *.yaml
     assert hp.retire(str(ha), "20261106-120100") == {"removed": [], "unmanaged": [], "errors": []}   # nothing left

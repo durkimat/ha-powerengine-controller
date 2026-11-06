@@ -1,6 +1,6 @@
 """PowerEngine hosted by its own process: the engine side of the connection to the Home Assistant integration.
 
-`SocketHost` gives the engine the `Host` interface (host.py) without AppDaemon. It talks the protocol in protocol.py to
+`SocketHost` gives the engine the `Host` interface (host.py) in its own process. It talks the protocol in protocol.py to
 the integration (the other end is host_server.py), keeps a local copy of every entity it has read so that `get_state`
 stays synchronous and instant, and runs timers and callbacks itself (host_scheduler.py).
 
@@ -11,7 +11,7 @@ stays synchronous and instant, and runs timers and callbacks itself (host_schedu
     and the host reconnects in the background, re-reads what it was watching and calls the listeners for what changed
     meanwhile. If the integration refuses it (a different protocol version, a wrong secret) it stops trying and
     `refused` says why.
-  * Callbacks and timers all run one at a time on one thread, as they do in AppDaemon.
+  * Callbacks and timers all run one at a time on one thread (the engine is written for that).
 """
 
 from __future__ import annotations
@@ -394,7 +394,7 @@ class SocketHost:
             listeners = [(c, kw) for e, c, kw in self._event_listeners.values() if e == event]
         for callback, kwargs in listeners:
             payload, extra = copy.deepcopy(data), dict(kwargs)
-            if context:                                            # where AppDaemon puts it (metadata)
+            if context:                                            # under "metadata", where the engine looks for it
                 payload.setdefault("metadata", {})["context"] = context
             self._dispatcher.submit(lambda c=callback, d=payload, k=extra: c(event, d, k), f"event listener {event}")
 

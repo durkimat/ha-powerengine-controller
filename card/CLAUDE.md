@@ -1,10 +1,10 @@
 # PowerEngine card: notes for Claude
 
 This is the Lovelace card for PowerEngine. It lives in the PowerEngine repository (`card/`) and is bundled into the
-integration, which serves it. **Read `../CLAUDE.md` first**: it has the release routine and guardrails. Releases run
-on the owner's machine, not in a cloud session.
+integration, which serves it and registers it as a Lovelace resource. **Read `../CLAUDE.md` first**: it has the
+release routine and guardrails.
 
-- One file: `ha-powerengine-card.js`. It holds several custom elements: config, toggle, handover, test,
+- One file: `ha-powerengine-card.js`. It holds several custom elements: config, toggle, test,
   diagnostics, update, health, log and sim cards.
 - Tests: `node --test tests/helpers.test.cjs`. Pure helpers are exported via `module.exports` at the bottom for
   testing.
@@ -15,7 +15,7 @@ on the owner's machine, not in a cloud session.
   (`versionWarnings`), not when the versions differ. Raise `MIN_APP_VERSION` when the card starts to need something
   a newer app publishes.
 - **Your system** (`PowerEngineSystemCard`, `custom:powerengine-system-card`; the old name `powerengine-wizard-card` is kept as an alias for a dashboard
-  written before it) replaced the setup wizard and the config card's equipment blocks. Plan: the app repo's `docs/plans/equipment-manager.md`. The page
+  written before it) replaced the setup wizard and the config card's equipment blocks. Plan: `docs/plans/equipment-manager.md`. The page
   shows the configured equipment read only; "Change your system" opens a panel (an overlay inside the card) to add, edit, replace and remove. Rules:
   - The panel works on **ops** (`opsSet`, `opsRemove`, `opsUndoRemove`; one per target: a part's name, `plant:<id>`, `device:<id>`), applied to the saved
     config by `applyOps` / `buildApplyConfig`. **Save draft** keeps the ops in local storage (`systemDraftSave/Load`, keyed to a fingerprint of the saved
@@ -36,7 +36,7 @@ on the owner's machine, not in a cloud session.
     are added in the same panel; a device already used by the config (`wizardUsedEntities`) is not offered again. The setup card hides itself when `setupSummary().allSet`.
 - "Other devices" (section "Other devices" before the card class: `DEVICES_APP_VERSION`, `DEVICE_INPUTS`, `devicesSupported`, `deviceDraft`,
   `buildDevices`, `deviceReadout`; UI in the Your system panel, `_entitiesDevice`) edits the app's read-only `devices` (app 0.9.93+, see
-  the app repo's docs/SITE.md and docs/plans/multiple-devices.md). **Rules:** the list is shown, and `devices` sent, only when the app is 0.9.93
+  docs/SITE.md and docs/plans/multiple-devices.md). **Rules:** the list is shown, and `devices` sent, only when the app is 0.9.93
   or newer (an older app rejects the unknown key); once sent it is always a list (`[]` removes them; a save without the key keeps the saved
   ones, which is what an older card does); the entity-in-use check (`wizardUsedEntities`) counts device inputs. Tests: `tests/devices.test.cjs`.
 - **Looking at the plan chart without Home Assistant:** `ha-card` is a Lit element there that renders its slot a moment after it is created, so a scroll box built in the same breath has
