@@ -1,6 +1,6 @@
 # PowerEngine dashboard: managed by the PowerEngine app.
 # This file is rewritten whenever PowerEngine is updated; local edits will be lost.
-# Needs: Sunsynk Power Flow Card and ApexCharts Card (HACS). See docs/INSTALL.md, Step 2.
+# Needs nothing beyond PowerEngine itself (its card draws the charts and the energy flow). See docs/INSTALL.md, Step 2.
 title: Power Engine
 views:
   - title: Monitoring
@@ -318,36 +318,11 @@ views:
           - type: heading
             heading: Energy flow
           # BEGIN energy-flow (generated from your configuration; edits here are replaced)
-          - type: custom:sunsynk-power-flow-card
+          - type: custom:powerengine-flow-card
             grid_options: {columns: full}
-            cardstyle: lite
-            show_solar: true
-            inverter:
-              model: solis
-              modern: false
-              autarky: "no"
-            battery:
-              energy: 18000
-              shutdown_soc: 12
-              # PowerEngine's battery power is + discharging; this card animates it the other way unless inverted
-              invert_power: true
-            solar:
-              mppts: 1
-            load:
-              show_daily: false
-              additional_loads: 1
-              load1_name: Car
-              load1_icon: mdi:car-electric
-            grid:
-              show_nonessential: false
-            entities:
-              battery_power_190: sensor.pe_state_battery_power
-              battery_soc_184: sensor.pe_state_battery_soc
-              grid_ct_power_172: sensor.pe_state_grid_power
-              # the load circle is the total (house + car); the car is shown as one of the loads within it
-              essential_power: sensor.pe_state_load_power
-              essential_load1: sensor.pe_state_ev_power
-              pv1_power_186: sensor.pe_state_solar_power
+            capacity_wh: 18000
+            reserve_soc: 12
+            ev: true
           # END energy-flow
       - type: grid
         column_span: 3

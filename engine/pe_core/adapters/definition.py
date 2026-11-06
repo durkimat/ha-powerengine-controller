@@ -114,7 +114,6 @@ def validate(data, source: str = "<definition>") -> None:
         raise DefinitionError(f"{source}: 'definition' must be {FORMAT} (the file format version)")
     _need(data, "name", str, source)
     _need(data, "display_names", dict, source)
-    _need(data, "card_model", str, source)
     caps = _need(data, "capabilities", dict, source)
     for flag in ("supports_ram", "supports_timed_slots"):
         _need(caps, flag, bool, f"{source}: capabilities")

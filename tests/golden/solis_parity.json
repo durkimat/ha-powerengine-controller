@@ -17211,7 +17211,6 @@
  "class_display_names": {
   "inverter": "Solis"
  },
- "card_model": "solis",
  "name": "solis",
  "capabilities": {
   "InverterCapabilities": {

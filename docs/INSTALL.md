@@ -86,8 +86,9 @@ PowerEngine ships its own dashboard and keeps it up to date: the integration add
 (address `/powerengine-dash`) and the engine writes the dashboard it shows to `/homeassistant/powerengine/dashboard.yaml`
 on every start. There is nothing to register.
 
-1. **Install the Sunsynk Power Flow Card from HACS** (by slipx06; search it, then Download): the energy flow picture on the
-   Monitoring tab. Reload the browser afterwards. (PowerEngine's own charts are part of its card: nothing else is needed.)
+Nothing else is needed: the charts and the energy-flow picture are drawn by PowerEngine's own card, which the integration
+serves. (Earlier versions asked for the Sunsynk Power Flow Card and the ApexCharts Card from HACS; the dashboard no longer
+uses either, so they can be uninstalled if nothing of yours does.)
 
 If an earlier version of this guide had you add a `powerengine-dash:` block under `lovelace: dashboards:` in
 `configuration.yaml`, it keeps working (an entry you made yourself is never replaced), but it is no longer needed:
@@ -402,7 +403,7 @@ the same for the card if you need to.
 | `Unknown command: ha` | Commands run on your own computer | Use HA's terminal add-on |
 | `Config problem: ...` in the log | `config.yaml` has an error | The message names the problem; fix or restore the backup |
 | Dashboard missing from the sidebar | The PowerEngine integration is not loaded (Settings → Devices & services), or in *shadow* mode (no dashboard) | Step 1; the integration's status |
-| The energy flow says *Custom element doesn't exist* | Sunsynk Power Flow Card not installed | Step 2.1, then reload the browser |
+| A PowerEngine card says *Custom element doesn't exist* or *Configuration error* | The browser or app is showing a page from before an update | Reload the page; in the Companion app, clear the frontend cache (Settings → Companion app → Troubleshooting) |
 | Plan says *house load learned from 0 days* | No history for the house-load input yet (new install, or recorder excludes it) | Wait a day; check the recorder keeps the house-load entity |
 | PowerEngine missing from HACS (repos disappeared) but still running | HACS lost its record of the custom repositories | Re-add both under *HACS → ⋮ → Custom repositories* (PowerEngine as **Integration**) and download the latest version; settings and dashboard are unaffected |
 | Dashboard values are *unknown* | Inputs not configured, or mode *unconfigured* | Step 3 |

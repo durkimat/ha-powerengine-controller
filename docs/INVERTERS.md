@@ -44,7 +44,6 @@ name: solis
 brand: Solis
 model: S5-EH1P6K-L (SolaX Modbus)
 display_names: {inverter: Solis}     # words for the app's own text (the <<inverter>> name)
-card_model: solis             # the Sunsynk Power Flow Card's "inverter: model:" key
 status: verified              # verified | community | draft (default draft): shown in the card's "Your system".
                               # Active is refused (Passive, with the reason) unless it is verified (pe_core/verification.py)
 verified_firmware: ["420044"] # the firmware versions the supervised tests were run on; any other firmware is refused for Active

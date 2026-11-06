@@ -2800,44 +2800,9 @@ if (typeof customElements !== "undefined" && !customElements.get("powerengine-up
 }
 
 // --- Setup checklist ---------------------------------------------------------------------------------------
-// PowerEngine itself is the integration (installed from HACS, with this card bundled), so what is left to check is
-// that the engine is running and that the two chart cards the dashboard draws with are loaded; the checklist installs
-// those with HACS if it can. Checks once (on load and after an install). Admins only: the HACS calls below are
-// admin-only on HA's side.
-//
-// Commands (verified against the sources, see the notes in tests/helpers.test.cjs):
-//   hacs/info                    (hacs/websocket/__init__.py)   -> {categories: [...], disabled_reason, version, ...}
-//   hacs/repositories/list       (hacs/websocket/repositories.py), optional "categories" -> [{id, full_name, category,
-//                                 installed, installed_version, ...}]
-//   hacs/repositories/add        (same file) {repository, category}; answers {} even when it refuses (the reason goes to
-//                                 HACS's error signal), so the card lists again to see whether it worked
-//   hacs/repository/download     (hacs/websocket/repository.py) {repository: <id as text>}; a failure is a WS error
-const SETUP_REPOS = {
-  flow: { key: "flow", full_name: "slipx06/sunsynk-power-flow-card", category: "plugin", label: "Energy-flow card", element: "sunsynk-power-flow-card" },
-};
-const SETUP_LINKS = {
-  hacs: "https://hacs.xyz/docs/use/download/download/",
-};
-
-/** The HACS repository (from hacs/repositories/list) for "owner/name", or null. Case doesn't matter. */
-function findHacsRepo(list, fullName) {
-  const want = String(fullName || "").toLowerCase();
-  return (list || []).find((r) => r && String(r.full_name || "").toLowerCase() === want) || null;
-}
-
-function hacsInfoPayload() { return { type: "hacs/info" }; }
-function hacsListPayload(categories) { return { type: "hacs/repositories/list", categories: categories || ["plugin"] }; }
-function hacsAddPayload(fullName, category) { return { type: "hacs/repositories/add", repository: fullName, category }; }
-/** HACS wants the repository id as text. */
-function hacsDownloadPayload(id) { return { type: "hacs/repository/download", repository: String(id) }; }
-
-/** The next HACS call to install one of SETUP_REPOS: add it to HACS if HACS doesn't know it yet, else download it. */
-function installStep(key, repos) {
-  const def = SETUP_REPOS[key];
-  if (!def) return null;
-  const repo = findHacsRepo(repos, def.full_name);
-  return repo ? hacsDownloadPayload(repo.id) : hacsAddPayload(def.full_name, def.category);
-}
+// PowerEngine is one install (the integration, with this card, the dashboard and its charts and energy-flow picture
+// bundled), so what is left to check is that the engine is running and, if it is not yet known, whether another battery
+// controller is installed. Nothing here installs anything.
 
 /** A version sensor that exists and has a value. */
 function peRunning(states) {
@@ -2845,55 +2810,27 @@ function peRunning(states) {
   return s && s.state !== "unavailable" && s.state !== "unknown" && s.state !== "" ? String(s.state) : null;
 }
 
-const ADMIN_NOTE = "Only an admin can check or install this.";
-
 /**
- * The checklist. facts: {isAdmin, hacs (true/false/null=unknown), hacsReason, repos (HACS list, or null), cardsLoaded
- * ({element: bool}), peVersion (string or null), otherController}.
- * Row: {key, title, why, status: "ok"|"missing"|"unknown", needed, detail, action}. action is null, or
- * {kind: "install", target, label}, {kind: "link", href, label} or {kind: "reload", label}.
+ * The checklist. facts: {peVersion (string or null), otherController}.
+ * Row: {key, title, why, status: "ok"|"missing", needed, detail}.
  */
 function setupRows(facts) {
   const f = facts || {};
-  const admin = !!f.isAdmin;
-  const repos = f.repos || null;
   const rows = [];
-  const hacsOk = f.hacs === true;
-  const install = (target, label) => (admin && hacsOk ? { kind: "install", target, label } : null);
-  const link = (href, label) => ({ kind: "link", href, label });
-  const unknownFor = (r) => (!admin ? { ...r, status: "unknown", detail: ADMIN_NOTE, action: null } : r);
-
   // 1. PowerEngine running
   const ver = f.peVersion || null;
   rows.push({ key: "running", title: "PowerEngine running", why: "It publishes its version once its engine has started.", status: ver ? "ok" : "missing", needed: true,
-    detail: ver ? `Version ${ver}.` : "Not running yet. Open Settings, Devices & services, PowerEngine: its Repairs say what is wrong, and its Restart engine button starts it again.", action: null });
-
-  // 2. The energy-flow card
-  ["flow"].forEach((k) => {
-    const def = SETUP_REPOS[k];
-    const loaded = !!(f.cardsLoaded || {})[def.element];
-    const repo = findHacsRepo(repos, def.full_name);
-    const base = { key: k, title: def.label, why: "Draws the live energy-flow picture.", needed: true };
-    if (loaded) rows.push({ ...base, status: "ok", detail: `Loaded (${def.full_name}).`, action: null });
-    else if (repo && repo.installed) rows.push({ ...base, status: "missing", detail: "Installed. Reload this page to load it.", action: { kind: "reload", label: "Reload page" } });
-    else rows.push(unknownFor({ ...base, status: hacsOk || f.hacs === false ? "missing" : "unknown",
-      detail: hacsOk ? `Not installed (${def.full_name}).`
-        : f.hacs === false ? `Not installed (${def.full_name}). Install it from HACS, or install HACS first.` : `Check HACS first (${def.full_name}).`,
-      action: hacsOk ? install(k, "Install") : f.hacs === false ? link(SETUP_LINKS.hacs, "How to install HACS") : null }));
-  });
-
-  // 3. Another battery controller: the app won't go Active until the owner has said whether there is one
+    detail: ver ? `Version ${ver}.` : "Not running yet. Open Settings, Devices & services, PowerEngine: its Repairs say what is wrong, and its Restart engine button starts it again." });
+  // 2. Another battery controller: the app won't go Active until the owner has said whether there is one
   if (f.otherController === "unset") rows.push({ key: "controller", title: "Other battery controller", needed: true, status: "missing",
-    why: "PowerEngine won't go Active until you choose.", detail: OTHER_UNSET_PROMPT, action: null });
-
+    why: "PowerEngine won't go Active until you choose.", detail: OTHER_UNSET_PROMPT });
   return rows;
 }
 
-/** "All set" when PowerEngine is running and the energy-flow card is loaded. */
+/** "All set" when PowerEngine is running and nothing else is waiting for a choice. */
 function setupSummary(facts) {
   const rows = setupRows(facts);
-  const ok = (k) => (rows.find((r) => r.key === k) || {}).status === "ok";
-  const allSet = ok("running") && ok("flow") && !rows.some((r) => r.key === "controller");
+  const allSet = rows.every((r) => r.status === "ok");
   return { allSet, line: allSet ? `All set. PowerEngine is running ${(facts || {}).peVersion}` : null,
     todo: rows.filter((r) => r.needed && r.status !== "ok").length };
 }
@@ -2902,102 +2839,35 @@ class PowerEngineSetupCard extends (typeof HTMLElement !== "undefined" ? HTMLEle
   setConfig(config) {
     this._config = config || {};
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
-    this._notes = this._notes || {};
   }
 
   set hass(hass) {
-    const first = !this._hass;
     this._hass = hass;
-    if (first) this._check();          // once on load; never on a timer
-    else this._render();
+    this._render();
   }
 
-  getCardSize() { return 4; }
+  getCardSize() { return 3; }
 
   getGridOptions() { return { columns: "full", rows: "auto" }; }
 
-  _isAdmin() { return !!(this._hass && this._hass.user && this._hass.user.is_admin); }
-
-  /** One round of checks. Together with _install, the only place that calls HACS or the Supervisor. */
-  async _check() {
-    const hass = this._hass;
-    if (!hass || this._checking) return;
-    this._checking = true;
-    this._render();
-    const comps = (hass.config && hass.config.components) || [];
-    const s = { hacs: null, hacsReason: null, repos: null };
-    if (this._isAdmin()) {
-      if (!comps.includes("hacs")) s.hacs = false;
-      else {
-        try {
-          const info = await hass.callWS(hacsInfoPayload());
-          s.hacsReason = info.disabled_reason || null;
-          s.hacs = !s.hacsReason;
-          if (s.hacs) s.repos = await hass.callWS(hacsListPayload());
-        } catch (err) { s.hacs = null; this._notes.hacs = "Couldn't ask HACS: " + ((err && err.message) || err); }
-      }
-    }
-    this._scan = s;
-    this._checking = false;
-    this._render();
-  }
-
-  async _install(key) {
-    const hass = this._hass;
-    const def = SETUP_REPOS[key];
-    if (!hass || !def || this._busy) return;
-    this._busy = key;
-    delete this._notes[key];
-    try {
-      let repos = (this._scan || {}).repos || [];
-      if (!findHacsRepo(repos, def.full_name)) {
-        this._progress(key, "Adding it to HACS…");
-        await hass.callWS(installStep(key, repos));
-        for (let i = 0; i < 3 && !findHacsRepo(repos, def.full_name); i++) {
-          if (i) await new Promise((res) => setTimeout(res, 1500));
-          repos = await hass.callWS(hacsListPayload());
-        }
-        if (!findHacsRepo(repos, def.full_name)) throw new Error("HACS didn't add it. Check HACS's notifications and log.");
-      }
-      this._progress(key, "Downloading with HACS…");
-      await hass.callWS(installStep(key, repos));
-      this._notes[key] = "Installed. Reload this page for the card to load.";
-    } catch (err) {
-      this._notes[key] = "Failed: " + ((err && err.message) || err);
-    }
-    this._busy = null;
-    this._progressNote = null;
-    await this._check();               // once, after the install finishes
-  }
-
-  _progress(key, text) { this._progressNote = { key, text }; this._render(); }
-
   _facts() {
     const hass = this._hass;
-    const s = this._scan || {};
-    const cardsLoaded = {};
-    Object.values(SETUP_REPOS).forEach((d) => {
-      if (d.element) cardsLoaded[d.element] = typeof customElements !== "undefined" && !!customElements.get(d.element);
-    });
-    return { isAdmin: this._isAdmin(), hacs: s.hacs === undefined ? null : s.hacs, hacsReason: s.hacsReason,
-      repos: s.repos, cardsLoaded, components: (hass.config && hass.config.components) || [],
-      peVersion: peRunning(hass.states),
-      otherController: otherControllerValue(hass.states),
+    return { peVersion: peRunning(hass.states), otherController: otherControllerValue(hass.states),
       setup: (((hass.states || {})[VERSION_SENSOR] || {}).attributes || {}).setup || null };
   }
 
   _render() {
     if (!this.shadowRoot || !this._hass) return;
     const facts = this._facts();
-    const sig = JSON.stringify([facts, this._busy, this._checking, this._notes, this._progressNote]);
+    const sig = JSON.stringify(facts);
     if (sig === this._sig) return;      // hass updates come often; only redraw when something we show changed
     this._sig = sig;
     const rows = setupRows(facts);
     const sum = setupSummary(facts);
     const root = this.shadowRoot;
     // all set: nothing to do here, so the card takes no room (the update card shows the version)
-    this.style.display = sum.allSet && !this._busy && !this._checking ? "none" : "";
-    if (this.style.display === "none") { root.innerHTML = ""; return; }
+    this.style.display = sum.allSet ? "none" : "";
+    if (sum.allSet) { root.innerHTML = ""; return; }
     root.innerHTML = `
       <style>
         ha-card { padding: 12px 16px; display: block; }
@@ -3009,67 +2879,30 @@ class PowerEngineSetupCard extends (typeof HTMLElement !== "undefined" ? HTMLEle
         .dot { flex: 0 0 22px; height: 22px; border-radius: 50%; color: #fff; text-align: center; line-height: 22px; font-size: 13px; font-weight: 600; }
         .ok .dot { background: var(--success-color, #43a047); }
         .missing .dot { background: var(--error-color, #db4437); }
-        .missing.optional .dot { background: var(--warning-color, #f9a825); }
-        .unknown .dot { background: var(--disabled-text-color, #9e9e9e); }
         .text { flex: 1 1 200px; min-width: 0; }
         .title { font-weight: 500; }
         .why, .detail { color: var(--secondary-text-color); font-size: 0.9em; overflow-wrap: anywhere; }
-        .detail.note { color: var(--primary-text-color); }
-        .act { flex: 0 0 auto; margin-left: 32px; }
-        @media (min-width: 600px) { .act { margin-left: 0; } }
-        button, a.btn { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--divider-color); text-decoration: none;
-                        background: var(--primary-color); color: var(--text-primary-color, #fff); cursor: pointer; display: inline-block; box-sizing: border-box; }
-        button.second, a.btn.second { background: none; color: var(--primary-text-color); }
-        button:disabled { opacity: .5; cursor: default; }
+        button { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--divider-color); background: none;
+                 color: var(--primary-text-color); cursor: pointer; box-sizing: border-box; }
       </style>
       <ha-card><div class="head"><h2>PowerEngine setup</h2><div class="btns"></div></div><div class="sub"></div><div class="list"></div></ha-card>`;
-    const q = (s) => root.querySelector(s);
-    const head = q(".btns");
+    const q = (sel) => root.querySelector(sel);
     const mk = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
-    const busy = !!this._busy || this._checking;
-    const sub = q(".sub");
-    if (!facts.isAdmin) {
-      sub.textContent = "You're not an admin. An admin needs to run the installs; you can see what's missing here.";
-    } else {
-      sub.textContent = sum.todo ? `${sum.todo} thing${sum.todo === 1 ? "" : "s"} still to do.` : "";
-    }
+    q(".sub").textContent = sum.todo ? `${sum.todo} thing${sum.todo === 1 ? "" : "s"} still to do.` : "";
     if (showDemoLink(facts)) {
-      const tryIt = mk("button", "second", "Try the demo");
+      const tryIt = mk("button", "", "Try the demo");
       tryIt.title = "The demo is at the top of this page";
       tryIt.addEventListener("click", () => { if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); });
-      head.append(tryIt);
+      q(".btns").append(tryIt);
     }
-    const list = q(".list");
     rows.forEach((r) => {
-      const row = mk("div", `row ${r.status}${r.needed ? "" : " optional"}`);
-      row.append(mk("div", "dot", r.status === "ok" ? "✓" : r.status === "missing" ? (r.needed ? "✕" : "!") : "?"));
+      const row = mk("div", `row ${r.status}`);
+      row.append(mk("div", "dot", r.status === "ok" ? "✓" : "✕"));
       const text = mk("div", "text");
       text.append(mk("div", "title", r.title), mk("div", "why", r.why));
-      const prog = this._progressNote && this._progressNote.key === r.key ? this._progressNote.text : null;
-      const note = prog || this._notes[r.key];
       if (r.detail) text.append(mk("div", "detail", r.detail));
-      if (note) text.append(mk("div", "detail note", note));
       row.append(text);
-      const a = r.action;
-      if (a) {
-        const box = mk("div", "act");
-        if (a.kind === "link") {
-          const l = mk("a", "btn second", a.label);
-          l.href = a.href; l.target = "_blank"; l.rel = "noopener noreferrer";
-          box.append(l);
-        } else if (a.kind === "reload") {
-          const b = mk("button", "", a.label);
-          b.addEventListener("click", () => location.reload());
-          box.append(b);
-        } else {
-          const b = mk("button", "", this._busy === a.target ? "Installing…" : a.label);
-          b.disabled = busy;
-          b.addEventListener("click", () => this._install(a.target));
-          box.append(b);
-        }
-        row.append(box);
-      }
-      list.append(row);
+      q(".list").append(row);
     });
   }
 }
@@ -3078,7 +2911,7 @@ if (typeof customElements !== "undefined" && !customElements.get("powerengine-se
   customElements.define("powerengine-setup-card", PowerEngineSetupCard);
   window.customCards = window.customCards || [];
   window.customCards.push({ type: "powerengine-setup-card", name: "PowerEngine setup",
-    description: "Checks what PowerEngine needs and installs what HACS can install." });
+    description: "Checks that PowerEngine is running and whether it still needs to know about another battery controller." });
 }
 
 // --- Demo card: welcome, banner, day picker and exit --------------------------------------------------------
@@ -9543,11 +9376,156 @@ class PowerEngineChartCard extends PowerEngineV2Card {
   }
 }
 
+// ---- native energy-flow picture: solar, battery, grid, home and car with moving flow lines ---------------------------------
+// `type: custom:powerengine-flow-card`. Drawn here, not by a card from another install. It reads PowerEngine's own sensors
+// (sensor.pe_state_*), whose signs are: battery + discharging, grid + importing, house load + using, car + charging.
+//   options: plants: [{name, entity}] (a breakdown of the solar figure when there are two or more), solar: false (no solar),
+//            ev: true (show the car), capacity_wh and reserve_soc (for "x h left" / "full in x h"), entities: {...} overrides.
+const FLOW_ENTITIES = {
+  solar: "sensor.pe_state_solar_power", battery_power: "sensor.pe_state_battery_power", battery_soc: "sensor.pe_state_battery_soc",
+  grid: "sensor.pe_state_grid_power", load: "sensor.pe_state_load_power", ev: "sensor.pe_state_ev_power",
+};
+const FLOW_IDLE_W = 10;
+
+/** A sensor's number, or null when it is missing, unavailable or not a number. Pure. */
+function flowNum(states, id) {
+  const s = id && states ? states[id] : null;
+  if (!s || s.state === "unavailable" || s.state === "unknown" || s.state === "" || s.state === null) return null;
+  const v = Number(s.state);
+  return Number.isNaN(v) ? null : v;
+}
+/** 1234 -> "1.2 kW", 640 -> "640 W", null -> "–" (always a size, never a sign). Pure. */
+function flowFmt(w) {
+  if (w === null || w === undefined) return "–";
+  const a = Math.abs(w);
+  return a >= 1000 ? `${(a / 1000).toFixed(1)} kW` : `${Math.round(a)} W`;
+}
+function flowDuration(hours) {
+  const m = Math.round(hours * 60);
+  if (m < 1) return "under a minute";
+  const h = Math.floor(m / 60), r = m % 60;
+  return h ? (r ? `${h} h ${r} min` : `${h} h`) : `${r} min`;
+}
+/** "5 h 10 min left to 12%" while discharging, "full in 1 h 40 min" while charging, "" when idle or the size is unknown. Pure. */
+function flowBatteryNote(soc, w, capacityWh, reserve) {
+  if (soc === null || w === null || !capacityWh || Math.abs(w) < FLOW_IDLE_W) return "";
+  if (w > 0) {
+    const floor = reserve || 0;
+    if (soc <= floor) return `at the ${floor}% reserve`;
+    return `${flowDuration((capacityWh * (soc - floor)) / 100 / w)} left to ${floor}%`;
+  }
+  if (soc >= 100) return "full";
+  return `full in ${flowDuration((capacityWh * (100 - soc)) / 100 / -w)}`;
+}
+/** Every figure the picture shows, from the states and the card's options. Pure. */
+function flowFigures(states, cfg) {
+  const o = cfg || {};
+  const id = Object.assign({}, FLOW_ENTITIES, o.entities || {});
+  const batteryW = flowNum(states, id.battery_power);
+  const soc = flowNum(states, id.battery_soc);
+  const gridW = flowNum(states, id.grid);
+  return {
+    solarW: o.solar === false ? null : flowNum(states, id.solar), hasSolar: o.solar !== false,
+    plants: (o.plants || []).map((p) => ({ name: p.name || "", w: flowNum(states, p.entity) })),
+    batteryW, soc, batteryState: batteryW === null ? "unknown" : batteryW > FLOW_IDLE_W ? "discharging" : batteryW < -FLOW_IDLE_W ? "charging" : "idle",
+    batteryNote: flowBatteryNote(soc, batteryW, o.capacity_wh, o.reserve_soc),
+    gridW, gridState: gridW === null ? "unknown" : gridW > FLOW_IDLE_W ? "importing" : gridW < -FLOW_IDLE_W ? "exporting" : "idle",
+    loadW: flowNum(states, id.load), hasEv: !!o.ev, evW: o.ev ? flowNum(states, id.ev) : null,
+  };
+}
+const FLOW_NODES = { solar: [210, 52], battery: [210, 252], grid: [64, 152], home: [356, 152], ev: [356, 252], hub: [210, 152] };
+/** The picture as data: the nodes (where, what they say) and the lines between them (which way the energy moves, if it does). Pure. */
+function flowModel(fig) {
+  const on = (w) => w !== null && Math.abs(w) >= FLOW_IDLE_W;
+  const at = (k) => FLOW_NODES[k];
+  const nodes = [];
+  if (fig.hasSolar) nodes.push({ id: "solar", at: at("solar"), value: flowFmt(fig.solarW), sub: "Solar", color: "var(--v2-sun)" });
+  nodes.push({ id: "battery", at: at("battery"), value: fig.soc === null ? "–" : `${Math.round(fig.soc)}%`,
+    sub: fig.batteryState === "unknown" ? "Battery" : `${flowFmt(fig.batteryW)} ${fig.batteryState}`, note: fig.batteryNote, soc: fig.soc, color: "var(--v2-battery)" });
+  nodes.push({ id: "grid", at: at("grid"), value: flowFmt(fig.gridW), sub: fig.gridState === "unknown" ? "Grid" : fig.gridState === "idle" ? "Grid" : `Grid ${fig.gridState}`,
+    color: fig.gridState === "exporting" ? "var(--v2-good)" : "var(--v2-price)" });
+  nodes.push({ id: "home", at: at("home"), value: flowFmt(fig.loadW), sub: "Home", color: "var(--v2-house)" });
+  if (fig.hasEv) nodes.push({ id: "ev", at: at("ev"), value: flowFmt(fig.evW), sub: "Car", color: "var(--v2-buy)" });
+  const line = (from, to, w, reverse, color) => ({ from, to, x1: at(from)[0], y1: at(from)[1], x2: at(to)[0], y2: at(to)[1], moving: on(w), reverse: !!reverse, color });
+  const lines = [];
+  if (fig.hasSolar) lines.push(line("solar", "hub", fig.solarW, false, "var(--v2-sun)"));
+  lines.push(line("hub", "battery", fig.batteryW === null ? null : -fig.batteryW, fig.batteryW !== null && fig.batteryW > 0, "var(--v2-battery)"));     // charging runs hub -> battery
+  lines.push(line("grid", "hub", fig.gridW, fig.gridW !== null && fig.gridW < 0, fig.gridW !== null && fig.gridW < 0 ? "var(--v2-good)" : "var(--v2-price)"));
+  lines.push(line("hub", "home", fig.loadW, false, "var(--v2-house)"));
+  if (fig.hasEv) lines.push(line("home", "ev", fig.evW, false, "var(--v2-buy)"));
+  return { nodes, lines, hub: at("hub"), plants: fig.plants.length >= 2 ? fig.plants : [] };
+}
+/** The icon inside a node, as SVG children of a group at (0, 0), about 28 px square. */
+function flowIcon(kind, g, color, soc) {
+  const s = { fill: "none", stroke: color, "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" };
+  if (kind === "solar") {
+    svgEl("circle", Object.assign({ cx: 0, cy: 0, r: 6 }, s), g);
+    for (let i = 0; i < 8; i += 1) { const a = (i * Math.PI) / 4; svgEl("line", Object.assign({ x1: Math.cos(a) * 10, y1: Math.sin(a) * 10, x2: Math.cos(a) * 14, y2: Math.sin(a) * 14 }, s), g); }
+  } else if (kind === "grid") {
+    svgEl("path", Object.assign({ d: "M-9,13 L0,-13 L9,13 M-5,3 H5 M-7.5,8 H7.5 M-4,-5 H4" }, s), g);
+  } else if (kind === "home") {
+    svgEl("path", Object.assign({ d: "M-13,2 L0,-12 L13,2 M-9,-1 V12 H9 V-1" }, s), g);
+  } else if (kind === "battery") {
+    svgEl("rect", Object.assign({ x: -8, y: -11, width: 16, height: 24, rx: 2 }, s), g);
+    svgEl("rect", Object.assign({ x: -3, y: -15, width: 6, height: 4 }, s), g);
+    const level = soc === null || soc === undefined ? 0 : Math.max(0, Math.min(100, soc));
+    svgEl("rect", { x: -6, y: 11 - (level / 100) * 20, width: 12, height: (level / 100) * 20, fill: color, "fill-opacity": 0.55 }, g);
+  } else if (kind === "ev") {
+    svgEl("path", Object.assign({ d: "M-13,4 H13 V-1 L9,-7 H-7 L-13,-1 Z" }, s), g);
+    svgEl("circle", Object.assign({ cx: -7, cy: 6, r: 3 }, s), g);
+    svgEl("circle", Object.assign({ cx: 7, cy: 6, r: 3 }, s), g);
+  }
+}
+
+class PowerEngineFlowCard extends PowerEngineV2Card {
+  setConfig(config) {
+    super.setConfig(Object.assign({}, config || {}));
+    if (this.style) this.style.display = "block";
+  }
+  getCardSize() { return 5; }
+  _entityIds() {
+    const c = this._config || {};
+    const id = Object.assign({}, FLOW_ENTITIES, c.entities || {});
+    return Object.values(id).concat((c.plants || []).map((p) => p.entity)).filter(Boolean);
+  }
+  _ids() { return this._entityIds(); }
+  _render(states) {
+    const fig = flowFigures(states, this._config);
+    const m = flowModel(fig);
+    this.shadowRoot.innerHTML = `<style>${V2_CSS}
+      ha-card { padding: 8px 12px 12px; }
+      svg { width: 100%; max-width: 520px; margin: 0 auto; height: auto; }
+      .ln { fill: none; stroke-width: 3; stroke-linecap: round; opacity: .25; }
+      .ln.moving { opacity: 1; stroke-dasharray: 2 12; animation: pe-flow 1.1s linear infinite; }
+      .ln.moving.rev { animation-direction: reverse; }
+      @keyframes pe-flow { to { stroke-dashoffset: -14; } }
+      @media (prefers-reduced-motion: reduce) { .ln.moving { animation: none; stroke-dasharray: none; } }
+      .nv { font-size: 15px; font-weight: 600; } .ns { font-size: 11.5px; } .nn { font-size: 11px; }
+      text { paint-order: stroke; stroke: var(--card-background-color, #fff); stroke-width: 5px; stroke-linejoin: round; }   /* a halo, so a line behind a label does not strike it out */
+    </style><ha-card><svg viewBox="0 0 420 340" role="img" aria-label="Energy flow: solar, battery, grid, home and car"></svg></ha-card>`;
+    const svg = this.shadowRoot.querySelector("svg");
+    m.lines.forEach((l) => svgEl("line", { x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, stroke: l.color, class: `ln${l.moving ? " moving" : ""}${l.reverse ? " rev" : ""}` }, svg));
+    svgEl("circle", { cx: m.hub[0], cy: m.hub[1], r: 13, fill: "var(--card-background-color, #fff)", stroke: "var(--divider-color)", "stroke-width": 2 }, svg);
+    svgEl("path", { d: `M${m.hub[0] - 2},${m.hub[1] - 8} L${m.hub[0] + 5},${m.hub[1] - 8} L${m.hub[0] + 1},${m.hub[1] - 1} L${m.hub[0] + 6},${m.hub[1] - 1} L${m.hub[0] - 4},${m.hub[1] + 9} L${m.hub[0] - 1},${m.hub[1] + 2} L${m.hub[0] - 6},${m.hub[1] + 2} Z`, fill: "var(--secondary-text-color)" }, svg);
+    m.nodes.forEach((n) => {
+      const [x, y] = n.at;
+      svgEl("circle", { cx: x, cy: y, r: 32, fill: "var(--card-background-color, #fff)", stroke: n.color, "stroke-width": 3 }, svg);
+      const g = svgEl("g", { transform: `translate(${x},${y})` }, svg);
+      flowIcon(n.id, g, n.color, n.soc);
+      svgEl("text", { x, y: y + 49, "text-anchor": "middle", class: "nv", fill: "var(--primary-text-color)" }, svg, n.value);
+      svgEl("text", { x, y: y + 63, "text-anchor": "middle", class: "ns", fill: "var(--secondary-text-color)" }, svg, n.sub);
+      if (n.note) svgEl("text", { x, y: y + 76, "text-anchor": "middle", class: "nn", fill: "var(--secondary-text-color)" }, svg, n.note);
+    });
+    m.plants.forEach((p, i) => svgEl("text", { x: 254, y: 40 + i * 14, class: "ns", fill: "var(--secondary-text-color)" }, svg, `${p.name} ${flowFmt(p.w)}`));
+  }
+}
+
 [["powerengine-engine-card", PowerEngineEngineCard, "PowerEngine engine v2", "Engine v2's mode, why, the value of a stored kWh against the buy and sell lines, and what ends the mode."],
   ["powerengine-v2-plan-card", PowerEngineV2PlanCard, "PowerEngine engine v2 plan", "Engine v2's expected timeline and the value map."],
   ["powerengine-v2-health-card", PowerEngineV2HealthCard, "PowerEngine engine v2 health", "Engine v2's recalculations, flip-flops, everyday range and learned weights."],
   ["powerengine-engine-badge-card", PowerEngineEngineBadgeCard, "PowerEngine engine badge", "Active, Paused or Passive for one engine, with what that means (engine: v1 or v2)."],
   ["powerengine-v2-history-card", PowerEngineV2HistoryCard, "PowerEngine engine v2 history", "A day of engine v2: level as it ran against the expected level, the modes, prices and value, with a day picker."],
+  ["powerengine-flow-card", PowerEngineFlowCard, "PowerEngine energy flow", "Solar, battery, grid, home and car with the energy moving between them (reads PowerEngine's own sensors)."],
   ["powerengine-chart-card", PowerEngineChartCard, "PowerEngine chart", "The plan, history, load and solar, and losses charts of the engine's sensors (chart: plan | history | load_solar | losses)."],
   ["powerengine-events-card", PowerEngineEventsCard, "PowerEngine events by month", "Grid-event and free-power totals by month; select a month for its days."],
   ["powerengine-engine-compare-card", PowerEngineEngineCompareCard, "PowerEngine engines compared", "What engine v1, engine v2 and the best possible would have saved on each of the last days."],
@@ -9560,7 +9538,7 @@ class PowerEngineChartCard extends PowerEngineV2Card {
 });
 
 if (typeof module !== "undefined") {
-  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerSupported, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, ROUTER_APP_VERSION, whatsappSupported, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, hasUpdateService, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, MIN_APP_VERSION, parseVersion, versionOlder, versionWarnings, logRows, logWhen, escHtml, findRcEntities, controlEntities, chartPts, chartClose, chartWindow, chartTimeTicks, chartNiceTicks, chartAxisRange, chartSmoothPath, chartStepPath, chartReadout, chartModel, CHART_DEFS, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, SETUP_REPOS, findHacsRepo, hacsInfoPayload, hacsListPayload, hacsAddPayload, hacsDownloadPayload, installStep, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, FREE_LOADS_APP_VERSION, freeLoadsSupported, freeLoadDraft, buildFreeLoads, DEVICES_APP_VERSION, DEVICE_INPUTS, devicesSupported, deviceDraft, deviceNewId, buildDevices, deviceReadout,
+  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerSupported, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, ROUTER_APP_VERSION, whatsappSupported, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, hasUpdateService, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, MIN_APP_VERSION, parseVersion, versionOlder, versionWarnings, logRows, logWhen, escHtml, findRcEntities, controlEntities, chartPts, chartClose, chartWindow, chartTimeTicks, chartNiceTicks, chartAxisRange, chartSmoothPath, chartStepPath, chartReadout, chartModel, CHART_DEFS, flowNum, flowFmt, flowDuration, flowBatteryNote, flowFigures, flowModel, FLOW_ENTITIES, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, FREE_LOADS_APP_VERSION, freeLoadsSupported, freeLoadDraft, buildFreeLoads, DEVICES_APP_VERSION, DEVICE_INPUTS, devicesSupported, deviceDraft, deviceNewId, buildDevices, deviceReadout,
   wizardDeviceName, wizardInUse, wizardOthers, wizardUsedEntities, wizardPlantFromDevice, wizardPlantId, EXPORT_FORMAT, EXPORT_VERSION, EXPORT_STATE_MAX, wizardInfo, wizardFacts, wizardMatch, wizardCandidates, wizardRoles, wizardSuggest, wizardPlantGuess, wizardMissing, wizardWatts, wizardSignCheck, wizardBalance, scrubText, buildCandidateExport, candidateFileName, wizardEnergyDevices,
   SYSTEM_DRAFT_KEY, systemKinds, systemItems, systemMissingParts, opsSet, opsRemove, opsUndoRemove, opsTag, opsSummary, applyOps, featuresLeftOut, buildApplyConfig, equipmentOf, systemFingerprint, overlayEquipment, systemImpact, systemDraftLoad, systemDraftSave,
   OVERRIDE_MODES, OVERRIDE_PERIODS, OVERRIDE_MAX_SLOTS, inverterWords, overrideEndOptions, overridePayload, overrideView, overrideSummary,
