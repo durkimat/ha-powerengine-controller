@@ -132,6 +132,7 @@ repository, so it is released with the integration. In short (the steps below de
 Read the named file before touching that area (they are one-liners here; the detail is there):
 
 - **Publishing** (`docs/history/demo-mode.md`, B1): all entity output goes through `self._get_publisher()` (native entities under the integration, plain states in the demo and tests); never write an entity's state any other way.
+- **Demo under the integration**: the host (`SocketHost`) sends `get_state`/`get_history`/`call_service`/`fire_event`/`set_state` to the demo gate's replacements when set (`override`), and the demo publishes the integration's own entities. A new install with no config starts the demo by itself (`_saved_demo_day`) until `demo_off` exists (written by the card's Exit); `integration/tests/test_demo.py` runs it against real Home Assistant.
 - **Demo gate** (C2): in demo mode always call `self.call_service` / `self.fire_event` in `powerengine.py`, never on anything else; a test fails on a new call elsewhere.
 - **Re-initialise** (C3): keep `initialize()` and what it sets in `self`; don't set attributes from the host's threads outside it.
 - **Demo pack** (C1): numbers, times and flags only; never commit a pack from an unscrubbed source, never put private day files in tests.

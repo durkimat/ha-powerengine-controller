@@ -1,4 +1,4 @@
-"""The demo, started from the dashboard on a PowerEngine that is not set up, run by the real engine."""
+"""The demo on a PowerEngine that is not set up: it starts by itself, and the dashboard's buttons change or end it."""
 
 import os
 
@@ -29,23 +29,39 @@ def pe_states(hass):
     return [s for s in hass.states.async_all() if s.entity_id.split(".", 1)[1].startswith("pe_")]
 
 
-async def test_the_demo_starts_runs_on_the_integrations_entities_and_exits(hass, tmp_path):
+async def settled(hass):
+    await wait_for(hass, lambda: version(hass).state not in ("unavailable", "unknown"), what="the engine's entities")
+
+
+async def test_a_new_install_shows_the_demo_and_the_buttons_change_it_and_leave_it(hass, tmp_path):
     await start(hass, tmp_path)
     await running(hass)
-    assert version(hass).attributes["setup"] == "unconfigured" and not version(hass).attributes.get("demo")
-    assert [d["key"] for d in version(hass).attributes["demo_days"]] == ["sunny", "dull", "axle", "car"]
-
-    await ask(hass, {"action": "start", "day": "sunny"}, lambda: demo_title(hass) == "Sunny day", "the demo to start")
+    await wait_for(hass, lambda: demo_title(hass) == "Sunny day", timeout=60, what="the demo to start by itself")
     soc = "sensor.pe_state_battery_soc"
     await wait_for(hass, lambda: hass.states.get(soc) and hass.states.get(soc).state not in ("unknown", "unavailable"),
                    what="the simulated battery")
     assert 0 < float(hass.states.get(soc).state) <= 100
-    # its entities are the integration's (one registry entry each), and none went unavailable while the engine restarted
+    assert version(hass).attributes["setup"] == "unconfigured"
+    assert [d["key"] for d in version(hass).attributes["demo"]["days"]] == ["sunny", "dull", "axle", "car"]
+    # its entities are the integration's, and none is unavailable now the engine has started
     assert not [s.entity_id for s in pe_states(hass) if s.state == "unavailable"]
-    assert os.path.isfile(tmp_path / "demo.json") and not os.path.exists(tmp_path / "config.yaml")
+    assert not os.path.exists(tmp_path / "config.yaml")
 
     await ask(hass, {"action": "day", "day": "dull"}, lambda: demo_title(hass) == "Dull day", "the day to change")
 
-    await ask(hass, {"action": "exit"}, lambda: version(hass).state not in ("unavailable", "unknown")
+    await ask(hass, {"action": "exit"}, lambda: version(hass).attributes.get("setup") == "unconfigured"
               and not version(hass).attributes.get("demo"), "the demo to end")
-    assert version(hass).attributes["setup"] == "unconfigured" and not os.path.exists(tmp_path / "demo.json")
+    assert version(hass).attributes["setup"] == "unconfigured" and (tmp_path / "demo_off").exists()
+
+    await ask(hass, {"action": "start", "day": "car"}, lambda: demo_title(hass) == "Car charging day",
+              "the demo to start again")
+    assert not (tmp_path / "demo_off").exists()
+
+
+async def test_a_left_demo_does_not_come_back_by_itself(hass, tmp_path):
+    (tmp_path / "demo_off").write_text("")
+    await start(hass, tmp_path)
+    await running(hass)
+    await settled(hass)
+    await wait_for(hass, lambda: version(hass).attributes.get("setup") == "unconfigured", what="the setup state")
+    assert not version(hass).attributes.get("demo")

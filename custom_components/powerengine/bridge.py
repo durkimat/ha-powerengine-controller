@@ -22,8 +22,6 @@ from homeassistant.helpers.template import Template
 from homeassistant.util import dt as dt_util
 from homeassistant.util.async_ import run_callback_threadsafe
 
-from .shadow import Ledger, from_ha, to_ha
-
 _LOGGER = logging.getLogger(__name__)
 CALL_TIMEOUT_S = 120.0          # a service call waits for the device (a slow inverter answers in 2 to 4 s)
 
@@ -65,12 +63,10 @@ class _Outbox:
 class HassHome:
     """host_server.Home over Home Assistant. `server` is set once the server exists."""
 
-    def __init__(self, hass: HomeAssistant, native: Any = None, ledger: Ledger | None = None,
-                 watchdog: Any = None) -> None:
+    def __init__(self, hass: HomeAssistant, native: Any = None, watchdog: Any = None) -> None:
         self.hass = hass
-        self.watchdog = watchdog                                   # watchdog.Watchdog, or None (a shadow run)
+        self.watchdog = watchdog                                   # watchdog.Watchdog, or None
         self.native = native                                       # native.NativeEntities, or None (plain states only)
-        self.ledger = ledger                                       # not None: a shadow run (shadow.py)
         self.server: Any = None
         self._outbox = _Outbox()
         self._watching: dict[str, Callable[[], None]] = {}
@@ -96,32 +92,14 @@ class HassHome:
         return asyncio.run_coroutine_threadsafe(coro, self.hass.loop).result(CALL_TIMEOUT_S)
 
     # --- Home: what the engine asks
-    @property
-    def shadow(self) -> bool:
-        return self.ledger is not None
-
-    def _ha_id(self, engine_id: str) -> str:
-        """The id Home Assistant has for an id the engine uses (a shadow run's own entities are its own)."""
-        return to_ha(engine_id) if self.shadow else engine_id
-
     def state(self, entity_id: str) -> dict | None:
-        ha_id = self._ha_id(entity_id)
-        return self._on_loop(lambda: dump(self.hass.states.get(ha_id), entity_id))
+        return self._on_loop(lambda: dump(self.hass.states.get(entity_id), entity_id))
 
     def states(self, domain: str | None = None) -> dict[str, dict]:
-        def everything() -> dict[str, dict]:
-            if not self.shadow:
-                return {s.entity_id: dump(s) for s in self.hass.states.async_all(domain)}
-            out = {}
-            for s in self.hass.states.async_all(domain):
-                engine_id = from_ha(s.entity_id)                   # None: the live engine's, not the shadow's to see
-                if engine_id is not None:
-                    out[engine_id] = dump(s, engine_id)
-            return out
-        return self._on_loop(everything)
+        return self._on_loop(lambda: {s.entity_id: dump(s) for s in self.hass.states.async_all(domain)})
 
     def history(self, entity_id: str, start: str | None, end: str | None, minimal: bool, no_attributes: bool) -> list:
-        return self._await(self._history(self._ha_id(entity_id), start, end, no_attributes))
+        return self._await(self._history(entity_id, start, end, no_attributes))
 
     async def _history(self, entity_id: str, start: str | None, end: str | None, no_attributes: bool) -> list:
         from homeassistant.components.recorder import get_instance, history
@@ -151,28 +129,18 @@ class HassHome:
         domain, _, name = service.partition("/")
         if not name:
             raise ValueError(f"not a service: {service!r} (use domain/service)")
-        if self.ledger is not None:                               # a shadow run changes nothing
-            self.ledger.add("service", service, data)
-            return None
         self._await(self.hass.services.async_call(domain, name, data, blocking=True))
         return None
 
     def fire(self, event: str, data: dict) -> None:
-        if self.ledger is not None:                               # (the live card would hear it as the live engine's)
-            self.ledger.add("event", event, data)
-            return
         self._on_loop(lambda: self.hass.bus.async_fire(event, data))
 
     def set_state(self, entity_id: str, state: Any, attributes: dict) -> None:
-        ha_id = self._ha_id(entity_id)
-
         def write() -> None:
-            if self.native is not None and self.native.knows(ha_id):
-                self.native.update(ha_id, state, attributes)
-            elif self.ledger is not None and ha_id == entity_id:    # a shadow run writes only its own entities
-                self.ledger.add("state", entity_id, {"state": state})
+            if self.native is not None and self.native.knows(entity_id):
+                self.native.update(entity_id, state, attributes)
             else:
-                self.hass.states.async_set(ha_id, "" if state is None else str(state), attributes)
+                self.hass.states.async_set(entity_id, "" if state is None else str(state), attributes)
         self._on_loop(write)
 
     def define_entity(self, component: str, key: str, name: str, options: dict) -> None:
@@ -182,8 +150,7 @@ class HassHome:
 
     def retire_entity(self, entity_id: str) -> None:
         if self.native is not None:
-            ha_id = self._ha_id(entity_id)
-            self._on_loop(lambda: self.native.retire(ha_id))
+            self._on_loop(lambda: self.native.retire(entity_id))
 
     def entities_online(self, online: bool) -> None:
         if self.native is not None:
@@ -191,7 +158,7 @@ class HassHome:
 
     def set_failsafe(self, calls: list, armed: bool) -> None:
         if self.watchdog is None:
-            raise ValueError("a shadow run holds no failsafe")
+            raise ValueError("no watchdog to hold a failsafe")
         self._on_loop(lambda: self.watchdog.set(calls, armed))
 
     # --- what the engine asked to hear about (called by the server on its threads)
@@ -202,12 +169,10 @@ class HassHome:
     def _watch(self, entity_id: str) -> None:
         if entity_id in self._watching:
             return
-        ha_id = self._ha_id(entity_id)
-
         @callback
         def changed(event: Event[EventStateChangedData]) -> None:
             self._outbox.put(self.server.state_changed, entity_id, dump(event.data["new_state"], entity_id))
-        self._watching[entity_id] = async_track_state_change_event(self.hass, [ha_id], changed)
+        self._watching[entity_id] = async_track_state_change_event(self.hass, [entity_id], changed)
 
     def listen(self, event_type: str) -> None:
         self.hass.loop.call_soon_threadsafe(self._listen, event_type)

@@ -1,5 +1,23 @@
 # PowerEngine: installation guide
 
+## Just want to look first?
+
+You need only Home Assistant and [HACS](https://hacs.xyz/). No inverter, tariff or other integration is needed, and the
+demo controls nothing.
+
+1. **HACS → ⋮ → Custom repositories**, add `https://github.com/durkimat/ha-powerengine-controller` as an **Integration**,
+   then download PowerEngine (turn on pre-releases for it while it is in beta).
+2. **Restart Home Assistant**, then **Settings → Devices & services → Add integration → PowerEngine**. It asks nothing.
+3. Open **Power Engine** in the sidebar. A new install starts the demo by itself: a simulated home and battery running one
+   recorded day from a real home, with the plan, costs and health pages filled in. Pick another day (sunny, dull, a
+   grid-event day, a car-charging day) from the banner at the top.
+
+**Exit demo** in the banner leaves it, and the page then offers to set up your own system. The demo never starts by
+itself again once you have left it (start it again from the same page), and it never runs once PowerEngine has a
+configuration.
+
+## Setting up your own system
+
 A complete, from-scratch setup, in order: four steps, about 30 minutes. Each step ends with a **Check** so
 you know it worked before moving on.
 
@@ -52,10 +70,12 @@ controls is a separate process it starts and watches. PowerEngine's entities are
 2. **Download PowerEngine** at the latest version. While it is in beta, turn on pre-releases for the repository in HACS,
    then pick the latest version.
 3. **Restart Home Assistant**, then reload the browser page (so the card loads).
-4. **Settings → Devices & services → Add integration → PowerEngine**, mode **Live**. The engine starts; with no
-   `config.yaml` yet it waits in Passive ("No config.yaml yet; set PowerEngine up on the config page").
+4. **Settings → Devices & services → Add integration → PowerEngine**. It asks nothing. The engine starts and, with no
+   `config.yaml` yet, shows the demo until you leave it or set PowerEngine up (see *Just want to look first?* above); leave
+   the demo (the banner's **Exit demo**) before you configure.
 
-**Check the device:** *Settings → Devices & services → PowerEngine*:
+**Check the device:** *Settings → Devices & services → PowerEngine* (the values below are those of a PowerEngine that is not
+showing the demo; click **Exit demo** first, or expect the simulated home's values while it runs):
 
 | Entity | Expected |
 | --- | --- |
@@ -199,6 +219,7 @@ All in `/homeassistant/powerengine/` (outside the app folder, so updates never t
 | --- | --- |
 | `config.yaml` (+ `.bak-<date>`) | Your configuration and backups |
 | `dashboard.yaml` | The managed dashboard (rewritten on update) |
+| `demo.json`, `demo_off`, `demo/` | The demo: the day chosen, a note that you left it (so it does not start by itself), and its own throw-away settings. Only present before PowerEngine is set up |
 | `costs/` | Half-hour energy and cost records (about 20 KB a day, 400 days), plan snapshots (hourly ones for 60 days), smart-charge slot and request history |
 | `load_history.json` | PowerEngine's own house-load record |
 | `inverter_writes.json`, `notifications.json`, `ui.json` | Write counts, sent notifications, dashboard defaults |
@@ -401,7 +422,7 @@ the same for the card if you need to.
 | Card says *app not detected* | The engine is not running | Step 1; check the Engine sensor and Repairs |
 | `Unknown command: ha` | Commands run on your own computer | Use HA's terminal add-on |
 | `Config problem: ...` in the log | `config.yaml` has an error | The message names the problem; fix or restore the backup |
-| Dashboard missing from the sidebar | The PowerEngine integration is not loaded (Settings → Devices & services), or in *shadow* mode (no dashboard) | Step 1; the integration's status |
+| Dashboard missing from the sidebar | The PowerEngine integration is not loaded (Settings → Devices & services), | Step 1; the integration's status |
 | A PowerEngine card says *Custom element doesn't exist* or *Configuration error* | The browser or app is showing a page from before an update | Reload the page; in the Companion app, clear the frontend cache (Settings → Companion app → Troubleshooting) |
 | Plan says *house load learned from 0 days* | No history for the house-load input yet (new install, or recorder excludes it) | Wait a day; check the recorder keeps the house-load entity |
 | PowerEngine missing from HACS (repos disappeared) but still running | HACS lost its record of the custom repositories | Re-add both under *HACS → ⋮ → Custom repositories* (PowerEngine as **Integration**) and download the latest version; settings and dashboard are unaffected |

@@ -628,6 +628,7 @@ test("configuration link follows the dashboard the visitor is on", () => {
 test("the setup card offers the demo only when PowerEngine runs unconfigured", () => {
   assert.strictEqual(h.showDemoLink({ peVersion: "0.9.62", setup: "unconfigured" }), true);
   assert.strictEqual(h.showDemoLink({ peVersion: "0.9.62", setup: "configured" }), false);
+  assert.strictEqual(h.showDemoLink({ peVersion: "0.9.62", setup: "unconfigured", demo: true }), false);   // already looking at it
   assert.strictEqual(h.showDemoLink({ peVersion: null, setup: "unconfigured" }), false);
   assert.strictEqual(h.showDemoLink(null), false);
 });

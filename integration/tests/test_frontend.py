@@ -48,12 +48,6 @@ async def test_a_replaced_card_gets_a_new_address_and_unloading_removes_it(hass,
     assert hass.data[DATA_EXTRA_MODULE_URL] == set()
 
 
-async def test_a_shadow_run_does_not_add_the_card(hass, tmp_path, monkeypatch):
-    entry = await setup_without_engine(hass, tmp_path, monkeypatch, **{const.CONF_MODE: const.MODE_SHADOW})
-    assert hass.data[DATA_EXTRA_MODULE_URL] == set()
-    await hass.config_entries.async_unload(entry.entry_id)
-
-
 async def test_without_the_frontend_nothing_is_added_and_nothing_breaks(hass, tmp_path, monkeypatch):
     monkeypatch.setattr(EngineSupervisor, "start", lambda self: None)
     hass.data.pop(DATA_EXTRA_MODULE_URL, None)                               # no frontend (a test, or Core without one)

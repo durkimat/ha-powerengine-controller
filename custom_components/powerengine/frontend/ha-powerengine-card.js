@@ -2808,8 +2808,9 @@ class PowerEngineSetupCard extends (typeof HTMLElement !== "undefined" ? HTMLEle
 
   _facts() {
     const hass = this._hass;
+    const attrs = ((hass.states || {})[VERSION_SENSOR] || {}).attributes || {};
     return { peVersion: peRunning(hass.states), otherController: otherControllerValue(hass.states),
-      setup: (((hass.states || {})[VERSION_SENSOR] || {}).attributes || {}).setup || null };
+      setup: attrs.setup || null, demo: !!attrs.demo };
   }
 
   _render() {
@@ -2884,7 +2885,7 @@ const DEMO_DAYS = [
   { key: "sunny", title: "Sunny day" }, { key: "dull", title: "Dull day" },
   { key: "axle", title: "<<event>> event day" }, { key: "car", title: "Car charging day" },
 ];
-const DEMO_WAIT = "Working on it… (about a minute; the page reloads when it's done)";
+const DEMO_WAIT = "Working on it… (a few seconds; the page reloads when it's done)";
 // The demo switches the dashboard file (the demo view, the flow card's plants), which HA only reads when the page loads.
 const DEMO_RELOAD_DELAY_MS = 3000;    // the app writes the dashboard just after it publishes the change
 
@@ -2936,10 +2937,10 @@ function configPath(pathname) {
   return seg ? `/${seg}/config` : "/powerengine/config";
 }
 
-/** The setup card offers the demo when PowerEngine runs but nothing is set up yet. */
+/** The setup card offers the demo when PowerEngine runs but nothing is set up yet (and the demo is not already running). */
 function showDemoLink(facts) {
   const f = facts || {};
-  return !!f.peVersion && f.setup === "unconfigured";
+  return !!f.peVersion && f.setup === "unconfigured" && !f.demo;
 }
 
 class PowerEngineDemoCard extends (typeof HTMLElement !== "undefined" ? HTMLElement : class {}) {
@@ -3100,6 +3101,7 @@ class PowerEngineDemoCard extends (typeof HTMLElement !== "undefined" ? HTMLElem
       const line = mk("div");
       line.append(mk("b", "", `Demo: ${view.title}.`), document.createTextNode(" " + view.note));
       text.append(line);
+      if (view.canAct) text.append(mk("div", "sub", "Ready for your own system? Exit the demo, then open the Config tab."));
       status(text);
       row.append(text);
       if (view.canAct) {
