@@ -32,7 +32,7 @@ SCENARIOS = {
         "overrides": WINDOWS, "start": "2026-09-27T19:30:00+00:00", "end": "2026-09-27T23:00:00+00:00",
         "events": [("2026-09-27T20:15:00+00:00", ("pause", True)), ("2026-09-27T20:45:00+00:00", ("pause", False))],
     },
-    # an AppDaemon restart mid-run
+    # an engine restart mid-run
     "ram_restart": {
         "overrides": RAM, "start": "2026-09-27T20:00:00+00:00", "end": "2026-09-27T22:30:00+00:00",
         "events": [("2026-09-27T21:10:00+00:00", ("restart",))],

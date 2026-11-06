@@ -99,7 +99,7 @@ def test_mode_changes_are_listed_capped_and_not_repeated_after_a_restart(tmp_pat
     h.tick(t(0, 0, 5), mode="hold", why="a")
     h.tick(t(0, 1), mode="hold", why="a")
     h.tick(t(0, 2), mode="export", why="b")
-    h2 = V2History(str(tmp_path), LON)                                     # AppDaemon restarted
+    h2 = V2History(str(tmp_path), LON)                                     # the engine restarted
     h2.tick(t(0, 3), mode="export", why="b")
     h2.tick(t(0, 4), mode="hold", why="c")
     ch = read(tmp_path / "2026-10-07.json")["changes"]

@@ -1,5 +1,5 @@
 """Engine v2 wired into the app (work package D): the engine choice, the v2 tick, the sensors, the state file, Passive
-and timed windows. Driven like tests/test_demo_app.py: the whole app in the demo world with a fake AppDaemon and a
+and timed windows. Driven like tests/test_demo_app.py: the whole app in the demo world with a fake host and a
 fake clock. The v1 replay (tests/test_replay.py) is what proves engine v1 is unchanged."""
 import json
 import os

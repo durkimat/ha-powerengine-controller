@@ -1,5 +1,5 @@
 """The host that runs the engine in its own process (pe_core/host_socket.py, host_server.py): the same answers as the
-AppDaemon host to the same questions, and what is new: a local copy of the states, listeners fed by the integration,
+local host to the same questions, and what is new: a local copy of the states, listeners fed by the integration,
 timers of its own, and carrying on through a lost connection."""
 
 import logging
@@ -15,17 +15,17 @@ from pe_core.host_local import LocalHost
 from pe_core.host_socket import HostError, HostUnavailable, SocketHost
 
 
-def test_the_socket_host_is_a_host_with_every_method_the_appdaemon_host_has():
+def test_the_socket_host_is_a_host_with_every_method_the_local_host_has():
     for name in (*host.METHODS, *host.EXTRAS, "args"):
         assert hasattr(SocketHost, name), name
     assert isinstance(SocketHost("tcp:127.0.0.1:1", "s"), host.Host)
 
 
 # --- the same questions, the same answers (the local host over the fake Home Assistant is the reference)
-@pytest.fixture(params=["appdaemon", "socket"])
+@pytest.fixture(params=["local", "socket"])
 def world(request):
     """(put, host): `put(entity, state, attributes)` sets Home Assistant's state; `host` is the host under test."""
-    if request.param == "appdaemon":
+    if request.param == "local":
         app = fake_home()()
         yield app.set_fake, LocalHost(app)
     else:
@@ -105,11 +105,11 @@ def test_an_entity_that_appears_later_is_seen_by_a_host_that_looked_for_it_earli
         wait_for(lambda: h.get_state("sensor.late") == "5", what="the entity to appear")
 
 
-def test_a_state_listener_is_called_with_appdaemons_arguments_when_the_state_changes():
+def test_a_state_listener_is_called_with_the_hosts_arguments_when_the_state_changes():
     with connected() as (home, _, h):
         home.put("switch.pause", "off")
         got = Recorder()
-        h.listen_state(got, "switch.pause")
+        h.on_state(got, "switch.pause")
         home.put("switch.pause", "off", {"only": "an attribute"})     # same state: not a change
         home.put("switch.pause", "on")
         assert got.wait() == [("switch.pause", "state", "off", "on", {})]
@@ -120,8 +120,8 @@ def test_a_state_listener_can_follow_one_attribute_or_everything():
     with connected() as (home, _, h):
         home.put("sensor.a", "1", {"mode": "x"})
         by_attribute, everything = Recorder(), Recorder()
-        h.listen_state(by_attribute, "sensor.a", attribute="mode")
-        h.listen_state(everything, "sensor.a", attribute="all")
+        h.on_state(by_attribute, "sensor.a", attribute="mode")
+        h.on_state(everything, "sensor.a", attribute="all")
         home.put("sensor.a", "2", {"mode": "x"})                       # the state moved, the attribute did not
         home.put("sensor.a", "2", {"mode": "y"})
         assert by_attribute.wait() == [("sensor.a", "mode", "x", "y", {})]
@@ -132,9 +132,9 @@ def test_cancelling_a_listener_stops_its_calls():
     with connected() as (home, _, h):
         home.put("sensor.a", "1")
         got, kept = Recorder(), Recorder()
-        handle = h.listen_state(got, "sensor.a")
-        h.listen_state(kept, "sensor.a")
-        assert h.cancel_listen_state(handle) is True and h.cancel_listen_state(handle) is False
+        handle = h.on_state(got, "sensor.a")
+        h.on_state(kept, "sensor.a")
+        assert h.off_state(handle) is True and h.off_state(handle) is False
         home.put("sensor.a", "2")
         kept.wait()
         assert got.calls == []
@@ -143,11 +143,11 @@ def test_cancelling_a_listener_stops_its_calls():
 def test_an_event_listener_hears_only_the_events_it_asked_for():
     with connected() as (home, server, h):
         got = Recorder()
-        handle = h.listen_event(got, "pe_config_save")
+        handle = h.on_event(got, "pe_config_save")
         server.event_fired("something_else", {"x": 1})
         server.event_fired("pe_config_save", {"settings": {"a": [1, 2]}})
         assert got.wait() == [("pe_config_save", {"settings": {"a": [1, 2]}}, {})]
-        h.cancel_listen_event(handle)
+        h.off_event(handle)
         wait_for(lambda: "pe_config_save" not in server.wants()[1], what="the event to be dropped")
         server.event_fired("pe_config_save", {})
         time.sleep(0.05)
@@ -157,12 +157,12 @@ def test_an_event_listener_hears_only_the_events_it_asked_for():
 def test_two_listeners_for_one_event_both_hear_it_and_it_is_asked_for_once():
     with connected() as (home, server, h):
         a, b = Recorder(), Recorder()
-        first = h.listen_event(a, "pe_x")
-        h.listen_event(b, "pe_x")
+        first = h.on_event(a, "pe_x")
+        h.on_event(b, "pe_x")
         server.event_fired("pe_x", {"n": 1})
         a.wait()
         b.wait()
-        h.cancel_listen_event(first)
+        h.off_event(first)
         assert "pe_x" in server.wants()[1]                                 # still wanted by the second
 
 
@@ -176,8 +176,8 @@ def test_callbacks_run_one_at_a_time_on_one_thread():
             threads.add(threading.get_ident())
             time.sleep(0.02)
             inside[0] -= 1
-        h.listen_event(slow, "pe_x")
-        h.run_in(lambda kw: slow(None, None, None), 0.01)
+        h.on_event(slow, "pe_x")
+        h.call_later(lambda kw: slow(None, None, None), 0.01)
         for n in range(4):
             server.event_fired("pe_x", {"n": n})
         wait_for(lambda: not inside[0] and len(threads) and h._dispatcher.idle(1), what="the callbacks")
@@ -188,10 +188,10 @@ def test_callbacks_run_one_at_a_time_on_one_thread():
 def test_timers_run_on_the_host_with_their_keywords_and_can_be_cancelled():
     with connected() as (_, _, h):
         got, never = Recorder(), Recorder()
-        h.run_in(got, 0.01, role="x")
-        h.cancel_timer(h.run_in(never, 0.01))
+        h.call_later(got, 0.01, role="x")
+        h.cancel_call(h.call_later(never, 0.01))
         every = Recorder()
-        h.run_every(every, "now", 0.02)
+        h.call_every(every, "now", 0.02)
         assert got.wait() == [({"role": "x"},)]
         every.wait(3)
         assert never.calls == []
@@ -200,7 +200,7 @@ def test_timers_run_on_the_host_with_their_keywords_and_can_be_cancelled():
 def test_the_timers_use_homes_time_zone():
     with connected() as (_, _, h):
         assert str(h._scheduler.tz) == "Europe/London"
-        handle = h.run_daily(lambda kw: None, "03:00:00")
+        handle = h.call_daily(lambda kw: None, "03:00:00")
         assert h._scheduler.timer_running(handle)
         assert h._scheduler.next_due().astimezone(h._scheduler.tz).strftime("%H:%M") == "03:00"
 
@@ -209,11 +209,11 @@ def test_the_timers_use_homes_time_zone():
 def test_tracking_cancels_exactly_what_was_registered_since_it_started():
     with connected() as (home, server, h):
         home.put("sensor.a", "1")
-        before = h.run_in(lambda kw: None, 3600)
+        before = h.call_later(lambda kw: None, 3600)
         h.start_tracking()
-        timer = h.run_every(lambda kw: None, "now+3600", 3600)
-        state = h.listen_state(lambda *a: None, "sensor.a")
-        event = h.listen_event(lambda *a: None, "pe_x")
+        timer = h.call_every(lambda kw: None, "now+3600", 3600)
+        state = h.on_state(lambda *a: None, "sensor.a")
+        event = h.on_event(lambda *a: None, "pe_x")
         h.cancel_all()
         assert not h._scheduler.timer_running(timer) and h._scheduler.timer_running(before)
         assert not h._state_listeners and not h._event_listeners
@@ -250,8 +250,8 @@ def test_after_a_reconnection_the_copy_is_refreshed_and_listeners_hear_what_chan
         home.put("sensor.b", "1")
         h.get_state("sensor.b")
         got, events = Recorder(), Recorder()
-        h.listen_state(got, "sensor.a")
-        h.listen_event(events, "pe_x")
+        h.on_state(got, "sensor.a")
+        h.on_event(events, "pe_x")
         address = server.address
         server.stop()
         wait_for(lambda: not h.connected.is_set(), what="the drop")
@@ -305,7 +305,7 @@ def test_an_integration_that_starts_refusing_the_engine_after_an_update_stops_it
             newer.stop()
 
 
-def test_the_host_logs_like_appdaemons_log(caplog):
+def test_the_host_logs_with_the_level_and_message_it_is_given(caplog):
     with connected() as (_, _, h):
         with caplog.at_level(logging.INFO, logger="powerengine"):
             h.log("plain")
@@ -314,10 +314,10 @@ def test_the_host_logs_like_appdaemons_log(caplog):
         ("INFO", "plain"), ("WARNING", "with args")]
 
 
-def test_an_event_arrives_with_who_caused_it_where_appdaemon_puts_it():
+def test_an_event_arrives_with_who_caused_it_under_metadata():
     with connected() as (home, server, h):
         got = Recorder()
-        h.listen_event(got, "pe_config_save")
+        h.on_event(got, "pe_config_save")
         server.event_fired("pe_config_save", {"a": 1}, {"user_id": "u1", "id": "c1"})
         assert got.wait() == [("pe_config_save", {"a": 1, "metadata": {"context": {"user_id": "u1", "id": "c1"}}}, {})]
 
@@ -332,7 +332,7 @@ def test_the_server_tells_the_integration_what_the_engine_wants_to_hear_about():
     try:
         host.start(timeout=5)
         host.get_state("sensor.a")
-        host.listen_event(lambda *a: None, "pe_x")
+        host.on_event(lambda *a: None, "pe_x")
         assert watched == ["sensor.a"] and listened == ["pe_x"]
     finally:
         host.stop()

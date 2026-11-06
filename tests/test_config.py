@@ -74,7 +74,7 @@ PLANT = {"id": "p1", "power": {"entity": "sensor.a"}, "energy_today": {"entity":
         {"features": {"teleport": True}},
         {"features": {"grid_events": "yes"}},
         {"schema_version": 99},
-        # the app's own AppDaemon definition must never be mistaken for settings
+        # an app definition (module, class) must never be mistaken for settings
         {"powerengine": {"module": "powerengine", "class": "PowerEngine"}},
         {"solar_plants": {"id": "x"}},
         {"solar_plants": [{**PLANT, "id": "Bad Id"}]},

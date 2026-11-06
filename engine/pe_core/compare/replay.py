@@ -4,7 +4,7 @@ days proved; docs/plans/engine-pages-and-comparison.md, 2.1).
 
 For each engine the WHOLE app runs in demo mode (a fake Home Assistant and a fake clock; the demo world plays the day's
 house, sun, prices, smart slots and grid events and simulates the battery), Active, RAM remote control. The app's own
-run_every callbacks (the 30 s cycle, v2's tick, the 5 min input check, the heartbeat) are called at their intervals and
+call_every callbacks (the 30 s cycle, v2's tick, the 5 min input check, the heartbeat) are called at their intervals and
 the world is stepped every 10 s. Each run is costed from the world's flows:
 
     grid import x the import rate in force (smart-slot rates included)
@@ -35,7 +35,7 @@ from .harness import Clock, loaded_app
 TICK_S = 10                                # the world and the callbacks advance in 10 s steps
 PEAK_P = 0.20                              # GBP/kWh: "bought at the peak rate"
 FLIP_WINDOW = timedelta(minutes=10)
-RUN_NAMES = {"_cycle", "_engine_tick", "_beat", "<lambda>"}     # the run_every callbacks the harness calls
+RUN_NAMES = {"_cycle", "_engine_tick", "_beat", "<lambda>"}     # the call_every callbacks the harness calls
 BACKFILL_TIMERS = ("_backfill", "_backfill_day")
 LEARN_TIMERS = ("_learn_load", "_learn_load_day")
 

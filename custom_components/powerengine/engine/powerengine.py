@@ -395,59 +395,59 @@ class Engine:
         self._cycle({})
         self._sync_dashboard()
 
-        self.host.listen_event(self._on_save, SAVE_EVENT)
-        self.host.listen_event(self._on_test, TEST_EVENT)
-        self.host.listen_event(self._on_diag_request, diagnostics.REQUEST_EVENT)
-        self.host.listen_event(self._on_set_control, CONTROL_EVENT)
-        self.host.listen_event(self._on_sim_history, "pe_sim_history")
-        self.host.listen_event(self._on_sim_settings, "pe_sim_settings")
+        self.host.on_event(self._on_save, SAVE_EVENT)
+        self.host.on_event(self._on_test, TEST_EVENT)
+        self.host.on_event(self._on_diag_request, diagnostics.REQUEST_EVENT)
+        self.host.on_event(self._on_set_control, CONTROL_EVENT)
+        self.host.on_event(self._on_sim_history, "pe_sim_history")
+        self.host.on_event(self._on_sim_settings, "pe_sim_settings")
         self._listen_for_commands()
         self._beat({})
-        self.host.run_every(self._beat, "now+60", HEARTBEAT_SECONDS)
-        self.host.run_every(lambda kwargs: self._evaluate(), f"now+{RECHECK_SECONDS}", RECHECK_SECONDS)
-        self.host.run_every(self._cycle, f"now+{CYCLE_SECONDS}", CYCLE_SECONDS)
+        self.host.call_every(self._beat, "now+60", HEARTBEAT_SECONDS)
+        self.host.call_every(lambda kwargs: self._evaluate(), f"now+{RECHECK_SECONDS}", RECHECK_SECONDS)
+        self.host.call_every(self._cycle, f"now+{CYCLE_SECONDS}", CYCLE_SECONDS)
         sample_s = self.cfg.engine_v2.sample_s if self.cfg is not None else V2Settings().sample_s
-        self.host.run_every(self._engine_tick, f"now+{sample_s}", sample_s)   # engine v2's tick; does nothing on v1
-        self.host.run_in(self._learn_load, 5)                     # load profile from history, then daily
-        self.host.run_daily(self._learn_load, "00:10:00")
-        self.host.run_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
-        self.host.run_daily(self._daily_summary, "08:00:00")
+        self.host.call_every(self._engine_tick, f"now+{sample_s}", sample_s)   # engine v2's tick; does nothing on v1
+        self.host.call_later(self._learn_load, 5)                     # load profile from history, then daily
+        self.host.call_daily(self._learn_load, "00:10:00")
+        self.host.call_daily(lambda kwargs: (self._refresh_months(prune=True), self._measure()), "00:05:00")
+        self.host.call_daily(self._daily_summary, "08:00:00")
         if not self._shadow:                                     # (heavy overnight jobs: the live engine does them)
-            self.host.run_daily(self._sim_start, SIM_START)              # tariff Simulator: heavy work, overnight only
-            self.host.run_daily(self._lowwrite_start, LOWWRITE_START)    # low-write study: shadow only, changes nothing
-        self.host.run_in(lambda kwargs: self._sim_publish(), 20)
-        self.host.run_in(lambda kwargs: self._lowwrite_publish(), 25)
+            self.host.call_daily(self._sim_start, SIM_START)              # tariff Simulator: heavy work, overnight only
+            self.host.call_daily(self._lowwrite_start, LOWWRITE_START)     # low-write study: shadow only
+        self.host.call_later(lambda kwargs: self._sim_publish(), 20)
+        self.host.call_later(lambda kwargs: self._lowwrite_publish(), 25)
         if not self._demo and not self._shadow:                  # engine comparison: yesterday, replayed apart
-            self.host.run_daily(self._compare_start, COMPARE_START)
-            self.host.run_every(self._compare_poll, f"now+{COMPARE_POLL_S}", COMPARE_POLL_S)
-        self.host.run_in(lambda kwargs: self._compare_publish(), 30)
-        self.host.run_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
-        self.host.run_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
+            self.host.call_daily(self._compare_start, COMPARE_START)
+            self.host.call_every(self._compare_poll, f"now+{COMPARE_POLL_S}", COMPARE_POLL_S)
+        self.host.call_later(lambda kwargs: self._compare_publish(), 30)
+        self.host.call_every(self._clock_step, "now+45", 600)          # inverter clock drift; sync in Active
+        self.host.call_every(self._publish_history, "now+60", 900)     # Plan history tab (today fills in as it goes)
         if not self._demo:                                       # (the demo makes no calls to the internet)
-            self.host.run_every(self._release_check, "now+60", 300)   # a new version released: straight from GitHub
-        self.host.run_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
-        self.host.listen_event(self._on_health_dismiss, "pe_health_dismiss")
-        self.host.listen_event(self._on_demo, DEMO_EVENT)
+            self.host.call_every(self._release_check, "now+60", 300)   # a new version released: straight from GitHub
+        self.host.call_every(self._log_step, "now+30", 60)             # Health tab's log card (saved every 5 minutes)
+        self.host.on_event(self._on_health_dismiss, "pe_health_dismiss")
+        self.host.on_event(self._on_demo, DEMO_EVENT)
         if not self._demo:
             self._early = EarlyTargets(os.path.join(self._real_dir(), "early_target.json"))
         if not self._demo:
             self._override = manual.load(self._override_file(), datetime.now(timezone.utc))
-        self.host.listen_event(self._on_override, OVERRIDE_EVENT)
+        self.host.on_event(self._on_override, OVERRIDE_EVENT)
         self._history_date = None                            # a day picked with the card's date picker (Plan history)
-        self.host.listen_event(self._on_history_day, HISTORY_DAY_EVENT)
+        self.host.on_event(self._on_history_day, HISTORY_DAY_EVENT)
         self._v2_history_date = None                         # a day picked on the Engine v2 page's history
         self._flows_cache = {}                               # day -> (grid flows, when read): the history's real timing
-        self.host.listen_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
-        self.host.listen_event(self._on_v2_replan, V2_REPLAN_EVENT)
-        self.host.listen_event(self._on_alexa_test, ALEXA_TEST_EVENT)
-        self.host.listen_event(self._on_notify_test, NOTIFY_TEST_EVENT)
-        self.host.run_every(self._publish_notify_cycle, "now+50", 900)
-        self.host.listen_event(self._on_pe_notify, NOTIFY_EVENT)
-        self.host.listen_event(self._on_compare_recheck, COMPARE_RECHECK_EVENT)
-        self.host.run_every(self._publish_v2_history, "now+65", 900)
-        self.host.run_every(self._publish_forecast_score, "now+240", 3600)
-        self.host.run_in(self._backfill, 90)                    # fill recent days from HA history (after load learning)
-        self.host.run_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
+        self.host.on_event(self._on_v2_history_day, V2_HISTORY_DAY_EVENT)
+        self.host.on_event(self._on_v2_replan, V2_REPLAN_EVENT)
+        self.host.on_event(self._on_alexa_test, ALEXA_TEST_EVENT)
+        self.host.on_event(self._on_notify_test, NOTIFY_TEST_EVENT)
+        self.host.call_every(self._publish_notify_cycle, "now+50", 900)
+        self.host.on_event(self._on_pe_notify, NOTIFY_EVENT)
+        self.host.on_event(self._on_compare_recheck, COMPARE_RECHECK_EVENT)
+        self.host.call_every(self._publish_v2_history, "now+65", 900)
+        self.host.call_every(self._publish_forecast_score, "now+240", 3600)
+        self.host.call_later(self._backfill, 90)                       # fill recent days from HA history
+        self.host.call_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
 
     def terminate(self):
@@ -1471,7 +1471,7 @@ class Engine:
                 units[eid] = {}
         self.log(f"Cost backfill: {len(days)} day(s) from HA history ({days[0]:%d %b} to {days[-1]:%d %b})")
         self._bf = {"days": days, "plain": plain, "full": full, "units": units, "added": 0, "errors": 0}
-        self.host.run_in(self._backfill_day, 1)
+        self.host.call_later(self._backfill_day, 1)
 
     def _backfill_day(self, kwargs):
         job = self._bf
@@ -1514,7 +1514,7 @@ class Engine:
         job["added"] += added
         if last is not None:
             self.log(f"Cost backfill: {day:%a %d %b}: {added} half-hours from history")
-        self.host.run_in(self._backfill_day, 1)
+        self.host.call_later(self._backfill_day, 1)
 
     def _refresh_months(self, prune=False):
         if self.costbook is None:
@@ -1582,7 +1582,7 @@ class Engine:
             ids["grid"], ids["check"] = self._role_entity("grid_power"), self._role_entity("grid_power_reference")
         self._hist_job = {"now": now, "days": list(range(HISTORY_DAYS, 0, -1)), "errors": 0, "ids": ids,
                           "units": {k: unit(e) for k, e in ids.items()}, "rows": {k: [] for k in ids}}
-        self.host.run_in(self._learn_load_day, 1)
+        self.host.call_later(self._learn_load_day, 1)
 
     def _history(self, eid, start, end):
         try:
@@ -1607,7 +1607,7 @@ class Engine:
                     job["errors"] += 1
                     if job["errors"] == 1:
                         self.log(f"Load history: couldn't read {eid} for {start:%d %b} ({err!r})", level="WARNING")
-            self.host.run_in(self._learn_load_day, 1)
+            self.host.call_later(self._learn_load_day, 1)
             return
         house_rows, car_rows = job["rows"]["house"], job["rows"]["car"]
         self._hist_means = house_only_means(house_rows, car_rows, job["now"],
@@ -1626,7 +1626,7 @@ class Engine:
         if not self._hist_means:
             self.log("Load history from HA was empty; retrying in an hour. "
                      "PowerEngine's own load record is still used.", level="WARNING")
-            self.host.run_in(self._learn_load, 3600)
+            self.host.call_later(self._learn_load, 3600)
         self._rebuild_profile()
 
     def _grid_check(self, r):
@@ -2616,7 +2616,7 @@ class Engine:
         """Count writes to the inverter's control entities by whatever controls it now (e.g. another controller)."""
         for handle in self._write_listeners:
             try:
-                self.host.cancel_listen_state(handle)
+                self.host.off_state(handle)
             except Exception:
                 pass
         self._write_listeners = []
@@ -2632,11 +2632,11 @@ class Engine:
         self._write_listeners = [h for h in self._write_listeners if h is not None]
 
     def _listen_state(self, callback, entity_id):
-        """listen_state, except for the demo world's entities: they live inside the app, not in Home Assistant, so
+        """on_state, except for the demo world's entities: they live inside the app, not in Home Assistant, so
         the host would ask Home Assistant for them, and nothing could ever change them from outside anyway."""
         if self._demo and self._demo_world().is_demo(entity_id):
             return None
-        return self.host.listen_state(callback, entity_id)
+        return self.host.on_state(callback, entity_id)
 
     def _on_guard_change(self, entity, attribute, old, new, kwargs):
         if old != new:
@@ -3189,7 +3189,7 @@ class Engine:
                     self.host.call_service(service, entity_id=eid, **data)
                 except Exception as err:
                     said = f"RAM remote control: could not re-send {eid}: {err!r}"      # (err is gone after this block)
-                    self.host.run_in(lambda kw: self.log(said, level="WARNING"), 0)
+                    self.host.call_later(lambda kw: self.log(said, level="WARNING"), 0)
             if self._writes_off_thread():
                 self._ram_worker().submit(send)                    # behind a command still being sent, in order
             else:
@@ -3238,7 +3238,7 @@ class Engine:
     def _ram_sent(self, now, want, why):
         self._ram().done(now, str(self._today()), want, why)
         if why == "change" and want.power_role:                    # and once more once the mode has landed
-            self.host.run_in(self._ram_relatch, 5, role=want.power_role, watts=want.watts)
+            self.host.call_later(self._ram_relatch, 5, role=want.power_role, watts=want.watts)
 
     def _ram_send_later(self, writes, rc, why, want, now):
         """_ram_send, with the calls made on the worker. The books and the log follow on the callback thread."""
@@ -3294,7 +3294,7 @@ class Engine:
             if ok:
                 self._ram_sent(now, want, why)
 
-        self._ram_worker().submit(work, lambda errors: self.host.run_in(lambda kw: back(errors), 0))
+        self._ram_worker().submit(work, lambda errors: self.host.call_later(lambda kw: back(errors), 0))
 
     def _ram_send(self, writes, rc, why, want):
         """Send remote-control writes (temporary settings: not counted as EEPROM writes). Changes are journalled;
@@ -3360,7 +3360,7 @@ class Engine:
                 self.log(f"RAM remote control: could not set {eid}: {err!r}", level="WARNING")
             else:
                 self.log(f"RAM remote control: {cmd.text()}")
-        self._ram_worker().submit(work, lambda err: self.host.run_in(lambda kw: back(err), 0))
+        self._ram_worker().submit(work, lambda err: self.host.call_later(lambda kw: back(err), 0))
 
     @staticmethod
     def _first_slot_hours(slots, now):
@@ -3482,7 +3482,7 @@ class Engine:
             # change behind), so press it once they read back, a few seconds later.
             args = {"buttons": buttons, "numbers": numbers, "why": why, "tries": 1}
             if numbers:
-                self.host.run_in(self._press_buttons, BUTTON_DELAY_S, **args)
+                self.host.call_later(self._press_buttons, BUTTON_DELAY_S, **args)
             else:
                 self._press_buttons(args)            # nothing to wait for (e.g. the clock sync button)
         try:
@@ -3495,7 +3495,7 @@ class Engine:
     def _press_buttons(self, kwargs):
         pending = [eid for eid, v in kwargs["numbers"] if not self._inverter().confirmed(eid, v)]
         if pending and kwargs["tries"] < 4:
-            self.host.run_in(self._press_buttons, BUTTON_DELAY_S, **dict(kwargs, tries=kwargs["tries"] + 1))
+            self.host.call_later(self._press_buttons, BUTTON_DELAY_S, **dict(kwargs, tries=kwargs["tries"] + 1))
             return
         if pending:
             self.log(f"Window values not confirmed before applying them ({pending}); applying anyway",
@@ -3517,7 +3517,7 @@ class Engine:
     def _execute(self, writes, entities, attempt=1):
         """Active mode, pause and leaving Active. Write, then verify."""
         self._write(writes, entities)
-        self.host.run_in(self._verify_writes, 15, writes=[w.as_dict() for w in writes if w.kind != "button"],
+        self.host.call_later(self._verify_writes, 15, writes=[w.as_dict() for w in writes if w.kind != "button"],
                     entities=entities, attempt=attempt)
 
     def _verify_writes(self, kwargs):
@@ -3787,9 +3787,9 @@ class Engine:
         self._publish_test()
         self.host.fire_event("pe_test_result", ok=True,
                              message=f"Test started: {req['action']} for {req['minutes']} min")
-        self._test_handles = [self.host.run_in(self._test_check, 10, phase="start", want=want, entities=entities),
-                              self.host.run_every(self._test_observe, "now+60", 60),
-                              self.host.run_in(self._test_end, req["minutes"] * 60)]
+        self._test_handles = [self.host.call_later(self._test_check, 10, phase="start", want=want, entities=entities),
+                              self.host.call_every(self._test_observe, "now+60", 60),
+                              self.host.call_later(self._test_end, req["minutes"] * 60)]
 
     def _test_observe(self, kwargs):
         if self._test_running():
@@ -3821,7 +3821,7 @@ class Engine:
             return
         for handle in getattr(self, "_test_handles", []):
             try:
-                self.host.cancel_timer(handle)
+                self.host.cancel_call(handle)
             except Exception:
                 pass
         self._test_handles = []
@@ -3834,7 +3834,8 @@ class Engine:
         self._write(writes, entities)
         run.step(datetime.now(timezone.utc), "reverted to Self-Use", writes=[w.as_dict() for w in writes])
         self._publish_test()
-        self.host.run_in(self._test_check, 10, phase="end", want=want, entities=entities, stopped=kwargs.get("stopped"))
+        self.host.call_later(self._test_check, 10, phase="end", want=want, entities=entities,
+                             stopped=kwargs.get("stopped"))
 
     # --- supervised remote-control (RC register) tests ------------------------------------------
 
@@ -3866,11 +3867,11 @@ class Engine:
         self._logbook(f"supervised RC test started by {user}: {test} for {req['minutes']} min")
         self._publish_test()
         self.host.fire_event("pe_test_result", ok=True, message=f"Test started: {test} for {req['minutes']} min")
-        self._test_handles = [self.host.run_in(self._rc_relatch, 5),
-                              self.host.run_every(self._rc_sample, f"now+{rctest.SAMPLE_S}", rctest.SAMPLE_S),
-                              self.host.run_in(self._rc_end, req["minutes"] * 60)]
+        self._test_handles = [self.host.call_later(self._rc_relatch, 5),
+                              self.host.call_every(self._rc_sample, f"now+{rctest.SAMPLE_S}", rctest.SAMPLE_S),
+                              self.host.call_later(self._rc_end, req["minutes"] * 60)]
         if test == "rc_failsafe":
-            self._test_handles.append(self.host.run_in(self._rc_stop_resending, rctest.FAILSAFE_FORCE_S))
+            self._test_handles.append(self.host.call_later(self._rc_stop_resending, rctest.FAILSAFE_FORCE_S))
 
     def _rc_relatch(self, kwargs):
         """The power again after the force option: some firmware only takes the power once RC is on."""
@@ -3904,7 +3905,7 @@ class Engine:
         run, rc = self._test, self._rc
         for handle in getattr(self, "_test_handles", []):
             try:
-                self.host.cancel_timer(handle)
+                self.host.cancel_call(handle)
             except Exception:
                 pass
         self._test_handles = []
@@ -3913,7 +3914,7 @@ class Engine:
         self._write([self._inverter().ram_off_command().writes()[0]], rc["rc"])
         run.step(datetime.now(timezone.utc), "remote control Off", **self._battery_now())
         self._publish_test()
-        self.host.run_in(self._rc_finish, 15, stopped=kwargs.get("stopped"))
+        self.host.call_later(self._rc_finish, 15, stopped=kwargs.get("stopped"))
 
     def _rc_finish(self, kwargs):
         run, rc = self._test, self._rc
@@ -3987,7 +3988,7 @@ class Engine:
     def _watch_ready_by(self):
         if getattr(self, "_ready_by_handle", None):
             try:
-                self.host.cancel_listen_state(self._ready_by_handle)
+                self.host.off_state(self._ready_by_handle)
             except Exception:
                 pass
         self._ready_by_handle = None
@@ -4109,7 +4110,7 @@ class Engine:
                                     log=lambda m: self.log(m, level="WARNING"), ctx=ctx)
             self._sim_steps, self._sim_began = 0, datetime.now(timezone.utc)
             self.log("Simulator: overnight run started")
-            self.host.run_in(self._sim_step, 1)
+            self.host.call_later(self._sim_step, 1)
         except Exception as err:
             self._sim_job = None
             self.log(f"Simulator could not start: {err!r}", level="WARNING")
@@ -4137,7 +4138,7 @@ class Engine:
             self._sim_job = None
             self.log(f"Simulator run failed: {err!r}", level="WARNING")
             return
-        self.host.run_in(self._sim_step, 1)
+        self.host.call_later(self._sim_step, 1)
 
     def _sim_context(self) -> SimContext:
         """Your tariff (from the rate sensor's 'tariff' attribute), history, heat pump, location."""
@@ -4256,7 +4257,7 @@ class Engine:
                                 datetime.now(timezone.utc), limit=LOWWRITE_SLICE)
             self._lowwrite_publish()
             if summary.get("pending"):
-                self.host.run_in(self._lowwrite_start, 60)
+                self.host.call_later(self._lowwrite_start, 60)
         except Exception as err:
             self.log(f"Low-write study failed: {err!r}", level="WARNING")
 
@@ -4669,8 +4670,8 @@ class Engine:
         the switches are real and the app just watches their state, so nothing is registered.)"""
         pub = self._get_publisher()
         if pub is not None and not pub.retains:
-            self.host.listen_event(self._on_call_service, "call_service")
-            self.host.listen_event(self._on_pe_command, "pe_command")
+            self.host.on_event(self._on_call_service, "call_service")
+            self.host.on_event(self._on_pe_command, "pe_command")
 
     def _on_call_service(self, event_name, data, kwargs):
         """Direct mode: a switch, select or number of ours was operated in HA (see pe_core/commands.py)."""
@@ -4742,7 +4743,7 @@ class Engine:
             if fid != self.costbook.flow_id:              # inputs that shape the flows changed: rebuild from history
                 self.costbook.flow_id = fid
                 self.log("Cost inputs changed; recent days will be rebuilt from HA history")
-                self.host.run_in(self._backfill, 30)
+                self.host.call_later(self._backfill, 30)
             else:
                 p_after = self._params(conversion=False)
                 if p_before is not None and (abs(p_after.capacity_kwh - p_before.capacity_kwh) > 0.05

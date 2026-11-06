@@ -79,7 +79,7 @@ def test_a_restart_carries_on_without_a_duplicate_full_entry(tmp_path):
     w = fcsnap.SnapshotWriter(str(tmp_path), LON)
     prof = LoadProfile({(False, 0): 400.0}, 14.0)
     w.observe(t(0, 1), roles, {"sensor.a": st("1")}, prof, {"2026-10-07T01:30:00+01:00": "2026-10-06T19:00:00+01:00"})
-    w2 = fcsnap.SnapshotWriter(str(tmp_path), LON)                    # AppDaemon restarted at 10:00
+    w2 = fcsnap.SnapshotWriter(str(tmp_path), LON)                    # the engine restarted at 10:00
     assert not w2.observe(t(10, 0), roles, {"sensor.a": st("1")}, prof,
                           {"2026-10-07T01:30:00+01:00": "2026-10-06T19:00:00+01:00"})
     assert w2.observe(t(10, 1), roles, {"sensor.a": st("2")}, prof)

@@ -1,8 +1,8 @@
-"""Timers for the engine's host: `run_in`, `run_every`, `run_daily` and `cancel_timer`, and the one thread the callbacks
-run on.
+"""Timers for the engine's host: `call_later`, `call_every`, `call_daily` and `cancel_call`, and the one thread the
+callbacks run on.
 
 Every callback of the engine (timers, listeners) runs on a single thread, so they never overlap, and the engine is
-written for that: a long job hands the thread back by scheduling its next slice with `run_in`. `Dispatcher` is that
+written for that: a long job hands the thread back by scheduling its next slice with `call_later`. `Dispatcher` is that
 thread; `Scheduler` decides when a callback is due and hands it over. A callback that raises is logged and the
 scheduler carries on.
 
@@ -112,24 +112,24 @@ class Scheduler:
             self.start()
 
     # --- the calls the engine makes
-    def run_in(self, callback: Callable, delay: float, **kwargs: Any) -> str:
+    def call_later(self, callback: Callable, delay: float, **kwargs: Any) -> str:
         return self._add(callback, kwargs, self._now() + timedelta(seconds=float(delay)), None, None)
 
-    def run_every(self, callback: Callable, start: Any, interval: float, **kwargs: Any) -> str:
+    def call_every(self, callback: Callable, start: Any, interval: float, **kwargs: Any) -> str:
         every = float(interval)
         if every <= 0:
-            raise ValueError("run_every needs an interval above zero")
+            raise ValueError("call_every needs an interval above zero")
         first = self._first(start)
         now = self._now()
         if first < now:                             # already past: the next interval counted from it
             first += timedelta(seconds=every * (int((now - first).total_seconds() // every) + 1))
         return self._add(callback, kwargs, first, every, None)
 
-    def run_daily(self, callback: Callable, start: Any = None, **kwargs: Any) -> str:
+    def call_daily(self, callback: Callable, start: Any = None, **kwargs: Any) -> str:
         at = self._time_of_day(start)
         return self._add(callback, kwargs, self._next_daily(at), None, at)
 
-    def cancel_timer(self, handle: Any, **kwargs: Any) -> bool:
+    def cancel_call(self, handle: Any, **kwargs: Any) -> bool:
         with self._lock:
             timer = self._timers.pop(handle, None)
             if timer is None:

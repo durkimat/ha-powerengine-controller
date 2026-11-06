@@ -1,4 +1,4 @@
-"""Guard against service-call arguments that AppDaemon reserves or rewrites (both broke logbook writes in 0.3.x)."""
+"""Guard against service-call arguments that the host reserves or rewrites (both broke logbook writes in 0.3.x)."""
 import ast
 import pathlib
 
