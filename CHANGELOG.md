@@ -2,6 +2,33 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.224 (beta)
+
+### Behaviour changes
+
+- **The energy-flow picture is PowerEngine's own: the Sunsynk Power Flow card is no longer needed.** The Monitoring page's
+  "Energy flow" is now `custom:powerengine-flow-card`: solar, battery, grid, home and car as five nodes around the inverter,
+  with the energy moving along the lines between them (the direction follows what is really happening: charging runs to the
+  battery, exporting runs to the grid; a still line means nothing is moving; the motion stops for anyone whose device asks
+  for reduced motion). Under the battery it says how long it will last to the reserve ("5 h 10 min left to 12%") or how long
+  until full ("full in 1 h 20 min"); with two or more solar plants the solar figure is broken down by plant. It reads
+  PowerEngine's own sensors, so there is nothing to map.
+- **PowerEngine now needs no card from another install.** With the charts in 0.9.223 and this, the dashboard uses only
+  PowerEngine's card. You can uninstall the Sunsynk Power Flow card and ApexCharts from HACS if nothing of yours uses them.
+- **The setup checklist is short:** it checks that PowerEngine is running and whether another battery controller still needs
+  choosing. It no longer lists or installs cards from HACS.
+- The inverter definition no longer has a `card_model` (it named the Sunsynk card's model key); a definition file that still
+  has the line is unaffected, since the key is simply not read.
+
+### Behind the scenes
+
+- The engine writes the flow card's options (`capacity_wh`, `reserve_soc`, `ev`, and the `plants` list when there are two or
+  more) into `dashboard.yaml` the way it wrote the Sunsynk card's, from the same configuration; there is no limit of five
+  panels any more. `energy_flow_card` lost its inverter-model argument.
+- The setup card lost its HACS code (listing, adding and downloading repositories, and their tests).
+- The figures, layout and battery note are pure functions with tests (`card/tests/flow.test.cjs`); the picture was checked in a
+  browser with the live sensors, charging, discharging and exporting.
+
 ## 0.9.223 (beta)
 
 ### Behaviour changes
