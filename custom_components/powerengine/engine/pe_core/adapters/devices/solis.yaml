@@ -23,8 +23,6 @@ verified_firmware: ["420044"]
 # Words the app uses for this inverter in its own text (the names map: <<inverter>>).
 display_names:
   inverter: Solis
-# The Sunsynk Power Flow Card's "inverter: model:" key for this brand.
-card_model: solis
 
 capabilities:
   supports_ram: true              # RAM remote control (the primary path; see `ram`)

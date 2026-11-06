@@ -60,7 +60,6 @@ class DefinedInverter:
         d = definition.data
         self.d = d
         self.name = d["name"]
-        self.card_model = d["card_model"]       # the Sunsynk Power Flow Card's "inverter: model:" key
         self.ha = ha
         self.role_entity = role_entity
         self.volts = volts

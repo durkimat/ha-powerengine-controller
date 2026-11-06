@@ -312,7 +312,6 @@ def collect(make) -> dict:
     out["display_names"] = inv.display_names()
     out["display_names_is_a_copy"] = [inv.display_names() is inv.display_names()]
     out["class_display_names"] = dict(type(inv).DISPLAY_NAMES)
-    out["card_model"] = inv.card_model
     out["name"] = inv.name
     out["capabilities"] = inv.capabilities()
     out["capabilities_params"] = [make(FakeHA(), nothing, max_charge_w=4800, max_discharge_w=3700,
@@ -343,7 +342,7 @@ def test_the_recording_covers_every_protocol_method():
     needed = ["slot_map", "slot_keys", "read", "rc_entities", "rc_missing", "ram_command", "ram_off_command",
               "service_for", "test_roles", "test_window", "rc_test_problem", "rc_test_writes", "clock_entities",
               "clock_status", "clock_sync_write", "slot_writes", "writes_for", "release_slots", "release_rolling",
-              "release", "rolling", "confirmed", "verify", "write_storage", "display_names", "card_model",
+              "release", "rolling", "confirmed", "verify", "write_storage", "display_names",
               "capabilities"]
     for n in needed:
         assert any(k.startswith(n) for k in want), n
@@ -438,7 +437,7 @@ def test_an_override_that_breaks_the_definition_is_refused():
 
 def test_a_definition_with_a_missing_key_names_it():
     from pe_core.adapters.definition import DefinitionError, parse_definition
-    for path, shown in (("card_model", "card_model"), ("display_names", "display_names"),
+    for path, shown in (("display_names", "display_names"),
                         ("capabilities.max_charge_w", "capabilities.max_charge_w"),
                         ("ram.entities.rc_mode", "ram.entities.rc_mode.domain"), ("ram.options.Off", "ram.options.Off"),
                         ("ram.failsafe_min", "ram.failsafe_min"), ("timed_slots.suffix", "timed_slots.suffix"),
@@ -523,7 +522,7 @@ def test_another_inverter_is_only_a_yaml_file():
     from pe_core.adapters.definition import parse_definition
     from pe_core.control import Write
     data = base_data()
-    data.update(name="acme", card_model="acme", display_names={"inverter": "Acme"})
+    data.update(name="acme", display_names={"inverter": "Acme"})
     data["capabilities"].update(supports_timed_slots=False, max_charge_w=3000, actions=["grid_charge", "self_use"])
     data.pop("timed_slots")
     data["ram"].update(prefer="acme", failsafe_min=10, max_power_w=3000)
@@ -538,7 +537,7 @@ def test_another_inverter_is_only_a_yaml_file():
     rc = inv.rc_entities(UTC_NOW)
     assert rc == {"rc_mode": "select.acme_remote_mode", "rc_charge_power": "number.acme_remote_charge_w",
                   "rc_discharge_power": "number.acme_remote_discharge_w"}
-    assert inv.name == "acme" and inv.card_model == "acme" and inv.display_names() == {"inverter": "Acme"}
+    assert inv.name == "acme" and inv.display_names() == {"inverter": "Acme"}
     assert inv.service_for(Write("rc_mode", "Force charge", "select")) == ("select/select_option",
                                                                           {"option": "Charge"})
     assert inv.service_for(Write("rc_charge_power", 900, "number")) == ("number/set_value", {"value": 900})

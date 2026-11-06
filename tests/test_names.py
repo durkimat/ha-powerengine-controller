@@ -35,7 +35,7 @@ def octopus_names():
 
 def his_card():
     from test_dashboard import _plant
-    return energy_flow_card([_plant("main", "Main")], 18000, 12, True, "solis")
+    return energy_flow_card([_plant("main", "Main")], 18000, 12, True)
 
 
 # --- the map ------------------------------------------------------------------------------

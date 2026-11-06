@@ -489,42 +489,7 @@ test("any label ending in ' tariff' is the waterfall's Tariff column, and the ev
 });
 
 // --- setup card ---------------------------------------------------------------------------------------------
-// Command shapes checked against hacs/integration (custom_components/hacs/websocket/__init__.py: hacs/info;
-// repositories.py: hacs/repositories/list and /add; repository.py: hacs/repository/download) and home-assistant/core
-// (components/hassio/websocket_api.py: supervisor/api; the frontend's fetchHassioAddonsInfo uses /addons, method get).
-const FLOW = "slipx06/sunsynk-power-flow-card";
-const hrepo = (full, id, installed, extra) => ({ id, full_name: full, installed: !!installed, installed_version: installed ? "1.0" : null, ...extra });
-const allFacts = () => ({
-  isAdmin: true, hacs: true,
-  repos: [hrepo(FLOW, "13", true)],
-  cardsLoaded: { "sunsynk-power-flow-card": true }, components: ["hacs"], peVersion: "0.9.61",
-});
-const emptyFacts = () => ({
-  isAdmin: true, hacs: true,
-  repos: [], cardsLoaded: {}, components: ["hacs"], peVersion: null,
-});
 const row = (rows, key) => rows.find((r) => r.key === key);
-
-test("setup payloads match HACS commands", () => {
-  assert.deepStrictEqual(h.hacsInfoPayload(), { type: "hacs/info" });
-  assert.deepStrictEqual(h.hacsListPayload(), { type: "hacs/repositories/list", categories: ["plugin"] });
-  assert.deepStrictEqual(h.hacsAddPayload(FLOW, "plugin"), { type: "hacs/repositories/add", repository: FLOW, category: "plugin" });
-  assert.deepStrictEqual(h.hacsDownloadPayload(12), { type: "hacs/repository/download", repository: "12" });   // id must be text
-});
-
-test("repository lookup ignores case and finds nothing in an empty list", () => {
-  const list = [hrepo("SlipX06/Sunsynk-Power-Flow-Card", 7, true)];
-  assert.strictEqual(h.findHacsRepo(list, FLOW).id, 7);
-  assert.strictEqual(h.findHacsRepo(list, "someone/else"), null);
-  assert.strictEqual(h.findHacsRepo(null, FLOW), null);
-});
-
-test("install step adds an unknown repository, then downloads it", () => {
-  assert.deepStrictEqual(h.installStep("flow", []), { type: "hacs/repositories/add", repository: FLOW, category: "plugin" });
-  assert.deepStrictEqual(h.installStep("flow", [hrepo(FLOW, 99, false)]), { type: "hacs/repository/download", repository: "99" });
-  assert.strictEqual(h.installStep("app", []), null);                     // PowerEngine is not installed from here
-  assert.strictEqual(h.installStep("nope", []), null);
-});
 
 test("version sensor: unavailable is not running", () => {
   assert.strictEqual(h.peRunning({ "sensor.pe_diag_version": { state: "0.9.61" } }), "0.9.61");
@@ -532,60 +497,31 @@ test("version sensor: unavailable is not running", () => {
   assert.strictEqual(h.peRunning({}), null);
 });
 
-test("nothing installed, as an admin: every needed row is missing and offers its action", () => {
-  const rows = h.setupRows(emptyFacts());
-  assert.deepStrictEqual(rows.map((r) => r.key), ["running", "flow"]);
+test("setup: PowerEngine not running says where to look, and offers nothing to install", () => {
+  const rows = h.setupRows({ peVersion: null });
+  assert.deepStrictEqual(rows.map((r) => r.key), ["running"]);
   assert.strictEqual(row(rows, "running").status, "missing");
   assert.match(row(rows, "running").detail, /Repairs/);
-  assert.strictEqual(row(rows, "flow").action.target, "flow");
-  assert.strictEqual(h.setupSummary(emptyFacts()).allSet, false);
+  assert.ok(rows.every((r) => !("action" in r)));
+  assert.strictEqual(h.setupSummary({ peVersion: null }).allSet, false);
+  assert.strictEqual(h.setupSummary({ peVersion: null }).todo, 1);
 });
 
-test("HACS missing: no install buttons, link to how to install it", () => {
-  const f = emptyFacts();
-  f.hacs = false; f.repos = null; f.components = [];
+test("setup: running means all set, with the version in one line", () => {
+  const f = { peVersion: "0.9.61", otherController: "none" };
   const rows = h.setupRows(f);
-  ["flow"].forEach((k) => {
-    assert.strictEqual(row(rows, k).status, "missing");
-    assert.strictEqual(row(rows, k).action.kind, "link");
-    assert.match(row(rows, k).action.href, /hacs\.xyz/);
-  });
-});
-
-test("the energy-flow card installed in HACS but not loaded asks for a reload", () => {
-  const f = allFacts();
-  f.cardsLoaded = { "sunsynk-power-flow-card": false };
-  const r = row(h.setupRows(f), "flow");
-  assert.strictEqual(r.status, "missing");
-  assert.match(r.detail, /Reload this page/);
-  assert.strictEqual(r.action.kind, "reload");
-});
-
-test("everything installed: all ok, one line with the version", () => {
-  const rows = h.setupRows(allFacts());
   rows.forEach((r) => assert.strictEqual(r.status, "ok", r.key));
-  const s = h.setupSummary(allFacts());
+  const s = h.setupSummary(f);
   assert.strictEqual(s.allSet, true);
   assert.strictEqual(s.line, "All set. PowerEngine is running 0.9.61");
   assert.strictEqual(s.todo, 0);
 });
 
-test("non-admin sees the list but no install buttons, and an admin note on HACS-dependent rows", () => {
-  const f = emptyFacts();
-  f.isAdmin = false; f.hacs = null; f.repos = null;
-  const rows = h.setupRows(f);
-  ["flow"].forEach((k) => {
-    assert.strictEqual(row(rows, k).action, null, k);
-    assert.strictEqual(row(rows, k).status, "unknown", k);
-    assert.match(row(rows, k).detail, /admin/i, k);
-  });
-  assert.strictEqual(row(rows, "running").status, "missing");   // needs no admin rights to see
-});
-
-test("non-admin with everything running still sees all set", () => {
-  const f = allFacts();
-  f.isAdmin = false; f.hacs = null; f.repos = null;
-  assert.strictEqual(h.setupSummary(f).allSet, true);
+test("setup: a controller choice still to make is a row of its own", () => {
+  const f = { peVersion: "0.9.61", otherController: "unset" };
+  assert.deepStrictEqual(h.setupRows(f).map((r) => r.key), ["running", "controller"]);
+  assert.strictEqual(h.setupSummary(f).allSet, false);
+  assert.strictEqual(h.setupSummary(f).todo, 1);
 });
 
 // --- demo card ----------------------------------------------------------------------------------------------

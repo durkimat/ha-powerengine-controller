@@ -22,7 +22,6 @@ class SolisInverter(DefinedInverter):
 
     name = _DEFINITION["name"]
     DISPLAY_NAMES = dict(_DEFINITION["display_names"])      # the class-level copy the names map starts from
-    card_model = _DEFINITION["card_model"]
 
     def __init__(self, ha, role_entity, volts: float = 52.0, max_charge_w: float | None = None,
                  max_discharge_w: float | None = None, ram_max_w: float | None = None,

@@ -4498,7 +4498,7 @@ class Engine:
             capacity_wh = 18000
         reserve_soc = self._reserve_soc() if self.cfg else 12
         has_ev = bool(self._role_entity("ev_charge_power")) if self.cfg else False
-        return energy_flow_card(plants, capacity_wh, reserve_soc, has_ev, self._inverter().card_model)
+        return energy_flow_card(plants, capacity_wh, reserve_soc, has_ev)
 
     def _sync_dashboard(self):
         targets = [os.path.join(os.path.dirname(self._save_path()), "dashboard.yaml")]
