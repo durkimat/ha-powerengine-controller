@@ -30,7 +30,7 @@ const SAVED = {
   schema_version: 1,
   inputs: { battery_soc: { entity: "sensor.solis_battery_soc" }, grid_power: { entity: "sensor.solis_grid", invert: true }, import_rate_now: { entity: "sensor.edf_rate" },
     ev_plug_status: { entity: "sensor.zappi_plug" }, event_state: { entity: "sensor.axle_event" } },
-  solar_plants: [{ id: "main", name: "Main", power: { entity: "sensor.pv" }, energy_today: { entity: "sensor.pv_today" }, forecast: "solcast_site", enabled: true },
+  solar_plants: [{ id: "main", name: "Main", power: { entity: "sensor.pv" }, energy_today: { entity: "sensor.pv_today" }, forecast: "service", enabled: true },
     { id: "garage", name: "Garage roof", power: { entity: "sensor.g_pv" }, energy_today: { entity: "sensor.g_pv_today" }, forecast: "none", enabled: true }],
   features: { smart_charge_optimisation: true, learn_car: true, learn_car_min: true, axle: true, arbitrage: false },
   operation: { mode: "active" }, safety: { battery_reserve_soc: 12 }, system: { poll_s: 30 },
@@ -120,7 +120,7 @@ test("applyOps: the forecast and the main plant stay in step; adding a forecast 
   assert.equal(rm.solar_plants[0].forecast, "none");
   const add = m.applyOps(rm, [{ target: "forecast", op: "set", kind: "forecast", part: "forecast", option: "solcast", inputs: {} }], INFO);
   assert.equal(add.site.forecast, "solcast");
-  assert.equal(add.solar_plants[0].forecast, "solcast_site");
+  assert.equal(add.solar_plants[0].forecast, "service");
 });
 
 test("applyOps: the tariff is saved as auto; plants and devices are added, edited and removed by id", () => {

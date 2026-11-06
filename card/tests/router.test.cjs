@@ -5,12 +5,6 @@ const GROUP = "120363085203994232@g.us";
 const LIVE = { service: "persistent_notification", events: { health: true, inputs: true, axle: true, free_power: true, daily: true, alexa: true, simulator: true },
   alexa: { services: ["notify.alexa_media_daddy_dot", "notify.alexa_media_grandpa_dot"], earliest_weekday: "07:30", earliest_weekend: "08:00", latest: "21:00", intro: "Daddy Bot here.", whatsapp: true, whatsapp_targets: [GROUP] } };
 
-test("the router needs app 0.9.195 or newer", () => {
-  assert.strictEqual(c.routerSupported("0.9.194"), false);
-  assert.strictEqual(c.routerSupported("0.9.195"), true);
-  assert.strictEqual(c.routerSupported(undefined), false);
-});
-
 test("the older settings become the same channels and rules the app makes", () => {
   const r = c.routerFromLegacy({ ...LIVE, alexa: c.alexaDraft(LIVE.alexa) });
   assert.deepStrictEqual(Object.keys(r.channels), ["bell", "alexa", "whatsapp"]);
@@ -27,12 +21,11 @@ test("the older settings become the same channels and rules the app makes", () =
   assert.deepStrictEqual(off.rules, []);
 });
 
-test("withRouter converts only for an app that supports it and leaves the new form alone", () => {
+test("withRouter converts the legacy form once and leaves the new form alone", () => {
   const mk = () => ({ notifications: { ...LIVE, alexa: c.alexaDraft(LIVE.alexa) } });
-  assert.ok(c.withRouter(mk(), true).notifications.channels);
-  assert.ok(c.withRouter(mk(), false).notifications.service);
-  const once = c.withRouter(mk(), true);
-  assert.deepStrictEqual(c.withRouter(JSON.parse(JSON.stringify(once)), true), once);
+  assert.ok(c.withRouter(mk()).notifications.channels);
+  const once = c.withRouter(mk());
+  assert.deepStrictEqual(c.withRouter(JSON.parse(JSON.stringify(once))), once);
 });
 
 test("a saved channels-and-rules config is kept by initialDraft and saved back by buildConfig", () => {
@@ -51,7 +44,7 @@ test("a saved channels-and-rules config is kept by initialDraft and saved back b
 });
 
 test("an unchanged page is not dirty: the draft and the saved base convert the same way", () => {
-  const mk = () => c.withRouter(c.initialDraft({ notifications: LIVE }, [], [], {}).draft, true);
+  const mk = () => c.withRouter(c.initialDraft({ notifications: LIVE }, [], [], {}).draft);
   assert.strictEqual(JSON.stringify(c.buildConfig(mk())), JSON.stringify(c.buildConfig(mk())));
   const edited = mk(); edited.notifications.channels.alexa.intro = "Hi.";
   assert.notStrictEqual(JSON.stringify(c.buildConfig(edited)), JSON.stringify(c.buildConfig(mk())));

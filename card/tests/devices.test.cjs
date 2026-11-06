@@ -2,14 +2,6 @@ const test = require("node:test");
 const assert = require("node:assert");
 const c = require("../ha-powerengine-card.js");
 
-test("devices need app 0.9.93 or newer", () => {
-  assert.strictEqual(c.devicesSupported("0.9.92"), false);
-  assert.strictEqual(c.devicesSupported("0.9.93"), true);
-  assert.strictEqual(c.devicesSupported("0.10.0"), true);
-  assert.strictEqual(c.devicesSupported("unknown"), false);
-  assert.strictEqual(c.devicesSupported(undefined), false);
-});
-
 test("deviceDraft copies saved devices and fills the gaps", () => {
   const saved = [{ id: "garage", adapter: "solis", inputs: { battery_soc: { entity: "sensor.a" } } }];
   const d = c.deviceDraft(saved);

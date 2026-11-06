@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.9.224 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.9.225 (beta; Passive by default, Active available)
 
 ---
 
@@ -70,7 +70,7 @@ controls is a separate process it starts and watches. PowerEngine's entities are
 **Check the log** (*Settings → System → Logs*, search for `powerengine`). Before any configuration it says:
 
 ```
-PowerEngine 0.9.224 starting
+PowerEngine 0.9.225 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 ```
@@ -399,7 +399,6 @@ the same for the card if you need to.
 | --- | --- | --- |
 | PowerEngine entities show *Unavailable* | The engine is stopped or restarting | Check the Engine sensor and the integration's Repairs; the Restart engine button restarts it |
 | Card says *app not detected* | The engine is not running | Step 1; check the Engine sensor and Repairs |
-| Card warns that the app (or the card) is too old | One of them is older than the other's minimum version | Update the one named in the warning to its latest version, then reload the page |
 | `Unknown command: ha` | Commands run on your own computer | Use HA's terminal add-on |
 | `Config problem: ...` in the log | `config.yaml` has an error | The message names the problem; fix or restore the backup |
 | Dashboard missing from the sidebar | The PowerEngine integration is not loaded (Settings → Devices & services), or in *shadow* mode (no dashboard) | Step 1; the integration's status |

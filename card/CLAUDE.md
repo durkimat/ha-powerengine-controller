@@ -10,10 +10,9 @@ release routine and guardrails.
   testing.
 - The card is released with PowerEngine: the build sets the bundled copy's `CARD_VERSION` to the engine's version, so
   the two always match (the source's own `CARD_VERSION` is not used). There are no separate card releases.
-- `MIN_APP_VERSION` is the oldest app the card works with (0.9.69: `demo_days`). The app publishes
-  `min_card_version` on `sensor.pe_diag_version`. Each side warns only when the other is older than its minimum
-  (`versionWarnings`), not when the versions differ. Raise `MIN_APP_VERSION` when the card starts to need something
-  a newer app publishes.
+- The card and the engine are one version, so the card checks nothing about the engine's version and there is no minimum
+  to raise. A browser tab left open across an update still runs the old card: reload it (a save from an old card can leave
+  out settings the new engine has).
 - **Your system** (`PowerEngineSystemCard`, `custom:powerengine-system-card`; the old name `powerengine-wizard-card` is kept as an alias for a dashboard
   written before it) replaced the setup wizard and the config card's equipment blocks. Plan: `docs/plans/equipment-manager.md`. The page
   shows the configured equipment read only; "Change your system" opens a panel (an overlay inside the card) to add, edit, replace and remove. Rules:

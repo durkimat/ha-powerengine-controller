@@ -2,6 +2,28 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.225 (beta)
+
+### Behaviour changes
+
+- **The forecast source setting `solcast_site` is now `service`** ("from the forecast service", whichever one you use). A saved
+  settings file that still says `solcast_site` is read as `service` (nothing to do; the Config page saves the new word the next
+  time you save). The Config page's forecast choice and the demo settings use the new word.
+- **The card and the engine no longer check each other's version.** They ship as one version now, so the "this card needs app
+  x" and "the app needs card x" warnings (and `min_card_version` on `sensor.pe_diag_version`) are gone, and so are the
+  checks that hid WhatsApp, notification-router, free-power and device settings from an engine too old to know them: the
+  engine is always the one that came with the card. One thing to know: a browser tab or phone app left open across an update
+  still runs the old card until it is reloaded, and a **Save from an old card can leave out settings that only the new engine
+  has**. Reload after updating (the install guide says so).
+- The diagnostics summary no longer reports whether the card is older than a minimum.
+
+### Behind the scenes
+
+- `pe_core/version.py` (the minimum card version and the version comparison) and its tests are removed, as are the card's
+  `MIN_APP_VERSION`, `parseVersion`, `versionOlder` and `versionWarnings` and the four `xSupported` helpers; `withWhatsapp`
+  and `withRouter` lose their "supported" argument. The simulator now recognises an exported engine by `pe_core/__init__.py`.
+- Tests: an old forecast source name is read under the new one and a bad one is refused naming the choices.
+
 ## 0.9.224 (beta)
 
 ### Behaviour changes

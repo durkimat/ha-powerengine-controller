@@ -2,12 +2,6 @@ const test = require("node:test");
 const assert = require("node:assert");
 const c = require("../ha-powerengine-card.js");
 
-test("free power switches need app 0.9.191 or newer", () => {
-  assert.strictEqual(c.freeLoadsSupported("0.9.190"), false);
-  assert.strictEqual(c.freeLoadsSupported("0.9.191"), true);
-  assert.strictEqual(c.freeLoadsSupported("unknown"), false);
-});
-
 test("freeLoadDraft accepts the bare-entity form and copies", () => {
   const saved = [{ entity: "switch.a", name: "A" }, "input_boolean.b"];
   assert.deepStrictEqual(c.freeLoadDraft(saved), [{ entity: "switch.a", name: "A" }, { entity: "input_boolean.b", name: "" }]);
