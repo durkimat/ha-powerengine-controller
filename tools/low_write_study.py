@@ -3,7 +3,7 @@
 
     tools/low_write_study.py [--switch-cost P [P ...]] [--days sunny dull axle car]
 
-Runs the real optimiser over the demo pack's recorded days (apps/powerengine/demo/pack.json), at several prices per
+Runs the real optimiser over the demo pack's recorded days (engine/demo/pack.json), at several prices per
 window change (the optimiser's `switch_cost_p`), and for four tiers of what the plan is allowed to do:
 
     T0  plain self-use, Axle events and free-power sessions honoured (the baseline: no PowerEngine planning)
@@ -29,7 +29,7 @@ from dataclasses import replace
 from datetime import date
 from zoneinfo import ZoneInfo
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "apps" / "powerengine"))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "engine"))
 
 import pe_core.optimiser as opt  # noqa: E402
 from pe_core.decide import EXPORT, GRID_CHARGE, HOLD, SELF_USE  # noqa: E402

@@ -44,7 +44,7 @@ custom_components/powerengine/        thin and stable: a Home Assistant restart 
        templates as requests; carrying on from the copy through a lost connection and reconnecting.
      - `pe_core/host_server.py` (`HostServer`, the integration's side, written against a small `Home` interface so
        Phase 3 only has to implement `Home` over Home Assistant).
-     - `apps/powerengine/engine_main.py`: the engine process (`PE_SECRET=... python engine_main.py --address ...`), with
+     - `engine/engine_main.py`: the engine process (`PE_SECRET=... python engine_main.py --address ...`), with
        exit statuses the supervisor can act on (10: protocol mismatch, so a Home Assistant restart is needed).
      - Tests: the same questions put to the AppDaemon host and the socket host, the handshake, reconnection, the timers,
        and the real engine started as a real process against a fake Home Assistant.
@@ -103,7 +103,7 @@ it is in shadow mode.
 
 ## Risks and open decisions
 
-- **One repository, two ways to install it (decided: the same repository).** `apps/powerengine/` is the AppDaemon app
+- **One repository, two ways to install it (decided: the same repository).** `engine/` is the AppDaemon app
   and `custom_components/powerengine/` is the integration; HACS takes the folder for the category it was added as. HACS
   keeps one entry per repository, so the two can't both be installed through HACS at once: the shadow run installs the
   integration by hand (copy the folder, restart Home Assistant), and at the cut-over the AppDaemon entry in HACS is

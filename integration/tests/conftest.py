@@ -18,7 +18,7 @@ from build_integration import sync  # noqa: E402
 
 sync()                                     # the generated files (engine/, protocol.py, ...) current, as CI also demands
 sys.path.insert(0, str(ROOT))              # custom_components/ is at the repository root
-sys.path.insert(0, str(ROOT / "apps" / "powerengine"))      # the engine's own client, to stand in for it (pe_core)
+sys.path.insert(0, str(ROOT / "engine"))      # the engine's own client, to stand in for it (pe_core)
 
 pytest_plugins = ["pytest_homeassistant_custom_component"]
 

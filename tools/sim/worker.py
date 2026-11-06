@@ -1,7 +1,7 @@
 """One simulation, in its own process: `python worker.py run <job.json> <result.json>`, or
 `python worker.py catalogue <code root>` (the engine settings that code has, as JSON).
 
-The process puts the chosen checkout's `apps/powerengine` first on `sys.path`, so it runs that code's real `pe_core`
+The process puts the chosen checkout's `engine` first on `sys.path`, so it runs that code's real `pe_core`
 and the real app (the same machinery as the nightly comparison, `pe_core.compare`): engine v2 only, Active, RAM remote
 control, the owner's settings, the day's recorded house, sun, prices, smart slots and grid events, the forecasts as they
 were. Nothing here changes what the engine does. It watches (the plan at every re-plan, the level, the mode changes) and

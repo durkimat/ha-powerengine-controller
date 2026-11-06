@@ -374,12 +374,11 @@ def base_data():
     return yaml.safe_load(definition_path("solis").read_text(encoding="utf-8"))
 
 
-def test_the_definition_ships_in_the_app_folder_and_is_not_an_appdaemon_config():
+def test_the_definition_ships_with_the_engine():
     from pe_core.adapters.definition import DEVICES_DIR, available, load_definition
-    app = Path(__file__).resolve().parents[1] / "apps" / "powerengine"
-    assert DEVICES_DIR == app / "pe_core" / "adapters" / "devices"        # inside what HACS installs
-    assert available() == ["solis"] and (DEVICES_DIR / "solis.yml").is_file()
-    assert not list(DEVICES_DIR.glob("*.yaml"))                            # AppDaemon would load these as apps
+    app = Path(__file__).resolve().parents[1] / "engine"
+    assert DEVICES_DIR == app / "pe_core" / "adapters" / "devices"        # inside the engine
+    assert available() == ["solis"] and (DEVICES_DIR / "solis.yaml").is_file()
     d = load_definition("solis")
     assert d.firmware is None and d.variant == "420044" and d["name"] == "solis"
 
@@ -451,8 +450,8 @@ def test_a_definition_with_a_missing_key_names_it():
         for part in head:
             cur = cur[part]
         del cur[last]
-        with pytest.raises(DefinitionError, match=f"solis.yml: missing '{shown}'"):
-            parse_definition(data, source="solis.yml")
+        with pytest.raises(DefinitionError, match=f"solis.yaml: missing '{shown}'"):
+            parse_definition(data, source="solis.yaml")
 
 
 def test_a_definition_with_a_bad_value_is_refused_with_a_clear_message():
@@ -479,10 +478,10 @@ def test_a_definition_with_a_bad_value_is_refused_with_a_clear_message():
         data = base_data()
         edit(data)
         with pytest.raises(DefinitionError) as err:
-            parse_definition(data, source="solis.yml")
+            parse_definition(data, source="solis.yaml")
         assert text in str(err.value), (text, str(err.value))
     with pytest.raises(DefinitionError, match="must be a mapping"):
-        parse_definition(["not", "a", "mapping"], source="x.yml")
+        parse_definition(["not", "a", "mapping"], source="x.yaml")
 
 
 def test_the_suggestions_come_from_the_definition_and_add_to_the_roles():
@@ -535,7 +534,7 @@ def test_another_inverter_is_only_a_yaml_file():
     ids = {"select.acme_remote_mode": "Idle", "number.acme_remote_charge_w": 0, "number.acme_remote_discharge_w": 0,
            "select.zz_remote_mode": "x"}
     ha = FakeHA(ids, {"select.acme_remote_mode": {"options": ["Idle", "Charge", "Discharge"]}})
-    inv = DefinedInverter(parse_definition(data, source="acme.yml"), ha, lambda role: None)
+    inv = DefinedInverter(parse_definition(data, source="acme.yaml"), ha, lambda role: None)
     rc = inv.rc_entities(UTC_NOW)
     assert rc == {"rc_mode": "select.acme_remote_mode", "rc_charge_power": "number.acme_remote_charge_w",
                   "rc_discharge_power": "number.acme_remote_discharge_w"}

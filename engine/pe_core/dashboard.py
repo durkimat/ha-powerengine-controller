@@ -13,7 +13,7 @@ import os
 from .names import fill
 
 # The shipped dashboard (a template: the engine fills it in and writes it to the settings folder as dashboard.yaml).
-SOURCE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dashboard", "dashboard.lovelace")
+SOURCE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dashboard", "dashboard.yaml")
 
 BEGIN_MARKER = "# BEGIN energy-flow (generated from your configuration; edits here are replaced)"
 END_MARKER = "# END energy-flow"

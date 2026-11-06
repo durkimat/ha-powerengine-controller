@@ -214,7 +214,7 @@ def test_a_config_with_missing_inputs_is_still_blocked(make):
 
 def test_the_dashboard_shows_a_neutral_tile_for_not_set_up_yet_and_hides_the_health_alert():
     from pathlib import Path
-    doc = yaml.safe_load((Path(__file__).parent.parent / "apps/powerengine/dashboard/dashboard.lovelace").read_text())
+    doc = yaml.safe_load((Path(__file__).parent.parent / "engine/dashboard/dashboard.yaml").read_text())
     tiles = [c for v in doc["views"] for s in v.get("sections", []) for c in s.get("cards", [])
              if c.get("type") == "tile" and c.get("entity") in ("sensor.pe_state_status", "sensor.pe_diag_health")]
     neutral = [t for t in tiles if any(c.get("state") == "Not set up yet" for c in t.get("visibility", []))]

@@ -184,8 +184,8 @@ The diagnostics export gains a section `engine_v2`: `health`, the last 300 journ
 |---|---|---|---|
 | **A** | Layers 2 and 3: `forecast.py`, `value.py` (+ tests) | `pe_core/engine_v2/forecast.py`, `value.py`, `tests/test_engine_v2_forecast.py`, `tests/test_engine_v2_value.py` | contract |
 | **B** | Layers 1, 4, 5, triggers, learning, facade, publish: `observe.py`, `rules.py`, `execute.py`, `triggers.py`, `learning.py`, `engine.py`, `publish.py` (+ tests) | those modules, `tests/test_engine_v2_{observe,rules,execute,triggers,learning,engine,publish}.py` | contract; A's interfaces (stub them in tests until A lands) |
-| **C** | Card and dashboard: new elements, config groups, `battery_floor_soc` in the card's battery topic, an "Engine v2" dashboard view | card repo `ha-powerengine-card.js`, `tests/*.test.cjs`; app repo `apps/powerengine/dashboard/dashboard.lovelace`, `tests/golden/dashboard_*.lovelace`, `tests/test_dashboard.py` if needed | sensor contract |
-| **D** | App wiring: engine choice, v2 tick, sensors, state file, diagnostics, guard, entities | `apps/powerengine/powerengine.py`, `pe_core/entities.py`, `pe_core/diagnostics.py`, `tools/diag_summary.py`, `tests/test_engine_v2_app.py` | A, B |
+| **C** | Card and dashboard: new elements, config groups, `battery_floor_soc` in the card's battery topic, an "Engine v2" dashboard view | card repo `ha-powerengine-card.js`, `tests/*.test.cjs`; app repo `engine/dashboard/dashboard.yaml`, `tests/golden/dashboard_*.lovelace`, `tests/test_dashboard.py` if needed | sensor contract |
+| **D** | App wiring: engine choice, v2 tick, sensors, state file, diagnostics, guard, entities | `engine/powerengine.py`, `pe_core/entities.py`, `pe_core/diagnostics.py`, `tools/diag_summary.py`, `tests/test_engine_v2_app.py` | A, B |
 | **E** | Comparison on recorded data: v1 against v2 in the closed-loop demo world, plus a perfect-foresight bound | `tools/engine_compare.py`, `tests/test_engine_compare.py` | D |
 | **F** | Release: docs, notes, versions (orchestrator) | `docs/`, `CLAUDE.md`, `release-notes/`, `pe_core/version.py`, card `CARD_VERSION`/`MIN_APP_VERSION` | all |
 
@@ -348,11 +348,11 @@ Card (`ha-powerengine-card.js`, one file; pure helpers exported for `node --test
   the config grouping (which keys go to which group), the "send v2 keys only when supported" rule, confirm text both
   ways.
 
-Dashboard (`apps/powerengine/dashboard/dashboard.lovelace`): a new view **"Engine v2"** (path `engine-v2`, icon
+Dashboard (`engine/dashboard/dashboard.yaml`): a new view **"Engine v2"** (path `engine-v2`, icon
 `mdi:engine`, placed after Plan) with the demo card, `custom:powerengine-engine-card`,
 `custom:powerengine-v2-plan-card`, `custom:powerengine-v2-health-card`, in the same section style as the other views.
 Nothing else in the dashboard changes (automatic switching of the existing pages is a later release). Update the golden
-`tests/golden/dashboard_edf_zappi_solcast_solis_axle.lovelace` to match (it is the rendered dashboard; regenerate the
+`tests/golden/dashboard_edf_zappi_solcast_solis_axle.yaml` to match (it is the rendered dashboard; regenerate the
 same way the test describes) and keep `tests/test_dashboard.py` passing; `MIN_CARD_VERSION` is raised by the
 orchestrator at release.
 

@@ -37,7 +37,7 @@ About two thirds of the roughly 10,000 lines are already hardware-neutral. The b
 | EV charger | `smartcharge`, parts of `readings` | Bespoke | Zappi plug-status words ("Charging", "Completed") |
 | Simulator and costs | `simulator`, `simjob`, `simhistory`, `costs`, `energy` | Generic | Tariff comparison uses the Kraken catalogue |
 | Main app | `powerengine.py` (2,400 lines) | Mixed | Wires everything together; Solis entity handling spread through it |
-| Dashboard and card | `dashboard.lovelace`, card JS | Mostly generic | Sunsynk card set to `model: solis`; Solis entity names in some cards |
+| Dashboard and card | `dashboard.yaml`, card JS | Mostly generic | Sunsynk card set to `model: solis`; Solis entity names in some cards |
 
 The main app file is the biggest single job: inverter logic must move out of it into an adapter before anything else can be swapped.
 

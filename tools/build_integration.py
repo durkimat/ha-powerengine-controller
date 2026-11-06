@@ -9,8 +9,8 @@ the engine it runs.
 The integration's own files are written by hand in custom_components/powerengine/. Five things in that folder are
 generated from the app and the card and committed, because HACS installs a repository's custom_components folder as it
 stands:
-  * engine/             a copy of the whole app (apps/powerengine/), which the integration starts as its own process;
-  * protocol.py and host_server.py, copies of apps/powerengine/pe_core/'s, so that the integration and the engine are
+  * engine/             a copy of the whole app (engine/), which the integration starts as its own process;
+  * protocol.py and host_server.py, copies of engine/pe_core/'s, so that the integration and the engine are
     written against the same files (an engine update that changes the protocol makes the engine exit with status 10);
   * frontend/ha-powerengine-card.js, the dashboard card (card/ha-powerengine-card.js) with its CARD_VERSION set to the
     engine's version, so the card and the engine that serves it always match; the integration serves it (frontend.py);
@@ -30,7 +30,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INTEGRATION = ROOT / "custom_components" / "powerengine"
-APP = ROOT / "apps" / "powerengine"
+APP = ROOT / "engine"
 CARD = ROOT / "card" / "ha-powerengine-card.js"
 SHARED = ("protocol.py", "host_server.py")          # copied from pe_core into the integration package
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache")

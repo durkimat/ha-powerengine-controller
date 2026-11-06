@@ -31,5 +31,5 @@ SERVICE_RESTART_ENGINE = "restart_engine"
 SERVICE_UPDATE = "update"
 SERVICE_REFRESH_SHADOW = "refresh_shadow"
 
-# the engine's exit statuses (apps/powerengine/engine_main.py)
+# the engine's exit statuses (engine/engine_main.py)
 EXIT_STOPPED, EXIT_PROTOCOL, EXIT_SECRET, EXIT_UNAVAILABLE = 0, 10, 11, 12

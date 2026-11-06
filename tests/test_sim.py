@@ -87,7 +87,7 @@ def test_job_key_follows_every_input(tmp_path):
 
 
 def test_code_id_ignores_git_state_and_follows_files(tmp_path):
-    app = tmp_path / "apps" / "powerengine" / "pe_core"
+    app = tmp_path / "engine" / "pe_core"
     app.mkdir(parents=True)
     (app / "a.py").write_text("x = 1\n")
     first = workspace.code_id(tmp_path)
@@ -101,7 +101,7 @@ def test_code_id_ignores_git_state_and_follows_files(tmp_path):
 def test_a_git_ref_is_exported_not_checked_out(tmp_path):
     before = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout
     root, label = workspace.resolve_code("HEAD", tmp_path)
-    assert (root / "apps" / "powerengine" / "pe_core" / "version.py").is_file()
+    assert (root / "engine" / "pe_core" / "version.py").is_file()
     assert "HEAD" in label
     assert workspace.resolve_code("HEAD", tmp_path)[0] == root  # reused, not exported again
     after = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout
@@ -415,3 +415,13 @@ def test_the_simulated_hold_sells_spare_sun_as_the_real_inverters_does():
         assert f["house_w"] + f["car_w"] - f["solar_w"] + f["charge_w"] - f["discharge_w"] - f["grid_w"] == \
             pytest.approx(0, abs=1e-6)
     assert soc[DemoWorld] > 50.5 and soc[Patched] == pytest.approx(50, abs=0.01)
+
+
+def test_a_ref_from_before_the_folder_was_renamed_is_exported_under_the_new_name(tmp_path):
+    """0.9.220 and older keep the engine in apps/powerengine; comparing against such a ref must still work."""
+    old = subprocess.run(["git", "rev-list", "-n", "1", "v0.9.220"], cwd=ROOT, capture_output=True, text=True)
+    if old.returncode or not old.stdout.strip():
+        pytest.skip("the v0.9.220 tag is not in this clone")
+    root, _ = workspace.resolve_code("v0.9.220", tmp_path)
+    assert (root / "engine" / "pe_core" / "version.py").is_file()
+    shutil.rmtree(tmp_path / "code")

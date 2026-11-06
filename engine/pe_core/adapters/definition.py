@@ -1,6 +1,6 @@
 """Inverter definition files: what makes one inverter different from another, as data.
 
-A definition is a YAML file (see `devices/solis.yml` and docs/INVERTERS.md). It says which entities an inverter's
+A definition is a YAML file (see `devices/solis.yaml` and docs/INVERTERS.md). It says which entities an inverter's
 roles are, how its timed windows and remote-control registers are laid out, what its options are called, and what it
 can do. The algorithms (timed-window arithmetic, the remote-control command for a decision, clock-drift maths) are
 Python; a definition picks them by name (`behaviour:`), it never contains code.
@@ -20,7 +20,7 @@ from pathlib import Path
 import yaml
 
 DEVICES_DIR = Path(__file__).parent / "devices"
-SUFFIX = ".yml"                # the definition files' extension
+SUFFIX = ".yaml"              # the definition files' extension
 FORMAT = 1
 
 # The named behaviours a definition may select (each is implemented in Python by DefinedInverter and its helpers).

@@ -12,7 +12,7 @@ from pe_core.demo import world as worldmod
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 LONDON = ZoneInfo("Europe/London")
-TEMPLATE = ROOT / "apps" / "powerengine" / "demo" / "config.template"
+TEMPLATE = ROOT / "engine" / "demo" / "config.template"
 DAY = date(2026, 10, 6)
 
 

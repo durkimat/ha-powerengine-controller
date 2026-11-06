@@ -12,7 +12,7 @@ from pe_core import ramcontrol
 from pe_core.background import Worker
 from pe_core.rctest import OPTION_CHARGE, OPTION_DISCHARGE, OPTION_OFF
 
-APP = __import__("pathlib").Path(__file__).resolve().parents[1] / "apps" / "powerengine"
+APP = __import__("pathlib").Path(__file__).resolve().parents[1] / "engine"
 RC = {"rc_mode": "select.mode", "rc_charge_power": "number.charge", "rc_discharge_power": "number.discharge"}
 WAIT = 5.0
 

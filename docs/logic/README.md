@@ -36,7 +36,7 @@ If you only read three: this page, [04](04-priorities.md) (who wins) and [09](09
 
 ## The whole pipeline in one picture
 
-Everything below happens in `PowerEngine._cycle` (`apps/powerengine/powerengine.py`), every **30 seconds**
+Everything below happens in `PowerEngine._cycle` (`engine/powerengine.py`), every **30 seconds**
 (`CYCLE_SECONDS`). The plan is remade at most every **5 minutes** (`REPLAN_SECONDS`) or sooner when something that matters
 changes. The decision is made on **every** cycle from the plan's first half-hour plus live readings.
 

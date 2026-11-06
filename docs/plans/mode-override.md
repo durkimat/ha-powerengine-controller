@@ -44,7 +44,7 @@ half-hours show as windows marked `manual` ("manual override: ..."), as a pink b
 "Manual override", from the plan series' `manual` list, present only while one is on) and as "(manual)" in the Actions table.
 A grid event slot keeps its event. A manual Export in the plan runs to the reserve; Charge heads for the charge target.
 
-**Top panel** (card + `dashboard.lovelace`, golden re-rendered):
+**Top panel** (card + `dashboard.yaml`, golden re-rendered):
 - Tile "Mode" becomes **Power Engine**: Active / Paused / Passive / Blocked, same colours.
 - New tile **Inverter**: what the inverter is doing now (Self-use, Charging, Exporting, Hold), and when an override is on,
   "Override: Export until 14:30" with a cancel button.
