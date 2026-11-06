@@ -373,3 +373,34 @@ def test_native_entities_are_defined_on_the_integration_and_defined_again_after_
             assert home.retired == ["sensor.pe_state_x"] and "state_x" not in native.defined
         finally:
             again.stop()
+
+
+def test_the_failsafe_is_handed_to_the_integration_and_handed_again_after_a_reconnection():
+    from pe_core.host_server import HostServer
+    home = FakeHome()
+    calls = [{"service": "number/set_value", "data": {"entity_id": "number.a", "value": 0}}, {"wait_s": 5}]
+    with connected(home) as (_, server, h):
+        h.native_entities.failsafe(calls, True)
+        assert home.failsafes == [(calls, True)] and h.native_entities.failsafe_sent == (calls, True)
+        address = server.address
+        server.stop()
+        wait_for(lambda: not h.connected.is_set(), what="the drop")
+        again = HostServer(home, "s3cret", address=address)
+        home.server = again
+        again.start()
+        try:
+            wait_for(lambda: len(home.failsafes) == 2, 10, "the failsafe again")
+            assert home.failsafes[1] == (calls, True)
+        finally:
+            again.stop()
+
+
+def test_an_integration_that_does_not_know_the_failsafe_says_so():
+    class Old(FakeHome):
+        def set_failsafe(self, calls, armed):
+            raise AttributeError("no such thing")
+
+    with connected(Old()) as (_, _, h):
+        with pytest.raises(HostError):
+            h.native_entities.failsafe([], False)
+        assert h.native_entities.failsafe_sent is None

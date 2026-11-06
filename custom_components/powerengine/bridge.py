@@ -65,8 +65,10 @@ class _Outbox:
 class HassHome:
     """host_server.Home over Home Assistant. `server` is set once the server exists."""
 
-    def __init__(self, hass: HomeAssistant, native: Any = None, ledger: Ledger | None = None) -> None:
+    def __init__(self, hass: HomeAssistant, native: Any = None, ledger: Ledger | None = None,
+                 watchdog: Any = None) -> None:
         self.hass = hass
+        self.watchdog = watchdog                                   # watchdog.Watchdog, or None (a shadow run)
         self.native = native                                       # native.NativeEntities, or None (plain states only)
         self.ledger = ledger                                       # not None: a shadow run (shadow.py)
         self.server: Any = None
@@ -186,6 +188,11 @@ class HassHome:
     def entities_online(self, online: bool) -> None:
         if self.native is not None:
             self._on_loop(lambda: self.native.set_online(online))
+
+    def set_failsafe(self, calls: list, armed: bool) -> None:
+        if self.watchdog is None:
+            raise ValueError("a shadow run holds no failsafe")
+        self._on_loop(lambda: self.watchdog.set(calls, armed))
 
     # --- what the engine asked to hear about (called by the server on its threads)
     def watch(self, entity_id: str) -> None:

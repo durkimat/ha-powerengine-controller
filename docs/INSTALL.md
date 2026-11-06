@@ -267,22 +267,12 @@ slots. It never uses Backup or Off-Grid mode and never writes bump/boost entitie
    - if something else also controls the battery, the handover guards (see "Safety" below). With *No other battery
      controller* none are needed.
 2. Check the **Daily write limit** (same section, default 150).
-3. **The package** (one-off, then PowerEngine looks after it). Make sure `configuration.yaml` has
-
-   ```yaml
-   homeassistant:
-     packages: !include_dir_named packages
-   ```
-
-   and that the `packages` folder exists next to it (`/config/packages/`), then restart Home Assistant once if you
-   had to add either. After that PowerEngine writes and updates its own file in that folder when it starts (so after
-   every update): `powerengine_handover.yaml` (the update button and the watchdog). It starts with a line saying
-   PowerEngine manages it; edits are replaced, and the old file is kept beside it as `<name>.bak-<date>` (the newest
-   three are kept). A file in that folder that PowerEngine did not write is never touched. It never creates the
-   `packages` folder. The copy in `docs/ha/` is the same file, for reading.
-   When the file changes, PowerEngine notifies you and the Config page offers **Load PowerEngine's Home Assistant
-   changes**: press it and Home Assistant starts using the change (no restart). If you keep a git copy of your Home
-   Assistant configuration, pull before you push, or the push puts the old file back.
+3. **Nothing else.** The one-button update and the watchdog are part of the integration (the `powerengine.update`
+   service and a watchdog it runs), so there is no package file and no `packages` folder to prepare. If an earlier
+   version wrote `powerengine_handover.yaml` into your `packages` folder, PowerEngine removes it by itself once the
+   integration has taken over the watchdog (a backup is kept beside it as `<name>.bak-<date>`, and a file of that
+   name that PowerEngine did not write is never touched). The `homeassistant: packages:` line in
+   `configuration.yaml` is then no longer needed by PowerEngine.
 
 ### Testing (paused)
 
@@ -319,8 +309,10 @@ While paused, remember nobody is optimising the battery: don't leave it paused o
   90 seconds (a blip of a sensor no longer switches remote control Off); the inverter's own failsafe returns it to
   Self-Use within about 5 minutes if PowerEngine stops refreshing. Either way it takes control again by itself within
   30 seconds of the inputs recovering.
-- **Stopped app:** windows set ahead keep running as planned. The watchdog automation in the handover package closes
-  every window (Self-Use) if PowerEngine's heartbeat stops for 15 minutes while it's the battery controller.
+- **Stopped app:** windows set ahead keep running as planned. The integration's watchdog closes every window
+  (Self-Use) if PowerEngine's heartbeat stops for 15 minutes while it's the battery controller, and says so in a
+  notification. The engine tells it what to do for your inverter (built from the same entities it drives, and kept
+  through a restart of Home Assistant), so it needs no set-up and names no inverter of its own.
 - **Read-back:** every write is read back after 6 seconds and retried once; if it still doesn't match, control
   stops until the engine restarts (the Restart engine button) and you're notified.
 - **Daily write limit:** control pauses if PowerEngine's own writes reach it in a day. Resuming allows the limit
@@ -379,15 +371,14 @@ gives a verdict:
 ## Updating
 
 HACS shows the update as for any integration. **Download** it (or press **Update** on the Configuration page, which
-installs the latest integration and card from HACS and waits for the new version): the engine restarts by itself
+calls `powerengine.update`: it asks HACS for the latest release, installs it and waits for the new version): the engine restarts by itself
 within a minute, the PowerEngine device's Engine sensor says when, and you get a *PowerEngine updated* notification.
 A Repair says if Home Assistant needs a restart too, which only happens when the integration and the engine have
 changed how they talk. The Restart engine button and `powerengine.restart_engine` do it at once. The dashboard updates
 with the card; refresh the browser after updating. Read the release notes' **Behaviour changes** first: they list
 anything that changes what PowerEngine does.
 
-Update the card too, when HACS offers it. The card is only released when it changes, so its version can be behind the
-integration's; that's fine. Each warns only if the other is older than the minimum it needs.
+The dashboard card is part of the integration and is updated with it; there is no separate card to update.
 
 Your settings (`/config/powerengine/config.yaml`) live outside the integration's folder, so updates never touch them.
 

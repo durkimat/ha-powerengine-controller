@@ -68,6 +68,10 @@
       "name": "Restart engine",
       "description": "Restart the PowerEngine engine now, for example to start an update that has just been installed."
     },
+    "update": {
+      "name": "Update PowerEngine",
+      "description": "Look for the latest PowerEngine release in HACS, install it, and restart the engine onto it."
+    },
     "refresh_shadow": {
       "name": "Refresh shadow data",
       "description": "Stop the shadow engine, copy the live PowerEngine's folder afresh, and start it again."

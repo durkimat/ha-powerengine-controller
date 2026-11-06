@@ -120,5 +120,5 @@ it is in shadow mode.
 - Timer behaviour (worker threads, `run_every` start strings such as `"now+240"`) must match AppDaemon's; the damping,
   early-target and event-run logic depends on it.
 - With MQTT publishing, Mosquitto goes away only if nothing else uses it.
-- The handover packages (`ha_packages/`) can become integration services later; leave them alone at first.
+- The handover packages (`ha_packages/`) became integration services in 0.9.218 (`powerengine.update`, the watchdog).
 - The card moves to websocket commands later, not in the first cut-over.
