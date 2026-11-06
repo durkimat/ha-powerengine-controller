@@ -1,0 +1,26 @@
+# The myenergi integration: the Zappi charger and the Harvi/Hub grid meter.
+#
+# Data about how PowerEngine recognises this integration's entities in Home Assistant, used only to pre-fill the Config
+# page and the wizard. Nothing here is read by the control code: it never changes what PowerEngine does, only what is
+# suggested. `part` is the site key this answers to; `detect` is what the wizard looks for (`domains` are Home Assistant
+# integration domains, the rest are regular expressions, case-insensitive for manufacturers and models); `roles` gives,
+# for a PowerEngine input, the entity-id patterns to suggest (`suggest`) and to refuse (`suggest_not`).
+# See docs/INVERTERS.md ("Other integrations").
+part: ev_charger
+name: zappi
+detect:
+  integration: {name: 'myenergi'}
+  domains: ['myenergi']
+  manufacturers: ['myenergi']
+  models: ['zappi']
+  entities: ['^sensor\.myenergi_zappi_']
+roles:
+  ev_charge_mode: {suggest: ['^select\.myenergi_zappi_.*_charge_mode$']}
+  ev_charge_power: {suggest: ['^sensor\.myenergi_.*_power_charging$']}
+  ev_charger_status: {suggest: ['^sensor\.myenergi_zappi_[0-9]+_status$']}
+  ev_energy_today: {suggest: ['^sensor\.myenergi_zappi_.*_energy_used_today$']}
+  ev_plug_status: {suggest: ['^sensor\.myenergi_zappi_.*_plug_status$']}
+  ev_session_energy: {suggest: ['^sensor\.myenergi_zappi_.*_charge_added_session$']}
+  grid_export_today_check: {suggest: ['^sensor\.myenergi_.*_grid_export_today$']}
+  grid_import_today_check: {suggest: ['^sensor\.myenergi_.*_grid_import_today$']}
+  grid_power_reference: {suggest: ['^sensor\.myenergi_.*_power_grid$']}

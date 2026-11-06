@@ -1,0 +1,470 @@
+{
+ "detect": {
+  "ev_charger": {
+   "zappi": {
+    "domains": [
+     "myenergi"
+    ],
+    "entities": [
+     "^sensor\\.myenergi_zappi_"
+    ],
+    "integration": {
+     "name": "myenergi"
+    },
+    "manufacturers": [
+     "myenergi"
+    ],
+    "models": [
+     "zappi"
+    ]
+   }
+  },
+  "events": {
+   "axle": {
+    "domains": [
+     "axle",
+     "axle_vpp"
+    ],
+    "entities": [
+     "^sensor\\.axle_vpp_"
+    ],
+    "integration": {
+     "name": "Axle"
+    },
+    "manufacturers": [
+     "axle"
+    ],
+    "models": []
+   }
+  },
+  "forecast": {
+   "solcast": {
+    "domains": [
+     "solcast_solar"
+    ],
+    "entities": [
+     "^sensor\\.solcast_pv_forecast_"
+    ],
+    "integration": {
+     "name": "Solcast PV Forecast",
+     "url": "https://github.com/BJReplay/ha-solcast-solar"
+    },
+    "manufacturers": [
+     "solcast"
+    ],
+    "models": []
+   }
+  },
+  "tariff": {
+   "edf": {
+    "domains": [
+     "edf_energy",
+     "octopus_energy"
+    ],
+    "entities": [
+     "^sensor\\.edf_energy_electricity_"
+    ],
+    "integration": {
+     "name": "Octopus Energy",
+     "url": "https://github.com/BottlecapDave/HomeAssistant-OctopusEnergy"
+    },
+    "manufacturers": [],
+    "models": []
+   },
+   "octopus": {
+    "domains": [
+     "octopus_energy"
+    ],
+    "entities": [
+     "^sensor\\.octopus_energy_electricity_"
+    ],
+    "integration": {
+     "name": "Octopus Energy",
+     "url": "https://github.com/BottlecapDave/HomeAssistant-OctopusEnergy"
+    },
+    "manufacturers": [
+     "octopus"
+    ],
+    "models": []
+   }
+  }
+ },
+ "roles": {
+  "axle_direction": {
+   "suggest": [
+    "^sensor\\.axle_vpp_axle_import_export$"
+   ],
+   "suggest_not": []
+  },
+  "axle_event_active": {
+   "suggest": [
+    "^sensor\\.axle_vpp_axle_event_in_progress$"
+   ],
+   "suggest_not": []
+  },
+  "axle_event_end": {
+   "suggest": [
+    "^sensor\\.axle_vpp_axle_end_time_friendly$"
+   ],
+   "suggest_not": []
+  },
+  "axle_event_start": {
+   "suggest": [
+    "^sensor\\.axle_vpp_axle_start_time_friendly$"
+   ],
+   "suggest_not": []
+  },
+  "battery_bms_charge_limit": {
+   "suggest": [
+    "^sensor\\.solis_bms_battery_charge_limit$"
+   ],
+   "suggest_not": []
+  },
+  "battery_bms_discharge_limit": {
+   "suggest": [
+    "^sensor\\.solis_bms_battery_discharge_limit$"
+   ],
+   "suggest_not": []
+  },
+  "battery_charge_power": {
+   "suggest": [
+    "^sensor\\.solis_battery_input_energy$"
+   ],
+   "suggest_not": []
+  },
+  "battery_charge_today": {
+   "suggest": [
+    "^sensor\\.solis_battery_charge_today$"
+   ],
+   "suggest_not": []
+  },
+  "battery_discharge_power": {
+   "suggest": [
+    "^sensor\\.solis_battery_output_energy$"
+   ],
+   "suggest_not": []
+  },
+  "battery_discharge_today": {
+   "suggest": [
+    "^sensor\\.solis_battery_discharge_today$"
+   ],
+   "suggest_not": []
+  },
+  "battery_power": {
+   "suggest": [
+    "^sensor\\.solis_battery_power$"
+   ],
+   "suggest_not": []
+  },
+  "battery_soc": {
+   "suggest": [
+    "^sensor\\.solis_battery_soc$"
+   ],
+   "suggest_not": []
+  },
+  "battery_soh": {
+   "suggest": [
+    "^sensor\\.solis_battery_soh$"
+   ],
+   "suggest_not": []
+  },
+  "battery_temperature": {
+   "suggest": [
+    "^sensor\\.solis_battery_temperature$"
+   ],
+   "suggest_not": []
+  },
+  "ev_charge_mode": {
+   "suggest": [
+    "^select\\.myenergi_zappi_.*_charge_mode$"
+   ],
+   "suggest_not": []
+  },
+  "ev_charge_power": {
+   "suggest": [
+    "^sensor\\.myenergi_.*_power_charging$"
+   ],
+   "suggest_not": []
+  },
+  "ev_charger_status": {
+   "suggest": [
+    "^sensor\\.myenergi_zappi_[0-9]+_status$"
+   ],
+   "suggest_not": []
+  },
+  "ev_energy_today": {
+   "suggest": [
+    "^sensor\\.myenergi_zappi_.*_energy_used_today$"
+   ],
+   "suggest_not": []
+  },
+  "ev_plug_status": {
+   "suggest": [
+    "^sensor\\.myenergi_zappi_.*_plug_status$"
+   ],
+   "suggest_not": []
+  },
+  "ev_session_energy": {
+   "suggest": [
+    "^sensor\\.myenergi_zappi_.*_charge_added_session$"
+   ],
+   "suggest_not": []
+  },
+  "export_rate": {
+   "suggest": [
+    "^sensor\\.edf_energy_electricity_.*_export_current_rate$"
+   ],
+   "suggest_not": []
+  },
+  "free_power_active": {
+   "suggest": [
+    "^binary_sensor\\.edf_energy_.*_free_electricity_now$"
+   ],
+   "suggest_not": []
+  },
+  "free_power_events": {
+   "suggest": [
+    "^event\\.edf_energy_.*_session_events$"
+   ],
+   "suggest_not": []
+  },
+  "free_power_next_end": {
+   "suggest": [
+    "^sensor\\.edf_energy_.*_next_free_electricity_session_end$"
+   ],
+   "suggest_not": []
+  },
+  "free_power_next_start": {
+   "suggest": [
+    "^sensor\\.edf_energy_.*_next_free_electricity_session_start$"
+   ],
+   "suggest_not": []
+  },
+  "grid_export_today": {
+   "suggest": [
+    "^sensor\\.solis_grid_export_today$"
+   ],
+   "suggest_not": []
+  },
+  "grid_export_today_check": {
+   "suggest": [
+    "^sensor\\.myenergi_.*_grid_export_today$"
+   ],
+   "suggest_not": []
+  },
+  "grid_import_today": {
+   "suggest": [
+    "^sensor\\.solis_grid_import_today$"
+   ],
+   "suggest_not": []
+  },
+  "grid_import_today_check": {
+   "suggest": [
+    "^sensor\\.myenergi_.*_grid_import_today$"
+   ],
+   "suggest_not": []
+  },
+  "grid_power": {
+   "suggest": [
+    "^sensor\\.solis_meter_active_power$"
+   ],
+   "suggest_not": []
+  },
+  "grid_power_reference": {
+   "suggest": [
+    "^sensor\\.myenergi_.*_power_grid$"
+   ],
+   "suggest_not": []
+  },
+  "house_load_power": {
+   "suggest": [
+    "^sensor\\.solis_house_load$"
+   ],
+   "suggest_not": []
+  },
+  "house_load_today": {
+   "suggest": [
+    "^sensor\\.solis_house_load_today$"
+   ],
+   "suggest_not": []
+  },
+  "import_rate_now": {
+   "suggest": [
+    "^sensor\\.edf_energy_electricity_.*_current_rate$"
+   ],
+   "suggest_not": [
+    "export"
+   ]
+  },
+  "import_rates_today": {
+   "suggest": [
+    "^event\\.edf_energy_electricity_.*_current_day_rates$"
+   ],
+   "suggest_not": [
+    "export"
+   ]
+  },
+  "import_rates_tomorrow": {
+   "suggest": [
+    "^event\\.edf_energy_electricity_.*_next_day_rates$"
+   ],
+   "suggest_not": [
+    "export"
+   ]
+  },
+  "inverter_clock": {
+   "suggest": [
+    "^sensor\\.solis_rtc$"
+   ],
+   "suggest_not": []
+  },
+  "inverter_clock_sync": {
+   "suggest": [
+    "^button\\.solis_sync_rtc$"
+   ],
+   "suggest_not": []
+  },
+  "inverter_export_limit": {
+   "suggest": [
+    "^number\\.solis_backflow_power$"
+   ],
+   "suggest_not": []
+  },
+  "inverter_min_soc": {
+   "suggest": [
+    "^number\\.solis_battery_minimum_soc$"
+   ],
+   "suggest_not": []
+  },
+  "offpeak_now": {
+   "suggest": [
+    "^binary_sensor\\.edf_energy_electricity_.*_off_peak$"
+   ],
+   "suggest_not": [
+    "export"
+   ]
+  },
+  "smart_dispatches": {
+   "suggest": [
+    "^binary_sensor\\.edf_energy_.*_intelligent_dispatching$"
+   ],
+   "suggest_not": []
+  },
+  "smart_state": {
+   "suggest": [
+    "^sensor\\.edf_energy_.*_intelligent_state$"
+   ],
+   "suggest_not": []
+  },
+  "smart_target_soc": {
+   "suggest": [
+    "^number\\.edf_energy_.*_intelligent_charge_target$"
+   ],
+   "suggest_not": []
+  },
+  "smart_target_time": {
+   "suggest": [
+    "^select\\.edf_energy_.*_intelligent_target_time$"
+   ],
+   "suggest_not": []
+  },
+  "solar_forecast_day3": {
+   "suggest": [
+    "^sensor\\.solcast_pv_forecast_forecast_day_3$"
+   ],
+   "suggest_not": []
+  },
+  "solar_forecast_today": {
+   "suggest": [
+    "^sensor\\.solcast_pv_forecast_forecast_today$"
+   ],
+   "suggest_not": []
+  },
+  "solar_forecast_tomorrow": {
+   "suggest": [
+    "^sensor\\.solcast_pv_forecast_forecast_tomorrow$"
+   ],
+   "suggest_not": []
+  },
+  "standing_charge": {
+   "suggest": [
+    "^sensor\\.edf_energy_electricity_.*_current_standing_charge$"
+   ],
+   "suggest_not": [
+    "export"
+   ]
+  },
+  "storage_mode": {
+   "suggest": [
+    "^select\\.solis_energy_storage_control_switch$"
+   ],
+   "suggest_not": []
+  },
+  "timed_charge_current": {
+   "suggest": [
+    "^number\\.solis_timed_charge_current$"
+   ],
+   "suggest_not": []
+  },
+  "timed_charge_end_hour": {
+   "suggest": [
+    "^number\\.solis_timed_charge_end_hours$"
+   ],
+   "suggest_not": []
+  },
+  "timed_charge_end_minute": {
+   "suggest": [
+    "^number\\.solis_timed_charge_end_minutes$"
+   ],
+   "suggest_not": []
+  },
+  "timed_charge_start_hour": {
+   "suggest": [
+    "^number\\.solis_timed_charge_start_hours$"
+   ],
+   "suggest_not": []
+  },
+  "timed_charge_start_minute": {
+   "suggest": [
+    "^number\\.solis_timed_charge_start_minutes$"
+   ],
+   "suggest_not": []
+  },
+  "timed_discharge_current": {
+   "suggest": [
+    "^number\\.solis_timed_discharge_current$"
+   ],
+   "suggest_not": []
+  },
+  "timed_discharge_end_hour": {
+   "suggest": [
+    "^number\\.solis_timed_discharge_end_hours$"
+   ],
+   "suggest_not": []
+  },
+  "timed_discharge_end_minute": {
+   "suggest": [
+    "^number\\.solis_timed_discharge_end_minutes$"
+   ],
+   "suggest_not": []
+  },
+  "timed_discharge_start_hour": {
+   "suggest": [
+    "^number\\.solis_timed_discharge_start_hours$"
+   ],
+   "suggest_not": []
+  },
+  "timed_discharge_start_minute": {
+   "suggest": [
+    "^number\\.solis_timed_discharge_start_minutes$"
+   ],
+   "suggest_not": []
+  },
+  "timed_update_button": {
+   "suggest": [
+    "^button\\.solis_update_charge_discharge_times$"
+   ],
+   "suggest_not": []
+  }
+ }
+}

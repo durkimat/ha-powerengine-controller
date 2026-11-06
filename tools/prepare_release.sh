@@ -39,8 +39,7 @@ clean_tree "$ROOT" || die "the working tree has uncommitted changes: commit them
 git fetch -q origin main
 behind="$(git rev-list --count HEAD..origin/main)"
 [ "$behind" = 0 ] || die "the branch is $behind commit(s) behind main: merge origin/main first, then run this again"
-# (transitional, 0.9.221: main still has the engine at apps/powerengine until this change is merged)
-main_now="$( { git show origin/main:engine/pe_core/__init__.py 2>/dev/null || git show origin/main:apps/powerengine/pe_core/__init__.py; } | sed -n 's/^__version__ *= *"\([^"]*\)".*/\1/p')"
+main_now="$(git show origin/main:engine/pe_core/__init__.py | sed -n 's/^__version__ *= *"\([^"]*\)".*/\1/p')"
 newer_than "$VERSION" "$main_now" || die "version $VERSION is not newer than main's $main_now"
 [ "$(current_version app engine/pe_core/__init__.py)" = "$main_now" ] || die "the branch already changed __version__: nothing to prepare, or a half-done run"
 

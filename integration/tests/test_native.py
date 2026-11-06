@@ -21,7 +21,7 @@ async def test_the_real_engines_entities_are_in_the_registry_with_the_ids_they_a
     registry = er.async_get(hass)
     mine = [e for e in registry.entities.values()
             if e.platform == DOMAIN and e.entity_id.split(".")[1].startswith("pe_")]
-    assert len(mine) == 83
+    assert len(mine) == 84
     version = registry.async_get("sensor.pe_diag_version")
     assert version.unique_id == "powerengine_diag_version" and version.entity_category.value == "diagnostic"
     assert registry.async_get("switch.pe_ctl_pause").unique_id == "powerengine_ctl_pause"

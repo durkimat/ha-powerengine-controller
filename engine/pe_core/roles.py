@@ -1,14 +1,16 @@
 """The catalogue of inputs ("roles") PowerEngine reads, and the outputs it may control.
 
 Single source of truth: the config card reads this catalogue from the app, so
-descriptions, units, sign conventions and suggestions live here only.
+descriptions, units and sign conventions live here only. The entity suggestions are data (the inverter's definition and
+`adapters/integrations/*.yaml`), merged in by `roles_for`: this module names no integration and no entity.
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
 
-from .adapters.definition import role_suggestions
+from .adapters.definition import plant_suggestions, role_suggestions
+from .adapters.integration_data import role_suggestions as integration_suggestions
 from .names import fill
 
 # kind -> what the value is; drives unit checks and how the card shows it
@@ -72,7 +74,6 @@ GROUPS = (
 )
 
 _GUARD = ("switch", "input_boolean", "automation", "binary_sensor")
-_E = r"^sensor\.edf_energy_electricity_"
 
 _BASE_ROLES: tuple[Role, ...] = (
     # --- battery ---
@@ -114,85 +115,77 @@ _BASE_ROLES: tuple[Role, ...] = (
     Role("grid_power", "grid", "Grid power", "Live import/export at the meter.",
          "power", signed=True, sign_note="+ importing, - exporting"),
     Role("grid_power_reference", "grid", "Check meter", "A second grid meter (e.g. <<ev_charger>> CT).", "power",
-         required="no", signed=True, sign_note="+ in, - out", suggest=(r"^sensor\.myenergi_.*_power_grid$",)),
+         required="no", signed=True, sign_note="+ in, - out"),
     Role("grid_import_today", "grid", "Grid import today", "Energy imported today, for costs and losses.",
          "energy"),
     Role("grid_export_today", "grid", "Grid export today", "Energy exported today, for costs and losses.",
          "energy"),
     Role("grid_import_today_check", "grid", "Check meter import today", "Preferred over the inverter's figure.",
-         "energy", required="no", suggest=(r"^sensor\.myenergi_.*_grid_import_today$",)),
+         "energy", required="no"),
     Role("grid_export_today_check", "grid", "Check meter export today", "Preferred over the inverter's figure.",
-         "energy", required="no", suggest=(r"^sensor\.myenergi_.*_grid_export_today$",)),
+         "energy", required="no"),
     Role("house_load_power", "grid", "House load", "Household consumption (car subtracted if in it).",
          "power"),
     Role("house_load_today", "grid", "House load today", "Household energy used today, for costs.",
          "energy"),
     # --- solar forecast ---
     Role("solar_forecast_today", "solar", "Solar forecast today", "Half-hourly solar forecast for today.",
-         "list", attribute="detailedForecast", suggest=(r"^sensor\.solcast_pv_forecast_forecast_today$",)),
+         "list", attribute="detailedForecast"),
     Role("solar_forecast_tomorrow", "solar", "Solar forecast tomorrow", "Half-hourly solar forecast for tomorrow.",
-         "list", attribute="detailedForecast", suggest=(r"^sensor\.solcast_pv_forecast_forecast_tomorrow$",)),
+         "list", attribute="detailedForecast"),
     Role("solar_forecast_day3", "solar", "Solar forecast day 3", "Extends planning beyond tomorrow.",
-         "list", required="no", attribute="detailedForecast", suggest=(r"^sensor\.solcast_pv_forecast_forecast_day_3$",)),
+         "list", required="no", attribute="detailedForecast"),
     # --- tariff ---
     Role("import_rate_now", "tariff", "Import rate now", "The rate you're paying right now.",
-         "rate", suggest=(_E + r".*_current_rate$",), suggest_not=(r"export",)),
+         "rate"),
     Role("import_rates_today", "tariff", "Import rates today", "Today's half-hourly import rates (slots included).",
-         "list", domains=("event", "sensor"), attribute="rates",
-         suggest=(r"^event\.edf_energy_electricity_.*_current_day_rates$",), suggest_not=(r"export",)),
+         "list", domains=("event", "sensor"), attribute="rates"),
     Role("import_rates_tomorrow", "tariff", "Import rates tomorrow", "Tomorrow's half-hourly import rates.",
-         "list", domains=("event", "sensor"), attribute="rates",
-         suggest=(r"^event\.edf_energy_electricity_.*_next_day_rates$",), suggest_not=(r"export",)),
+         "list", domains=("event", "sensor"), attribute="rates"),
     Role("export_rate", "tariff", "Export rate", "What you're paid per kWh exported.",
-         "rate", static_ok=True, static_unit="GBP/kWh", suggest=(_E + r".*_export_current_rate$",)),
+         "rate", static_ok=True, static_unit="GBP/kWh"),
     Role("standing_charge", "tariff", "Standing charge", "Daily fixed charge, for costs.",
-         "money", static_ok=True, static_unit="GBP/day",
-         suggest=(_E + r".*_current_standing_charge$",), suggest_not=(r"export",)),
+         "money", static_ok=True, static_unit="GBP/day"),
     Role("offpeak_now", "tariff", "Off-peak now", "On in the normal off-peak window.",
-         "binary", domains=("binary_sensor",),
-         suggest=(r"^binary_sensor\.edf_energy_electricity_.*_off_peak$",), suggest_not=(r"export",)),
+         "binary", domains=("binary_sensor",)),
     # --- EV ---
     Role("ev_plug_status", "ev", "Car plug status", "'Charging' while the car draws power.",
-         "text", suggest=(r"^sensor\.myenergi_zappi_.*_plug_status$",)),
+         "text"),
     Role("ev_charger_status", "ev", "Charger status", "What the charger is doing.",
-         "text", suggest=(r"^sensor\.myenergi_zappi_[0-9]+_status$",)),
+         "text"),
     Role("ev_charge_power", "ev", "Car charging power", "Live charging power, to split car from house.",
-         "power", suggest=(r"^sensor\.myenergi_.*_power_charging$",)),
+         "power"),
     Role("ev_energy_today", "ev", "Car energy today", "Energy into the car today.",
-         "energy", suggest=(r"^sensor\.myenergi_zappi_.*_energy_used_today$",)),
+         "energy"),
     Role("ev_charge_mode", "ev", "Charger mode", "Charger mode (e.g. Eco+).",
-         "text", required="no", domains=("select", "sensor"), suggest=(r"^select\.myenergi_zappi_.*_charge_mode$",)),
+         "text", required="no", domains=("select", "sensor")),
     Role("ev_session_energy", "ev", "Charge this session", "Energy added this session.",
-         "energy", required="no", suggest=(r"^sensor\.myenergi_zappi_.*_charge_added_session$",)),
+         "energy", required="no"),
     # --- EDF smart charge ---
     Role("smart_dispatches", "smart", "Smart-charge dispatches", "Planned and completed smart-charge slots.",
-         "list", domains=("binary_sensor",), attribute="planned_dispatches",
-         suggest=(r"^binary_sensor\.edf_energy_.*_intelligent_dispatching$",)),
+         "list", domains=("binary_sensor",), attribute="planned_dispatches"),
     Role("smart_state", "smart", "Smart-charge state", "<<supplier>>'s smart-charging state.",
-         "text", required="no", suggest=(r"^sensor\.edf_energy_.*_intelligent_state$",)),
+         "text", required="no"),
     # --- grid events (run by <<event>>) ---
     Role("axle_event_active", "axle", "Grid event active", "On during a grid event run by <<event>>.",
-         "binary", required="axle", domains=("sensor", "binary_sensor"),
-         suggest=(r"^sensor\.axle_vpp_axle_event_in_progress$",)),
+         "binary", required="axle", domains=("sensor", "binary_sensor")),
     Role("axle_event_start", "axle", "Grid event start", "Start of the next grid event.",
-         "timestamp", required="axle", suggest=(r"^sensor\.axle_vpp_axle_start_time_friendly$",)),
+         "timestamp", required="axle"),
     Role("axle_event_end", "axle", "Grid event end", "End of the next grid event.",
-         "timestamp", required="axle", suggest=(r"^sensor\.axle_vpp_axle_end_time_friendly$",)),
+         "timestamp", required="axle"),
     Role("axle_direction", "axle", "Grid event direction", "Import or export (only export is acted on).",
-         "text", required="no", unknown_ok=True, suggest=(r"^sensor\.axle_vpp_axle_import_export$",)),
+         "text", required="no", unknown_ok=True),
     Role("heating_setback", "axle", "Heating set-back", "Switch that turns the heating down.",
          "control", required="no", domains=("switch", "input_boolean")),
     # --- free power ---
     Role("free_power_active", "free", "Free power now", "On during a free-electricity session.",
-         "binary", required="free_power", domains=("binary_sensor",),
-         suggest=(r"^binary_sensor\.edf_energy_.*_free_electricity_now$",)),
+         "binary", required="free_power", domains=("binary_sensor",)),
     Role("free_power_next_start", "free", "Next free session start", "Start of the next free session.",
-         "timestamp", required="free_power", suggest=(r"^sensor\.edf_energy_.*_next_free_electricity_session_start$",)),
+         "timestamp", required="free_power"),
     Role("free_power_next_end", "free", "Next free session end", "End of the next free session.",
-         "timestamp", required="free_power", suggest=(r"^sensor\.edf_energy_.*_next_free_electricity_session_end$",)),
+         "timestamp", required="free_power"),
     Role("free_power_events", "free", "All free sessions", "Every session, to see a whole night.",
-         "list", required="no", domains=("event", "sensor"), attribute="events", unknown_ok=True,
-         suggest=(r"^event\.edf_energy_.*_session_events$",)),
+         "list", required="no", domains=("event", "sensor"), attribute="events", unknown_ok=True),
     # --- control outputs (never written in Passive mode) ---
     # Solis timed charge/discharge slots (pre-FB00 firmware: values apply when the update button is pressed)
     Role("timed_charge_start_hour", "controls", "Charge window start (hour)", "Timed charge window start hour.",
@@ -224,11 +217,9 @@ _BASE_ROLES: tuple[Role, ...] = (
     Role("inverter_export_limit", "controls", "Inverter export limit (entity)", "Export (backflow) power limit.",
          "control", required="no", domains=("number",)),
     Role("smart_target_soc", "controls", "Smart-charge target", "Car charge target sent to <<supplier>>.",
-         "control", required="no", domains=("number",),
-         suggest=(r"^number\.edf_energy_.*_intelligent_charge_target$",)),
+         "control", required="no", domains=("number",)),
     Role("smart_target_time", "controls", "Smart-charge ready-by time", "Ready-by time sent to <<supplier>>.",
-         "control", required="no", domains=("select", "time"),
-         suggest=(r"^select\.edf_energy_.*_intelligent_target_time$",)),
+         "control", required="no", domains=("select", "time")),
     # --- handover guards: Active is refused unless every mapped guard is in its safe state ---
     Role("guard_read_only", "handover", "Other controller read-only", "Must be on (e.g. a read-only switch).",
          "binary", required="no", domains=_GUARD),
@@ -242,18 +233,23 @@ DEFAULT_INVERTER = "solis"
 
 
 def roles_for(inverter: str = DEFAULT_INVERTER, firmware: str | None = None) -> tuple[Role, ...]:
-    """The catalogue with the entity suggestions that the inverter's definition file adds (its `roles:` section:
-    brand-specific `suggest` / `suggest_not` regexes). Suggestions that belong to no brand (the tariff, the car
-    charger, the forecast) stay on the roles above."""
-    extra = role_suggestions(inverter, firmware)
-    unknown = sorted(set(extra) - {r.key for r in _BASE_ROLES})
-    if unknown:
-        raise ValueError(f"the {inverter} definition suggests entities for unknown role(s): {', '.join(unknown)}")
+    """The catalogue with the entity suggestions that come from data: the other integrations' files
+    (`adapters/integrations/*.yaml`: the tariff, the car charger, the forecast, grid events) and the inverter's
+    definition file (its `roles:` section). Brand-specific `suggest` / `suggest_not` regexes are never in this module."""
+    known = {r.key for r in _BASE_ROLES}
+    sources = (("the integration files", integration_suggestions()), (f"the {inverter} definition",
+                                                                     role_suggestions(inverter, firmware)))
+    for label, extra in sources:
+        unknown = sorted(set(extra) - known)
+        if unknown:
+            raise ValueError(f"{label} suggest entities for unknown role(s): {', '.join(unknown)}")
     out = []
     for role in _BASE_ROLES:
-        add = extra.get(role.key)
-        if add:
-            role = replace(role, suggest=role.suggest + add["suggest"], suggest_not=role.suggest_not + add["suggest_not"])
+        for _label, extra in sources:
+            add = extra.get(role.key)
+            if add:
+                role = replace(role, suggest=role.suggest + add["suggest"],
+                               suggest_not=role.suggest_not + add["suggest_not"])
         out.append(role)
     return tuple(out)
 
@@ -275,4 +271,4 @@ def is_forbidden_control(entity_id: str) -> bool:
 def catalogue() -> dict:
     """Compact, JSON-safe catalogue for the config card (published as sensor attributes: HA's recorder skips any
     over 16 KiB, so role groups are left out; the card places roles by its own topics)."""
-    return {"roles": [r.as_dict() for r in ROLES]}
+    return {"roles": [r.as_dict() for r in ROLES], "plant_suggest": plant_suggestions(DEFAULT_INVERTER)}

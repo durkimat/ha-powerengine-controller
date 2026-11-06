@@ -803,7 +803,15 @@
      "binary_sensor"
     ]
    }
-  ]
+  ],
+  "plant_suggest": {
+   "power": [
+    "^sensor\\.solis_pv_total_power$"
+   ],
+   "energy_today": [
+    "^sensor\\.solis_power_generation_today$"
+   ]
+  }
  },
  "suggest": {
   "battery_soc": [

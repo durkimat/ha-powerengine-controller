@@ -16,8 +16,9 @@ released with it: `tools/build_integration.py` copies it, with its `CARD_VERSION
 
 - A new setting in `pe_core/config.py` (`SAFETY`, `SETTING_SECTIONS`) needs adding to the card's section lists in
   `ha-powerengine-card.js` (search for a neighbouring key, e.g. `ram_max_power_w`), or it never shows on the config page.
-- A new adapter (tariff, charger, forecast, events) or inverter definition needs a detect entry for the Your system card (once the setup wizard)
-  (`pe_core/adapters/detect.py`, or the definition's `detect:`); see Phase 1 below.
+- A new adapter (tariff, charger, forecast, events) needs a file in `engine/pe_core/adapters/integrations/` (its detect entry and its
+  entity suggestions: `docs/INVERTERS.md`, "Other integrations"); an inverter definition needs a detect entry for the Your system card (once the setup wizard)
+  (the definition's `detect:`); see Phase 1 below.
 - `MIN_APP_VERSION` (card) and `MIN_CARD_VERSION` (app, `pe_core/version.py`): raise one in the PR that makes the other
   side need something new, and release both (see Releases).
 - A changed state text or attribute on a published sensor (`pe_core/status.py`) can break the card or the dashboard

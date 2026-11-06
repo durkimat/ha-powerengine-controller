@@ -1,0 +1,17 @@
+# The Octopus Energy integration serves the Octopus tariff (and EDF's, which is why both suppliers name it).
+#
+# Data about how PowerEngine recognises this integration's entities in Home Assistant, used only to pre-fill the Config
+# page and the wizard. Nothing here is read by the control code: it never changes what PowerEngine does, only what is
+# suggested. `part` is the site key this answers to; `detect` is what the wizard looks for (`domains` are Home Assistant
+# integration domains, the rest are regular expressions, case-insensitive for manufacturers and models); `roles` gives,
+# for a PowerEngine input, the entity-id patterns to suggest (`suggest`) and to refuse (`suggest_not`).
+# See docs/INVERTERS.md ("Other integrations").
+part: tariff
+name: octopus
+detect:
+  integration: {name: 'Octopus Energy', url: 'https://github.com/BottlecapDave/HomeAssistant-OctopusEnergy'}
+  domains: ['octopus_energy']
+  manufacturers: ['octopus']
+  models: []
+  entities: ['^sensor\.octopus_energy_electricity_']
+roles: {}

@@ -21,12 +21,16 @@ def test_sync_writes_once(tmp_path):
     assert sync_dashboard(str(target)) is True
 
 
-def test_the_yaml_the_engine_ships_is_the_dashboard_and_the_inverter_definitions():
-    """No stray YAML in the engine's folder: the dashboard, and the definitions in one folder."""
+def test_the_yaml_the_engine_ships_is_the_dashboard_and_the_data_files():
+    """No stray YAML in the engine's folder: the dashboard, the inverter definitions and the integration files."""
     import pathlib
     app = pathlib.Path(__file__).resolve().parents[1] / "engine"
     yamls = sorted(p.relative_to(app).as_posix() for p in app.rglob("*.y*ml"))
-    assert yamls == ["dashboard/dashboard.yaml", "pe_core/adapters/devices/solis.yaml"], yamls
+    data_dirs = ("pe_core/adapters/devices/", "pe_core/adapters/integrations/")
+    assert [y for y in yamls if not y.startswith(data_dirs)] == ["dashboard/dashboard.yaml"], yamls
+    assert [y for y in yamls if y.startswith("pe_core/adapters/devices/")] == ["pe_core/adapters/devices/solis.yaml"]
+    assert {y.split("/")[-1] for y in yamls if y.startswith("pe_core/adapters/integrations/")} == {
+        "axle.yaml", "edf.yaml", "octopus.yaml", "solcast.yaml", "zappi.yaml"}
 
 
 def test_dashboard_templates_parse():
