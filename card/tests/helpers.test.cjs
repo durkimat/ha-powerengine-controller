@@ -1006,9 +1006,9 @@ test("the BMS charge and discharge limits are with the battery, not Other", () =
   assert.equal(plan.find((t) => t.key === "other"), undefined);
 });
 
-test("dampening is part of Inverter control, the simulator and engine comparison share one topic, publisher is not in Other", () => {
+test("dampening is part of Inverter control, the simulator and engine comparison share one topic, nothing is left in Other", () => {
   const plan = h.topicPlan([], ["damp_restart_min", "damp_burst_window_min", "damp_burst_settle_min"],
-    ["damp_restart", "damp_bursts", "tariff_simulator", "engine_compare"], ["publisher"]);
+    ["damp_restart", "damp_bursts", "tariff_simulator", "engine_compare"], []);
   const control = plan.find((t) => t.key === "control");
   assert.deepEqual(control.damp.features, ["damp_restart", "damp_bursts"]);
   assert.deepEqual(control.damp.settings, ["damp_restart_min", "damp_burst_window_min", "damp_burst_settle_min"]);

@@ -387,3 +387,14 @@ def test_the_measured_capacity_and_rates_stand_in_for_the_typed_ones_unless_use_
     inputs = yaml.safe_load(settings.replay_config(owner, template, "v2", got))["inputs"]
     assert inputs["battery_capacity"]["value"] == 16.81 and inputs["battery_max_charge_power"]["value"] == 4800
     assert inputs["battery_max_discharge_power"]["value"] == 5200                 # the owner switched measuring off
+
+
+def test_settings_the_app_has_since_removed_in_an_archived_config_do_not_reach_the_replay():
+    """Old archived configs hold `publisher` and `remove_entities`; the app refuses them now: the replay drops them."""
+    import yaml
+
+    from pe_core.compare.settings import replay_config
+    owner = {"system": {"publisher": "auto", "other_controller": "none"}, "remove_entities": False, "inputs": {}}
+    out = yaml.safe_load(replay_config(owner, {"inputs": {}}, "v2"))
+    assert "publisher" not in out["system"] and "remove_entities" not in out
+    assert out["system"]["other_controller"] == "none"

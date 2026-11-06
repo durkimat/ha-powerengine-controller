@@ -6,7 +6,7 @@ in use, and when each smart slot was first seen. This module keeps them as a day
 
     <costs dir>/snapshots/YYYY-MM-DD.json
     {"version": 1, "day": "2026-10-07", "tz": "Europe/London",
-     "roles": {"import_rates_today": "event.edf_..._current_day_rates", ...},
+     "roles": {"import_rates_today": "event.<supplier>_..._current_day_rates", ...},
      "entries": [{"at": "2026-10-07T00:00:12+01:00",
                   "states": {"<entity id>": {"state": "...", "attributes": {...}}},
                   "profile": {"days": 14.0, "watts": {"0|0": 412.0, ...}},      # key "<weekend 0|1>|<half-hour 0-47>"

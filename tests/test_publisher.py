@@ -129,9 +129,7 @@ def test_the_publisher_is_native_where_the_host_makes_entities_else_plain_states
     assert select_publisher(None) is None and select_publisher(None, native=FakeNative()) is None
 
 
-def test_the_retired_publisher_setting_is_accepted_in_a_saved_config_and_ignored():
-    for value in ("auto", "mqtt", "direct", "carrier-pigeon"):
-        assert "publisher" not in parse_config({"system": {"publisher": value}}).system
+def test_there_is_no_publisher_setting_any_more():
     assert "publisher" not in parse_config({}).system
     assert not [s for s in settings_catalogue()["system"] if s["key"] == "publisher"]
     with pytest.raises(ConfigError):

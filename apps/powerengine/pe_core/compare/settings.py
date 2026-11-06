@@ -18,8 +18,10 @@ import yaml
 FEATURES_OFF = ("smart_charge_optimisation", "tariff_simulator", "cold_caution", "cold_learning", "engine_compare")
 # top-level sections the replay takes from the template, not from the owner's config
 FROM_TEMPLATE = ("solar_plants", "notifications")
-# sections of the owner's config that name real equipment and are left out
+# sections of the owner's config that name real equipment and are left out, and settings an older archived config
+# may still hold that the app has since removed (the app refuses them now, so a replay must not carry them)
 DROPPED = ("site", "devices", "remove_entities")
+REMOVED_SYSTEM_SETTINGS = ("publisher",)
 
 
 def replay_config(owner: dict | None, template: dict, engine: str, measured: dict | None = None) -> str:
@@ -48,6 +50,7 @@ def replay_config(owner: dict | None, template: dict, engine: str, measured: dic
             cfg[key] = tmpl[key]
     for key in DROPPED:
         cfg.pop(key, None)
+    cfg["system"] = {k: v for k, v in (cfg.get("system") or {}).items() if k not in REMOVED_SYSTEM_SETTINGS}
     features = dict(cfg.get("features") or {})
     for key in FEATURES_OFF:
         features[key] = False

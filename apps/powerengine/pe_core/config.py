@@ -54,7 +54,6 @@ KNOWN_KEYS = frozenset(
         "v2_profile",
         "v2_profiles",
         "v2_split",
-        "remove_entities",           # retired (an old uninstall switch): accepted and ignored
     }
 )
 
@@ -121,9 +120,6 @@ SAFETY = {
 SYSTEM_DEFAULTS = {"house_load_includes_ev": True, "battery_location": "garage", "control_method": "timed_windows",
                    "overnight_window": "learned", "engine": "v1",
                    "other_controller": ""}      # "" = not chosen: derived from the mapped guards (other_controller())
-# system settings that were removed: still accepted in a saved config, and ignored. `publisher` (auto / mqtt / direct)
-# chose how entities reached Home Assistant; the integration's own entities are the only way now.
-RETIRED_SYSTEM_SETTINGS = ("publisher",)
 # system settings chosen from a list: key -> (config-page section, ((value, label), ...))
 SYSTEM_CHOICES = {
     "battery_location": ("cold", (("garage", "Garage or outbuilding (follows outside over about 24 h)"),
@@ -828,8 +824,6 @@ def parse_config(data: Any) -> Config:
     if not isinstance(raw_system, dict):
         raise ConfigError("'system' must be a mapping")
     for key, value in raw_system.items():
-        if key in RETIRED_SYSTEM_SETTINGS:
-            continue                              # a setting that no longer exists: accepted and ignored
         if key not in SYSTEM_DEFAULTS:
             raise ConfigError(f"unknown system setting '{key}'")
         if key in SYSTEM_CHOICES:

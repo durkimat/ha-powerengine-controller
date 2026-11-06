@@ -2,7 +2,7 @@
 
 The boiler's circulation pump draws a few hundred watts while the heating calls for heat and for a while after (its
 overrun), and every unit the house doesn't use during a grid event is exported at the event rate. So a switch the
-owner chooses (a Home Assistant input_boolean or switch that sets the heating back, e.g. `input_boolean.heating_off`)
+owner chooses (a Home Assistant input_boolean or switch that your heating automation watches to set the heating back)
 is turned on `lead` minutes before the event starts, the pump overrun, so the pump has stopped by the time the event
 begins, and turned off when the event ends. What "set back" means is the switch's business, not PowerEngine's.
 
