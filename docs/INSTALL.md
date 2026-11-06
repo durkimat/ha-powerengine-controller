@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.9.222 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.9.223 (beta; Passive by default, Active available)
 
 ---
 
@@ -70,7 +70,7 @@ controls is a separate process it starts and watches. PowerEngine's entities are
 **Check the log** (*Settings → System → Logs*, search for `powerengine`). Before any configuration it says:
 
 ```
-PowerEngine 0.9.222 starting
+PowerEngine 0.9.223 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 ```
@@ -86,11 +86,8 @@ PowerEngine ships its own dashboard and keeps it up to date: the integration add
 (address `/powerengine-dash`) and the engine writes the dashboard it shows to `/homeassistant/powerengine/dashboard.yaml`
 on every start. There is nothing to register.
 
-1. **Install two dashboard cards from HACS** (search each, then Download):
-   - **Sunsynk Power Flow Card** (by slipx06): the energy flow picture (Monitoring tab)
-   - **ApexCharts Card**: the plan chart (Plan tab) and the daily cost chart (Costs tab)
-
-   Reload the browser afterwards.
+1. **Install the Sunsynk Power Flow Card from HACS** (by slipx06; search it, then Download): the energy flow picture on the
+   Monitoring tab. Reload the browser afterwards. (PowerEngine's own charts are part of its card: nothing else is needed.)
 
 If an earlier version of this guide had you add a `powerengine-dash:` block under `lovelace: dashboards:` in
 `configuration.yaml`, it keeps working (an entry you made yourself is never replaced), but it is no longer needed:
@@ -405,7 +402,7 @@ the same for the card if you need to.
 | `Unknown command: ha` | Commands run on your own computer | Use HA's terminal add-on |
 | `Config problem: ...` in the log | `config.yaml` has an error | The message names the problem; fix or restore the backup |
 | Dashboard missing from the sidebar | The PowerEngine integration is not loaded (Settings → Devices & services), or in *shadow* mode (no dashboard) | Step 1; the integration's status |
-| Energy flow or plan chart says *Custom element doesn't exist* | Sunsynk Power Flow Card or ApexCharts Card not installed | Step 2.1, then reload the browser |
+| The energy flow says *Custom element doesn't exist* | Sunsynk Power Flow Card not installed | Step 2.1, then reload the browser |
 | Plan says *house load learned from 0 days* | No history for the house-load input yet (new install, or recorder excludes it) | Wait a day; check the recorder keeps the house-load entity |
 | PowerEngine missing from HACS (repos disappeared) but still running | HACS lost its record of the custom repositories | Re-add both under *HACS → ⋮ → Custom repositories* (PowerEngine as **Integration**) and download the latest version; settings and dashboard are unaffected |
 | Dashboard values are *unknown* | Inputs not configured, or mode *unconfigured* | Step 3 |

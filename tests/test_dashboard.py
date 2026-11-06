@@ -1,3 +1,6 @@
+import pathlib
+import re
+
 import yaml
 
 from pe_core.dashboard import SOURCE, sync_dashboard
@@ -48,33 +51,26 @@ def test_dashboard_templates_parse():
     assert count >= 5
 
 
-def test_charts_have_a_phone_version():
-    """Every chart is shown twice: desktop (>= 600 px) and a phone version with one visible axis."""
+def test_the_charts_are_the_cards_own_and_the_dashboard_needs_no_other_chart_card():
+    """Each chart is one `powerengine-chart-card` (it adapts to a phone itself), of a kind the card knows."""
     d = yaml.safe_load(open(SOURCE))
-    pairs = []
+    found = []
 
     def walk(x):
         if isinstance(x, dict):
-            if x.get("type") == "custom:apexcharts-card":
-                raise AssertionError("chart outside a screen-size conditional")
-            if x.get("type") == "conditional" and x["card"].get("type") == "custom:apexcharts-card":
-                pairs.append((x["conditions"][0]["media_query"], x["card"]))
-                return
+            assert "apexcharts" not in str(x.get("type", "")), "the dashboard needs no chart card from another install"
+            if x.get("type") == "custom:powerengine-chart-card":
+                found.append(x["chart"])
             for v in x.values():
                 walk(v)
         elif isinstance(x, list):
             for v in x:
                 walk(v)
     walk(d)
-    desk = [c for q, c in pairs if "min-width" in q]
-    phone = [c for q, c in pairs if "max-width" in q]
-    assert len(desk) == len(phone) == 4
-    for a, b in zip(desk, phone, strict=True):
-        assert a["series"] == b["series"]
-        assert sum(y.get("show", True) for y in b["yaxis"]) == 1
-        assert all("title" not in (y.get("apex_config") or {}) for y in b["yaxis"])
-        assert b["apex_config"]["legend"]["position"] == "top"
-    assert (desk[0]["graph_span"], phone[0]["graph_span"]) == ("36h", "18h")
+    card = (pathlib.Path(SOURCE).resolve().parents[2] / "card" / "ha-powerengine-card.js").read_text()
+    known = set(re.findall(r"^  (\w+): \{\n    sensor: ", card, re.M))
+    assert sorted(found) == ["history", "load_solar", "losses", "plan"]
+    assert set(found) <= known, (found, known)
 
 
 def test_every_page_says_what_it_is():
