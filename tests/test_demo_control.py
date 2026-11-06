@@ -34,32 +34,32 @@ def load_app(monkeypatch):
             self.live[h] = (kind, cb.__name__, key)
             return h
 
-        def run_in(self, cb, delay, **kw):
-            h = super().run_in(cb, delay, **kw)
+        def call_later(self, cb, delay, **kw):
+            h = super().call_later(cb, delay, **kw)
             self.live[h] = ("timer", cb.__name__, "in")
             return h
 
-        def run_every(self, cb, *a, **k):
+        def call_every(self, cb, *a, **k):
             return self._add("timer", cb, "every")
 
-        def run_daily(self, cb, *a, **k):
-            return self.run_every(cb, "now", 86400)
+        def call_daily(self, cb, *a, **k):
+            return self.call_every(cb, "now", 86400)
 
-        def listen_event(self, cb, event=None, **k):
+        def on_event(self, cb, event=None, **k):
             return self._add("event", cb, event)
 
-        def listen_state(self, cb, entity=None, **k):
+        def on_state(self, cb, entity=None, **k):
             return self._add("state", cb, entity)
 
-        def cancel_timer(self, handle, **kw):
+        def cancel_call(self, handle, **kw):
             self.timers[:] = [x for x in self.timers if x[3] != handle]  # in place: no new attribute
             if self.live.pop(handle, None) is None:          # a handle that is not live
                 self.invalid_cancels += 1
 
-        def cancel_listen_event(self, handle, **kw):
+        def off_event(self, handle, **kw):
             self.live.pop(handle, None)
 
-        cancel_listen_state = cancel_listen_event
+        off_state = off_event
 
         def set_state(self, entity_id, state=None, attributes=None, **kw):
             self.real_sets.append(entity_id)
@@ -131,19 +131,19 @@ def test_a_real_config_is_configured_and_start_is_refused(make):
 
 def test_a_configured_app_runs_exactly_as_before_no_tracking(make):
     # A set-up PowerEngine never re-initialises in place, so none of the recording is installed: its timers and
-    # listeners go straight to AppDaemon, and no list of handles grows while it runs.
+    # listeners go straight to the host, and no list of handles grows while it runs.
     app = make(real_config=True)
     assert "_touched" not in app.__dict__ and app.host.handles is None
-    assert "run_in" not in app.__dict__ and "listen_state" not in app.__dict__
+    assert "call_later" not in app.__dict__ and "on_state" not in app.__dict__
 
 
 def test_an_unconfigured_app_forgets_timers_that_have_run(make):
     app = make()
     before = len(app.host.handles)
     for _ in range(50):
-        app.host.run_in(lambda kw: None, 1)
+        app.host.call_later(lambda kw: None, 1)
     Clock.now = NOW + timedelta(minutes=5)
-    app.host.run_in(lambda kw: None, 1)
+    app.host.call_later(lambda kw: None, 1)
     assert len(app.host.handles) <= before + 1
 
 

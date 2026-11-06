@@ -19,10 +19,10 @@ from typing import Any
 
 from .host import METHODS
 
-# calls whose handle is recorded while tracking: method -> kind (cancel_timer, cancel_listen_event and
-# cancel_listen_state take the handle back)
-_TRACKED = {"run_every": "timer", "run_daily": "timer", "listen_event": "event", "listen_state": "state"}
-_CANCEL = {"timer": "cancel_timer", "event": "cancel_listen_event", "state": "cancel_listen_state"}
+# calls whose handle is recorded while tracking: method -> kind (cancel_call, off_event and
+# off_state take the handle back)
+_TRACKED = {"call_every": "timer", "call_daily": "timer", "on_event": "event", "on_state": "state"}
+_CANCEL = {"timer": "cancel_call", "event": "off_event", "state": "off_state"}
 
 
 def _forward(name: str) -> Callable:
@@ -88,8 +88,8 @@ class LocalHost:
         self.overrides.clear()
 
     # --- timers and listeners: forwarded, and recorded while tracking
-    def run_in(self, callback: Callable, delay: float, **kwargs: Any) -> Any:
-        handle = self.method("run_in")(callback, delay, **kwargs)
+    def call_later(self, callback: Callable, delay: float, **kwargs: Any) -> Any:
+        handle = self.method("call_later")(callback, delay, **kwargs)
         if self.handles is None:
             return handle
         return self._track("timer", handle, datetime.now(timezone.utc) + timedelta(seconds=float(delay)))
@@ -107,7 +107,7 @@ class LocalHost:
         if kind == "timer":                             # forget one-off timers that have already run (bounded list)
             now = datetime.now(timezone.utc)
             handles[:] = [h for h in handles if not (h[0] == "timer" and h[2] is not None and h[2] < now)]
-        if not any(h[1] == handle for h in handles):    # (run_daily is built on run_every)
+        if not any(h[1] == handle for h in handles):    # (call_daily is built on call_every)
             handles.append((kind, handle, due))
         return handle
 
@@ -138,8 +138,8 @@ class LocalHost:
 
 
 for _name in METHODS:
-    if _name not in ("run_in", "run_every", "run_daily", "listen_event", "listen_state", "cancel_timer",
-                     "cancel_listen_event", "cancel_listen_state"):
+    if _name not in ("call_later", "call_every", "call_daily", "on_event", "on_state", "cancel_call",
+                     "off_event", "off_state"):
         setattr(LocalHost, _name, _forward(_name))
 for _name in _TRACKED:
     setattr(LocalHost, _name, _recording(_name))

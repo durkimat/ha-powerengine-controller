@@ -123,7 +123,7 @@ def test_listeners_only_in_direct_mode(app):
     # what initialize() registers: the call_service and pe_command listeners exist only when the entities are plain
     # states (with native entities the switches are real and their state changes arrive as any state does)
     events = []
-    app.listen_event = lambda cb, name, **k: events.append(name)
+    app.on_event = lambda cb, name, **k: events.append(name)
     for pub, expected in ((DirectPublisher(app.ha.set_state), ["call_service", "pe_command"]),
                           (NativePublisher(types.SimpleNamespace(), app.ha.set_state), [])):
         events.clear()

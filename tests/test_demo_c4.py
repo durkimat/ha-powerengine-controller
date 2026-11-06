@@ -243,7 +243,7 @@ def test_a_configured_or_running_app_does_not_publish_the_preview(make):
 # --- round 2: a wipe cancels each timer once -------------------------------------------
 
 def test_a_wipe_cancels_each_timer_once_so_nothing_is_cancelled_twice(make):
-    """run_daily is built on run_every, so both wrappers recorded the same handle: the wipe cancelled it twice."""
+    """call_daily is built on call_every, so both wrappers recorded the same handle: the wipe cancelled it twice."""
     app = make()
     send(app, action="start", day="sunny")
     send(app, action="day", day="dull")

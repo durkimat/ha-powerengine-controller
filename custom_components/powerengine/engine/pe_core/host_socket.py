@@ -325,18 +325,18 @@ class SocketHost:
         return self.request("set", entity_id=entity_id, state=state, attributes=attributes or {})
 
     # --- listening
-    def listen_state(self, callback: Callable, entity_id: str | None = None, **kwargs: Any) -> Any:
+    def on_state(self, callback: Callable, entity_id: str | None = None, **kwargs: Any) -> Any:
         if not entity_id or "." not in entity_id:
-            raise ValueError("listen_state needs one entity")
+            raise ValueError("on_state needs one entity")
         handle = f"state-{next(self._handles)}"
         with self._lock:
             self._state_listeners[handle] = (entity_id, callback, kwargs)
         self._copy_of(entity_id)                                       # watch it (and fill the copy)
         return self._tracked("state", handle)
 
-    def listen_event(self, callback: Callable, event: str | None = None, **kwargs: Any) -> Any:
+    def on_event(self, callback: Callable, event: str | None = None, **kwargs: Any) -> Any:
         if not event:
-            raise ValueError("listen_event needs an event name")
+            raise ValueError("on_event needs an event name")
         handle = f"event-{next(self._handles)}"
         with self._lock:
             first = all(e != event for e, _, _ in self._event_listeners.values())
@@ -348,12 +348,12 @@ class SocketHost:
                 pass                                                   # asked again when the connection is back
         return self._tracked("event", handle)
 
-    def cancel_listen_state(self, handle: Any, **kwargs: Any) -> Any:
+    def off_state(self, handle: Any, **kwargs: Any) -> Any:
         self._untrack(handle)
         with self._lock:
             return self._state_listeners.pop(handle, None) is not None
 
-    def cancel_listen_event(self, handle: Any, **kwargs: Any) -> Any:
+    def off_event(self, handle: Any, **kwargs: Any) -> Any:
         self._untrack(handle)
         with self._lock:
             gone = self._event_listeners.pop(handle, None)
@@ -399,18 +399,18 @@ class SocketHost:
             self._dispatcher.submit(lambda c=callback, d=payload, k=extra: c(event, d, k), f"event listener {event}")
 
     # --- timers (the engine's own: nothing to ask the integration)
-    def run_in(self, callback: Callable, delay: float, **kwargs: Any) -> Any:
-        return self._tracked("timer", self._scheduler.run_in(callback, delay, **kwargs))
+    def call_later(self, callback: Callable, delay: float, **kwargs: Any) -> Any:
+        return self._tracked("timer", self._scheduler.call_later(callback, delay, **kwargs))
 
-    def run_every(self, callback: Callable, start: Any, interval: float, **kwargs: Any) -> Any:
-        return self._tracked("timer", self._scheduler.run_every(callback, start, interval, **kwargs))
+    def call_every(self, callback: Callable, start: Any, interval: float, **kwargs: Any) -> Any:
+        return self._tracked("timer", self._scheduler.call_every(callback, start, interval, **kwargs))
 
-    def run_daily(self, callback: Callable, start: Any = None, **kwargs: Any) -> Any:
-        return self._tracked("timer", self._scheduler.run_daily(callback, start, **kwargs))
+    def call_daily(self, callback: Callable, start: Any = None, **kwargs: Any) -> Any:
+        return self._tracked("timer", self._scheduler.call_daily(callback, start, **kwargs))
 
-    def cancel_timer(self, handle: Any, **kwargs: Any) -> Any:
+    def cancel_call(self, handle: Any, **kwargs: Any) -> Any:
         self._untrack(handle)
-        return self._scheduler.cancel_timer(handle)
+        return self._scheduler.cancel_call(handle)
 
     # --- beyond the calls above
     def log(self, msg: str, *args: Any, **kwargs: Any) -> None:
@@ -451,8 +451,8 @@ class SocketHost:
 
     def cancel_all(self) -> None:
         for kind, handle in list(self.handles or []):
-            {"timer": self.cancel_timer, "state": self.cancel_listen_state,
-             "event": self.cancel_listen_event}[kind](handle)
+            {"timer": self.cancel_call, "state": self.off_state,
+             "event": self.off_event}[kind](handle)
         if self.handles is not None:
             self.handles.clear()
 
