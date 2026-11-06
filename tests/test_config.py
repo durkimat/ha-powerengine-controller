@@ -19,8 +19,11 @@ def test_defaults_are_safe():
     assert cfg.solar_plants == ()
 
 
-def test_the_retired_remove_entities_switch_in_a_saved_config_is_accepted_and_ignored():
-    assert parse_config({"remove_entities": True}).mode == "passive"
+def test_a_setting_that_no_longer_exists_is_refused_by_name():
+    with pytest.raises(ConfigError, match="remove_entities"):
+        parse_config({"remove_entities": True})
+    with pytest.raises(ConfigError, match="publisher"):
+        parse_config({"system": {"publisher": "auto"}})
 
 
 def test_valid_file(tmp_path):

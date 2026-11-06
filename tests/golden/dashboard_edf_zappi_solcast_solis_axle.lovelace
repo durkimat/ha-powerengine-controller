@@ -1547,7 +1547,7 @@ views:
               {%- if k.attributes.sync_due %} A sync is due ({{ k.attributes.sync_due }}){{ '; PowerEngine does it in Active mode' if states('sensor.pe_state_operation_mode') != 'active' else '' }}.{% endif %}
               In Active mode PowerEngine syncs it weekly, and within 10 minutes if it drifts by a minute or more (e.g. when the clocks change).
               {%- else %}
-              Map *Inverter clock* (`sensor.solis_rtc`) and *Sync inverter clock* (`button.solis_sync_rtc`) on the Config tab to check drift.
+              Map *Inverter clock* and *Sync inverter clock* (your inverter's clock sensor and sync button) on the Config tab to check drift.
               {%- endif %}
           - type: heading
             heading: Inputs

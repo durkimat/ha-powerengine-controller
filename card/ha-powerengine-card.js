@@ -540,7 +540,7 @@ function topicPlan(roleKeys, settingKeys, featureKeys, systemKeys) {
   const other = { key: "other", title: "Other",
     roles: roleKeys.filter((k) => !used.roles.has(k)), settings: settingKeys.filter((k) => !used.settings.has(k)),
     features: featureKeys.filter((k) => !used.features.has(k)), learning: [],
-    system: systemKeys.filter((k) => !used.system.has(k) && k !== "publisher") };     // "publisher" is in Operation
+    system: systemKeys.filter((k) => !used.system.has(k)) };
   if (other.roles.length || other.settings.length || other.features.length || other.system.length) topics.push(other);
   return topics;
 }
@@ -725,7 +725,6 @@ function buildConfig(draft) {
     if (typeof draft.v2_profile === "string" && draft.v2_profile) out.v2_profile = draft.v2_profile;      // only set when the app has profiles
     if (draft.v2_profiles && Object.keys(draft.v2_profiles).length) out.v2_profiles = draft.v2_profiles;
   }
-  if (draft.remove_entities) out.remove_entities = true;
   return out;
 }
 
@@ -1437,8 +1436,6 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     activeWarn.style.display = modeSel.value === "active" ? "" : "none";
     body.append(track(el("div", { class: "row" }, el("div", { class: "head" }, el("span", { class: "label" }, "Operation mode")),
       el("div", { class: "ctl" }, modeSel), activeWarn), "setting", "operation mode passive active live"));
-    const publisher = systemRow("publisher");
-    if (publisher) body.append(publisher);
 
     // one section per topic
     const roles = this._catalogue.roles;

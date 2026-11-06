@@ -7,7 +7,7 @@
  * an HA event; the app validates, writes config.yaml (with a backup) and
  * reports the result.
  */
-const CARD_VERSION = "0.9.219";
+const CARD_VERSION = "0.9.220";
 const VERSION_SENSOR = "sensor.pe_diag_version";
 // The oldest app this card works with (0.9.69 added the demo_days attribute the welcome card reads). Raise it only when
 // the card starts to need something a newer app publishes. The app publishes its own minimum as min_card_version.
@@ -540,7 +540,7 @@ function topicPlan(roleKeys, settingKeys, featureKeys, systemKeys) {
   const other = { key: "other", title: "Other",
     roles: roleKeys.filter((k) => !used.roles.has(k)), settings: settingKeys.filter((k) => !used.settings.has(k)),
     features: featureKeys.filter((k) => !used.features.has(k)), learning: [],
-    system: systemKeys.filter((k) => !used.system.has(k) && k !== "publisher") };     // "publisher" is in Operation
+    system: systemKeys.filter((k) => !used.system.has(k)) };
   if (other.roles.length || other.settings.length || other.features.length || other.system.length) topics.push(other);
   return topics;
 }
@@ -725,7 +725,6 @@ function buildConfig(draft) {
     if (typeof draft.v2_profile === "string" && draft.v2_profile) out.v2_profile = draft.v2_profile;      // only set when the app has profiles
     if (draft.v2_profiles && Object.keys(draft.v2_profiles).length) out.v2_profiles = draft.v2_profiles;
   }
-  if (draft.remove_entities) out.remove_entities = true;
   return out;
 }
 
@@ -1437,8 +1436,6 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     activeWarn.style.display = modeSel.value === "active" ? "" : "none";
     body.append(track(el("div", { class: "row" }, el("div", { class: "head" }, el("span", { class: "label" }, "Operation mode")),
       el("div", { class: "ctl" }, modeSel), activeWarn), "setting", "operation mode passive active live"));
-    const publisher = systemRow("publisher");
-    if (publisher) body.append(publisher);
 
     // one section per topic
     const roles = this._catalogue.roles;

@@ -1,7 +1,7 @@
 """The battery's own limits (BMS charge and discharge current limits) and what they mean for a remote-control command.
 
 The Solis force-power registers take up to 5000 W, but the battery can take or give less: when it is cold, or nearly
-full or empty, its BMS lowers the current it allows (SolaX Modbus: `sensor.solis_bms_battery_charge_limit`, normally
+full or empty, its BMS lowers the current it allows (the inverter integration's BMS charge-limit sensor, normally
 100 A). Asking for more than that is pointless, and a follow check that judges the battery against the command would
 call a BMS-limited charge "not following". Everything here is pure; the app reads the states and passes them in.
 

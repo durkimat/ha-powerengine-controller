@@ -76,5 +76,5 @@ def finding(drift: float | None, ram: bool = False, synced: datetime | None = No
     return {"level": "problem" if abs(drift) >= 600 else "warning",
             "title": f"Inverter clock {size} {ahead} HA",
             "detail": "The timed charge/discharge windows run on the inverter's clock, so they are shifted by this "
-                      "much. In Active mode PowerEngine syncs it; otherwise press Sync inverter clock (e.g. "
-                      "button.solis_sync_rtc)." + tried}
+                      "much. In Active mode PowerEngine syncs it; otherwise press your inverter's sync-clock "
+                      "button." + tried}
