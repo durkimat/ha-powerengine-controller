@@ -19,8 +19,8 @@ released with it: `tools/build_integration.py` copies it, with its `CARD_VERSION
 - A new adapter (tariff, charger, forecast, events) needs a file in `engine/pe_core/adapters/integrations/` (its detect entry and its
   entity suggestions: `docs/INVERTERS.md`, "Other integrations"); an inverter definition needs a detect entry for the Your system card (once the setup wizard)
   (the definition's `detect:`); see Phase 1 below.
-- `MIN_APP_VERSION` (card) and `MIN_CARD_VERSION` (app, `pe_core/version.py`): raise one in the PR that makes the other
-  side need something new, and release both (see Releases).
+- The card and the engine are released as one version: there are no minimum-version checks between them (a tab left open
+  across an update needs a reload).
 - A changed state text or attribute on a published sensor (`pe_core/status.py`) can break the card or the dashboard
   (`dashboard.yaml`, and its frozen render in `tests/golden/`): search both repos for the old text.
 

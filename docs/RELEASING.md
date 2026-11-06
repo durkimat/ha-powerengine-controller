@@ -80,9 +80,7 @@ tools/release.sh <version> --app-notes <file> [--app-branch <b>] [--app-dir <d>]
 
 ### Card and engine versions
 
-The card is bundled with the engine and always has its version, so there is no card release and no version to keep in step.
-The minimum-version warnings that remain (the card has `MIN_APP_VERSION`; the engine publishes `min_card_version` on
-`sensor.pe_diag_version`) only catch a browser tab still running a card from before an update: raise a minimum in the PR
-that makes one side need something the other only newer versions have.
+The card is bundled with the engine and always has its version, so there is no card release, no version to keep in step and
+no minimum-version check between them. A browser tab left open across an update still runs the old card: reload it.
 
 Tests-only or docs-only changes can merge without a release.

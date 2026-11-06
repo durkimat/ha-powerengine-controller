@@ -84,7 +84,7 @@ solar_plants:
     entity: sensor.demo_solar_power
   energy_today:
     entity: sensor.demo_solar_energy_today
-  forecast: solcast_site
+  forecast: service
   enabled: true
 features:
   auto_cheap_threshold: true

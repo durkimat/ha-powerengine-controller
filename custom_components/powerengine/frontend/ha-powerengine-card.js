@@ -9,37 +9,6 @@
  */
 const CARD_VERSION = "0.9.224";
 const VERSION_SENSOR = "sensor.pe_diag_version";
-// The oldest app this card works with (0.9.69 added the demo_days attribute the welcome card reads). Raise it only when
-// the card starts to need something a newer app publishes. The app publishes its own minimum as min_card_version.
-const MIN_APP_VERSION = "0.9.188";   // 0.9.188: pe_compare_recheck (Compare this day again); 0.9.187: the Costs page period picker (daily rows with self_use_adj, bin, bout); 0.9.182: notifications.alexa.finish (the grid event summary); 0.9.179: heating set-back (axle_heating_setback); 0.9.175: pe_alexa_test; 0.9.174: notifications.alexa
-
-/** "0.9.70" -> [0, 9, 70]; null when it isn't a plain dotted number ("?", "unavailable", "0.9.70-beta"). */
-function parseVersion(v) {
-  const m = /^\s*v?(\d+(?:\.\d+)*)\s*$/.exec(String(v == null ? "" : v));
-  return m ? m[1].split(".").map(Number) : null;
-}
-/** True if version a is older than version b; false if equal or newer; null if either can't be read (so: no warning). */
-function versionOlder(a, b) {
-  const x = parseVersion(a), y = parseVersion(b);
-  if (!x || !y) return null;
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    const d = (x[i] || 0) - (y[i] || 0);
-    if (d) return d < 0;
-  }
-  return false;
-}
-/** Plain-words warnings when one side is older than the other's minimum. Differing versions are fine. */
-function versionWarnings(states) {
-  const s = (states || {})[VERSION_SENSOR];
-  if (!s) return [];
-  const out = [];
-  if (versionOlder(s.state, MIN_APP_VERSION) === true)
-    out.push(`This card needs PowerEngine app ${MIN_APP_VERSION} or newer; the app is running ${s.state}. Update the app.`);
-  const minCard = (s.attributes || {}).min_card_version;
-  if (versionOlder(CARD_VERSION, minCard) === true)
-    out.push(`The app needs card ${minCard} or newer; this page has ${CARD_VERSION}. Update the card, then reload the page.`);
-  return out;
-}
 const MODE_SENSOR = "sensor.pe_state_operation_mode";
 const CATALOGUE_SENSOR = "sensor.pe_map_catalogue";
 const SETTINGS_SENSOR = "sensor.pe_map_settings";
@@ -143,12 +112,10 @@ function alexaDraft(raw) {
     earliest_weekday: time(a.earliest_weekday, ALEXA_DEFAULT.earliest_weekday), earliest_weekend: time(a.earliest_weekend, ALEXA_DEFAULT.earliest_weekend),
     latest: time(a.latest, ALEXA_DEFAULT.latest), intro: typeof a.intro === "string" ? a.intro.trim().slice(0, 80) : ALEXA_DEFAULT.intro,
     finish: typeof a.finish === "boolean" ? a.finish : ALEXA_DEFAULT.finish,
-    // the WhatsApp copy (app 0.9.193 and newer) is kept only when the saved settings or the page carry it
+    // the WhatsApp copy is kept only when the saved settings or the page carry it
     ...(a.whatsapp === undefined && a.whatsapp_targets === undefined ? {} : { whatsapp: a.whatsapp === true, whatsapp_targets: whatsappTargets(a.whatsapp_targets) }) };
 }
-const WHATSAPP_APP_VERSION = "0.9.193";
 const WHATSAPP_TARGET = /^(\d+(-\d+)?@g\.us|\d{6,15})$/;
-function whatsappSupported(appVersion) { return versionOlder(appVersion, WHATSAPP_APP_VERSION) === false; }
 /** The WhatsApp chats as a clean list: group ids (120363012345678901@g.us) and phone numbers with the country code, each once. */
 function whatsappTargets(list) {
   return [...new Set((Array.isArray(list) ? list : []).map((x) => String(x).trim()).filter((x) => WHATSAPP_TARGET.test(x)))];
@@ -158,19 +125,16 @@ function parseWhatsappTargets(text) {
   const parts = String(text).split(/[,\s]+/).filter(Boolean);
   return parts.every((x) => WHATSAPP_TARGET.test(x)) ? [...new Set(parts)] : null;
 }
-/** The draft with the WhatsApp settings present (off, no chats) when the app supports them, and absent when it doesn't. */
-function withWhatsapp(draft, supported) {
+/** The draft with the WhatsApp settings present (off, no chats) even when none were saved. */
+function withWhatsapp(draft) {
   const n = draft && draft.notifications;
   if (!n || !n.alexa || n.channels) return draft;
-  if (supported) n.alexa = { ...n.alexa, whatsapp: n.alexa.whatsapp === true, whatsapp_targets: whatsappTargets(n.alexa.whatsapp_targets) };
-  else { delete n.alexa.whatsapp; delete n.alexa.whatsapp_targets; }
+  n.alexa = { ...n.alexa, whatsapp: n.alexa.whatsapp === true, whatsapp_targets: whatsappTargets(n.alexa.whatsapp_targets) };
   return draft;
 }
-// Notifications as channels and rules (app 0.9.195 and newer): where messages can go, and which kinds go where.
-const ROUTER_APP_VERSION = "0.9.195";
+// Notifications as channels and rules: where messages can go, and which kinds go where.
 const NOTIFY_SENSOR = "sensor.pe_ui_notify";
 const NOTIFY_TEST_EVENT = "pe_notify_test", NOTIFY_TEST_RESULT = "pe_notify_test_result";
-function routerSupported(appVersion) { return versionOlder(appVersion, ROUTER_APP_VERSION) === false; }
 const CHANNEL_TYPES = [["bell", "Home Assistant notifications"], ["notify", "Phone or other notify service"], ["alexa", "Alexa speakers"], ["whatsapp", "WhatsApp"]];
 // what PowerEngine sends: [kind, label, what it is]
 const NOTIFY_KINDS = [
@@ -227,10 +191,10 @@ function routerFromLegacy(n) {
   if (events.alexa && spoken.length) rules.push({ events: a.finish ? ["grid_reminder", "grid_summary"] : ["grid_reminder"], to: spoken });
   return { channels, rules, reminder_hours: a.hours_before };
 }
-/** The draft with its notifications in the channels-and-rules form when the app supports it. */
-function withRouter(draft, supported) {
+/** The draft with its notifications in the channels-and-rules form. */
+function withRouter(draft) {
   const n = draft && draft.notifications;
-  if (n && supported && !n.channels) draft.notifications = routerFromLegacy(n);
+  if (n && !n.channels) draft.notifications = routerFromLegacy(n);
   return draft;
 }
 /** One channel as the app takes it (also what the test button sends). */
@@ -651,7 +615,7 @@ function initialDraft(saved, roles, entityIds, settings, plantSuggest) {
       const find = (pats) => entityIds.find((id) => (pats || []).some((p) => new RegExp(p).test(id))) || "";
       const sug = plantSuggest || {};
       draft.solar_plants = [{
-        id: "main", name: "Main", forecast: "solcast_site",
+        id: "main", name: "Main", forecast: "service",
         power: { entity: find(sug.power) },
         energy_today: { entity: find(sug.energy_today) },
       }];
@@ -795,11 +759,9 @@ function siteDetectedLine(detected, chosen) {
 function siteOptionLabel(row) { return row.status && row.status !== "verified" ? `${row.name} (${row.status})` : row.name; }
 
 /* ------------------------------------------------------------ Switches to run during free power
- * `free_power_loads` in the app's config (app 0.9.191 and newer): each switch is turned on when a free-electricity session
+ * `free_power_loads` in the app's config : each switch is turned on when a free-electricity session
  * starts and off when it ends. Entries are {entity, name}; only switches and input booleans can be turned on and off. */
-const FREE_LOADS_APP_VERSION = "0.9.191";
 const FREE_LOAD_DOMAINS = ["switch", "input_boolean"];
-function freeLoadsSupported(appVersion) { return versionOlder(appVersion, FREE_LOADS_APP_VERSION) === false; }
 
 /** The saved list as an editable draft: every entry an {entity, name} (the config also allows a bare entity id). */
 function freeLoadDraft(saved) {
@@ -814,9 +776,8 @@ function buildFreeLoads(list) {
 }
 
 /* ------------------------------------------------------------ Other devices (multiple-devices plan, M1)
- * Read-only devices beyond the main inverter: the app (0.9.93 and newer) reads their battery and solar, publishes one sensor per
+ * Read-only devices beyond the main inverter: the app reads their battery and solar, publishes one sensor per
  * mapped input (sensor.pe_state_dev_<id>_soc / _battery_power / _solar_power) and counts their solar. Nothing is controlled. */
-const DEVICES_APP_VERSION = "0.9.93";
 const DEVICE_INPUTS = [          // [input key, label, can be inverted]
   ["battery_soc", "Battery state of charge (%)", false],
   ["battery_power", "Battery power (W); + discharging, - charging", true],
@@ -824,7 +785,6 @@ const DEVICE_INPUTS = [          // [input key, label, can be inverted]
 ];
 const DEVICE_NOTE = "Read only: PowerEngine measures these and counts their solar, but only the inverter chosen above is controlled.";
 
-function devicesSupported(appVersion) { return versionOlder(appVersion, DEVICES_APP_VERSION) === false; }
 
 /** The saved devices as an editable draft (a copy with every field present). */
 function deviceDraft(saved) {
@@ -932,14 +892,10 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     this._site = siteInfo(ver.attributes);
     this._siteSaved = this._site ? siteFromSelection(this._site.site) : null;
     if (this._site) draft.site = Object.assign({}, this._siteSaved); else delete draft.site;
-    this._devices = devicesSupported(ver.state);
-    if (this._devices) draft.devices = deviceDraft(draft.devices); else delete draft.devices;
-    this._freeLoads = freeLoadsSupported(ver.state);
-    this._whatsapp = whatsappSupported(ver.state);
-    withWhatsapp(draft, this._whatsapp);
-    this._router = routerSupported(ver.state);
-    withRouter(draft, this._router);
-    if (this._freeLoads) draft.free_power_loads = freeLoadDraft(draft.free_power_loads); else delete draft.free_power_loads;
+    draft.devices = deviceDraft(draft.devices);
+    withWhatsapp(draft);
+    withRouter(draft);
+    draft.free_power_loads = freeLoadDraft(draft.free_power_loads);
     this._v2 = v2Supported(s) ? v2WithProfiles(s) : null;
     if (this._v2) {
       draft.engine_v2 = Object.assign({}, this._saved.engine_v2 || {}); draft.system.engine = uiEngine(this._v2, engineInUse(s, this._saved)); this._engine = draft.system.engine;
@@ -1017,7 +973,7 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     say("ok", "Sending…");
     this._testingChannel = name;
     clearTimeout(this._notifyTestTimer);
-    this._notifyTestTimer = setTimeout(() => say("error", `No reply from PowerEngine. Check it is running version ${ROUTER_APP_VERSION} or later, then look at PowerEngine's log.`), ALEXA_TEST_WAIT_MS);
+    this._notifyTestTimer = setTimeout(() => say("error", `No reply from PowerEngine. Check PowerEngine is running, then look at its log.`), ALEXA_TEST_WAIT_MS);
     try {
       await this._hass.callWS({ type: "fire_event", event_type: NOTIFY_TEST_EVENT, event_data: { channel: routerChannelConfig(ch) } });
     } catch (e) {
@@ -1494,7 +1450,7 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
         t.damp.settings.map((k) => settingByKey[k]).filter(Boolean)
           .forEach((st) => body.append(track(this._settingRow(st), "setting", `${st.label} ${st.help} ${st.key}`)));
       }
-      if (t.key === "free" && this._freeLoads) {
+      if (t.key === "free") {
         sub(body, "Switches to run during free power");
         body.append(this._freeLoadsEditor());
       }
@@ -1558,7 +1514,7 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
         ab.append(track(el("div", { class: "row" }, el("div", { class: "head" }, el("span", { class: "label" }, "Speakers")),
           el("div", { class: "desc" }, "Announcements play on every speaker ticked. Don't tick a group as well as a speaker that is in it, or that speaker says it twice. \"Everywhere\" is all of them. A speaker added to Alexa Media Player later appears here after the page is reloaded."), picks),
           "setting", "alexa announcements speakers groups devices echo"));
-        if (this._whatsapp) {
+        {
           const waBox = el("input", { type: "checkbox", onchange: (ev) => { alexa.whatsapp = ev.target.checked; this._refresh(); } });
           waBox.checked = alexa.whatsapp === true;
           const waInput = el("input", { type: "text", size: 34, placeholder: "120363012345678901@g.us", onchange: (ev) => {
@@ -1776,10 +1732,10 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
   _baseDraft(saved) {
     const base = initialDraft(saved, [], [], this._settings).draft;
     if (this._siteSaved) base.site = this._siteSaved; else delete base.site;
-    if (this._devices) base.devices = deviceDraft(base.devices); else delete base.devices;
-    if (this._freeLoads) base.free_power_loads = freeLoadDraft(base.free_power_loads); else delete base.free_power_loads;
-    withWhatsapp(base, this._whatsapp);
-    withRouter(base, this._router);
+    base.devices = deviceDraft(base.devices);
+    base.free_power_loads = freeLoadDraft(base.free_power_loads);
+    withWhatsapp(base);
+    withRouter(base);
     if (this._v2) { base.engine_v2 = Object.assign({}, saved.engine_v2 || {}); base.system.engine = uiEngine(this._v2, engineInUse(this._hass.states, saved)); Object.assign(base, profileDraft(this._v2, saved)); }
     else { delete base.engine_v2; delete base.v2_profile; delete base.v2_profiles; }
     return base;
@@ -2054,7 +2010,7 @@ class PowerEngineConfigCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     }
     // equipment is changed in Your system, not here: when the saved plants, devices or inputs move, the draft follows
     if (mapping && mapping.attributes && mapping.attributes.config && JSON.stringify(saved) !== JSON.stringify(this._saved)) {
-      const next = overlayEquipment(this._draft, this._saved, saved, !!this._devices);
+      const next = overlayEquipment(this._draft, this._saved, saved, true);
       this._saved = saved;
       if (JSON.stringify(next) !== JSON.stringify(this._draft)) { this._draft = next; this._build(); return; }
     }
@@ -2587,7 +2543,7 @@ class PowerEngineTestCard extends (typeof HTMLElement !== "undefined" ? HTMLElem
       : "Remote-control entities: " + need.map((r) => `${rc[r]} (${(states[rc[r]] || {}).state})`).join(", ");
     q(".start").disabled = running || !q(".confirm").checked || gone.length > 0;
     q(".stop").disabled = !running;
-    q(".msg").textContent = this._msg || versionWarnings(states).join(" ");
+    q(".msg").textContent = this._msg || "";
   }
 }
 
@@ -3514,7 +3470,7 @@ class PowerEngineHealthCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     this._hass = hass;
     const st = hass.states["sensor.pe_diag_health"];
     const vs = hass.states[VERSION_SENSOR];
-    const sig = (st ? st.last_updated + st.state : "") + (vs ? vs.state + ((vs.attributes || {}).min_card_version || "") : "");
+    const sig = (st ? st.last_updated + st.state : "");
     if (sig !== this._sig) {
       this._sig = sig;
       this._render();
@@ -3555,7 +3511,6 @@ class PowerEngineHealthCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     }
     const gone = (a.dismissed || []).length
       ? `<p class="small">Dismissed recently: ${a.dismissed.map((d) => escHtml(d.title)).join("; ")}. A new or changed finding shows again.</p>` : "";
-    const vw = versionWarnings(this._hass.states).map((w) => `<p><span class="lvl p">Problem</span> ${escHtml(w)}</p>`).join("");
     this.shadowRoot.innerHTML = `
       <style>
         ha-card { padding: 12px 16px; }
@@ -3569,7 +3524,7 @@ class PowerEngineHealthCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
         .small, .err { color: var(--secondary-text-color); font-size: 0.85em; }
         .err { color: var(--error-color, #db4437); }
       </style>
-      <ha-card>${vw}${body}${gone}${this._err ? `<p class="err">${escHtml(this._err)}</p>` : ""}</ha-card>`;
+      <ha-card>${body}${gone}${this._err ? `<p class="err">${escHtml(this._err)}</p>` : ""}</ha-card>`;
     this.shadowRoot.querySelectorAll("button[data-key]").forEach((b) =>
       b.addEventListener("click", () => this._dismiss(b.dataset.key)));
   }
@@ -5436,7 +5391,7 @@ function applyOps(draft0, ops, info) {
       if (o.part === "inverter" && o.firmware !== undefined) d.site.inverter_firmware = o.firmware || null;
       Object.entries(o.inputs || {}).forEach(([k, v]) => { if (v) d.inputs[k] = JSON.parse(JSON.stringify(v)); else delete d.inputs[k]; });
       if (o.plant) { const p = main(); p.power = Object.assign({}, o.plant.power || {}); p.energy_today = Object.assign({}, o.plant.energy_today || {}); }
-      if (o.part === "forecast") { const p = main(); if (!p.forecast || p.forecast === "none") p.forecast = "solcast_site"; }
+      if (o.part === "forecast") { const p = main(); if (!p.forecast || p.forecast === "none") p.forecast = "service"; }
     }
   });
   return d;
@@ -5584,7 +5539,7 @@ class PowerEngineSystemCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     this._settings = cat.settings || catalogueAttrs(s, SETTINGS_SENSOR) || {};
     this._saved = (((map || {}).attributes) || {}).config || {};
     this._retest = (ver.attributes || {}).retest_required === true;
-    this._devicesOn = devicesSupported(ver.state);
+    this._devicesOn = true;                                  // the engine always has them: card and engine ship together
     this._fp = systemFingerprint(Object.assign({}, this._saved, { site: this._info.site }), this._info);
     return true;
   }
@@ -6396,7 +6351,7 @@ class PowerEngineSystemCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
     kids.push(el("div", { class: "ctl" }, el("input", { type: "text", value: p.name || "", placeholder: "Name", "aria-label": "Name", onchange: (ev) => { p.name = ev.target.value; } }),
       (() => {
         const fc = el("select", { "aria-label": "Forecast", onchange: (ev) => { p.forecast = ev.target.value; } },
-          el("option", { value: "none" }, "Forecast: none (actuals only)"), el("option", { value: "solcast_site" }, "Forecast: from the forecast service"), el("option", { value: "scaled" }, "Forecast: scaled from the main plant"));
+          el("option", { value: "none" }, "Forecast: none (actuals only)"), el("option", { value: "service" }, "Forecast: from the forecast service"), el("option", { value: "scaled" }, "Forecast: scaled from the main plant"));
         fc.value = p.forecast || "none";
         return fc;
       })()));
@@ -9538,7 +9493,7 @@ class PowerEngineFlowCard extends PowerEngineV2Card {
 });
 
 if (typeof module !== "undefined") {
-  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerSupported, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, ROUTER_APP_VERSION, whatsappSupported, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, hasUpdateService, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, MIN_APP_VERSION, parseVersion, versionOlder, versionWarnings, logRows, logWhen, escHtml, findRcEntities, controlEntities, chartPts, chartClose, chartWindow, chartTimeTicks, chartNiceTicks, chartAxisRange, chartSmoothPath, chartStepPath, chartReadout, chartModel, CHART_DEFS, flowNum, flowFmt, flowDuration, flowBatteryNote, flowFigures, flowModel, FLOW_ENTITIES, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, FREE_LOADS_APP_VERSION, freeLoadsSupported, freeLoadDraft, buildFreeLoads, DEVICES_APP_VERSION, DEVICE_INPUTS, devicesSupported, deviceDraft, deviceNewId, buildDevices, deviceReadout,
+  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, hasUpdateService, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, logRows, logWhen, escHtml, findRcEntities, controlEntities, chartPts, chartClose, chartWindow, chartTimeTicks, chartNiceTicks, chartAxisRange, chartSmoothPath, chartStepPath, chartReadout, chartModel, CHART_DEFS, flowNum, flowFmt, flowDuration, flowBatteryNote, flowFigures, flowModel, FLOW_ENTITIES, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, freeLoadDraft, buildFreeLoads, DEVICE_INPUTS, deviceDraft, deviceNewId, buildDevices, deviceReadout,
   wizardDeviceName, wizardInUse, wizardOthers, wizardUsedEntities, wizardPlantFromDevice, wizardPlantId, EXPORT_FORMAT, EXPORT_VERSION, EXPORT_STATE_MAX, wizardInfo, wizardFacts, wizardMatch, wizardCandidates, wizardRoles, wizardSuggest, wizardPlantGuess, wizardMissing, wizardWatts, wizardSignCheck, wizardBalance, scrubText, buildCandidateExport, candidateFileName, wizardEnergyDevices,
   SYSTEM_DRAFT_KEY, systemKinds, systemItems, systemMissingParts, opsSet, opsRemove, opsUndoRemove, opsTag, opsSummary, applyOps, featuresLeftOut, buildApplyConfig, equipmentOf, systemFingerprint, overlayEquipment, systemImpact, systemDraftLoad, systemDraftSave,
   OVERRIDE_MODES, OVERRIDE_PERIODS, OVERRIDE_MAX_SLOTS, inverterWords, overrideEndOptions, overridePayload, overrideView, overrideSummary,

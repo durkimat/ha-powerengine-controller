@@ -37,7 +37,7 @@ def test_valid_file(tmp_path):
         "    name: Solis (roof)\n"
         "    power: {entity: sensor.solis_pv_total_power}\n"
         "    energy_today: {entity: sensor.solis_power_generation_today}\n"
-        "    forecast: solcast_site\n"
+        "    forecast: service\n"
         "  - id: garage\n"
         "    power: {entity: sensor.solax_power}\n"
         "    energy_today: {entity: sensor.solax_yield_today}\n"
@@ -195,3 +195,15 @@ def test_smart_slot_certainty_moved_to_engine_v2_with_a_default_of_sixty():
     assert "smart_slot_certainty_pct" not in SAFETY and "smart_slot_certainty_pct" not in SETTING_TEXT
     assert "smart_slot_certainty_pct" not in parse_config({}).safety
     assert parse_config({}).engine_v2.slot_odds_pct == 60
+
+
+def _plant(forecast):
+    return {"solar_plants": [{"id": "main", "power": {"entity": "sensor.p"}, "energy_today": {"entity": "sensor.e"},
+                              "forecast": forecast}]}
+
+
+def test_a_saved_forecast_source_under_its_old_name_is_read_under_the_new_one():
+    assert parse_config(_plant("solcast_site")).solar_plants[0].forecast == "service"
+    assert parse_config(_plant("service")).solar_plants[0].forecast == "service"
+    with pytest.raises(ConfigError, match="forecast must be one of none, service, scaled"):
+        parse_config(_plant("nonsense"))

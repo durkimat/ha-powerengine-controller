@@ -154,7 +154,6 @@ from pe_core.v2flows import real_flows
 from pe_core.v2history import KEEP_DAYS as V2_HISTORY_KEEP_DAYS
 from pe_core.v2history import V2History
 from pe_core.verification import active_refusal
-from pe_core.version import MIN_CARD_VERSION
 from pe_core.weather import Weather
 from pe_core.wizard import wizard_info
 
@@ -2730,7 +2729,7 @@ class Engine:
 
     def _publish_names(self):
         """The version sensor carries the names map (a small attribute; the card fills its placeholders from it)."""
-        attrs = {"names": self._names(), "min_card_version": MIN_CARD_VERSION,
+        attrs = {"names": self._names(),
                  "setup": "configured" if self._real_config_exists() else "unconfigured",
                  "demo": self._demo_info() if self._demo else None}
         if attrs["setup"] == "unconfigured" and not self._demo:
@@ -4784,7 +4783,7 @@ class Engine:
         mode = getattr(self, "mode", None)
         run = getattr(self, "_test", None)
         return {
-            "app": {"version": __version__, "min_card_version": MIN_CARD_VERSION,
+            "app": {"version": __version__,
                     "generated": now.isoformat(timespec="seconds"),
                     "timezone": str(self.tz) if self.tz else None},
             "mode": s(lambda: {"configured": mode.configured, "effective": mode.effective, "reason": mode.reason,

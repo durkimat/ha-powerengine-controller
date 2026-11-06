@@ -67,19 +67,6 @@ def stamp(t, tz):
     return t.astimezone(tz).strftime("%d %b %H:%M") if t else "?"
 
 
-def version_tuple(v):
-    m = re.fullmatch(r"\s*v?(\d+(?:\.\d+)*)\s*", str(v or ""))
-    return tuple(int(x) for x in m.group(1).split(".")) if m else None
-
-
-def older(a, b):
-    x, y = version_tuple(a), version_tuple(b)
-    if x is None or y is None:
-        return None
-    n = max(len(x), len(y))
-    return x + (0,) * (n - len(x)) < y + (0,) * (n - len(y))
-
-
 def action_of(text):
     """ "Would grid-charge to 80%: cheap rate" -> "grid-charge" (the action without its level, power or caveat)."""
     head = str(text).split(":", 1)[0].strip().lower()
@@ -332,15 +319,13 @@ def summarise(export, since=None):
     levels = Counter(x["level"] for x in lines)
     mode = as_dict(app.get("mode"))
     cfg = as_dict(app.get("config"))
-    card, min_card = export.get("card_version"), meta.get("min_card_version")
+    card = export.get("card_version")
     sizes = [as_dict(x) for x in as_list(app.get("attribute_sizes"))]
     smart_slots = as_dict(app.get("smart_slots"))
     out = {
         "generated": export.get("generated") or meta.get("generated"),
         "app_version": meta.get("version"),
         "card_version": card,
-        "min_card_version": min_card,
-        "card_older_than_minimum": older(card, min_card) if min_card else None,
         "timezone": meta.get("timezone"),
         "mode": {k: mode.get(k) for k in ("configured", "effective", "reason", "halted")} if mode else None,
         "site": cfg.get("site"),
@@ -412,8 +397,6 @@ def render(s):
         + f" ({s.get('timezone') or 'tz ?'})"
     )
     card = f"card {s.get('card_version') or '?'}"
-    if s.get("card_older_than_minimum"):
-        card += f"  ** OLDER than the app's minimum {s.get('min_card_version')} **"
     add(f"  app {s.get('app_version') or '?'}, {card}" + (f", window since {T(s['since'])}" if s.get("since") else ""))
     m = s.get("mode")
     if m:

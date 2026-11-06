@@ -101,7 +101,7 @@ def test_code_id_ignores_git_state_and_follows_files(tmp_path):
 def test_a_git_ref_is_exported_not_checked_out(tmp_path):
     before = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout
     root, label = workspace.resolve_code("HEAD", tmp_path)
-    assert (root / "engine" / "pe_core" / "version.py").is_file()
+    assert (root / "engine" / "pe_core" / "__init__.py").is_file()
     assert "HEAD" in label
     assert workspace.resolve_code("HEAD", tmp_path)[0] == root  # reused, not exported again
     after = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True).stdout
@@ -423,5 +423,5 @@ def test_a_ref_from_before_the_folder_was_renamed_is_exported_under_the_new_name
     if old.returncode or not old.stdout.strip():
         pytest.skip("the v0.9.220 tag is not in this clone")
     root, _ = workspace.resolve_code("v0.9.220", tmp_path)
-    assert (root / "engine" / "pe_core" / "version.py").is_file()
+    assert (root / "engine" / "pe_core" / "__init__.py").is_file()
     shutil.rmtree(tmp_path / "code")

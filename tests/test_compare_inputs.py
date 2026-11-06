@@ -182,7 +182,7 @@ def owner_config():
     cfg["operation"] = {"mode": "passive"}
     cfg["engine_v2"] = {"sample_s": 15, "preview_when_v1": True}
     cfg["solar_plants"] = [{"id": "main", "name": "Roof", "power": {"entity": "sensor.real_pv"},
-                            "energy_today": {"entity": "sensor.real_pv_e"}, "forecast": "solcast_site"},
+                            "energy_today": {"entity": "sensor.real_pv_e"}, "forecast": "service"},
                            {"id": "garage", "name": "Garage", "power": {"entity": "sensor.g"},
                             "energy_today": {"entity": "sensor.ge"}}]
     return cfg
