@@ -226,7 +226,7 @@ def run_app(sc: Scenario, engine: str, on_tick=None) -> dict:
         world = app._demo_world()
         p = app._params()
         v2s = app.cfg.engine_v2
-        pay_v1 = (p.axle_value * 100, p.axle_plus_export)
+        pay_v1 = (p.axle_value * 100, p.grid_event_plus_export)
         pay_v2 = (v2s.event_value_p, v2s.event_plus_export)
         if pay_v1 != pay_v2:
             raise RuntimeError(f"the engines are told different event pay: v1 {pay_v1}, v2 {pay_v2}")

@@ -63,7 +63,7 @@ def test_export_runs_to_the_reserve_not_below():
 
 def _app(ov, axle=False):
     from types import SimpleNamespace
-    return SimpleNamespace(_active_override=lambda: ov, cfg=SimpleNamespace(features={"axle": axle}))
+    return SimpleNamespace(_active_override=lambda: ov, cfg=SimpleNamespace(features={"grid_events": axle}))
 
 
 def test_mark_manual_covers_now_to_the_end_and_skips_events(monkeypatch):

@@ -14,9 +14,9 @@ def at(minutes):
 
 
 def test_the_setting_is_on_by_default():
-    assert FEATURE_DEFAULTS["axle_stop_car"] is True
-    assert parse_config({}).features.get("axle_stop_car", True) is True
-    assert parse_config({"features": {"axle_stop_car": False}}).features["axle_stop_car"] is False
+    assert FEATURE_DEFAULTS["grid_event_stop_car"] is True
+    assert parse_config({}).features.get("grid_event_stop_car", True) is True
+    assert parse_config({"features": {"grid_event_stop_car": False}}).features["grid_event_stop_car"] is False
 
 
 def test_stops_the_charger_at_the_start_and_restores_the_mode_at_the_end():
@@ -132,7 +132,7 @@ def test_app_stops_and_restores_the_charger_and_keeps_it_across_a_restart(monkey
 
 
 def test_app_leaves_the_charger_alone_when_it_should(monkeypatch, tmp_path):
-    for kw in ({"features": {"axle_stop_car": False}}, {"features": {"axle": False}}, {"mode": "passive"},
+    for kw in ({"features": {"grid_event_stop_car": False}}, {"features": {"axle": False}}, {"mode": "passive"},
                {"entity": "sensor.zappi_charge_mode"}):
         a = _app(monkeypatch, tmp_path, **kw)
         a._car_stop_step(a.readings(True, "Eco+"))

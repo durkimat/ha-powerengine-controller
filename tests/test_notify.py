@@ -11,7 +11,7 @@ NOW = datetime(2026, 9, 26, 9, 0, tzinfo=timezone.utc)
 def test_notifications_go_to_the_ha_notification_area_by_default_and_are_validated():
     cfg = parse_config({})
     assert cfg.notifications["channels"]["bell"]["type"] == "bell"
-    assert cfg.notifications["rules"][0] == {"events": ["health", "inputs", "axle", "free_power", "simulator"],
+    assert cfg.notifications["rules"][0] == {"events": ["health", "inputs", "grid_event", "free_power", "simulator"],
                                              "to": ["bell"]}                        # the daily summary is off
     assert parse_config({"notifications": {"service": "off"}}).notifications["rules"] == []
     assert "bell" not in parse_config({"notifications": {"service": ""}}).notifications["channels"]

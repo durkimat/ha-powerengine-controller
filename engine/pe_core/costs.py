@@ -78,7 +78,7 @@ def event_share(rec: dict) -> float:
 
 def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: float, eff: float,
             floor_soc: float, max_kw: float, includes_ev: bool, axle_value: float = 1.0,
-            axle_plus_export: bool = True) -> dict:
+            grid_event_plus_export: bool = True) -> dict:
     """Value one half-hour. Updates the ledger and the default-battery simulation. Returns the record's values."""
     rte = eff * eff
     act, std, ovn, exp = rt.actual, rt.standard, rt.overnight, rt.export
@@ -149,7 +149,7 @@ def process(rec: dict, rt: Rates, ledger: Ledger, sim: SimDefault, *, capacity: 
         out["event_kwh"] = exported
         out["event_pay"] = exported * axle_value                    # what Axle pays, per kWh exported
         # the supplier's export rate on the same energy
-        out["event_export"] = exported * exp if axle_plus_export else 0.0
+        out["event_export"] = exported * exp if grid_event_plus_export else 0.0
         out["event_gross"] = out["event_pay"] + out["event_export"]
         # what the energy was worth otherwise: battery energy at the overnight rate it's refilled at (with the
         # round-trip loss), solar at the export rate it would have earned anyway

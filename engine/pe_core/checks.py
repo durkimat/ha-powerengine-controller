@@ -96,7 +96,7 @@ def check(role: Role, spec: dict[str, Any] | None, state: dict[str, Any] | None,
 # unavailable for minutes around 03:00 most nights: the app holds their last reading for 15 minutes
 # (`_state_all`), and after that carries on with no event assumed rather than stopping the battery's control.
 # Unmapped still counts as missing.
-DEGRADABLE_GROUPS = frozenset({"ev", "axle"})
+DEGRADABLE_GROUPS = frozenset({"ev", "grid_events"})
 DEGRADED = (UNAVAILABLE, STALE)
 
 

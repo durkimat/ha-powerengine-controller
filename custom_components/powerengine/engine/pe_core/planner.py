@@ -41,7 +41,7 @@ class Params:
     cheap_cap_p: float = 10.0         # normal charging only at or below this price
     axle_kw: float = 4.0
     axle_value: float = 1.00          # GBP/kWh Axle pays for export during an event
-    axle_plus_export: bool = True     # the supplier's export rate is paid on top (EDF: £1 + 15p)
+    grid_event_plus_export: bool = True     # the supplier's export rate is paid on top (EDF: £1 + 15p)
     axle_enabled: bool = True
     free_enabled: bool = True
     hold_for_car: bool = True         # car in house load: don't let the battery feed it
@@ -317,14 +317,14 @@ def _default(s: Slot, p: Params, tz) -> PlanSlot:
 
 def axle_rate(p: Params, export: float | None) -> float:
     """GBP per kWh exported during an Axle event: Axle's payment, plus the export rate when the supplier pays it too."""
-    return p.axle_value + ((export or 0.0) if p.axle_plus_export else 0.0)
+    return p.axle_value + ((export or 0.0) if p.grid_event_plus_export else 0.0)
 
 
 def axle_words(p: Params, export: float | None) -> str:
     """'£1.15/kWh (£1 Axle + 15p export)' or '£1/kWh'."""
     total = axle_rate(p, export)
     pounds = f"£{total:.2f}".replace(".00", "")
-    if p.axle_plus_export and export:
+    if p.grid_event_plus_export and export:
         return f"{pounds}/kWh (£{p.axle_value:g} {N('event')} + {export * 100:g}p export)"
     return f"{pounds}/kWh"
 
@@ -726,8 +726,8 @@ def params_from(cfg, readings=None) -> Params:
         target_soc=s["grid_charge_target_soc"],
         cheap_cap_p=s["cheap_threshold_p"],
         axle_kw=max_dis,                 # Axle pays per kWh: plan events at full discharge power (0.9.55)
-        axle_enabled=bool(f.get("axle")),
-        axle_plus_export=bool(f.get("axle_plus_export", True)),
+        axle_enabled=bool(f.get("grid_events")),
+        grid_event_plus_export=bool(f.get("grid_event_plus_export", True)),
         free_enabled=bool(f.get("free_power_days")),
         hold_for_car=bool(cfg.system.get("house_load_includes_ev", True)),
         fuse_kw=s.get("main_fuse_a", 60) * 0.230 * 0.9,

@@ -15,7 +15,7 @@ want to change or remove a rule, read its row first: the incident is what the ru
 | **Sentences name the price the decision used** ("tariff still 30.28p" for a planned slot not yet priced) | 29 Sep 2026, 21:17: a car slot showed the ordinary 30.28p for 30 s before it showed 6.99p, and the sentence named a peak price as the slot price | `planner._car_slot_p` | 0.9.64 |
 | **A Hold does not store surplus solar** in the plan; it exports it | 4 Oct 2026: a Hold with about 1.9 kW spare sun averaged +0.19 kW battery, Self-use -1.9 kW. On the inverter Hold is a force charge at 0 W | `planner.step` (#175) | 0.9.98 |
 | **Event power is the battery's full discharge power** | The aggregator pays per kWh; before 0.9.55 every event was capped at 4 kW, which left about 1 kWh an hour unsold on 28 Sep 2026 | `decide.axle_power_w`, `Params.axle_kw` | 0.9.55 |
-| **Event value counts the export rate too** (EDF: £1 + 15p) | Owner's tariff; switch `axle_plus_export` | `planner.axle_rate` | |
+| **Event value counts the export rate too** (EDF: £1 + 15p) | Owner's tariff; switch `grid_event_plus_export` | `planner.axle_rate` | |
 | **The cheap threshold is worked out from the day's prices** and "storing must pay after losses and wear" | A flat tariff has nothing cheap; buying is never "cheap" if storing it cannot pay | `tariff.cheap_threshold` | |
 | **A charge in the rules plan must beat the price it avoids by 0.5p/kWh after round-trip losses** | Avoid pointless cycles for tiny gains | `planner.MIN_GAIN` | |
 | **Arbitrage must clear a margin after losses and wear, and reach the refill with the reserve + 10 points** | A small forecast error must not push the house onto the peak rate | `planner._add_arbitrage` | |

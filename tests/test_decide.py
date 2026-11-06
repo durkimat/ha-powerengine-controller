@@ -77,7 +77,7 @@ def test_axle_discharges_at_the_battery_limit_within_the_ram_cap():
 
 
 def test_axle_feature_off_is_ignored():
-    cfg = dataclasses.replace(CFG, features={**CFG.features, "axle": False})
+    cfg = dataclasses.replace(CFG, features={**CFG.features, "grid_events": False})
     assert decide(R(axle_active=True), cfg).action == SELF_USE
 
 

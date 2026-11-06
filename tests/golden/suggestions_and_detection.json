@@ -90,25 +90,25 @@
   }
  },
  "roles": {
-  "axle_direction": {
+  "grid_event_direction": {
    "suggest": [
     "^sensor\\.axle_vpp_axle_import_export$"
    ],
    "suggest_not": []
   },
-  "axle_event_active": {
+  "grid_event_active": {
    "suggest": [
     "^sensor\\.axle_vpp_axle_event_in_progress$"
    ],
    "suggest_not": []
   },
-  "axle_event_end": {
+  "grid_event_end": {
    "suggest": [
     "^sensor\\.axle_vpp_axle_end_time_friendly$"
    ],
    "suggest_not": []
   },
-  "axle_event_start": {
+  "grid_event_start": {
    "suggest": [
     "^sensor\\.axle_vpp_axle_start_time_friendly$"
    ],

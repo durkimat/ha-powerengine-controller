@@ -15,13 +15,14 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 
+from ..config import RENAMED_INPUTS
 from ..forecast import LoadProfile
 
 # the world's roles whose entities the feed replaces: what an adapter reads future information from
 FED_ROLES = ("solar_forecast_today", "solar_forecast_tomorrow", "solar_forecast_day3", "import_rate_now",
              "import_rates_today", "import_rates_tomorrow", "export_rate", "standing_charge", "smart_dispatches",
-             "free_power_active", "free_power_next_start", "free_power_next_end", "axle_event_active",
-             "axle_event_start", "axle_event_end")
+             "free_power_active", "free_power_next_start", "free_power_next_end", "grid_event_active",
+             "grid_event_start", "grid_event_end")
 START_BY = timedelta(minutes=30)          # a usable snapshot has an entry at or before 00:30 local
 
 
@@ -48,7 +49,9 @@ class Snapshot:
     def __init__(self, data: dict):
         self.data = data
         self.day, self.tz = data.get("day"), data.get("tz")
-        self.roles: dict[str, str] = {k: v for k, v in (data.get("roles") or {}).items() if isinstance(v, str)}
+        # snapshots written before the grid-event inputs were renamed hold the old role names
+        self.roles: dict[str, str] = {RENAMED_INPUTS.get(k, k): v for k, v in (data.get("roles") or {}).items()
+                                      if isinstance(v, str)}
         entries = []
         for e in data.get("entries") or []:
             try:

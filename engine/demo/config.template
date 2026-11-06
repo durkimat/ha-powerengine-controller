@@ -61,11 +61,11 @@ inputs:
     entity: sensor.demo_zappi_power_charging
   ev_energy_today:
     entity: sensor.demo_zappi_energy_used_today
-  axle_event_active:
+  grid_event_active:
     entity: sensor.demo_axle_event_in_progress
-  axle_event_start:
+  grid_event_start:
     entity: sensor.demo_axle_start_time
-  axle_event_end:
+  grid_event_end:
     entity: sensor.demo_axle_end_time
   guard_read_only:
     entity: switch.demo_other_controller_read_only
@@ -91,7 +91,7 @@ features:
   fill_when_cheap: true
   smart_charge_optimisation: false
   arbitrage: true
-  axle: true
+  grid_events: true
   free_power_days: true
   tariff_simulator: false
   optimised_plan: true
@@ -114,8 +114,8 @@ safety:
   main_fuse_a: 80
   ev_charger_kw: 7.4
   export_limit_kw: 6
-  pre_axle_lookahead_h: 6
-  axle_margin_soc: 5
+  pre_grid_event_lookahead_h: 6
+  grid_event_margin_soc: 5
   battery_wear_p: 2
   arbitrage_min_margin_p: 1
   arbitrage_min_soc: 75
@@ -136,6 +136,6 @@ notifications:
   events:
     health: false
     inputs: false
-    axle: false
+    grid_event: false
     free_power: false
     daily: false

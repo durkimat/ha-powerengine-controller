@@ -70,7 +70,7 @@ def _app(monkeypatch):
 
     from pe_core.config import parse_config
     a = powerengine.PowerEngine.__new__(powerengine.PowerEngine)
-    a.cfg = parse_config({"inputs": {"axle_event_start": {"entity": "sensor.axle_start"},
+    a.cfg = parse_config({"inputs": {"grid_event_start": {"entity": "sensor.axle_start"},
                                      "battery_soc": {"entity": "sensor.soc"}}})
     a.states = {}
     a.get_state = lambda eid, attribute=None: a.states.get(eid)

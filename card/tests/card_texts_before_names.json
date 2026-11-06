@@ -47,22 +47,22 @@
    "When a check meter is set and reporting, use it for grid power instead of the inverter's meter, and correct the inverter's house load by the difference (also in the learned usage history). If it stops reporting for 3 minutes, the inverter's meter is used again. Off: the check meter is only compared."
   ],
   [
-   "axle",
+   "grid_events",
    "Take part in grid events",
    "Force-discharge during grid events (run by Axle) and hold charge beforehand, so the battery is full when one starts."
   ],
   [
-   "axle_plus_export",
+   "grid_event_plus_export",
    "Grid events also earn the export rate",
    "Your supplier pays its normal export rate on grid-event exports as well as the event payment (Axle: £1/kWh; EDF: £1 + 15p). Planning and the event figures count both. Off: the event payment only."
   ],
   [
-   "axle_stop_car",
+   "grid_event_stop_car",
    "Stop the car charger during grid events",
    "While a grid event (Axle) runs, set the car charger (Zappi) to Stopped, so the battery's export isn't charged into the car, and put its mode back when the event ends. Without this, a smart-charge slot or a manual charge can take the whole event's energy and the event earns almost nothing. Needs the Charger mode entity (a select) mapped. Applies in Active mode only."
   ],
   [
-   "axle_heating_setback",
+   "grid_event_heating_setback",
    "Turn the heating down before grid events",
    "Turn your heating's set-back switch on shortly before a grid event (Axle) starts and off when it ends, so the boiler's pump isn't drawing power while the battery is exporting. Choose the switch below (for example input_boolean.heating_off) and how long before the event to start: the pump's overrun. A switch that is already on is left alone, and one you turn off during the set-back stays off. Applies in Active mode only."
   ],
@@ -164,7 +164,7 @@
    "note": null
   },
   {
-   "key": "axle",
+   "key": "grid_events",
    "title": "Grid events",
    "note": null
   },
@@ -203,7 +203,7 @@
    true
   ],
   [
-   "axle",
+   "grid_event",
    "Grid events",
    "When a grid event (Axle) is scheduled, with its time.",
    true

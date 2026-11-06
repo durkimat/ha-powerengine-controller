@@ -13,7 +13,7 @@
    {
     "key": "battery_power",
     "label": "Battery power",
-    "description": "Live charge/discharge power (if no pair below).",
+    "description": "Live charge/discharge power (if no pair).",
     "kind": "power",
     "signed": true,
     "sign_note": "+ discharging, - charging",
@@ -94,7 +94,7 @@
    {
     "key": "battery_discharge_today",
     "label": "Battery discharged today",
-    "description": "Energy out of the battery today, for losses.",
+    "description": "Battery output today, for losses.",
     "kind": "energy",
     "suggest": [
      "^sensor\\.solis_battery_discharge_today$"
@@ -197,7 +197,7 @@
    {
     "key": "grid_import_today",
     "label": "Grid import today",
-    "description": "Energy imported today, for costs and losses.",
+    "description": "Imported today, for costs and losses.",
     "kind": "energy",
     "suggest": [
      "^sensor\\.solis_grid_import_today$"
@@ -206,7 +206,7 @@
    {
     "key": "grid_export_today",
     "label": "Grid export today",
-    "description": "Energy exported today, for costs and losses.",
+    "description": "Exported today, for costs and losses.",
     "kind": "energy",
     "suggest": [
      "^sensor\\.solis_grid_export_today$"
@@ -235,7 +235,7 @@
    {
     "key": "house_load_power",
     "label": "House load",
-    "description": "Household consumption (car subtracted if in it).",
+    "description": "House consumption (car taken off if in it).",
     "kind": "power",
     "suggest": [
      "^sensor\\.solis_house_load$"
@@ -296,7 +296,7 @@
    {
     "key": "import_rates_today",
     "label": "Import rates today",
-    "description": "Today's half-hourly import rates (slots included).",
+    "description": "Today's half-hour import rates (with slots).",
     "kind": "list",
     "domains": [
      "event",
@@ -451,11 +451,11 @@
     ]
    },
    {
-    "key": "axle_event_active",
+    "key": "grid_event_active",
     "label": "Grid event active",
     "description": "On during a grid event run by Axle.",
     "kind": "binary",
-    "required": "axle",
+    "required": "grid_events",
     "domains": [
      "sensor",
      "binary_sensor"
@@ -465,29 +465,29 @@
     ]
    },
    {
-    "key": "axle_event_start",
+    "key": "grid_event_start",
     "label": "Grid event start",
     "description": "Start of the next grid event.",
     "kind": "timestamp",
-    "required": "axle",
+    "required": "grid_events",
     "suggest": [
      "^sensor\\.axle_vpp_axle_start_time_friendly$"
     ]
    },
    {
-    "key": "axle_event_end",
+    "key": "grid_event_end",
     "label": "Grid event end",
     "description": "End of the next grid event.",
     "kind": "timestamp",
-    "required": "axle",
+    "required": "grid_events",
     "suggest": [
      "^sensor\\.axle_vpp_axle_end_time_friendly$"
     ]
    },
    {
-    "key": "axle_direction",
+    "key": "grid_event_direction",
     "label": "Grid event direction",
-    "description": "Import or export (only export is acted on).",
+    "description": "Import or export (only export is used).",
     "kind": "text",
     "required": "no",
     "suggest": [
@@ -1108,28 +1108,28 @@
    [],
    null
   ],
-  "axle_event_active": [
+  "grid_event_active": [
    [
     "^sensor\\.axle_vpp_axle_event_in_progress$"
    ],
    [],
    null
   ],
-  "axle_event_start": [
+  "grid_event_start": [
    [
     "^sensor\\.axle_vpp_axle_start_time_friendly$"
    ],
    [],
    null
   ],
-  "axle_event_end": [
+  "grid_event_end": [
    [
     "^sensor\\.axle_vpp_axle_end_time_friendly$"
    ],
    [],
    null
   ],
-  "axle_direction": [
+  "grid_event_direction": [
    [
     "^sensor\\.axle_vpp_axle_import_export$"
    ],

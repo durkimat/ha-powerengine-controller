@@ -21,7 +21,7 @@ STEP = timedelta(seconds=30)
 COST_ROLES = ("battery_soc", "battery_power", "battery_charge_power", "battery_discharge_power", "grid_power",
               "grid_power_reference",
               "house_load_power", "ev_charge_power", "ev_plug_status",
-              "import_rate_now", "export_rate", "standing_charge", "axle_event_active", "free_power_active")
+              "import_rate_now", "export_rate", "standing_charge", "grid_event_active", "free_power_active")
 ATTRIBUTE_ROLES = ("import_rates_today",)
 
 

@@ -48,7 +48,7 @@ def test_valid_file(tmp_path):
     assert used == str(p)
     assert cfg.mode == "active"
     assert set(cfg.inputs) == {"battery_soc", "export_rate"}
-    assert cfg.features["axle"] is True and cfg.features["arbitrage"] is False
+    assert cfg.features["grid_events"] is True and cfg.features["arbitrage"] is False
     assert [pl.id for pl in cfg.solar_plants] == ["main", "garage"]
     assert cfg.solar_plants[1].forecast == "none" and cfg.solar_plants[1].enabled is True
     assert cfg.solar_plants[1].name == "garage"
@@ -72,7 +72,7 @@ PLANT = {"id": "p1", "power": {"entity": "sensor.a"}, "energy_today": {"entity":
         {"inputs": {"battery_soc": {"entity": "Not An Entity"}}},
         {"inputs": {"smart_target_soc": {"entity": "number.edf_x_intelligent_bump_charge"}}},
         {"features": {"teleport": True}},
-        {"features": {"axle": "yes"}},
+        {"features": {"grid_events": "yes"}},
         {"schema_version": 99},
         # an app definition (module, class) must never be mistaken for settings
         {"powerengine": {"module": "powerengine", "class": "PowerEngine"}},
@@ -104,8 +104,8 @@ def test_signed_input_can_be_inverted():
 def test_required_roles_follow_features():
     from pe_core.config import required_roles
     with_axle = required_roles(parse_config({}))
-    without = required_roles(parse_config({"features": {"axle": False, "free_power_days": False}}))
-    assert "axle_event_active" in with_axle and "axle_event_active" not in without
+    without = required_roles(parse_config({"features": {"grid_events": False, "free_power_days": False}}))
+    assert "grid_event_active" in with_axle and "grid_event_active" not in without
     assert "battery_soc" in without and "battery_soh" not in with_axle
 
 

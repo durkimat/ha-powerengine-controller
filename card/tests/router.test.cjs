@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert");
 const c = require("../ha-powerengine-card.js");
 const GROUP = "120363085203994232@g.us";
-const LIVE = { service: "persistent_notification", events: { health: true, inputs: true, axle: true, free_power: true, daily: true, alexa: true, simulator: true },
+const LIVE = { service: "persistent_notification", events: { health: true, inputs: true, grid_event: true, free_power: true, daily: true, alexa: true, simulator: true },
   alexa: { services: ["notify.alexa_media_daddy_dot", "notify.alexa_media_grandpa_dot"], earliest_weekday: "07:30", earliest_weekend: "08:00", latest: "21:00", intro: "Daddy Bot here.", whatsapp: true, whatsapp_targets: [GROUP] } };
 
 test("the older settings become the same channels and rules the app makes", () => {
@@ -11,7 +11,7 @@ test("the older settings become the same channels and rules the app makes", () =
   assert.strictEqual(r.channels.alexa.intro, "Daddy Bot here.");
   assert.deepStrictEqual(r.channels.alexa.hours, { weekday_from: "07:30", weekend_from: "08:00", until: "21:00" });
   assert.deepStrictEqual(r.channels.whatsapp.targets, [GROUP]);
-  assert.deepStrictEqual(r.rules, [{ events: ["health", "inputs", "axle", "free_power", "daily", "simulator"], to: ["bell"] },
+  assert.deepStrictEqual(r.rules, [{ events: ["health", "inputs", "grid_event", "free_power", "daily", "simulator"], to: ["bell"] },
     { events: ["grid_reminder", "grid_summary"], to: ["alexa", "whatsapp"] }]);
   assert.deepStrictEqual(r.reminder_hours, [8, 5, 2, 1, 0]);
   const phone = c.routerFromLegacy({ service: "notify.mobile_app_pixel", events: { health: true }, alexa: c.alexaDraft({ finish: false }) });

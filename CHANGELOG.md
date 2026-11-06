@@ -2,6 +2,23 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.227 (beta)
+
+### Behaviour changes
+
+None you will see. The grid-event settings have new names inside the settings file, and your existing file keeps working: it is
+read under the new names, and the next time you save from the card it is written with them.
+
+### Behind the scenes
+
+- **The grid-event settings are no longer named after one supplier.** The feature `axle` is now `grid_events`, with
+  `grid_event_plus_export`, `grid_event_stop_car` and `grid_event_heating_setback`; the safety settings are
+  `pre_grid_event_lookahead_h` and `grid_event_margin_soc`; the inputs are `grid_event_active`, `grid_event_start`,
+  `grid_event_end` and `grid_event_direction`; the notification kind is `grid_event`. Settings files, held notices and
+  snapshots saved under the old names are read under the new ones. Stored history (the ledger, decision names and the
+  `sensor.pe_state_axle` entity) keeps its names.
+- A few role descriptions on the Config page are shorter, to keep the role list in one sensor.
+
 ## 0.9.226 (beta)
 
 ### Behaviour changes

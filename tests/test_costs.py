@@ -155,7 +155,7 @@ def test_events_are_kept_out_of_the_everyday_layers():
     ev = s["events"]["axle"]
     assert ev["kwh"] == pytest.approx(2.0) and ev["gross"] == pytest.approx(2.0 * (1.0 + EXP))   # £1 + export
     assert 0 < ev["net"] < ev["gross"]
-    only_axle, _ = run([(axle, Rates(PEAK, PEAK, CHEAP, EXP, False))], axle_plus_export=False)
+    only_axle, _ = run([(axle, Rates(PEAK, PEAK, CHEAP, EXP, False))], grid_event_plus_export=False)
     assert day_summary(only_axle, complete=False)["events"]["axle"]["gross"] == pytest.approx(2.0)
     only_night, _ = run(CASES[:1])
     assert s["s0"] == day_summary(only_night, complete=False)["s0"]
@@ -180,7 +180,7 @@ def test_the_event_pays_per_kwh_and_the_export_rate_is_counted_separately():
     records, _ = run([(axle, Rates(PEAK, PEAK, CHEAP, EXP, False))])
     ev = day_summary(records, complete=False)["events"]["axle"]
     assert ev["pay"] == pytest.approx(2.0) and ev["gross"] == pytest.approx(2.0 * (1.0 + EXP))
-    without, _ = run([(axle, Rates(PEAK, PEAK, CHEAP, EXP, False))], axle_plus_export=False)
+    without, _ = run([(axle, Rates(PEAK, PEAK, CHEAP, EXP, False))], grid_event_plus_export=False)
     ev = day_summary(without, complete=False)["events"]["axle"]
     assert ev["pay"] == pytest.approx(2.0) and ev["gross"] == pytest.approx(2.0)
 

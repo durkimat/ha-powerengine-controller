@@ -281,22 +281,22 @@ test("health: causes biggest first, backstop flagged, weights and comfort text",
 
 test("config grouping: v1-only settings leave the house topics, nothing is lost, nothing doubles", () => {
   const settings = ["battery_floor_soc", "min_reserve_soc", "grid_charge_target_soc", "charge_hysteresis_soc", "main_fuse_a", "cheap_threshold_p",
-    "window_switch_cost_p", "battery_wear_p", "arbitrage_min_soc", "pre_axle_lookahead_h", "axle_margin_soc", "export_limit_kw", "brand_new_setting"];
-  const features = ["optimised_plan", "auto_cheap_threshold", "fill_when_cheap", "arbitrage", "deep_overnight", "axle", "use_check_meter"];
+    "window_switch_cost_p", "battery_wear_p", "arbitrage_min_soc", "pre_grid_event_lookahead_h", "grid_event_margin_soc", "export_limit_kw", "brand_new_setting"];
+  const features = ["optimised_plan", "auto_cheap_threshold", "fill_when_cheap", "arbitrage", "deep_overnight", "grid_events", "use_check_meter"];
   const system = ["engine", "overnight_window", "control_method"];
   const on = card.engineGrouping(["battery_soc"], settings, features, system, true);
   assert.strictEqual(on.grouped, true);
   const houseSettings = on.house.flatMap((t) => t.settings), houseFeatures = on.house.flatMap((t) => t.features);
-  ["min_reserve_soc", "charge_hysteresis_soc", "window_switch_cost_p", "battery_wear_p", "arbitrage_min_soc", "pre_axle_lookahead_h", "axle_margin_soc"]
+  ["min_reserve_soc", "charge_hysteresis_soc", "window_switch_cost_p", "battery_wear_p", "arbitrage_min_soc", "pre_grid_event_lookahead_h", "grid_event_margin_soc"]
     .forEach((k) => assert.ok(!houseSettings.includes(k), k));
   // the car's smart-charge requests read the cheap threshold and the grid-charge target whichever engine runs
   ["battery_floor_soc", "main_fuse_a", "export_limit_kw", "cheap_threshold_p", "grid_charge_target_soc", "brand_new_setting"].forEach((k) => assert.ok(houseSettings.includes(k), k));
   ["optimised_plan", "fill_when_cheap", "arbitrage", "deep_overnight"].forEach((k) => assert.ok(!houseFeatures.includes(k), k));
-  ["axle", "use_check_meter", "auto_cheap_threshold"].forEach((k) => assert.ok(houseFeatures.includes(k), k));
+  ["grid_events", "use_check_meter", "auto_cheap_threshold"].forEach((k) => assert.ok(houseFeatures.includes(k), k));
   assert.ok(!on.house.flatMap((t) => t.system).includes("engine"));            // the choice has its own control
   const v1Settings = on.v1.flatMap((s) => s.settings), v1Features = on.v1.flatMap((s) => s.features);
-  assert.deepStrictEqual(v1Settings.slice().sort(), ["arbitrage_min_soc", "axle_margin_soc", "battery_wear_p", "charge_hysteresis_soc",
-    "min_reserve_soc", "pre_axle_lookahead_h", "window_switch_cost_p"]);
+  assert.deepStrictEqual(v1Settings.slice().sort(), ["arbitrage_min_soc", "battery_wear_p", "charge_hysteresis_soc", "grid_event_margin_soc",
+    "min_reserve_soc", "pre_grid_event_lookahead_h", "window_switch_cost_p"]);
   assert.deepStrictEqual(v1Features.slice().sort(), ["arbitrage", "deep_overnight", "fill_when_cheap", "optimised_plan"]);
   // the battery floor is a shared setting in the battery topic
   assert.ok(on.house.find((t) => t.key === "battery").settings.includes("battery_floor_soc"));

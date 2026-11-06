@@ -88,7 +88,7 @@ test("buildConfig drops empty inputs and incomplete plants, keeps invert", () =>
   const out = h.buildConfig({
     inputs: { a: { entity: "sensor.a" }, b: {}, g: { entity: "sensor.g", invert: true }, c: { value: "18" } },
     solar_plants: [{ id: "main", name: "Main", power: { entity: "sensor.p" }, energy_today: { entity: "sensor.e" } }, { id: "x", power: {}, energy_today: {} }],
-    features: { axle: true }, operation: { mode: "passive" },
+    features: { grid_events: true }, operation: { mode: "passive" },
   });
   assert.deepStrictEqual(Object.keys(out.inputs).sort(), ["a", "c", "g"]);
   assert.strictEqual(out.inputs.c.value, 18);
@@ -146,7 +146,7 @@ test("notifications default to HA's notification area; off and phone are saved",
   assert.equal(buildConfig(draft).notifications.service, "persistent_notification");
   draft.notifications.service = "notify.mobile_app_pixel";
   draft.notifications.events.daily = true;
-  assert.deepEqual(buildConfig(draft).notifications, { service: "notify.mobile_app_pixel", events: { health: true, inputs: true, axle: true, free_power: true, daily: true, alexa: false, simulator: true }, alexa: { services: ["notify.alexa_media_everywhere"], hours_before: [8, 5, 2, 1, 0], earliest_weekday: "07:30", earliest_weekend: "09:00", latest: "21:00", intro: "Daddybot here.", finish: true } });
+  assert.deepEqual(buildConfig(draft).notifications, { service: "notify.mobile_app_pixel", events: { health: true, inputs: true, grid_event: true, free_power: true, daily: true, alexa: false, simulator: true }, alexa: { services: ["notify.alexa_media_everywhere"], hours_before: [8, 5, 2, 1, 0], earliest_weekday: "07:30", earliest_weekend: "09:00", latest: "21:00", intro: "Daddybot here.", finish: true } });
   const off = initialDraft({ inputs: {}, notifications: { service: "" } }, [], [], {}).draft;
   assert.equal(off.notifications.service, "off");
   assert.equal(buildConfig(off).notifications.service, "off");
@@ -262,7 +262,7 @@ test("every feature has a default", () => {
 
 test("topicPlan puts everything somewhere, clocks together, leftovers in Other", () => {
   const plan = h.topicPlan(["battery_soc", "inverter_clock", "inverter_clock_sync", "new_thing"], ["min_reserve_soc"],
-    ["axle", "learn_taper"], ["battery_location"]);
+    ["grid_events", "learn_taper"], ["battery_location"]);
   const where = (k) => plan.find((t) => t.roles.includes(k)).key;
   assert.equal(where("inverter_clock"), "control");
   assert.equal(where("inverter_clock_sync"), "control");
@@ -294,8 +294,8 @@ test("roleNeed", () => {
   assert.equal(h.roleNeed({ key: "battery_soc", required: "yes" }, d("passive")).level, "req");
   assert.equal(h.roleNeed({ key: "timed_charge_current", required: "no" }, d("passive")).level, "cond");
   assert.equal(h.roleNeed({ key: "timed_charge_current", required: "no" }, d("active")).badge, "Required to go live");
-  assert.equal(h.roleNeed({ key: "axle_event_active", required: "axle" }, d("passive", { axle: false })).level, "cond");
-  assert.equal(h.roleNeed({ key: "axle_event_active", required: "axle" }, d("passive", { axle: true })).level, "req");
+  assert.equal(h.roleNeed({ key: "grid_event_active", required: "grid_events" }, d("passive", { grid_events: false })).level, "cond");
+  assert.equal(h.roleNeed({ key: "grid_event_active", required: "grid_events" }, d("passive", { grid_events: true })).level, "req");
   assert.equal(h.roleNeed({ key: "smart_target_soc", required: "no" }, d("passive", { smart_charge_optimisation: true })).level, "req");
   assert.equal(h.roleNeed({ key: "battery_soh", required: "no" }, d("passive")).level, "opt");
   assert.equal(h.roleNeed({ key: "battery_power", required: "yes" }, d("passive"), true).level, "unused");
@@ -810,11 +810,11 @@ test("Alexa speaker list: groups (Amazon Speaker Group devices and Everywhere) a
 });
 
 test("the heating set-back is a grid-event feature, off by default, with its switch and pump overrun beside it", () => {
-  const axle = h.TOPICS.find((t) => t.key === "axle");
-  assert.ok(axle.features.includes("axle_heating_setback"));
+  const axle = h.TOPICS.find((t) => t.key === "grid_events");
+  assert.ok(axle.features.includes("grid_event_heating_setback"));
   assert.ok(axle.roles.includes("heating_setback") && axle.settings.includes("heating_pump_overrun_min"));
-  assert.equal(h.FEATURE_DEFAULTS.axle_heating_setback, false);
-  assert.ok(h.FEATURES.some((f) => f[0] === "axle_heating_setback"));
+  assert.equal(h.FEATURE_DEFAULTS.grid_event_heating_setback, false);
+  assert.ok(h.FEATURES.some((f) => f[0] === "grid_event_heating_setback"));
 });
 
 test("the grid event summary switch is carried and defaults on", () => {
