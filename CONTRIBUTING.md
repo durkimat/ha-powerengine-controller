@@ -12,7 +12,7 @@ PowerEngine is two repositories that release together:
 
 Licence: [Apache-2.0](LICENSE). Under section 5 of that licence, anything you submit is licensed to the project under the
 same terms, with no extra paperwork. Don't submit code you don't have the right to share, and don't copy code from projects
-with an incompatible licence (nothing is taken from Predbat).
+with an incompatible licence.
 
 ## Ways to help
 

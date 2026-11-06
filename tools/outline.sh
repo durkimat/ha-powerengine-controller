@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A map of the two big files, so a session reads one range instead of scanning the whole file.
+# A map of the two big files (the engine and the dashboard card, `card/`), so a session reads one range instead of scanning the whole file.
 #
 #   tools/outline.sh [app|card|<file>] [--defs]
 #
@@ -12,8 +12,7 @@ target="app"; defs=0
 for a in "$@"; do case "$a" in --defs) defs=1 ;; -h|--help) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;; *) target="$a" ;; esac; done
 case "$target" in
   app) file="apps/powerengine/powerengine.py"; kind=py ;;
-  card) file="../ha-powerengine-card/ha-powerengine-card.js"; kind=js
-        [ -f "$file" ] || { echo "card repo not found at $file (clone it beside this repo)"; exit 1; } ;;
+  card) file="card/ha-powerengine-card.js"; kind=js ;;
   *) file="$target"; [ -f "$file" ] || { echo "no such file: $file"; exit 1; }
      case "$file" in *.js) kind=js ;; *) kind=py ;; esac ;;
 esac

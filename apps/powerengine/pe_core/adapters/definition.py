@@ -20,7 +20,7 @@ from pathlib import Path
 import yaml
 
 DEVICES_DIR = Path(__file__).parent / "devices"
-SUFFIX = ".yml"                # not .yaml: AppDaemon loads every .yaml under the apps folder as app config
+SUFFIX = ".yml"                # the definition files' extension
 FORMAT = 1
 
 # The named behaviours a definition may select (each is implemented in Python by DefinedInverter and its helpers).

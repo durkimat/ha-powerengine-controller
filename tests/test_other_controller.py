@@ -31,10 +31,6 @@ def test_parse_accepts_the_choices_and_rejects_others():
         _cfg(choice="bogus")
 
 
-def test_a_saved_predbat_choice_from_an_older_version_becomes_other():
-    assert _cfg(choice="predbat").system["other_controller"] == "other"
-
-
 def test_derived_when_not_chosen():
     assert other_controller(_cfg(READ_ONLY)) == "other"
     assert other_controller(_cfg({**READ_ONLY, **OTHER})) == "other"

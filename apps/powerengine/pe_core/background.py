@@ -1,6 +1,6 @@
 """One worker thread that does slow work in order, so the thread that calls the engine's callbacks doesn't wait for it.
 
-AppDaemon runs every callback of the app on one thread. A remote-control command is three service calls, each of which
+Every callback of the engine runs on one thread. A remote-control command is three service calls, each of which
 waits for the Modbus integration to talk to the inverter (2 to 4 seconds each on a slow day), so a command change held
 that thread for up to 15 seconds. The worker takes the calls instead, one after another in the order they were handed
 over, and hands the result back (`done`) for the caller to pass to whatever must run on the callback thread.

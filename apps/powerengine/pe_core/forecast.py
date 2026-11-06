@@ -131,7 +131,7 @@ def profile_from_means(means: dict[datetime, float], now: datetime, tz) -> LoadP
 
 
 def flatten_history(result) -> list[dict]:
-    """AppDaemon's get_history result in whatever shape it comes (list of lists, list, or dict) -> rows."""
+    """Home Assistant's history in whatever shape it comes (list of lists, list, or dict) -> rows."""
     if not result:
         return []
     if isinstance(result, dict):
@@ -146,7 +146,7 @@ def flatten_history(result) -> list[dict]:
 
 def parse_history(rows: list | None, unit: str | None = None,
                   gaps: bool = False) -> list[tuple[datetime, float | None]]:
-    """AppDaemon/HA history rows ([{'state', 'last_changed'}...]) -> (time, W).
+    """Home Assistant history rows ([{'state', 'last_changed'}...]) -> (time, W).
 
     `unit` is the entity's unit when the rows carry no attributes (no_attributes=True). With `gaps`, a row that is not
     a number (unavailable, unknown) comes back as (time, None), for `half_hour_means` to count as a gap.

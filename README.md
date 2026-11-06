@@ -11,8 +11,8 @@ smart-charge slots and VPP events, and explains every decision in plain English.
 ## Install
 
 Follow the **[installation guide](docs/INSTALL.md)**: HACS, the PowerEngine dashboard, configuration, updating,
-rollback, uninstalling and troubleshooting, with a check at each step. No AppDaemon and no MQTT broker are needed, and
-updating restarts only the engine, not Home Assistant. See **[docs/INTEGRATION.md](docs/INTEGRATION.md)** for how the
+rollback, uninstalling and troubleshooting, with a check at each step. Updating restarts only the engine, not Home
+Assistant. See **[docs/INTEGRATION.md](docs/INTEGRATION.md)** for how the
 integration works.
 
 A fresh install runs in **Passive** mode: it monitors, plans and simulates, but
@@ -28,7 +28,7 @@ ruff check . && pytest -q
 ```
 
 Decision logic lives in `apps/powerengine/pe_core/` and has no Home Assistant
-dependency; `powerengine.py` is a thin AppDaemon adapter.
+dependency; `powerengine.py` wires it to Home Assistant through the host.
 
 ## Contributing
 

@@ -2,7 +2,7 @@
 
 The engine says what each entity is (`define`: component, key, name, options as PowerEngine's catalogue has them) and
 writes its state and extra attributes as it goes (`update`). Here each becomes a real entity: in the entity registry
-with the unique id `powerengine_<key>` (as the old AppDaemon app's MQTT entities had), the entity id
+with the unique id `powerengine_<key>` (as the entities of the first versions had), the entity id
 `<component>.pe_<key>`, and on the PowerEngine device. Because the engine describes them, a new entity in an
 engine update needs nothing from this integration, so no Home Assistant restart.
 

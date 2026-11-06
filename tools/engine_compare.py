@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Engine v1 against engine v2 on the demo pack's recorded days, closed loop (engine v2 build, work package E).
 
-For each day the WHOLE app runs in demo mode (a fake AppDaemon and a fake clock; the demo world plays the recorded
+For each day the WHOLE app runs in demo mode (a fake Home Assistant and a fake clock; the demo world plays the recorded
 house, sun, prices, smart slots and grid events and simulates the battery), Active, RAM remote control, from the same
 start, once with engine v1 and once with engine v2. The app's own run_every callbacks (the 30 s cycle, v2's 10 s tick,
 the 5 min input check, the heartbeat) are called at their intervals, and the world is stepped every 10 s, so both

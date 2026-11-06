@@ -3,11 +3,10 @@
 PowerEngine runs as a Home Assistant **integration**. The integration is thin and
 rarely changes; the engine that plans and controls is a separate process that it starts and watches. So:
 
-- no AppDaemon, no `apps.yaml` and no MQTT broker are needed (PowerEngine's entities are real Home Assistant entities
-  with the same ids, `sensor.pe_...`, as before);
+- PowerEngine's entities are real Home Assistant entities (`sensor.pe_...`);
 - updating PowerEngine in HACS restarts **only the engine**, within a minute, and not Home Assistant. Home Assistant
   needs restarting only when a Repair says so (the integration and engine have changed how they talk);
-- the engine keeps its settings and data in `/config/powerengine`, as the app does, and nothing in them changes.
+- the engine keeps its settings and data in `/config/powerengine`, and updates never touch them.
 
 It works wherever Home Assistant runs its own Python (OS, Supervised, Container, Core). Tested against Home Assistant
 2026.10. [INSTALL.md](INSTALL.md) is the full guide: install, the dashboard, configuration and first-day checks. The rest of

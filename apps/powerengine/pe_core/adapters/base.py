@@ -2,7 +2,7 @@
 
 `pe_core` decides what to do in neutral terms (a `Decision`, a set of action names, plain readings). Adapters
 translate those neutral terms into and out of a specific piece of hardware or a specific supplier's API. Nothing
-here talks to Home Assistant or AppDaemon directly except through the `HomeAssistant` protocol below, so adapters
+here talks to Home Assistant directly except through the `HomeAssistant` protocol below, so adapters
 stay testable without either.
 """
 
@@ -15,11 +15,11 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class HomeAssistant(Protocol):
-    """The only door an adapter has into Home Assistant. Nothing here talks to AppDaemon directly."""
+    """The only door an adapter has into Home Assistant. Nothing here talks to the host directly."""
 
     def get_state(self, entity_id: str | None = None, attribute: str | None = None) -> Any:
         """Read an entity's state, or one of its attributes when `attribute` is given. `entity_id=None` returns
-        every entity's state (AppDaemon's `get_state()` with no argument)."""
+        every entity's state (the host's `get_state()` with no argument)."""
         ...
 
     def call_service(self, service: str, **data: Any) -> Any:

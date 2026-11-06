@@ -2,7 +2,7 @@
 
 Design: docs/plans/engine-v2.md; build plan: docs/plans/engine-v2-build.md.
 
-Layers (each its own module, all pure: no Home Assistant, no AppDaemon):
+Layers (each its own module, all pure: no Home Assistant):
 
     settings.py   the v2 settings catalogue and the parsed `V2Settings` (the `engine_v2:` block of config.yaml)
     types.py      the data passed between layers (the contract every module and the app build against)

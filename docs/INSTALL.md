@@ -6,7 +6,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.9.218 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.9.219 (beta; Passive by default, Active available)
 
 ---
 
@@ -43,8 +43,8 @@ batteries, Solcast, myenergi Zappi, EDF (edf_energy) tariff, Axle VPP.
 ## Step 1: install PowerEngine
 
 PowerEngine is a Home Assistant integration. The integration is thin and rarely changes; the engine that plans and
-controls is a separate process it starts and watches. No AppDaemon, no MQTT broker and no `apps.yaml` are needed, and
-PowerEngine's entities are ordinary Home Assistant entities (`sensor.pe_...`).
+controls is a separate process it starts and watches. PowerEngine's entities are ordinary Home Assistant entities
+(`sensor.pe_...`).
 
 1. **HACS → ⋮ → Custom repositories**, add `https://github.com/durkimat/ha-powerengine-controller`, category
    **Integration**. That is the whole install: the dashboard card is part of PowerEngine and the integration serves it,
@@ -70,7 +70,7 @@ PowerEngine's entities are ordinary Home Assistant entities (`sensor.pe_...`).
 **Check the log** (*Settings → System → Logs*, search for `powerengine`). Before any configuration it says:
 
 ```
-PowerEngine 0.9.218 starting
+PowerEngine 0.9.219 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 ```

@@ -8,7 +8,7 @@ goes back to Self-Use about 5 minutes after it stops being sent. So:
   - each decision maps to one command: charge -> Force charge at the planned power, hold -> Force charge at 0 W,
     sell / Axle -> Force discharge at the planned power, self-use -> Off;
   - a change is sent at once; while a force command is on it's re-sent every `refresh` (default 1 minute), well
-    inside the inverter's timeout, so if PowerEngine, AppDaemon or HA stops, the inverter is back on Self-Use within
+    inside the inverter's timeout, so if PowerEngine or HA stops, the inverter is back on Self-Use within
     about 5 minutes by itself;
   - the timed windows are closed once when this method takes over, and then left alone (no EEPROM writes);
   - PowerEngine checks the battery is following the command and reports it if not.
