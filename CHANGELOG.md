@@ -2,6 +2,18 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.231 (beta)
+
+### Behaviour changes
+
+- The dashboard's Update and Check-for-updates buttons work under Home Assistant 2026.11's Marketplace, which replaced
+  HACS. They said "Update failed: unknown command" because the card asked HACS's own interface to look for a new
+  release; without it, the card now asks PowerEngine's update entity to look instead.
+
+### Other
+
+- Card only: no Home Assistant restart is needed; reload the page after the update.
+
 ## 0.9.230 (beta)
 
 ### Behaviour changes

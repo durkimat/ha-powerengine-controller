@@ -2568,6 +2568,21 @@ function peRepos(list) {
   return (list || []).filter((r) => r && r.installed && /powerengine/i.test(String(r.full_name || r.name || "")));
 }
 
+// Ask the store to look for a new release: HACS's own interface, or (no HACS: Home Assistant's Marketplace took over in
+// 2026.11) PowerEngine's update entities. `pause` lets the update entities catch up afterwards.
+async function refreshUpdates(hass, pause = 3000) {
+  try {
+    const repos = peRepos(await hass.callWS({ type: "hacs/repositories/list" }));
+    for (const r of repos) {
+      await hass.callWS({ type: "hacs/repository/refresh", repository: String(r.id) });
+    }
+  } catch (err) {
+    const ids = updateEntities(hass.states);
+    if (ids.length) await hass.callService("homeassistant", "update_entity", { entity_id: ids });
+  }
+  await new Promise((res) => setTimeout(res, pause));
+}
+
 function updateEntities(states) {
   return Object.keys(states || {}).filter((id) => /^update\..*powerengine/i.test(id)).sort();
 }
@@ -2610,14 +2625,7 @@ class PowerEngineUpdateCard extends (typeof HTMLElement !== "undefined" ? HTMLEl
 
   getGridOptions() { return { columns: "full", rows: "auto" }; }
 
-  async _refresh() {
-    const hass = this._hass;
-    const repos = peRepos(await hass.callWS({ type: "hacs/repositories/list" }));
-    for (const r of repos) {
-      await hass.callWS({ type: "hacs/repository/refresh", repository: String(r.id) });
-    }
-    await new Promise((res) => setTimeout(res, 3000));      // let the update entities catch up
-  }
+  async _refresh() { await refreshUpdates(this._hass); }
 
   async _checkNow() {
     const hass = this._hass;
@@ -9495,7 +9503,7 @@ class PowerEngineFlowCard extends PowerEngineV2Card {
 });
 
 if (typeof module !== "undefined") {
-  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, hasUpdateService, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, versionLine, logRows, logWhen, escHtml, findRcEntities, controlEntities, chartPts, chartClose, chartWindow, chartTimeTicks, chartNiceTicks, chartAxisRange, chartSmoothPath, chartStepPath, chartReadout, chartModel, CHART_DEFS, flowNum, flowFmt, flowDuration, flowBatteryNote, flowFigures, flowModel, FLOW_ENTITIES, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, freeLoadDraft, buildFreeLoads, DEVICE_INPUTS, deviceDraft, deviceNewId, buildDevices, deviceReadout,
+  module.exports = { HOUSE_GROUPS, TOPIC_GROUP, routerDraft, routerFromLegacy, withRouter, routerConfig, routerChannelConfig, routerProblem, routeCells, routesFromCells, notifyKinds, newChannelName, NOTIFY_KINDS, whatsappTargets, parseWhatsappTargets, withWhatsapp, catalogueAttrs, alexaSpeakerKinds, alexaTestPayload, ALEXA_TEST_EVENT, alexaDraft, parseHoursBefore, alexaSpeakerName, ALEXA_DEFAULT, v2HistoryProbe, v2Forecast, v2ForecastLastDay, v2HistoryReadout, V2_FLOWS, V2_HISTORY_HINT, runRows, REPLAN_EVENT, replanStatus, plannedImportP, hasUpdateService, roleNeed, setupRows, setupSummary, otherControllerValue, effectiveOtherController, guardRolesShown, otherControllerPrompt, testsPauseHint, OTHER_UNSET_PROMPT, GUARD_ROLES, v2Preview, previewLabel, previewBanner, V2_PREVIEW_LINE, historyDayPayload, shiftHistoryDay, demoNeedsReload, DEMO_WAIT, asBool, FEATURES, FEATURE_DEFAULTS, parseSignNote, readout, inUseFor, nowText, instantProblem, effectiveRole, suggestEntity, initialDraft, buildConfig, slugify, summariseAttribute, settingProblem, testSummary, dampingNote, configEntities, diagStates, diagFileName, scrubReport, reportFileName, reportIssueUrl, REPORT_TEMPLATE, diagHistoryIds, peRepos, refreshUpdates, versionLine, logRows, logWhen, escHtml, findRcEntities, controlEntities, chartPts, chartClose, chartWindow, chartTimeTicks, chartNiceTicks, chartAxisRange, chartSmoothPath, chartStepPath, chartReadout, chartModel, CHART_DEFS, flowNum, flowFmt, flowDuration, flowBatteryNote, flowFigures, flowModel, FLOW_ENTITIES, liveLine, TESTS, measuredText, simHistoryPlan, monthRange, topicPlan, roleNeed, matchesSearch, TOPICS, CARD_VERSION, waterfallRows, waterfallCustom, waterfallSteps, costsRange, costsSummary, costsTodayInfo, costsBars, peParts, costsDayLabel, shownValue, sectionOpen, sectionsLoad, SECTIONS_KEY, overnightReadout, waterfallScale, pct, waterfallShortLabel, compactGbp, fillNames, peRunning, setupRows, setupSummary, demoView, demoEventPayload, configPath, showDemoLink, DEMO_DAYS, NOTIFY_EVENTS, SCREEN, NAME_FALLBACK, SITE_KINDS, SITE_WARNING, SITE_RETEST, siteInfo, siteFirmwareOptions, siteVariant, siteFromSelection, siteChooseInverter, siteNeedsWarning, siteDetectedLine, siteOptionLabel, freeLoadDraft, buildFreeLoads, DEVICE_INPUTS, deviceDraft, deviceNewId, buildDevices, deviceReadout,
   wizardDeviceName, wizardInUse, wizardOthers, wizardUsedEntities, wizardPlantFromDevice, wizardPlantId, EXPORT_FORMAT, EXPORT_VERSION, EXPORT_STATE_MAX, wizardInfo, wizardFacts, wizardMatch, wizardCandidates, wizardRoles, wizardSuggest, wizardPlantGuess, wizardMissing, wizardWatts, wizardSignCheck, wizardBalance, scrubText, buildCandidateExport, candidateFileName, wizardEnergyDevices,
   SYSTEM_DRAFT_KEY, systemKinds, systemItems, systemMissingParts, opsSet, opsRemove, opsUndoRemove, opsTag, opsSummary, applyOps, featuresLeftOut, buildApplyConfig, equipmentOf, systemFingerprint, overlayEquipment, systemImpact, systemDraftLoad, systemDraftSave,
   OVERRIDE_MODES, OVERRIDE_PERIODS, OVERRIDE_MAX_SLOTS, inverterWords, overrideEndOptions, overridePayload, overrideView, overrideSummary,
