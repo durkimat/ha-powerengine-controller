@@ -952,3 +952,22 @@ test("the event's own pay and the export rate on top are said apart; an older ap
   const older = h.costsSummary(range, names, { halfHours: 20, axle: { kwh: 3.26, gross: 3.75, net: 3.5 }, free: null, lastEvent: null }).join(" ");
   assert.match(older, /and paid you £3.75/);
 });
+
+test("the update check falls back to the update entities when there is no HACS (the Marketplace)", async () => {
+  const calls = [];
+  const hass = {
+    states: { "update.powerengine_update": {}, "sensor.other": {} },
+    callWS: async () => { throw new Error("unknown command"); },
+    callService: async (domain, service, data) => { calls.push([domain, service, data]); },
+  };
+  await h.refreshUpdates(hass, 0);
+  assert.deepStrictEqual(calls, [["homeassistant", "update_entity", { entity_id: ["update.powerengine_update"] }]]);
+  const ws = [];
+  const withHacs = {
+    states: {}, callService: async () => { throw new Error("not used"); },
+    callWS: async (m) => { ws.push(m.type); return m.type === "hacs/repositories/list"
+      ? [{ id: 7, full_name: "durkimat/ha-powerengine-controller", installed: true }] : null; },
+  };
+  await h.refreshUpdates(withHacs, 0);
+  assert.deepStrictEqual(ws, ["hacs/repositories/list", "hacs/repository/refresh"]);
+});
