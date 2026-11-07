@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
 from homeassistant.core import callback
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_mock_service
@@ -139,8 +139,9 @@ async def _no_sleep(_seconds):
 
 # --- the update service ----------------------------------------------------------------------------------
 
-def hacs_update(hass, entity_id="update.powerengine_update", state="on", installed="v0.9.1", latest="v0.9.2"):
-    er.async_get(hass).async_get_or_create("update", "hacs", entity_id, suggested_object_id=entity_id.split(".")[1])
+def hacs_update(hass, entity_id="update.powerengine_update", state="on", installed="v0.9.1", latest="v0.9.2",
+                platform="hacs"):
+    er.async_get(hass).async_get_or_create("update", platform, entity_id, suggested_object_id=entity_id.split(".")[1])
     hass.states.async_set(entity_id, state, {"installed_version": installed, "latest_version": latest})
 
 
@@ -183,4 +184,30 @@ async def test_without_a_hacs_update_entity_the_service_says_so(hass, tmp_path, 
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(DOMAIN, "update", {}, blocking=True)
     assert any("No HACS update entity" in n["message"] for n in hass.data["persistent_notification"].values())
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_the_marketplace_that_replaced_hacs_is_used_the_same_way(hass, tmp_path, monkeypatch):
+    entry = await setup(hass, tmp_path, monkeypatch)
+    hacs_update(hass, platform="marketplace")
+    async_mock_service(hass, "homeassistant", "update_entity")
+    installs = async_mock_service(hass, "update", "install")
+    monkeypatch.setattr(EngineSupervisor, "running", property(lambda self: "0.9.1"))
+    await updater.async_update(hass, entry.runtime_data, settle_s=0, running_wait_s=0)
+    assert [c.data["entity_id"] for c in installs] == [["update.powerengine_update"]]
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_an_install_the_store_refuses_is_said_in_a_notification(hass, tmp_path, monkeypatch):
+    entry = await setup(hass, tmp_path, monkeypatch)
+    hacs_update(hass, platform="marketplace")
+    async_mock_service(hass, "homeassistant", "update_entity")
+
+    @callback
+    def refuse(call):
+        raise HomeAssistantError("Open the Marketplace and read the warning first")
+    hass.services.async_register("update", "install", refuse)
+    with pytest.raises(HomeAssistantError):
+        await updater.async_update(hass, entry.runtime_data, settle_s=0, running_wait_s=0)
+    assert any("read the warning first" in n["message"] for n in hass.data["persistent_notification"].values())
     await hass.config_entries.async_unload(entry.entry_id)

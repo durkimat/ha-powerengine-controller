@@ -1,4 +1,5 @@
-"""The one-button update: the latest PowerEngine from HACS, then the engine restarted onto it (`powerengine.update`).
+"""The one-button update: the latest PowerEngine from HACS (or Home Assistant's Marketplace, which took over from it in
+2026.11), then the engine restarted onto it (`powerengine.update`).
 
 What the `script.powerengine_update` in the package earlier versions wrote did, as part of the integration. HACS does
 the download (its update entity for PowerEngine); the engine is restarted by the supervisor as soon as it sees the new
@@ -13,7 +14,7 @@ import logging
 
 from homeassistant.components import persistent_notification
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN
@@ -24,10 +25,13 @@ SETTLE_S = 5                       # after asking HACS to look: time for its ent
 RUNNING_WAIT_S = 180               # for the engine to come back on the new version
 
 
+STORES = ("hacs", "marketplace")      # whose update entities carry PowerEngine: HACS, or the Marketplace since 2026.11
+
+
 def hacs_updates(hass: HomeAssistant) -> list[str]:
-    """HACS's update entities for PowerEngine itself (not the retired separate card)."""
+    """The store's update entities for PowerEngine itself (not the retired separate card)."""
     return sorted(e.entity_id for e in er.async_get(hass).entities.values()
-                  if e.platform == "hacs" and e.domain == "update" and "powerengine" in e.entity_id
+                  if e.platform in STORES and e.domain == "update" and "powerengine" in e.entity_id
                   and "card" not in e.entity_id and not e.disabled)
 
 
@@ -40,8 +44,8 @@ async def async_update(hass: HomeAssistant, runtime, settle_s: float = SETTLE_S,
     """Look for, install and start the latest release. Returns the message it also leaves as a notification."""
     entities = hacs_updates(hass)
     if not entities:
-        _note(hass, "No HACS update entity for PowerEngine was found. In HACS check PowerEngine is downloaded, and "
-                    "under Settings > Entities that its update entity is enabled.")
+        _note(hass, "No HACS update entity for PowerEngine was found. In HACS (or the Marketplace) check PowerEngine "
+                    "is downloaded, and under Settings > Entities that its update entity is enabled.")
         raise ServiceValidationError("No HACS update entity for PowerEngine was found")
     try:
         await hass.services.async_call("homeassistant", "update_entity", {"entity_id": entities}, blocking=True)
@@ -50,7 +54,11 @@ async def async_update(hass: HomeAssistant, runtime, settle_s: float = SETTLE_S,
     await asyncio.sleep(settle_s)
     pending = [e for e in entities if hass.states.is_state(e, "on")]
     if pending:
-        await hass.services.async_call("update", "install", {"entity_id": pending}, blocking=True)
+        try:
+            await hass.services.async_call("update", "install", {"entity_id": pending}, blocking=True)
+        except HomeAssistantError as err:                 # e.g. the Marketplace's one-time warning, not yet accepted
+            _note(hass, f"The update was not installed: {err}")
+            raise
     state = hass.states.get(entities[0])
     installed = str(state.attributes.get("installed_version") or "").lstrip("v") if state else ""
     await runtime.check()                                 # the engine restarts onto new files at once
