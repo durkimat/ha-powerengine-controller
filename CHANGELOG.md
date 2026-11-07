@@ -2,6 +2,19 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.230 (beta)
+
+### Behaviour changes
+
+- The Update button (and the `powerengine.update` service) works with Home Assistant's new Marketplace, which replaced
+  HACS in Home Assistant 2026.11. Before, it said "No HACS update entity for PowerEngine was found".
+- If the store refuses the install (the Marketplace asks you to read a warning once before it installs anything), the
+  button says so in a notification instead of failing silently.
+
+### Other
+
+- Integration change: Home Assistant needs one restart after this update.
+
 ## 0.9.229 (beta)
 
 ### Behaviour changes
