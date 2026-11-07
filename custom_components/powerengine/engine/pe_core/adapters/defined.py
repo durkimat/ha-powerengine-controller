@@ -35,6 +35,9 @@ from ..testwrite import end_time as _test_end_time
 from .base import ControlMethod, HomeAssistant, InverterCapabilities
 from .definition import RC_ROLES, Definition, load_definition
 
+LOOK_AGAIN_SOON_S = 30      # slots not found just after a start: look again this soon, for the next few minutes
+LOOK_AGAIN_WINDOW_S = 300
+
 STORAGE_MODE = "storage_mode"           # the neutral role of the inverter's storage-mode select
 RAM, TIMED = "ram_remote", "timed_windows"
 
@@ -72,6 +75,7 @@ class DefinedInverter:
         self._ram = ram
         self._clock = d.get("clock") or {}
         self._slot_cache = None
+        self._lost_since = None
         self._rc_cache = None
 
     @property
@@ -107,11 +111,16 @@ class DefinedInverter:
         key = tuple(sorted(first.items()))
         cached = self._slot_cache
         recheck = self._slots["recheck_seconds"]
+        if cached and cached[1] is None and self._lost_since is not None \
+                and (now - self._lost_since).total_seconds() < LOOK_AGAIN_WINDOW_S:
+            recheck = min(recheck, LOOK_AGAIN_SOON_S)         # just lost, as at a Home Assistant start: look soon
         if cached and cached[0] == key and (cached[1] is not None or (now - cached[2]).total_seconds() < recheck):
             return cached[1], False
         m = slot_entities(first, lambda e: self.ha.get_state(e) is not None, self._slots["count"],
                           self._slots["suffix"])
         warn = m is None and not (cached and cached[1] is None)
+        if warn:
+            self._lost_since = now
         self._slot_cache = (key, m, now)       # found: kept; not found: looked for again after `recheck`
         return m, warn
 

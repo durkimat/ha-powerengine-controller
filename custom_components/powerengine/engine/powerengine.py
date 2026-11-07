@@ -178,6 +178,7 @@ EVENT_ROLES = ("grid_event_active", "grid_event_start", "grid_event_end", "grid_
 FINISH_KEEP_H = 14          # a grid event's summary not yet spoken (quiet hours) is dropped after this long
 EVENT_HOLD_S = 900          # the grid-event sensors may be unavailable this long before their last reading is dropped
 STICK_WARMUP = timedelta(minutes=5)   # after a start, no mid-slot stickiness while the plan's inputs load
+STARTUP_GRACE = timedelta(minutes=5)  # after a start, inputs from other integrations may still be loading: no alarms
 REPLAN_SECONDS = 300
 HISTORY_DAYS = 14
 BACKFILL_DAYS = 14
@@ -441,6 +442,7 @@ class Engine:
         self.host.call_every(self._publish_v2_history, "now+65", 900)
         self.host.call_every(self._publish_forecast_score, "now+240", 3600)
         self.host.call_later(self._backfill, 90)                       # fill recent days from HA history
+        self.host.call_later(lambda kwargs: self._health(), STARTUP_GRACE.total_seconds() + 5)   # what lasted
         self.host.call_daily(self._backfill, "00:20:00")           # and any day with gaps (e.g. restarts)
         self.log(f"Published {len(ENTITIES)} entities under the PowerEngine device")
 
@@ -563,8 +565,16 @@ class Engine:
             return kept[1]
         return st
 
+    def _winding_down(self):
+        """Has the integration asked this engine to stop (Home Assistant is shutting down, or an update)? Then no
+        more readings, plans or writes: they would only fail against a Home Assistant that is going away."""
+        stop = getattr(self.host, "stop_requested", None)
+        return stop is not None and stop.is_set()
+
     def _evaluate(self):
         if "_last_checks" not in self.__dict__:       # a listener fired between a demo's wipe and its start again
+            return
+        if self._winding_down():
             return
         checks, required = {}, []
         if self.cfg is not None:
@@ -922,6 +932,8 @@ class Engine:
         self._decision). Skips a tick while the last one is still running."""
         preview = self._v2_preview_on()
         if (self._engine_name() != "v2" and not preview) or self.cfg_error or self.mode.effective == "unconfigured":
+            return
+        if self._winding_down():
             return
         if not self._v2_lock.acquire(blocking=False):
             return
@@ -2878,7 +2890,7 @@ class Engine:
         if warn:
             n = self._inverter().slot_count
             self.log(f"Inverter windows {'2 and 3' if n == 3 else f'2 to {n}'} not found (the '_2'/'_3' entities); "
-                     "using the single rolling window for now, rechecking every 10 minutes", level="WARNING")
+                     "using the single rolling window for now, rechecking soon", level="WARNING")
         return m
 
     def _slot_keys(self, slots):
@@ -4419,6 +4431,10 @@ class Engine:
             steps = waterfall([s], "yesterday")["steps"] if s.get("scenarios") and s.get("complete") else None
             self._notify("daily", daily_message(s, steps))
 
+    def _starting_up(self):
+        started = getattr(self, "_started_at", None)
+        return started is not None and datetime.now(timezone.utc) - started < STARTUP_GRACE
+
     def _health(self):
         if self.costbook is None or self._get_publisher() is None:
             return
@@ -4447,7 +4463,8 @@ class Engine:
             h["state"] = overall(h["findings"])
             self._health_last = h
             self._publish_state("diag_health", h["state"], {k: v for k, v in h.items() if k != "all_findings"})
-            self._notify("health", health_message(h))
+            if not self._starting_up():           # (other integrations are still loading: say it if it lasts)
+                self._notify("health", health_message(h))
         except Exception as err:
             self.log(f"Could not evaluate health: {err!r}", level="WARNING")
 
