@@ -103,6 +103,26 @@ def test_slot_map_found_after_not_found_is_kept():
     assert set(m) == {1, 2, 3} and warn is False
 
 
+def test_slot_map_looks_again_soon_when_just_lost_then_every_ten_minutes():
+    ha = FakeHA({eid: "0" for eid in ENTITY.values()})        # a Home Assistant start: "_2"/"_3" not loaded yet
+    inv = SolisInverter(ha, role_entity_all_slots)
+    assert inv.slot_map(NOW) == (None, True)
+    for m in FOR_SLOTS_2_3.values():                          # they load half a minute later
+        ha.states.update({eid: "0" for eid in m.values()})
+    assert inv.slot_map(NOW + timedelta(seconds=10))[0] is None          # not looked at again yet
+    m, warn = inv.slot_map(NOW + timedelta(seconds=31))
+    assert set(m) == {1, 2, 3} and warn is False
+
+    ha2 = FakeHA({eid: "0" for eid in ENTITY.values()})       # still missing after the first few minutes
+    inv2 = SolisInverter(ha2, role_entity_all_slots)
+    inv2.slot_map(NOW)
+    inv2.slot_map(NOW + timedelta(seconds=310))               # looked at, still missing (a 30 s look; now 600 s)
+    for m in FOR_SLOTS_2_3.values():
+        ha2.states.update({eid: "0" for eid in m.values()})
+    assert inv2.slot_map(NOW + timedelta(seconds=400))[0] is None        # the long wait applies now
+    assert inv2.slot_map(NOW + timedelta(seconds=911))[0] is not None
+
+
 # ---------------------------------------------------------------------------
 # slot_keys / read
 # ---------------------------------------------------------------------------

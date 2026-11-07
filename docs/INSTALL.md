@@ -24,7 +24,7 @@ you know it worked before moving on.
 > Keep this guide current: any release that adds or changes a setup step
 > updates this file in the same pull request.
 
-**Version this guide matches:** 0.9.228 (beta; Passive by default, Active available)
+**Version this guide matches:** 0.9.229 (beta; Passive by default, Active available)
 
 ---
 
@@ -90,7 +90,7 @@ showing the demo; click **Exit demo** first, or expect the simulated home's valu
 **Check the log** (*Settings → System → Logs*, search for `powerengine`). Before any configuration it says:
 
 ```
-PowerEngine 0.9.228 starting
+PowerEngine 0.9.229 starting
 No config.yaml found (...); running unconfigured.
 Inputs: unconfigured; mode unconfigured (...)
 ```

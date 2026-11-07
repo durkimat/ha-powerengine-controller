@@ -2,6 +2,24 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.229 (beta)
+
+### Behaviour changes
+
+- After a start, PowerEngine no longer sends a "problems to look at" notification in the first five minutes. Other
+  integrations (the inverter, the meters) are still loading then, so their inputs look missing for a short while. If a
+  problem is still there after the five minutes, the notification is sent as before.
+- If the inverter's second and third timed windows are not found at a start (their entities have not loaded yet),
+  PowerEngine looks again after 30 seconds for the next five minutes, not after 10 minutes. The inverter's failsafe
+  now has all its steps within a minute or two of a Home Assistant restart, not ten minutes after.
+- When Home Assistant is stopping (or an update is stopping the engine), the engine stops reading, planning and writing
+  at once, so a Home Assistant restart no longer fills the log with "integration is stopping" and "event loop is closed"
+  warnings.
+
+### Other
+
+- Engine only: no Home Assistant restart is needed for this update.
+
 ## 0.9.228 (beta)
 
 ### Behaviour changes
