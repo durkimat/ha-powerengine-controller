@@ -118,7 +118,7 @@ from pe_core.forecast import (
     slot_start,
 )
 from pe_core.freeloads import FreeLoadState
-from pe_core.health import WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
+from pe_core.health import PROBLEM, WINDOW_KEYS, overall, plan_snapshot, slot_snapshot
 from pe_core.heatpump import HeatPumpSettings
 from pe_core.history import chosen_plan, day_view
 from pe_core.hold import Hold
@@ -145,7 +145,7 @@ from pe_core.simjob import run as sim_run
 from pe_core.simulate import SimBattery
 from pe_core.slots import DEFAULT_MIN_CHARGE_MIN, SlotTracker, learn_min_charge
 from pe_core.smartcharge import SmartCharger, ask_message, worth_asking
-from pe_core.status import entity_states
+from pe_core.status import entity_states, short
 from pe_core.store import coerce_flags, save_config, with_operation
 from pe_core.tariff import describe_window, fixed_window, overnight_window
 from pe_core.v2flows import FLOW_ROLES as V2_FLOW_ROLES
@@ -184,6 +184,7 @@ HISTORY_DAYS = 14
 BACKFILL_DAYS = 14
 RECHECK_SECONDS = 300
 BUTTON_DELAY_S = 3                # apply the inverter's window times this long after writing them (see _press_buttons)
+HALT_RETRY_MIN = (5, 10, 20, 40, 60)   # control stopped (writes not confirmed): wait this long, then try again
 INPUT_GRACE_SECONDS = 600         # inputs missing: keep the inverter's programmed windows this long before releasing
 RAM_INPUT_GRACE_SECONDS = 90      # inputs missing under RAM remote control: carry on this long before switching it Off
 # ...but the refresh interval plus that grace stays under this (the inverter's own failsafe is about 5 minutes)
@@ -632,7 +633,8 @@ class Engine:
         else:
             overall = summarise(checks, required)
 
-        signature = (overall, mode, tuple(guards), paused, tuple(sorted(checks.items())))
+        signature = (overall, mode, tuple(guards), paused, tuple(sorted(checks.items())),
+                     bool(getattr(self, "_halted", False)))
         if signature == self._last_checks:
             return
         self._last_checks = signature
@@ -642,8 +644,9 @@ class Engine:
                             {"reason": self.cfg_error or overall, "file": self.cfg_path})
         self._publish_state("cfg_operation_mode", mode.configured)
         self._publish_state("state_operation_mode", mode.effective,
-                            {"reason": mode.reason, "guards": guards or "all safe", "paused": paused,
-                             "guards_absent": absent})
+                            {"reason": self._stopped_why() or mode.reason, "guards": guards or "all safe",
+                             "paused": paused, "guards_absent": absent,
+                             "halted": bool(getattr(self, "_halted", False))})
         self._publish_status()
         self._publish_state("map_config", overall, {
             "config": self.cfg.raw if self.cfg else {},
@@ -713,6 +716,9 @@ class Engine:
             self._hand_over(readings, decision)
         shown = self._decision if readings is not None and self._engine_name() == "v2" else decision
         for key, (state, attrs) in entity_states(readings, self.mode, self.tz, shown, self._since).items():
+            if key == "state_summary" and self._stopped_why():
+                text = f"CONTROL STOPPED. {self._stopped_why()} Plan only: {attrs.get('text', state)}"
+                state, attrs = short(text), dict(attrs, text=text)
             self._publish_if_changed(key, state, attrs)
         self._publish_if_changed("state_engine", self._engine_name(), self._engine_attrs())
         self._publish_override()
@@ -1819,6 +1825,9 @@ class Engine:
         except Exception as err:
             self.log(f"Could not forecast inverter writes: {err!r}", level="WARNING")
         for key, (state, attrs) in plan_entity_states(self.plan, extra).items():
+            if key == "plan_headline" and self._stopped_why():
+                text = f"Control stopped, so this plan is not being sent to the inverter. {attrs.get('text', state)}"
+                state, attrs = text[:254], dict(attrs, text=text)
             self._publish_if_changed(key, state, attrs)
 
     def _snapshot_plan(self, now):
@@ -3532,18 +3541,94 @@ class Engine:
         bad = [w for w in kwargs["writes"]
                if not self._inverter().confirmed(kwargs["entities"][w["role"]], w["value"])]
         if not bad:
+            self._writes_confirmed([w["role"] for w in kwargs["writes"]])
             return
         if kwargs["attempt"] == 1:
             self.log(f"Inverter read-back mismatch ({[w['role'] for w in bad]}); retrying once", level="WARNING")
             self._write_why = "read-back retry"
             self._execute([Write(w["role"], w["value"], w["kind"]) for w in bad], kwargs["entities"], attempt=2)
             return
-        self._halted = True                              # no more writes until the engine restarts
-        self._publish_status()
-        self.log("Inverter writes could not be confirmed; control stopped until restart", level="WARNING")
+        self._halt_control([w["role"] for w in bad])
+
+    def _halt_control(self, roles):
+        """Writes did not read back twice: stop writing, say so on every status line, and try again after a wait that
+        grows (HALT_RETRY_MIN). The retry is the ordinary control step, writing what the plan wants then, so nothing
+        stale is sent; if it fails to read back too, control stops again for longer."""
+        if getattr(self, "_halted", False):
+            return                                   # one stop at a time: another write that failed adds nothing
+        tries = getattr(self, "_halt_count", 0)
+        wait = HALT_RETRY_MIN[min(tries, len(HALT_RETRY_MIN) - 1)]
+        self._halt_count = tries + 1
+        self._halted = True
+        self._halt_probation = False
+        self._halt_roles = list(roles)
+        self._halt_retry_at = datetime.now(timezone.utc) + timedelta(minutes=wait)
+        self.host.call_later(self._lift_halt, wait * 60)
+        self.log(f"Inverter writes could not be confirmed ({', '.join(roles)}); control stopped, trying again in "
+                 f"{wait} min", level="WARNING")
         self._notify("health", ("control:verify", "PowerEngine: inverter writes not confirmed",
-                                "Settings written to the inverter didn't read back correctly twice. Check the "
-                                "inverter and the SolaX Modbus integration."))
+                                "Settings written to the inverter didn't read back correctly twice, so control is "
+                                f"stopped. It will try again at {self._halt_retry_text()}. Check the inverter and the "
+                                "SolaX Modbus integration."))
+        self._publish_halt_state()
+
+    def _halt_retry_text(self):
+        at = getattr(self, "_halt_retry_at", None)
+        if at is None:
+            return "the next check"
+        return at.astimezone(self.tz).strftime("%H:%M") if self.tz else at.strftime("%H:%M UTC")
+
+    def _stopped_why(self):
+        """Why control is stopped, in words, or None when it is not (the halt, not Passive or Paused)."""
+        if not getattr(self, "_halted", False):
+            return None
+        return f"Inverter writes couldn't be confirmed; control is stopped. Trying again at {self._halt_retry_text()}."
+
+    def _lift_halt(self, kwargs=None):
+        """The wait is over: let the control step write again, once the inputs are working."""
+        if not getattr(self, "_halted", False):
+            return
+        due = getattr(self, "_halt_retry_at", None)
+        if due is not None and datetime.now(timezone.utc) < due:
+            return                                   # a timer from an earlier stop: the wait now is longer
+        if self.mode.effective != "active":
+            self.host.call_later(self._lift_halt, 60)             # inputs not ready: wait for them first
+            return
+        self._halted = False
+        self._halt_probation = True
+        self._ram_forget()                                         # send the command again, not assume it stands
+        self.log("Control resumed after the wait: writing to the inverter again")
+        self.host.call_later(self._end_probation, 3600)
+        self._publish_halt_state()
+
+    def _writes_confirmed(self, roles):
+        """Writes read back. If control had been stopped and the setting that failed is among them, it is working
+        again (other settings reading back says nothing about the one that did not)."""
+        if not getattr(self, "_halt_probation", False) or not set(roles) & set(getattr(self, "_halt_roles", ())):
+            return
+        self._halt_probation = False
+        self._halt_count = 0
+        self.log("Inverter writes confirmed again; control is back to normal")
+        self._notify("health", ("control:recovered", "PowerEngine: control resumed",
+                                "Inverter writes read back correctly again, so PowerEngine is controlling the "
+                                "inverter."))
+        self._publish_halt_state()
+
+    def _end_probation(self, kwargs=None):
+        """An hour after control resumed without stopping again: the stop is over, forget the growing wait."""
+        if getattr(self, "_halt_probation", False) and not getattr(self, "_halted", False):
+            self._halt_probation = False
+            self._halt_count = 0
+
+    def _publish_halt_state(self):
+        """Control stopped or resumed: every place that says what PowerEngine is doing says so now."""
+        self._last_checks = None                 # so the check below republishes the operation-mode sensor
+        try:
+            self._evaluate()
+        except Exception as err:
+            self.log(f"Could not refresh the status after control stopped or resumed: {err!r}", level="WARNING")
+        self._publish_status()
+        self._health()
 
     def _within_write_limit(self, n):
         """False (and pause control) if these writes would take today's own writes past the daily limit."""
@@ -4452,6 +4537,10 @@ class Engine:
                               getattr(self, "_clock_synced", None), datetime.now(self.tz))
             if f:
                 h["findings"].append(f)
+            stopped = self._stopped_why()
+            if stopped:
+                h["findings"].append({"level": PROBLEM, "title": "Control stopped: inverter writes not confirmed",
+                                      "detail": stopped})
             from pe_core.health import finding_key
             for x in h["findings"]:
                 x["key"] = finding_key(x)
@@ -5120,7 +5209,7 @@ class Engine:
         if mode is None:
             return
         if getattr(self, "_halted", False):
-            word, why = "Stopped", "Inverter writes couldn't be confirmed; control stopped until the engine restarts."
+            word, why = "Stopped", self._stopped_why()
         elif mode.effective == "active":
             word, why = "Active", mode.reason
         elif mode.effective == "paused":

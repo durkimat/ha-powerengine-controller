@@ -40,6 +40,13 @@ def _extra_urls(hass: HomeAssistant):
     return hass.data.get(DATA_EXTRA_MODULE_URL)
 
 
+def _forget_url(urls, url: str) -> None:
+    """Take `url` off the frontend's extra modules. Home Assistant 2026.11 keeps a UrlManager (add and remove), earlier
+    versions a plain set (add and discard): unloading used to fail on the first with an AttributeError."""
+    drop = getattr(urls, "discard", None) or urls.remove
+    drop(url)
+
+
 def _state(hass: HomeAssistant) -> dict:
     return hass.data.setdefault(_KEY, {"served": False, "url": None, "resource": None})
 
@@ -88,7 +95,7 @@ async def async_refresh(hass: HomeAssistant) -> None:
     if urls is None or state["url"] == url:
         return
     if state["url"] is not None:
-        urls.discard(state["url"])
+        _forget_url(urls, state["url"])
     urls.add(url)
     state["url"] = url
     _LOGGER.debug("PowerEngine card registered with the frontend as an extra module: %s", url)
@@ -100,7 +107,7 @@ async def _resource(hass: HomeAssistant, resources, state: dict, url: str) -> No
     mine = [item for item in resources.async_items() if _ours(item)]
     urls = _extra_urls(hass)
     if urls is not None and state["url"] is not None and state["url"] not in {i.get("url") for i in mine}:
-        urls.discard(state["url"])                        # the resource now does the job: not loaded twice
+        _forget_url(urls, state["url"])                        # the resource now does the job: not loaded twice
     if mine:
         keep, *extra = mine
         for item in extra:
@@ -119,7 +126,7 @@ async def async_unregister(hass: HomeAssistant) -> None:
     state = _state(hass)
     urls = _extra_urls(hass)
     if state["url"] is not None and urls is not None:
-        urls.discard(state["url"])
+        _forget_url(urls, state["url"])
     resources = _resources(hass)
     if resources is not None:
         await resources.async_get_info()

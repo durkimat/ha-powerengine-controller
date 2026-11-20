@@ -332,8 +332,10 @@ While paused, remember nobody is optimising the battery: don't leave it paused o
   (Self-Use) if PowerEngine's heartbeat stops for 15 minutes while it's the battery controller, and says so in a
   notification. The engine tells it what to do for your inverter (built from the same entities it drives, and kept
   through a restart of Home Assistant), so it needs no set-up and names no inverter of its own.
-- **Read-back:** every write is read back after 6 seconds and retried once; if it still doesn't match, control
-  stops until the engine restarts (the Restart engine button) and you're notified.
+- **Read-back:** every write is read back after 15 seconds and retried once; if it still doesn't match, control
+  stops and you're notified. The status, health, summary and plan headline all say it is stopped and when it will
+  try again. It tries again by itself after 5 minutes, then 10, 20, 40 and every 60, once the inputs are working,
+  and tells you when a write reads back again. The Restart engine button tries at once.
 - **Daily write limit:** control pauses if PowerEngine's own writes reach it in a day. Resuming allows the limit
   again. Only real inverter writes count: update-button presses (each sends a whole block of window times),
   currents, the storage mode and remote-control settings. Window start/end times are staged in HA until the button

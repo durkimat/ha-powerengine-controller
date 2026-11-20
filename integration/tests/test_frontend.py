@@ -48,6 +48,36 @@ async def test_a_replaced_card_gets_a_new_address_and_unloading_removes_it(hass,
     assert hass.data[DATA_EXTRA_MODULE_URL] == set()
 
 
+class UrlManager:
+    """The shape of Home Assistant 2026.11's frontend url manager: add and remove, no discard."""
+
+    def __init__(self):
+        self.urls = frozenset()
+
+    def add(self, url):
+        self.urls = self.urls | {url}
+
+    def remove(self, url):
+        self.urls = self.urls - {url}
+
+
+async def test_unloading_works_with_the_url_manager_of_newer_home_assistant(hass, tmp_path, monkeypatch):
+    monkeypatch.setattr(EngineSupervisor, "start", lambda self: None)
+    manager = UrlManager()
+    hass.data[DATA_EXTRA_MODULE_URL] = manager
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={const.CONF_SETTINGS_DIR: str(tmp_path)})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert len(manager.urls) == 1
+    assert await hass.config_entries.async_unload(entry.entry_id)               # used to fail: no `discard`
+    assert manager.urls == frozenset()
+    assert await hass.config_entries.async_setup(entry.entry_id)                # and it can be loaded again
+    await hass.async_block_till_done()
+    assert len(manager.urls) == 1
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
 async def test_without_the_frontend_nothing_is_added_and_nothing_breaks(hass, tmp_path, monkeypatch):
     monkeypatch.setattr(EngineSupervisor, "start", lambda self: None)
     hass.data.pop(DATA_EXTRA_MODULE_URL, None)                               # no frontend (a test, or Core without one)
