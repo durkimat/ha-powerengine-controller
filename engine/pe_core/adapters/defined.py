@@ -292,10 +292,17 @@ class DefinedInverter:
 
     # --- confirming writes -------------------------------------------------------------------
 
+    def _read_back(self, state: Any, value: Any) -> bool:
+        """Whether a read `state` confirms a write of `value` (HA sometimes reports a number as "N.0"). Plain
+        Self-Use is also confirmed by the options the definition lists as meaning the same (the Solis settles on
+        "No Timed Charge/Discharge" once its timed windows are closed)."""
+        if str(state) in (str(value), f"{value}.0"):
+            return True
+        return str(value) == self._self_use() and str(state) in self._slots.get("self_use_equivalents", ())
+
     def confirmed(self, entity_id: str, value: Any) -> bool:
-        """Whether `entity_id` has read back `value` (HA sometimes reports a number as "N.0")."""
-        state = self.ha.get_state(entity_id)
-        return str(state) in (str(value), f"{value}.0")
+        """Whether `entity_id` has read back `value`."""
+        return self._read_back(self.ha.get_state(entity_id), value)
 
     def verify(self, writes: list, ha: HomeAssistant, entities: dict | None = None) -> list[str]:
         """Read back `writes` from `ha`; return one message per mismatch. `entities` resolves a write's role to
@@ -312,7 +319,7 @@ class DefinedInverter:
             if not entity:
                 continue
             state = ha.get_state(entity)
-            if str(state) not in (str(value), f"{value}.0"):
+            if not self._read_back(state, value):
                 msgs.append(f"{role} did not read back (wanted {value}, have {state})")
         return msgs
 
