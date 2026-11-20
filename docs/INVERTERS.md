@@ -68,7 +68,7 @@ own words on the right), and `tests` (which option each supervised test forces).
 three), `suffix` (slot n's entity is slot 1's plus this, `{n}` being the number), `first_slot_roles` (the roles that have one
 entity per slot), `button_role` (optional, default `timed_update_button`: the control role whose button sends the window
 times; it must be one of `first_slot_roles` and contain `write_only_match`),
-`currents`, `self_use_option` (the `storage_mode` option that gives plain Self-Use), `write_only_match` (roles
+`currents`, `self_use_option` (the `storage_mode` option that gives plain Self-Use), `self_use_equivalents` (optional: options the inverter reads back as the same thing, which confirm a write of it), `write_only_match` (roles
 containing this are never read, the button), `staged_parts` (role names containing these are kept in Home Assistant
 until the button sends them, so setting them is not an inverter write), `recheck_seconds` and `test_roles`.
 

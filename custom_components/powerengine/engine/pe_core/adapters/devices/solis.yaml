@@ -101,6 +101,10 @@ timed_slots:
   currents: [timed_charge_current, timed_discharge_current]
   # the `storage_mode` role's option that hands the inverter back to plain Self-Use
   self_use_option: Self-Use
+  # Options the inverter reports back after plain Self-Use is written, which mean the same thing. With every timed
+  # window closed it settles on "No Timed Charge/Discharge" (the SolaX Modbus select reads it back a poll later),
+  # so a read-back of any of these confirms a write of `self_use_option`.
+  self_use_equivalents: [Self-Use - No Timed Charge/Discharge]
   write_only_match: update_button # roles containing this are never read back (the button has no value)
   # Window times are kept in Home Assistant until the update button sends them, so setting them is not an
   # inverter write ("staged"); a role or entity id containing one of these is staged.

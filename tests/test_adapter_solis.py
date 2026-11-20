@@ -218,6 +218,18 @@ def test_confirmed_accepts_string_or_int_and_the_dot_zero_float_reading():
     assert SolisInverter(ha2, lambda role: None).confirmed("e", 5) is True
 
 
+def test_self_use_is_confirmed_by_the_equivalent_option_the_solis_settles_on():
+    from pe_core.control import Write
+    ha = FakeHA({"mode": "Self-Use - No Timed Charge/Discharge"})
+    inv = SolisInverter(ha, lambda role: {"storage_mode": "mode"}.get(role))
+    assert inv.confirmed("mode", "Self-Use") is True
+    assert inv.verify([Write("storage_mode", "Self-Use", "select")], ha) == []
+    # only plain Self-Use has an equivalent: other modes and other values still have to match exactly
+    assert inv.confirmed("mode", "Self-Use - No Grid Charging") is False
+    assert inv.confirmed("mode", "Backup/Reserve") is False
+    assert SolisInverter(FakeHA({"mode": "Backup/Reserve"}), lambda role: None).confirmed("mode", "Self-Use") is False
+
+
 def test_verify_reports_mismatches_and_skips_buttons():
     from pe_core.control import Write
     ha = FakeHA({"e1": "5", "e2": "9"})

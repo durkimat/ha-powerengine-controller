@@ -187,6 +187,8 @@ def _validate_timed(data, source: str) -> None:
     _strings(data, "timed_slots.currents", source)
     _strings(data, "timed_slots.test_roles", source)
     _strings(data, "timed_slots.staged_parts", source)
+    if "self_use_equivalents" in data["timed_slots"]:
+        _strings(data, "timed_slots.self_use_equivalents", source)
     for key in ("self_use_option", "write_only_match"):
         _need(data, f"timed_slots.{key}", str, source)
     _need(data, "timed_slots.recheck_seconds", (int, float), source)
