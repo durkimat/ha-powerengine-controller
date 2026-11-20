@@ -105,21 +105,21 @@ null
 },
 {
 "t": "2026-09-27T19:37:00+00:00",
+"svc": "persistent_notification/create"
+},
+{
+"t": "2026-09-27T19:37:00+00:00",
 "svc": "number/set_value",
 "entity_id": "number.solis_timed_discharge_start_hours",
 "value": 21
 },
 {
 "t": "2026-09-27T19:37:00+00:00",
-"warning": "Inverter writes could not be confirmed; control stopped until restart"
+"warning": "Inverter writes could not be confirmed (timed_discharge_start_hour#1); control stopped, trying again in 5 min"
 },
 {
 "t": "2026-09-27T19:37:00+00:00",
 "warning": "Inverter read-back mismatch (['timed_discharge_start_hour#1']); retrying once"
-},
-{
-"t": "2026-09-27T19:38:00+00:00",
-"warning": "Inverter writes could not be confirmed; control stopped until restart"
 },
 {
 "t": "2026-09-27T19:39:00+00:00",
@@ -154,6 +154,42 @@ null
 "warning": "Window values not confirmed before applying them (['number.solis_timed_discharge_start_hours']); applying anyway"
 },
 {
+"t": "2026-09-27T19:42:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 21
+},
+{
+"t": "2026-09-27T19:43:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 21
+},
+{
+"t": "2026-09-27T19:43:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 21
+},
+{
+"t": "2026-09-27T19:43:00+00:00",
+"warning": "Inverter read-back mismatch (['timed_discharge_start_hour#1']); retrying once"
+},
+{
+"t": "2026-09-27T19:44:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 21
+},
+{
+"t": "2026-09-27T19:44:00+00:00",
+"warning": "Inverter writes could not be confirmed (timed_discharge_start_hour#1); control stopped, trying again in 10 min"
+},
+{
+"t": "2026-09-27T19:44:00+00:00",
+"warning": "Inverter read-back mismatch (['timed_discharge_start_hour#1']); retrying once"
+},
+{
 "t": "2026-09-27T19:45:00+00:00",
 "plan": "sssEsssssCCECECCCCCCCsssssssssss",
 "soc": [
@@ -175,7 +211,25 @@ null
 },
 {
 "t": "2026-09-27T19:46:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T19:46:00+00:00",
 "warning": "Load history from HA was empty; retrying in an hour. PowerEngine's own load record is still used."
+},
+{
+"t": "2026-09-27T19:46:00+00:00",
+"warning": "Window values not confirmed before applying them (['number.solis_timed_discharge_start_hours']); applying anyway"
+},
+{
+"t": "2026-09-27T19:47:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T19:47:00+00:00",
+"warning": "Window values not confirmed before applying them (['number.solis_timed_discharge_start_hours']); applying anyway"
 },
 {
 "t": "2026-09-27T19:50:00+00:00",
@@ -192,6 +246,84 @@ null
 ]
 },
 {
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes",
+"value": 0
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours_2",
+"value": 23
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_2",
+"value": 23
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes_2",
+"value": 59
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_3",
+"value": 7
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes",
+"value": 0
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours_2",
+"value": 22
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_2",
+"value": 23
+},
+{
+"t": "2026-09-27T19:54:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_current",
+"value": 0
+},
+{
 "t": "2026-09-27T19:55:00+00:00",
 "plan": "sssssssssCECECECCCCCCsssssssssss",
 "soc": [
@@ -204,6 +336,79 @@ null
 90,
 89
 ]
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_3",
+"value": 0
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-27T19:55:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_current",
+"value": 100
+},
+{
+"t": "2026-09-27T19:56:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-27T19:56:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
 },
 {
 "t": "2026-09-27T20:00:00+00:00",
@@ -234,6 +439,86 @@ null
 ]
 },
 {
+"t": "2026-09-27T20:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours",
+"value": 1
+},
+{
+"t": "2026-09-27T20:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 3
+},
+{
+"t": "2026-09-27T20:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 23
+},
+{
+"t": "2026-09-27T20:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours",
+"value": 23
+},
+{
+"t": "2026-09-27T20:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes",
+"value": 59
+},
+{
+"t": "2026-09-27T20:10:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_2",
+"value": 1
+},
+{
+"t": "2026-09-27T20:11:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 23
+},
+{
+"t": "2026-09-27T20:11:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 23
+},
+{
+"t": "2026-09-27T20:11:00+00:00",
+"warning": "Inverter read-back mismatch (['timed_discharge_start_hour#1']); retrying once"
+},
+{
+"t": "2026-09-27T20:12:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 23
+},
+{
+"t": "2026-09-27T20:12:00+00:00",
+"warning": "Inverter writes could not be confirmed (timed_discharge_start_hour#1); control stopped, trying again in 20 min"
+},
+{
+"t": "2026-09-27T20:12:00+00:00",
+"warning": "Inverter read-back mismatch (['timed_discharge_start_hour#1']); retrying once"
+},
+{
+"t": "2026-09-27T20:14:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T20:14:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-27T20:14:00+00:00",
+"warning": "Window values not confirmed before applying them (['number.solis_timed_discharge_start_hours']); applying anyway"
+},
+{
 "t": "2026-09-27T20:15:00+00:00",
 "plan": "ssssEEECCCCEEEECCCCCssssssssssss",
 "soc": [
@@ -249,9 +534,18 @@ null
 },
 {
 "t": "2026-09-27T20:15:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T20:15:00+00:00",
 "svc": "select/select_option",
 "entity_id": "select.edf_energy_dev_intelligent_target_time",
 "option": "04:30"
+},
+{
+"t": "2026-09-27T20:15:00+00:00",
+"warning": "Window values not confirmed before applying them (['number.solis_timed_discharge_start_hours']); applying anyway"
 },
 {
 "t": "2026-09-27T20:20:00+00:00",
@@ -296,6 +590,72 @@ null
 ]
 },
 {
+"t": "2026-09-27T20:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours",
+"value": 0
+},
+{
+"t": "2026-09-27T20:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 0
+},
+{
+"t": "2026-09-27T20:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-27T20:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_2",
+"value": 2
+},
+{
+"t": "2026-09-27T20:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 22
+},
+{
+"t": "2026-09-27T20:32:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_minutes",
+"value": 30
+},
+{
+"t": "2026-09-27T20:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 22
+},
+{
+"t": "2026-09-27T20:33:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 22
+},
+{
+"t": "2026-09-27T20:33:00+00:00",
+"warning": "Inverter read-back mismatch (['timed_discharge_start_hour#1']); retrying once"
+},
+{
+"t": "2026-09-27T20:34:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 22
+},
+{
+"t": "2026-09-27T20:34:00+00:00",
+"warning": "Inverter writes could not be confirmed (timed_discharge_start_hour#1); control stopped, trying again in 40 min"
+},
+{
+"t": "2026-09-27T20:34:00+00:00",
+"warning": "Inverter read-back mismatch (['timed_discharge_start_hour#1']); retrying once"
+},
+{
 "t": "2026-09-27T20:35:00+00:00",
 "plan": "ssEEEECCCEEECCCCCCCsssssssssssss",
 "soc": [
@@ -308,6 +668,29 @@ null
 94,
 98
 ]
+},
+{
+"t": "2026-09-27T20:36:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T20:36:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-27T20:36:00+00:00",
+"warning": "Window values not confirmed before applying them (['number.solis_timed_discharge_start_hours']); applying anyway"
+},
+{
+"t": "2026-09-27T20:37:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T20:37:00+00:00",
+"warning": "Window values not confirmed before applying them (['number.solis_timed_discharge_start_hours']); applying anyway"
 },
 {
 "t": "2026-09-27T20:40:00+00:00",
@@ -412,6 +795,66 @@ null
 ]
 },
 {
+"t": "2026-09-27T21:14:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 22
+},
+{
+"t": "2026-09-27T21:14:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours_2",
+"value": 2
+},
+{
+"t": "2026-09-27T21:14:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_2",
+"value": 3
+},
+{
+"t": "2026-09-27T21:14:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_2",
+"value": 30
+},
+{
+"t": "2026-09-27T21:14:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_3",
+"value": 30
+},
+{
+"t": "2026-09-27T21:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 22
+},
+{
+"t": "2026-09-27T21:15:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 22
+},
+{
+"t": "2026-09-27T21:15:00+00:00",
+"warning": "Inverter read-back mismatch (['timed_discharge_start_hour#1']); retrying once"
+},
+{
+"t": "2026-09-27T21:16:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_start_hours",
+"value": 22
+},
+{
+"t": "2026-09-27T21:16:00+00:00",
+"warning": "Inverter writes could not be confirmed (timed_discharge_start_hour#1); control stopped, trying again in 60 min"
+},
+{
+"t": "2026-09-27T21:16:00+00:00",
+"warning": "Inverter read-back mismatch (['timed_discharge_start_hour#1']); retrying once"
+},
+{
 "t": "2026-09-27T21:17:00+00:00",
 "plan": "sEEEECCCEEECCCCCCCssssssssssssss",
 "soc": [
@@ -424,6 +867,34 @@ null
 94,
 100
 ]
+},
+{
+"t": "2026-09-27T21:18:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T21:18:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-27T21:18:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
+},
+{
+"t": "2026-09-27T21:18:00+00:00",
+"warning": "Window values not confirmed before applying them (['number.solis_timed_discharge_start_hours']); applying anyway"
+},
+{
+"t": "2026-09-27T21:19:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T21:19:00+00:00",
+"warning": "Window values not confirmed before applying them (['number.solis_timed_discharge_start_hours']); applying anyway"
 },
 {
 "t": "2026-09-27T21:22:00+00:00",
@@ -600,7 +1071,64 @@ null
 },
 {
 "t": "2026-09-27T22:16:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_hours",
+"value": 1
+},
+{
+"t": "2026-09-27T22:16:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours",
+"value": 2
+},
+{
+"t": "2026-09-27T22:16:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_minutes",
+"value": 30
+},
+{
+"t": "2026-09-27T22:16:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_start_minutes_2",
+"value": 0
+},
+{
+"t": "2026-09-27T22:16:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_charge_end_hours_2",
+"value": 0
+},
+{
+"t": "2026-09-27T22:16:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_hours_3",
+"value": 1
+},
+{
+"t": "2026-09-27T22:16:00+00:00",
+"svc": "number/set_value",
+"entity_id": "number.solis_timed_discharge_end_minutes_3",
+"value": 0
+},
+{
+"t": "2026-09-27T22:16:00+00:00",
 "warning": "Load history from HA was empty; retrying in an hour. PowerEngine's own load record is still used."
+},
+{
+"t": "2026-09-27T22:17:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times"
+},
+{
+"t": "2026-09-27T22:17:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_2"
+},
+{
+"t": "2026-09-27T22:17:00+00:00",
+"svc": "button/press",
+"entity_id": "button.solis_update_charge_discharge_times_3"
 },
 {
 "t": "2026-09-27T22:21:00+00:00",

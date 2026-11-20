@@ -2,6 +2,14 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.233 (beta)
+
+### Behaviour changes
+
+- **Control that stopped because the inverter's settings would not read back now restarts by itself.** Until now PowerEngine stopped for good the second time a write failed to read back, and only an engine restart brought it back (a Modbus outage on 19 Nov left the battery uncontrolled for about a day). It now waits 5 minutes, then writes again whatever the plan wants at that moment, and if that fails to read back it waits 10, 20, 40 and then 60 minutes between tries. It waits for the inputs to be working first. When the setting that failed reads back again you get a "PowerEngine: control resumed" notification. It never writes more often than that, and the daily write limit still applies.
+- **While control is stopped, every status line says so.** The Mode tile shows Stopped with "Trying again at HH:MM", the operation-mode sensor's reason says the same and has a `halted` attribute, the Status sentence starts "CONTROL STOPPED", the plan headline says the plan is not being sent to the inverter, and Health shows a problem, "Control stopped: inverter writes not confirmed". The first notification now says when it will try again.
+- Fixed: unloading or reloading PowerEngine failed on Home Assistant 2026.11 (`'UrlManager' object has no attribute 'discard'`) and left it unusable until Home Assistant restarted.
+
 ## 0.9.232 (beta)
 
 ### Behaviour changes

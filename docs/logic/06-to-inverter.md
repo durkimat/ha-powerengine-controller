@@ -76,7 +76,7 @@ flowchart TD
     VR --> OK{"Matches?"}
     OK -- yes --> DONE["Done"]
     OK -- "no, first time" --> RT["Retry once"]
-    OK -- "no, second time" --> HALT["HALT: no more writes until AppDaemon restarts,<br/>notify"]
+    OK -- "no, second time" --> HALT["HALT: no more writes, notify;<br/>try again after 5, 10, 20, 40, 60 min"]
 ```
 
 * Windows cannot cross midnight, so a period over midnight takes two windows. Charge windows share one current (Hold =
@@ -162,7 +162,7 @@ by the 60 A fuse)". The plan models the same limit (`grid_charge_kw`), so the li
 | Unverified definition or firmware | `verification.active_refusal` | Active refused: effective Passive |
 | Another controller in charge | handover guards | Active refused; no window writes |
 | Daily write limit (timed windows) | `_within_write_limit` | Pause, Self-use, notify |
-| Read-back mismatch twice | `_verify_writes` | Halt until restart, notify |
+| Read-back mismatch twice | `_verify_writes`, `_halt_control` | Halt, notify, show it on every status line; `_lift_halt` tries again after 5, 10, 20, 40, then every 60 min once the inputs are active; recovered when the setting that failed reads back |
 | Supervised test running | `_test_running` | Normal control stands aside |
 | A site/inverter change | `_site_guard` | Switch to Passive, flag a retest |
 | Attributes under 16 KB | `_publish_state` | Warning above 15,000 bytes |
