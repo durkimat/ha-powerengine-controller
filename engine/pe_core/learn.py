@@ -17,7 +17,9 @@ temperature (``tb_c``). From those:
 - **Reserve:** the charge at which the battery stops supplying the house even though the house needs power.
 - **Export limit:** only when selling hits a ceiling below the battery's own rate (the grid limit, not the battery).
 - **Car charge rate:** the typical kW of a half-hour the car charged throughout.
-- **Cold:** the battery-temperature threshold below which charging slows, and by how much.
+- **Cold:** the battery-temperature threshold below which charging slows, and by how much. A slow charge counts only
+  when the battery's own charge limit was cut in that half-hour (``bms_min_w``); it shapes the plan, never the command
+  while the battery's limit is known.
 
 The battery temperature is estimated from the outside temperature: it follows it with a lag (about a day in a
 garage), so a cold spell chills it slowly and it stays cold until the weather has been warmer for a while.
@@ -248,11 +250,16 @@ def learn(halves: list[dict], rated_charge_kw: float, rated_discharge_kw: float,
         out.car_kw, out.car_samples = round(_p(car, 0.9), 2), len(car)
 
     # --- cold: charge half-hours at the full rate asked, below the taper zone, with a battery temperature estimate
-    samples = [(h["tb_c"], _kw(h.get("battery_in"), h["seconds"]) / base) for h in full
+    # A slow half-hour counts as cold only when the battery's own charge limit was reduced in it (`bms_min_w`).
+    # A battery that held its limit open while the charge came slow was not slowed by its temperature (an inverter
+    # firmware or settings change, a limit elsewhere), and a half-hour with no limit reading cannot show it was.
+    open_w = rated_charge_kw * 1000 * FULL_ASK
+    samples = [(h["tb_c"], _kw(h.get("battery_in"), h["seconds"]) / base, h.get("bms_min_w")) for h in full
                if _asked_full(h, "grid_charge", rated_charge_kw) and h["soc_end"] < TAPER_BANDS[0]
                and h.get("tb_c") is not None]
-    slow = [(t, r) for t, r in samples if r < SLOW_RATIO and t < cold.threshold_c + 8]
-    fast = [t for t, r in samples if r >= SLOW_RATIO and t < cold.threshold_c]
+    slow = [(t, r) for t, r, lim in samples
+            if r < SLOW_RATIO and t < cold.threshold_c + 8 and lim is not None and lim < open_w]
+    fast = [t for t, r, _ in samples if r >= SLOW_RATIO and t < cold.threshold_c]
     out.cold_slow, out.cold_fast = len(slow), len(fast)
     if len(slow) >= MIN_COLD_SAMPLES:
         # slowed at these temperatures: be cautious up to just above the warmest of them

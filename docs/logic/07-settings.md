@@ -37,7 +37,7 @@ A setting marked **fallback only** is read just by the reactive rule stack that 
 | `learn_car_min` | on | Smart-slot history (certainty, Health tab) | Move the shortest real charge towards what the supplier-confirmed slots show (see page 1) |
 | `engine_compare` | on | Costs page (Engines compared, same day) | Each night (03:20) replay yesterday through the whole app once with engine v1 and once with engine v2, from the day's forecast record and the cost records, in a separate process; publishes `sensor.pe_cost_engines`. Needs the forecast records (kept 14 days) and uses about 15 minutes of one core at low priority |
 | `learn_conversion` | on | Plan | Include the inverter's AC/DC losses in the efficiency |
-| `cold_caution` | on | Plan, Control | Plan slower charging when the battery is cold; the BMS-limit fallback |
+| `cold_caution` | on | Plan, Control | Plan slower charging when the battery is cold. Caps the inverter command only as the fallback when the BMS charge limit is unusable; with the limit known the command follows the battery's own limit |
 | `cold_learning` | on | Plan | Learn the cold threshold and factor |
 | `damp_restart` | on | Control (timed) | 5-minute write hold-off after a start or resume |
 | `damp_bursts` | off | Control (timed) | Hold back a second quick change until the plan is steady |
@@ -112,7 +112,7 @@ Needs `arbitrage_min_soc` below `arbitrage_max_soc`. (`arbitrage_keep_soc`, 10 p
 | Setting | Default (range) | Acts in | What it does |
 |---|---|---|---|
 | `cold_caution_temp_c` | 4 °C (-20 to 20) | Plan | Slow charging below this battery temperature (or the learned one) |
-| `cold_charge_pct` | 50 % (10 to 100) | Plan, Control | ...to this share of the normal rate |
+| `cold_charge_pct` | 50 % (10 to 100) | Plan, Control (fallback only) | ...to this share of the normal rate |
 | `cold_release_c` | 3 °C (0 to 15) | Plan | ...until the battery is this much above the threshold |
 | `battery_temp_lag_h` | 24 h (1 to 96) | Plan | How long the battery takes to follow the outside temperature (when the location is Custom) |
 

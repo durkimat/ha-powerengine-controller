@@ -17,8 +17,8 @@ def half(i=0, **kw):
     return h
 
 
-def charge(kw, tb=None, soc=(40, 50), i=0):
-    return half(i, cmd="grid_charge", cmd_kw=4.8, battery_in=kw / 2, soc_start=soc[0], soc_end=soc[1], tb_c=tb)
+def charge(kw, tb=None, soc=(40, 50), i=0, **extra):
+    return half(i, cmd="grid_charge", cmd_kw=4.8, battery_in=kw / 2, soc_start=soc[0], soc_end=soc[1], tb_c=tb, **extra)
 
 
 def learn(halves):
@@ -78,9 +78,19 @@ def test_car_rate():
 
 def test_cold_slow_raises_threshold_and_sets_factor():
     hs = [charge(4.8, tb=15, i=i) for i in range(6)]
-    hs += [charge(2.2, tb=t, i=10 + i) for i, t in enumerate((2.0, 4.5, 5.2))]
+    hs += [charge(2.2, tb=t, i=10 + i, bms_min_w=2300) for i, t in enumerate((2.0, 4.5, 5.2))]   # BMS limit cut
     lr = learn(hs)
     assert lr.cold_threshold_c == 5.7 and lr.cold_factor == 0.46
+
+
+def test_slow_charge_with_the_bms_limit_open_is_not_learned_as_cold():
+    hs = [charge(4.8, tb=15, i=i) for i in range(6)]
+    slow = [(2.0, 4.5, 5.2)]
+    hs += [charge(0.9, tb=t, i=10 + i, bms_min_w=5200) for i, t in enumerate(slow[0])]    # limit open: not the cold
+    lr = learn(hs)
+    assert lr.cold_factor is None and lr.cold_threshold_c is None and lr.cold_slow == 0
+    hs = [charge(0.9, tb=t, i=10 + i) for i, t in enumerate(slow[0])]                      # no limit reading at all
+    assert learn(hs).cold_factor is None
 
 
 def test_cold_fast_at_three_drops_threshold():
@@ -322,3 +332,12 @@ def test_bms_limit_is_kept_per_half_hour_from_80_percent():
     h.note_limit(96.2, None)
     assert h.as_dict()["bms_lim"] == {"96": 2200}
     assert "bms_lim" not in HalfHour(T0).as_dict()
+
+
+def test_lowest_bms_limit_is_kept_at_any_level():
+    h = HalfHour(T0)
+    h.note_limit(40.0, 5200)
+    h.note_limit(45.0, 2600)
+    h.note_limit(50.0, None)
+    assert h.as_dict()["bms_min_w"] == 2600 and h.as_dict().get("bms_lim") is None
+    assert "bms_min_w" not in HalfHour(T0).as_dict()

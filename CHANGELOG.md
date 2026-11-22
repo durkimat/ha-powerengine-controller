@@ -2,6 +2,13 @@
 
 Every release lists **Behaviour changes** (anything that changes what PowerEngine does to your system) first.
 
+## 0.9.234 (beta)
+
+### Behaviour changes
+
+- **The cold-battery caution no longer slows the charge command when the battery reports its own charge limit.** Engine v2 was sending the inverter the learned cold rate (for example 0.9 kW, a learned 20% of the normal rate) even while the battery's limit sensor read 100 A, so a battery that was not asking for any slowdown charged slowly. Now, with a usable battery (BMS) charge limit, the inverter is asked for what the battery allows (and the fuse headroom); the cold factor still shapes the plan's charge rates. When there is no usable BMS limit, the cold factor still caps the command as the fallback, as before.
+- **The cold factor is learned only from half-hours where the battery's own charge limit was actually cut.** A slow charge with the battery's limit wide open (an inverter firmware or settings change, for example) is no longer taken for a cold battery, and half-hours with no limit reading do not count. Half-hours recorded by earlier versions carry no limit reading, so a 20% learned by them goes away at the next daily re-learn.
+
 ## 0.9.233 (beta)
 
 ### Behaviour changes

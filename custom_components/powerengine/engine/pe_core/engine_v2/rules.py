@@ -53,10 +53,14 @@ def normal_floor(facts: BatteryFacts, settings: V2Settings) -> float:
 def caps(facts: BatteryFacts, charge_factor: float = 1.0, house_kw: float | None = None,
          solar_kw: float | None = None, car_kw: float = 0.0) -> tuple[float | None, float | None]:
     """(charge cap, discharge cap) in kW, each only when below the battery's own limit (else None).
-    Charge: the fuse (house and car first, with the sun taken off the house), the battery's own limit and the cold."""
-    charge = [facts.max_charge_kw * min(1.0, max(0.0, min(facts.charge_factor, charge_factor)))]
+    Charge: the fuse (house and car first, with the sun taken off the house) and the battery's own limit. The cold
+    caution caps the command only as the fallback when there is no usable battery limit: the battery (BMS) already
+    slows itself when it is cold, so with its limit known the inverter is asked for what the battery allows. The
+    cold factor still shapes the plan (slot charge rates), not the command."""
     if facts.bms_charge_kw is not None:
-        charge.append(max(0.0, facts.bms_charge_kw))
+        charge = [facts.max_charge_kw, max(0.0, facts.bms_charge_kw)]
+    else:
+        charge = [facts.max_charge_kw * min(1.0, max(0.0, min(facts.charge_factor, charge_factor)))]
     if house_kw is not None:
         charge.append(max(0.0, facts.fuse_kw - max(0.0, house_kw - (solar_kw or 0.0)) - car_kw))
     c = min(charge)
