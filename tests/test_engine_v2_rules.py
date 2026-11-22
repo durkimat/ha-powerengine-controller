@@ -118,7 +118,15 @@ def test_caps_only_when_below_the_batterys_own_limit():
     lim = now_limits(facts=BatteryFacts(bms_charge_kw=2.0, bms_discharge_kw=1.5))
     assert lim.charge_cap_kw == 2.0 and lim.discharge_cap_kw == 1.5
     assert now_limits(facts=BatteryFacts(bms_charge_kw=4.8)).charge_cap_kw is None
-    assert now_limits(facts=BatteryFacts(charge_factor=0.5)).charge_cap_kw == 2.4
+    assert now_limits(facts=BatteryFacts(charge_factor=0.5)).charge_cap_kw == 2.4     # no battery limit: cold fallback
+
+
+def test_cold_factor_does_not_cap_the_command_when_the_battery_limit_is_known():
+    f = BatteryFacts(charge_factor=0.2, bms_charge_kw=5.2)
+    assert now_limits(facts=f).charge_cap_kw is None                   # the battery asks for nothing less
+    assert rules.limits_for(segment(T0, charge_factor=0.2), f, SETTINGS).charge_cap_kw is None
+    f = BatteryFacts(charge_factor=0.2, bms_charge_kw=2.0)
+    assert now_limits(facts=f).charge_cap_kw == 2.0                    # the battery's own limit still wins
 
 
 def test_fuse_headroom_is_live_house_and_car_less_the_sun():

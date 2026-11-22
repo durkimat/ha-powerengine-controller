@@ -90,6 +90,7 @@ class HalfHour:
     noted: bool = False
     bms_lim: dict = field(default_factory=dict)   # whole SoC % (80+) -> lowest BMS charge limit seen there, W
     miss: dict = field(default_factory=dict)      # seconds not counted, by why (a reading missing, a gap, a late start)
+    bms_min_w: float | None = None     # lowest BMS charge limit seen this half-hour at any level, W (cold learning)
 
     def lose(self, why: str, seconds: float) -> None:
         """Note time that is not in `seconds`, and why (so an incomplete day can say what it lacked)."""
@@ -98,6 +99,8 @@ class HalfHour:
 
     def note_limit(self, soc: float | None, charge_w: float | None) -> None:
         """The battery's own charge limit at this level (kept from 80%, where it starts to taper), for learning."""
+        if charge_w is not None:
+            self.bms_min_w = float(charge_w) if self.bms_min_w is None else min(self.bms_min_w, float(charge_w))
         if soc is None or charge_w is None or soc < BMS_LIM_FROM_SOC:
             return
         k = int(soc)
@@ -161,6 +164,8 @@ class HalfHour:
             "axle_s": self.axle_s, "free": self.free, "import_rate": self.import_rate,
             "export_rate": self.export_rate, "standing": self.standing, "cmd": self.cmd, "cmd_kw": self.cmd_kw,
             "temp_c": self.temp_c, "tb_c": self.tb_c}.items()})
+        if self.bms_min_w is not None:
+            d["bms_min_w"] = self.bms_min_w
         if self.bms_lim:
             d["bms_lim"] = {str(k): v for k, v in sorted(self.bms_lim.items())}
         if self.miss:
